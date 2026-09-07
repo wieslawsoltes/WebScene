@@ -9,6 +9,43 @@ namespace WebScene.Backend.Avalonia.Tests;
 
 public sealed unsafe class NativeResourceBridgeTests
 {
+    [Theory]
+    [InlineData("http", 503)]
+    [InlineData("timeout", 0)]
+    [InlineData("network", 0)]
+    public void FailureEnvelopePreservesMetadataWithoutSecretsOrDuplicateLoads(string category, int status)
+    {
+        var loader = new FailingLoader(category, status);
+        using var bridge = CreateBridge(loader);
+        const string url = "https://example.test/missing?token=secret";
+        var required = bridge.Copy(1, url, null, 0, IntPtr.Zero, 0);
+        var destination = NativeMemory.Alloc(required);
+        try
+        {
+            Assert.Equal(required, bridge.Copy(1, url, null, 0, (IntPtr)destination, required));
+            var bytes = new ReadOnlySpan<byte>(destination, (int)required);
+            Assert.Equal(3, bytes[0]);
+            Assert.Equal(status, BinaryPrimitives.ReadInt64LittleEndian(bytes[6..]));
+            Assert.True(BinaryPrimitives.ReadInt64LittleEndian(bytes[14..]) >= 0);
+            Assert.Equal(category, Encoding.UTF8.GetString(bytes[22..]));
+            Assert.DoesNotContain("secret", Encoding.UTF8.GetString(bytes));
+            Assert.Equal(1, loader.Count);
+        }
+        finally { NativeMemory.Free(destination); }
+    }
+
+    private sealed class FailingLoader(string category, int status) : IWebSceneResourceLoader
+    {
+        public int Count;
+        public WebSceneTextResource LoadText(in WebSceneResourceRequest request)
+        {
+            Count++;
+            throw category == "timeout" ? new TimeoutException("secret")
+                : new System.Net.Http.HttpRequestException("secret", null,
+                    status == 0 ? null : (System.Net.HttpStatusCode)status);
+        }
+    }
+
     [Fact]
     public void SufficientDestinationWritesEnvelopeWithoutAProbe()
     {

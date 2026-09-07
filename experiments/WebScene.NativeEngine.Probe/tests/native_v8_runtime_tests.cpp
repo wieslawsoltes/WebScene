@@ -1,5 +1,6 @@
 #include "webscene_native_engine.h"
 #include "webscene_native_dom.h"
+#include "webscene_embed_fallback.h"
 
 #include <ixwebsocket/IXGetFreePort.h>
 #include <ixwebsocket/IXNetSystem.h>
@@ -73,13 +74,20 @@ uint8_t measure_baseline_fixture_text(
 #endif
 #include "native_v8_runtime_interop_tests.inc"
 #include "native_v8_runtime_input_tests.inc"
+#include "native_table_cell_copy_tests.inc"
 #include "native_v8_runtime_resource_tests.inc"
+#include "native_v8_runtime_diagnostics_tests.inc"
+#include "native_resource_failure_diagnostics_tests.inc"
 #include "native_v8_runtime_css_layout_tests.inc"
+#include "native_go_to_overflow_tests.inc"
+#include "native_v8_runtime_media_query_tests.inc"
 #include "native_v8_runtime_animation_cssom_tests.inc"
 #include "native_v8_runtime_layout_scene_tests.inc"
 #include "native_v8_runtime_canvas_tests.inc"
 #include "native_v8_runtime_frame_scheduling_tests.inc"
+#include "native_youtube_embed_tests.inc"
 #include "native_v8_runtime_browser_dom_tests.inc"
+#include "native_v8_runtime_resize_observer_tests.inc"
 #include "native_v8_runtime_rendering_metrics_tests.inc"
 #include "native_v8_runtime_websocket_tests.inc"
 int main()
@@ -115,6 +123,31 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "youtube-embed") { test_youtube_embed_fallback(); return 0; }
+        if (selected == "table-cell-copy") { test_table_cell_click_copies_text_to_host(); return 0; }
+        if (selected == "resource-failure-diagnostics") { test_resource_failure_diagnostics(); return 0; }
+        if (selected == "media-query-reentrant") { test_media_query_callback_can_create_more_queries(); return 0; }
+        if (selected == "runtime-diagnostics") {
+            test_runtime_diagnostics();
+            test_runtime_diagnostics_frame_and_failure();
+            return 0;
+        }
+        if (selected == "host-pointer-exit") {
+            test_host_pointer_exit_clears_tooltip_without_another_move();
+            return 0;
+        }
+        if (selected == "resize-observer-retina-export"
+            || selected == "resize-observer-device-scale") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused observer engine creation failed");
+            if (selected == "resize-observer-retina-export") {
+                test_resize_observer_device_pixel_canvas_export(focused_engine);
+            } else {
+                test_resize_observer_device_scale_only_delivery(focused_engine);
+            }
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "elliptical-corner-radii") {
             test_elliptical_scene_metadata_is_cold_and_scalar_compatible();
             auto* focused_engine = webscene_engine_create(0);
@@ -128,6 +161,52 @@ int main()
             require(focused_engine != nullptr, "focused engine creation failed");
             test_event_listener_options_reach_native_input_and_resize(focused_engine);
             test_synthetic_window_resize_dispatch_uses_outer_listener_registry(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "media-query-list") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "go-to-overflow") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_go_to_tab_lines_and_calendar_scroll_ranges(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "compact-go-to-grid") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "scrollbar-style-drag") {
+            auto* focused_engine = webscene_engine_create(64);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_authored_scrollbar_style_and_thumb_drag(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "toolbar-overflow-navigation") {
+            auto* focused_engine = webscene_engine_create(64);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_table_minimum_width_reaches_toolbar_overflow_navigation(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "dynamic-percentage-flex-list") {
+            auto* focused_engine = webscene_engine_create(64);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_dynamic_percentage_flex_list_keeps_intrinsic_inline_contribution(
+                focused_engine);
             webscene_engine_destroy(focused_engine);
             return 0;
         }
@@ -153,7 +232,48 @@ int main()
         if (selected == "tradingview-settings-scroll") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
+            execute(focused_engine, "void 0", "focused-settings-scene-bootstrap.js");
+            resize(focused_engine, 800, 734, 1U);
+            wait_for_consumed_inputs(
+                focused_engine, 1U, "focused settings viewport resize was not consumed");
             test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
+                focused_engine);
+            test_tradingview_settings_panel_switch_recomputes_scroll_range(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "tradingview-property-table-spacing") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_tradingview_property_table_preserves_control_row_spacing(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "tradingview-compact-property-table") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_tradingview_compact_property_table_expands_wrapped_grid_rows(
+                focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "tradingview-opacity-border") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            execute(focused_engine, "void 0", "focused-opacity-scene-bootstrap.js");
+            test_css_linear_gradient_reaches_the_retained_scene(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "fixed-portal-stacking") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            resize(focused_engine, 420, 300, 1U);
+            wait_for_consumed_inputs(
+                focused_engine, 1U, "focused portal viewport resize was not consumed");
+            test_fixed_portal_descendant_stays_in_ancestor_stacking_context(
                 focused_engine);
             webscene_engine_destroy(focused_engine);
             return 0;
@@ -216,12 +336,26 @@ int main()
             test_canvas_text_metrics_use_host_font_axes();
             return 0;
         }
+        if (selected == "canvas-svg-image") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_svg_dom_parser_preserves_fill_rule(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "frame-resource-base-url") {
             test_dynamic_frame_resources_use_each_document_base_url();
             return 0;
         }
         if (selected == "datafeed-symbol-search") {
             test_tradingview_datafeed_iframe_symbol_search_round_trip();
+            return 0;
+        }
+        if (selected == "canvas-blob-url-download") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_pointer_cursor_and_external_anchor_host_handoff(focused_engine);
+            webscene_engine_destroy(focused_engine);
             return 0;
         }
         if (selected == "tradingview-save-acknowledgement") {
@@ -290,6 +424,13 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "positional-selector-siblings") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_positional_selector_sibling_semantics(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "tradingview-symbol-search-grid") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -302,6 +443,18 @@ int main()
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
             test_native_text_input_focus_events_and_caret(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "raf-aligned-mouse-moves") {
+            test_mouse_moves_are_raf_aligned_at_compositor_cadence();
+            return 0;
+        }
+        if (selected == "logical-inset-transition") {
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            test_logical_inset_transition_smooths_throttled_pointer_updates(
+                focused_engine);
             webscene_engine_destroy(focused_engine);
             return 0;
         }
@@ -352,10 +505,16 @@ int main()
     test_outer_document_lifecycle_for_editor_bootstrap();
     test_event_listener_exceptions_do_not_abort_document_load();
     test_timer_error_handler_preserves_later_tasks();
+    test_host_pointer_exit_clears_tooltip_without_another_move();
+    test_runtime_diagnostics();
+    test_resource_failure_diagnostics();
+    test_runtime_diagnostics_frame_and_failure();
+    test_media_query_callback_can_create_more_queries();
     test_concurrent_input_producers_remain_consumable();
     test_dom_implementation_create_html_document();
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();
+    test_mouse_moves_are_raf_aligned_at_compositor_cadence();
     test_controlled_switch_native_activation_matches_browser_semantics();
     test_tradingview_switch_repeated_transitions_publish_dense_scenes();
     test_loaded_document_keeps_html_and_body_cascade_distinct();
@@ -370,6 +529,7 @@ int main()
     test_deferred_frame_script_observes_window_dom_content_loaded();
     test_cooperative_iframe_hydration_yields_and_isolates_cascade();
     test_loaded_iframe_replaces_provisional_layout_root();
+    test_youtube_embed_fallback();
     test_outer_dynamic_recascade_preserves_iframe_cascade();
     test_animation_frame_demand_emits_idle_to_active_edges();
     test_dynamic_stylesheet_custom_properties_preserve_cascade_order();
@@ -404,6 +564,9 @@ int main()
         "throw new Error('IntersectionObserver bootstrap missing')",
         "intersection-observer-bootstrap.js");
     test_responsive_positioned_sizing(engine);
+    test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(engine);
+    test_go_to_tab_lines_and_calendar_scroll_ranges(engine);
+    test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(engine);
     test_responsive_unset_restores_auto_inset(engine);
     test_preferred_color_scheme_updates_css_and_match_media(engine);
     test_resize_listener_receives_window_event(engine);
@@ -434,16 +597,20 @@ int main()
     test_single_fractional_grid_track_stays_one_column(engine);
     test_tradingview_symbol_search_display_contents_rows_join_parent_grid(engine);
     test_tradingview_settings_subgrid_keeps_controls_on_their_rows(engine);
+    test_tradingview_property_table_preserves_control_row_spacing(engine);
+    test_tradingview_compact_property_table_expands_wrapped_grid_rows(engine);
     test_footer_grid_direction_and_focus_within_state(engine);
     test_active_chart_generated_border_tracks_active_class(engine);
     test_non_rendered_dom_nodes_do_not_create_layout_items(engine);
     test_calc_percent_with_pixel_offset(engine);
     test_calc_viewport_units_with_pixel_offsets_bound_fixed_boxes(engine);
     test_current_color_and_color_mix_reach_element_and_pseudo_paint(engine);
+    test_hsl_and_pseudo_gradients_reach_color_plane_paint(engine);
     test_adjacent_inline_spans_wrap_through_generated_whitespace(engine);
     test_flex_basis_reserves_fixed_track(engine);
     test_flex_icon_metadata_card_and_title_geometry(engine);
     test_absolute_flex_child_uses_container_static_position(engine);
+    test_absolute_inset_stretch_accounts_for_negative_margins(engine);
     test_flex_flow_shorthand_controls_layout_and_cssom(engine);
     test_font_relative_box_lengths_follow_inherited_font_context(engine);
     test_floats_share_a_bounded_formatting_line(engine);
@@ -459,6 +626,7 @@ int main()
     test_css_linear_gradient_reaches_the_retained_scene(engine);
     test_z_index_orders_positioned_siblings_in_scene(engine);
     test_popup_portal_tooltip_escapes_non_stacking_positioned_wrapper(engine);
+    test_fixed_portal_descendant_stays_in_ancestor_stacking_context(engine);
     test_transform_origin_keywords_cascade_independently_from_inline_transform(engine);
     test_transform_translate_calc_arguments_preserve_nested_functions(engine);
     test_zero_depth_translate3d_positions_fixed_coach_mark(engine);
@@ -477,11 +645,14 @@ int main()
     test_segmented_rounded_borders_share_an_unclipped_join(engine);
     test_flex_gap_and_variable_text_metrics(engine);
     test_native_overflow_scrolling_and_nowrap(engine);
+    test_authored_scrollbar_style_and_thumb_drag(engine);
     test_absolute_virtualized_rows_follow_ancestor_scroll_container(engine);
     test_rounded_overflow_visual_fixture_geometry(engine);
     test_elliptical_corner_radii_reach_cssom(engine);
     test_row_flex_vertical_scroll_extent_remains_bounded(engine);
     test_toolbar_scroll_chevrons_use_single_rotation(engine);
+    test_table_minimum_width_reaches_toolbar_overflow_navigation(engine);
+    test_dynamic_percentage_flex_list_keeps_intrinsic_inline_contribution(engine);
     test_root_document_overflow_scrolls_and_paints_overlay(engine);
     test_table_menu_row_cells_stay_horizontal_and_centered(engine);
     test_semantic_table_auto_layout_and_intrinsic_cell_content(engine);
@@ -493,6 +664,7 @@ int main()
     test_auto_height_overflow_auto_does_not_paint_phantom_scrollbar(engine);
     test_constrained_column_flex_scroll_item_keeps_footer_inside(engine);
     test_tradingview_settings_dialog_clips_and_scrolls_middle_region(engine);
+    test_tradingview_settings_panel_switch_recomputes_scroll_range(engine);
     test_tradingview_symbol_info_auto_height_has_no_scrollbar(engine);
     test_later_dom_overlay_background_paints_above_retained_canvas(engine);
     test_multiple_canvas_pane_backgrounds_remain_below_retained_layers(engine);
@@ -518,6 +690,7 @@ int main()
     test_event_listener_options_reach_native_input_and_resize(engine);
     test_listener_added_during_dispatch_waits_for_next_event(engine);
     test_node_filter_tree_walker_focus_navigation(engine);
+    test_table_cell_click_copies_text_to_host();
     test_synthetic_window_resize_dispatch_uses_outer_listener_registry(engine);
     test_document_create_event_and_init_event(engine);
     test_native_mouseup_honors_immediate_propagation_stop(engine);
@@ -527,6 +700,7 @@ int main()
     test_component_library_dom_discovery_primitives(engine);
     test_document_id_index_preserves_tree_and_root_semantics(engine);
     test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(engine);
+    test_positional_selector_sibling_semantics(engine);
     test_dropdown_runtime_primitives(engine);
     test_collapsed_single_select_native_activation(engine);
     test_input_dispatch_failures_are_attributed_and_consumable(engine);
@@ -571,6 +745,8 @@ int main()
     test_detached_dom_wrappers_do_not_permanently_root_nodes(engine);
     test_connected_style_recascade_skips_detached_wrapper_retention(engine);
     test_resize_updates_device_pixel_ratio(engine);
+    test_resize_observer_device_pixel_canvas_export(engine);
+    test_resize_observer_device_scale_only_delivery(engine);
     test_session_storage_in_outer_and_frame_contexts(engine);
     test_window_post_message_is_queued(engine);
     test_window_post_message_coalesces_style_recascade(engine);
@@ -594,6 +770,7 @@ int main()
     test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(engine);
     test_rotation_keyframes_use_host_clock_and_wrap_continuously(engine);
     test_clipped_offscreen_keyframes_do_not_keep_host_frame_clock_alive(engine);
+    test_logical_inset_transition_smooths_throttled_pointer_updates(engine);
     webscene_engine_destroy(engine);
     test_binary_interop_result_outlives_engine();
     return 0;

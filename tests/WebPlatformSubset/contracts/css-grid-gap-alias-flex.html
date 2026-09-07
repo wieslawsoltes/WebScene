@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8">
+<title>Legacy grid-gap aliases apply to flex layout</title>
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>body{margin:0}#row{display:flex;flex-wrap:wrap;width:110px;grid-column-gap:8px;grid-row-gap:6px}#row>div{width:50px;height:20px;flex-shrink:0}</style>
+<div id="row"><div id="a"></div><div id="b"></div><div id="c"></div></div>
+<script>
+test(()=>{assert_equals(b.getBoundingClientRect().x-a.getBoundingClientRect().right,8);assert_equals(c.getBoundingClientRect().y-a.getBoundingClientRect().bottom,6);},'Grid row/column gap aliases preserve flex spacing and wrapping');
+test(()=>{row.style.gridColumnGap='10px';assert_equals(b.getBoundingClientRect().x-a.getBoundingClientRect().right,10);},'CSSOM camel-case gridColumnGap sets the column-gap alias');
+</script>

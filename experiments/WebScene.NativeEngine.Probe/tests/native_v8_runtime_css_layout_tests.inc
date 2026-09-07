@@ -5,8 +5,12 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
         (() => {
           const style = document.createElement('style');
           style.textContent = `
+            :root { --responsive-probe: 11px; }
             .dialog { position:fixed; width:100%; min-width:380px; max-width:550px; }
-            @media (max-width:379px) { .dialog { min-width:100%; } }
+            @media (max-width:379px) {
+              :root { --responsive-probe: 17px; }
+              .dialog { min-width:100%; }
+            }
           `;
           document.body.appendChild(style);
           const dialog = document.createElement('div');
@@ -20,11 +24,13 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
         (() => ({
           width: __testDialog.getBoundingClientRect().width,
           minWidth: getComputedStyle(__testDialog).getPropertyValue('min-width'),
+          rootVariable: getComputedStyle(document.documentElement)
+            .getPropertyValue('--responsive-probe').trim(),
           narrow: matchMedia('(max-width:379px)').matches,
           wide: matchMedia('(min-width:1020px)').matches
         }))()
     )JS", "native-responsive-positioned-desktop.js");
-    require(desktop == R"({"width":550,"minWidth":"380px","narrow":false,"wide":true})",
+    require(desktop == R"({"width":550,"minWidth":"380px","rootVariable":"11px","narrow":false,"wide":true})",
         "desktop media rules or fixed min/max sizing regressed: " + desktop);
 
     resize(engine, 320, 720, 2);
@@ -32,13 +38,216 @@ void test_responsive_positioned_sizing(webscene_engine* engine)
         (() => ({
           width: __testDialog.getBoundingClientRect().width,
           minWidth: getComputedStyle(__testDialog).getPropertyValue('min-width'),
+          rootVariable: getComputedStyle(document.documentElement)
+            .getPropertyValue('--responsive-probe').trim(),
           narrow: matchMedia('(max-width:379px)').matches,
           wide: matchMedia('(min-width:1020px)').matches
         }))()
     )JS", "native-responsive-positioned-narrow.js");
-    if (narrow != R"({"width":320,"minWidth":"100%","narrow":true,"wide":false})") {
+    if (narrow != R"({"width":320,"minWidth":"100%","rootVariable":"17px","narrow":true,"wide":false})") {
         fail("responsive rules did not recascade after resize: " + narrow);
     }
+}
+
+void test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(
+    webscene_engine* engine)
+{
+    resize(engine, 610, 720, 4U);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              .dialog-base {
+                max-width: 380px;
+                min-width: 280px;
+                position: fixed;
+                top: 20px;
+                width: 100%;
+              }
+              .dialog-variant {
+                display: block;
+                max-width: 550px;
+                min-width: 380px;
+                width: auto;
+              }
+              .dialog-wrapper { min-width: 302px; }
+              .dialog-content { display: flex; flex-direction: column; }
+              .fullscreen {
+                bottom: 0;
+                max-width: 100%;
+                min-width: 100%;
+                top: 0;
+                width: 100%;
+              }
+              #input-row {
+                box-sizing: content-box;
+                column-gap: 12px;
+                display: grid;
+                grid-template-columns: 150px 100px;
+                height: 34px;
+                padding: 0 20px;
+              }
+              #date, #time { height: 34px; min-width: 0; }
+            </style>
+            <section id="dialog" class="dialog-base dialog-variant dialog-wrapper">
+              <div class="dialog-content">
+                <div id="input-row"><input id="date"><input id="time"></div>
+              </div>
+            </section>`;
+          const dialog = document.getElementById('dialog');
+          const query = matchMedia('(max-width: 431px)');
+          const synchronize = event => dialog.classList.toggle(
+            'fullscreen', event.matches);
+          synchronize(query);
+          query.addEventListener('change', synchronize);
+        })()
+    )JS", "native-go-to-production-sizing-setup.js");
+    const auto snapshot = [&](std::string_view source) {
+        return evaluate(engine, R"JS(
+        (() => {
+          const rect = id => document.getElementById(id).getBoundingClientRect();
+          const dialog = rect('dialog');
+          const row = rect('input-row');
+          const date = rect('date');
+          const time = rect('time');
+          return {
+            viewport: innerWidth,
+            dialog: [dialog.left, dialog.top, dialog.width],
+            row: [row.left, row.width, row.right],
+            date: [date.left, date.width, date.right],
+            time: [time.left, time.width, time.right],
+            gap: time.left - date.right,
+            trailing: row.right - time.right
+          };
+        })()
+    )JS", std::string(source));
+    };
+    const auto wide = snapshot("native-go-to-production-sizing-wide.js");
+    require(
+        wide == R"JSON({"viewport":610,"dialog":[0,20,302],"row":[0,302,302],"date":[20,150,170],"time":[182,100,282],"gap":12,"trailing":20})JSON",
+        "Go To dialog did not shrink-to-fit its production auto width: " + wide);
+
+    resize(engine, 431, 720, 5U);
+    const auto compact = snapshot("native-go-to-production-sizing-compact.js");
+    require(
+        compact == R"JSON({"viewport":431,"dialog":[0,0,431],"row":[0,431,431],"date":[20,150,170],"time":[182,100,282],"gap":12,"trailing":149})JSON",
+        "fullscreen Go To dialog lost its fixed tracks or trailing space: " + compact);
+}
+
+void test_media_query_list_tracks_outer_and_frame_viewport_breakpoints(
+    webscene_engine* engine)
+{
+    resize(engine, 800, 600, 8800U);
+    execute(engine, R"JS(
+        (() => {
+          const install = target => {
+            const modern = target.matchMedia('(max-width: 500px)');
+            const legacy = target.matchMedia('(max-width: 500px)');
+            const state = {
+              modern,
+              legacy,
+              modernEvents: [],
+              legacyEvents: []
+            };
+            state.modernListener = event => state.modernEvents.push({
+              matches: event.matches,
+              media: event.media,
+              target: event.target === modern,
+              currentTarget: event.currentTarget === modern
+            });
+            state.legacyListener = event => state.legacyEvents.push({
+              matches: event.matches,
+              media: event.media
+            });
+            modern.addEventListener('change', state.modernListener);
+            legacy.addListener(state.legacyListener);
+            return state;
+          };
+          globalThis.__outerMqlState = install(globalThis);
+          const frame = document.createElement('iframe');
+          document.body.appendChild(frame);
+          const frameDocument = frame.contentDocument;
+          frameDocument.open();
+          frameDocument.write(`<html><body><script>
+            (() => {
+              const modern = matchMedia('(max-width: 500px)');
+              const legacy = matchMedia('(max-width: 500px)');
+              const state = globalThis.__frameMqlState = {
+                modern, legacy, modernEvents: [], legacyEvents: []
+              };
+              state.modernListener = event => state.modernEvents.push({
+                matches: event.matches,
+                media: event.media,
+                target: event.target === modern,
+                currentTarget: event.currentTarget === modern
+              });
+              state.legacyListener = event => state.legacyEvents.push({
+                matches: event.matches,
+                media: event.media
+              });
+              modern.addEventListener('change', state.modernListener);
+              legacy.addListener(state.legacyListener);
+            })();
+          <\/script></body></html>`);
+          frameDocument.close();
+          globalThis.__mqlFrame = frame;
+        })()
+    )JS", "native-media-query-list-setup.js");
+
+    const auto snapshot = [&](std::string_view scope) {
+        return evaluate(engine, std::string(R"JS(
+          (() => {
+            const state = )JS") + std::string(scope) + R"JS(;
+            return {
+              modern: state.modern.matches,
+              legacy: state.legacy.matches,
+              modernEvents: state.modernEvents,
+              legacyEvents: state.legacyEvents
+            };
+          })()
+        )JS", "native-media-query-list-state.js");
+    };
+    const auto initial = R"({"modern":false,"legacy":false,"modernEvents":[],"legacyEvents":[]})";
+    require(snapshot("globalThis.__outerMqlState") == initial,
+        "outer MediaQueryList initial state regressed");
+    require(snapshot("globalThis.__mqlFrame.contentWindow.__frameMqlState") == initial,
+        "frame MediaQueryList initial state regressed");
+
+    resize(engine, 420, 300, 8801U);
+    const auto entered = R"JSON({"modern":true,"legacy":true,"modernEvents":[{"matches":true,"media":"(max-width: 500px)","target":true,"currentTarget":true}],"legacyEvents":[{"matches":true,"media":"(max-width: 500px)"}]})JSON";
+    require(snapshot("globalThis.__outerMqlState") == entered,
+        "outer MediaQueryList did not enter the narrow breakpoint exactly once");
+    require(snapshot("globalThis.__mqlFrame.contentWindow.__frameMqlState") == entered,
+        "frame MediaQueryList did not enter the narrow breakpoint exactly once");
+
+    resize(engine, 400, 300, 8802U);
+    require(snapshot("globalThis.__outerMqlState") == entered,
+        "outer MediaQueryList emitted within an unchanged breakpoint");
+    require(snapshot("globalThis.__mqlFrame.contentWindow.__frameMqlState") == entered,
+        "frame MediaQueryList emitted within an unchanged breakpoint");
+
+    execute_and_wait(engine, R"JS(
+        (() => {
+          const remove = state => {
+            state.modern.removeEventListener('change', state.modernListener);
+            state.legacy.removeListener(state.legacyListener);
+          };
+          remove(globalThis.__outerMqlState);
+          remove(globalThis.__mqlFrame.contentWindow.__frameMqlState);
+        })()
+    )JS", "native-media-query-list-remove.js");
+    resize(engine, 800, 600, 8803U);
+    const auto removed = R"JSON({"modern":false,"legacy":false,"modernEvents":[{"matches":true,"media":"(max-width: 500px)","target":true,"currentTarget":true}],"legacyEvents":[{"matches":true,"media":"(max-width: 500px)"}]})JSON";
+    const auto outer_removed = snapshot("globalThis.__outerMqlState");
+    const auto frame_removed = snapshot(
+        "globalThis.__mqlFrame.contentWindow.__frameMqlState");
+    require(outer_removed == removed,
+        "removed outer MediaQueryList listeners were invoked or matches stayed stale: "
+            + outer_removed);
+    require(frame_removed == removed,
+        "removed frame MediaQueryList listeners were invoked or matches stayed stale: "
+            + frame_removed);
 }
 
 void test_responsive_unset_restores_auto_inset(webscene_engine* engine)
@@ -1389,6 +1598,148 @@ void test_tradingview_settings_subgrid_keeps_controls_on_their_rows(
         "TradingView settings subgrid stacked its checkbox/select row: " + result);
 }
 
+void test_tradingview_property_table_preserves_control_row_spacing(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; }
+              #content {
+                box-sizing: border-box;
+                display: inline-grid;
+                grid-template-columns: auto 1fr;
+                max-width: 550px;
+                padding: 16px 20px;
+                width: 100%;
+              }
+              .cell { align-items: center; display: flex; min-width: 0; }
+              .inner { align-items: center; display: flex; padding: 8px 0; }
+              .first .inner { display: block; padding-inline-end: 20px; }
+              .wrap { align-items: center; display: flex; max-width: 100%; }
+              .wrap:before { content: ""; flex: none; height: 34px; width: 0; }
+              .control { box-sizing: border-box; display: block; height: 18px; width: 100px; }
+            </style>
+            <div id="content">
+              <div class="cell first"><div class="inner">Title</div></div>
+              <div class="cell"><div class="inner"><div class="wrap"><button class="control" id="title">Name</button></div></div></div>
+              <div class="cell first"><div class="inner">Open market status</div></div>
+              <div class="cell"><div class="inner"><div class="wrap"><button class="control" id="market">Visible</button></div></div></div>
+              <div class="cell first"><div class="inner">Chart values</div></div>
+              <div class="cell"><div class="inner"><div class="wrap"><button class="control" id="values">Values</button></div></div></div>
+            </div>`;
+          const top = id => document.getElementById(id).getBoundingClientRect().top;
+          const wrap = document.querySelector('.wrap');
+          return {
+            titleTop: top('title'),
+            marketTop: top('market'),
+            valuesTop: top('values'),
+            firstDelta: top('market') - top('title'),
+            secondDelta: top('values') - top('market'),
+            contentHeight: document.getElementById('content').getBoundingClientRect().height,
+            wrapHeight: wrap.getBoundingClientRect().height
+          };
+        })()
+    )JS", "native-tradingview-property-table-row-spacing.js");
+    require(
+        result == R"JSON({"titleTop":32,"marketTop":82,"valuesTop":132,"firstDelta":50,"secondDelta":50,"contentHeight":182,"wrapHeight":34})JSON",
+        "TradingView property-table controls lost their padded grid row spacing: "
+            + result);
+}
+
+void test_tradingview_compact_property_table_expands_wrapped_grid_rows(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              body { margin: 0; }
+              #content {
+                box-sizing: border-box;
+                display: inline-grid;
+                grid-template-columns: 1fr min-content;
+                padding: 16px 20px;
+                width: 334px;
+              }
+              .cell { align-items: center; display: flex; min-width: 0; }
+              .cell .inner {
+                align-items: center;
+                display: flex;
+                font: 14px/20px sans-serif;
+                padding: 8px 0;
+              }
+              .cell.first { align-items: flex-start; }
+              .cell.first .inner {
+                display: block;
+                min-width: 0;
+                overflow-wrap: break-word;
+                padding-inline-end: 20px;
+              }
+              .control { box-sizing: border-box; height: 34px; width: 150px; }
+              .control-wrap { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
+              .swatch { box-sizing: border-box; height: 34px; width: 75px; }
+            </style>
+            <div id="content">
+              <div class="cell first"><div class="inner" id="first-label">Scale modes (A and L)</div></div>
+              <div class="cell"><div class="inner"><button class="control">Visible on mouse over</button></div></div>
+              <div class="cell first"><div class="inner" id="second-label">Lock price to bar ratio</div></div>
+              <div class="cell"><div class="inner"><input class="control"></div></div>
+              <div class="cell first"><div class="inner" id="third-label">Scales placement</div></div>
+              <div class="cell"><div class="inner"><button class="control">Auto</button></div></div>
+              <div class="cell first"><div class="inner" id="wide-label">Symbol</div></div>
+              <div class="cell" id="symbol-control-cell"><div class="inner"><div class="control-wrap" id="control-wrap"><button class="control"></button><div class="swatch" id="swatch"></div></div></div></div>
+              <div class="cell first"><div class="inner" id="after-label">Crosshair</div></div>
+              <div class="cell"><div class="inner"><div class="swatch"></div></div></div>
+            </div>`;
+          const rect = id => document.getElementById(id).getBoundingClientRect();
+          const first = rect('first-label');
+          const second = rect('second-label');
+          const third = rect('third-label');
+          const wide = rect('wide-label');
+          const content = rect('content');
+          const symbolControlCell = rect('symbol-control-cell');
+          const controlWrap = rect('control-wrap');
+          const swatch = rect('swatch');
+          const after = rect('after-label');
+          return {
+            labelsDoNotOverlap: first.bottom <= second.top + 0.01
+              && second.bottom <= third.top + 0.01
+              && third.bottom <= wide.top + 0.01,
+            firstWrapped: first.height > 36,
+            compactTracks: first.width > 120 && symbolControlCell.width <= 151,
+            controlsWrap: controlWrap.height > 70 && swatch.top > controlWrap.top + 33,
+            wrappedControlGrowsRow: symbolControlCell.height > 90
+              && controlWrap.bottom <= after.top + 0.01,
+            contentContainsRows: content.bottom >= after.bottom - 0.01,
+            geometry: {
+              content: [content.width, content.height],
+              first: [first.left, first.top, first.width, first.height],
+              second: [second.left, second.top, second.width, second.height],
+              third: [third.left, third.top, third.width, third.height],
+              wide: [wide.left, wide.top, wide.width, wide.height],
+              symbolControlCell: [symbolControlCell.left, symbolControlCell.top,
+                symbolControlCell.width, symbolControlCell.height],
+              controlWrap: [controlWrap.left, controlWrap.top,
+                controlWrap.width, controlWrap.height],
+              swatch: [swatch.left, swatch.top, swatch.width, swatch.height],
+              after: [after.left, after.top, after.width, after.height]
+            }
+          };
+        })()
+    )JS", "native-tradingview-compact-property-table.js");
+    require(
+        result.find(R"JSON("labelsDoNotOverlap":true)JSON") != std::string::npos
+            && result.find(R"JSON("firstWrapped":true)JSON") != std::string::npos
+            && result.find(R"JSON("compactTracks":true)JSON") != std::string::npos
+            && result.find(R"JSON("controlsWrap":true)JSON") != std::string::npos
+            && result.find(R"JSON("wrappedControlGrowsRow":true)JSON") != std::string::npos
+            && result.find(R"JSON("contentContainsRows":true)JSON") != std::string::npos,
+        "TradingView compact property-table grid rows did not grow with wrapped labels: "
+            + result);
+}
+
 void test_footer_grid_direction_and_focus_within_state(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -1707,6 +2058,175 @@ void test_popup_portal_tooltip_escapes_non_stacking_positioned_wrapper(
         "the popup-owned tooltip was retained behind the popup surface");
 }
 
+void test_fixed_portal_descendant_stays_in_ancestor_stacking_context(
+    webscene_engine* engine)
+{
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin:0; width:420px; height:300px; }
+              #settings { position:fixed; z-index:150; left:20px; top:20px;
+                width:260px; height:240px; background:rgb(63,31,31); }
+              #portal { position:fixed; z-index:150; left:0; top:0;
+                width:0; height:0; }
+              #portal-anchor { position:fixed; z-index:0; left:0; top:0;
+                width:0; height:0; }
+              #palette { position:fixed; z-index:100; left:180px; top:70px;
+                box-sizing:border-box; width:248px;
+                background:rgb(31,31,31); }
+              #scroll { height:100%; overflow-x:hidden; overflow-y:auto; }
+              #menu-box { padding:6px 12px; }
+              #menu-content { height:180px; }
+              #swatches { display:flex; flex-wrap:wrap; margin:0 -3px 6px; }
+              .swatch { all:unset; background-color:currentColor;
+                border:1px solid; border-radius:2px; flex:0 0 15px;
+                height:15px; margin:3px; position:relative; width:15px; }
+              .swatch::after { border:2px solid #0000; border-radius:6px;
+                box-sizing:initial; content:""; height:100%; left:-5px;
+                padding:3px; position:absolute; top:-5px; width:100%; }
+              .swatch.selected::after { border-color:rgb(17,34,51); }
+            </style>
+            <div id="settings"></div>
+            <div id="portal"><span><div id="portal-anchor">
+              <div id="palette"><div id="scroll"><div id="menu-box">
+                <div id="menu-content"><div id="swatches"></div></div>
+              </div></div></div>
+            </div></span></div>`;
+          const colours = ['#ffffff', '#f23645', '#ff9800', '#ffeb3b',
+            '#4caf50', '#089981', '#00bcd4', '#2962ff', '#673ab7', '#e91e63'];
+          const swatches = document.getElementById('swatches');
+          for (let row = 0; row < 8; ++row) {
+            for (const colour of colours) {
+              const swatch = document.createElement('button');
+              swatch.className = 'swatch';
+              swatch.style.color = colour;
+              swatches.appendChild(swatch);
+            }
+          }
+          swatches.firstElementChild.classList.add('selected');
+        })()
+    )JS", "native-fixed-portal-stacking-setup.js");
+
+    require(
+        evaluate(engine,
+            "[document.getElementById('palette').offsetHeight, "
+            "document.getElementById('scroll').scrollHeight]",
+            "native-fixed-portal-initial-size.js") == "[192,192]",
+        "the initial fixed palette fixture did not establish its measured height");
+    const auto fixture = evaluate(engine, R"JS(
+        (() => {
+          const palette = document.getElementById('palette');
+          const swatches = [...document.querySelectorAll('.swatch')];
+          const lateControls = document.createElement('div');
+          lateControls.style.height = '138px';
+          document.getElementById('menu-box').appendChild(lateControls);
+          return {
+            hit: document.elementFromPoint(200, 90)?.id ||
+              document.elementFromPoint(200, 90)?.className || null,
+            palette: [palette.offsetWidth, palette.offsetHeight,
+              palette.clientHeight, palette.scrollHeight],
+            scroll: (() => { const node = document.getElementById('scroll');
+              return [node.clientHeight, node.scrollHeight]; })(),
+            swatches: swatches.length,
+            first: (() => { const style = getComputedStyle(swatches[0]); return [
+              swatches[0].offsetWidth, swatches[0].offsetHeight,
+              style.backgroundColor,
+              style.borderTopWidth, style.borderRightWidth,
+              style.borderBottomWidth, style.borderLeftWidth,
+              style.borderTopLeftRadius]; })()
+          };
+        })()
+    )JS", "native-fixed-portal-stacking-geometry.js");
+    require(
+        fixture == R"json({"hit":"swatch selected","palette":[248,330,330,330],"scroll":[330,330],"swatches":80,"first":[17,17,"rgb(255, 255, 255)","1px","1px","1px","1px","2px"]})json",
+        "a nested fixed palette escaped its ancestor stacking context or lost swatch geometry: "
+            + fixture);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto settings_index = -1;
+    auto palette_index = -1;
+    auto white_swatch_index = -1;
+    auto white_swatch_border_index = -1;
+    uint32_t white_swatch_node_id = 0U;
+    webscene_scene_command white_swatch_background{};
+    webscene_scene_command white_swatch_border{};
+    webscene_scene_command selected_ring_border{};
+    for (auto attempt = 0; attempt < 100 && white_swatch_index < 0; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if ((command.kind == 1U || command.kind == 7U || command.kind == 9U)
+                    && command.rgba == 0x3F1F1FFFU) {
+                    settings_index = static_cast<int>(index);
+                }
+                if ((command.kind == 1U || command.kind == 7U || command.kind == 9U)
+                    && command.rgba == 0x1F1F1FFFU) {
+                    palette_index = static_cast<int>(index);
+                }
+                if ((command.kind == 1U || command.kind == 7U || command.kind == 9U
+                        || command.kind == 10U)
+                    && command.rgba == 0xFFFFFFFFU
+                    && white_swatch_index < 0
+                    && command.width >= 13.0F && command.width <= 17.0F
+                    && command.height >= 15.0F && command.height <= 17.0F) {
+                    white_swatch_index = static_cast<int>(index);
+                    white_swatch_node_id = command.node_id;
+                    white_swatch_background = command;
+                }
+                if ((command.kind == 8U || command.kind == 11U)
+                    && white_swatch_node_id != 0U
+                    && command.node_id == white_swatch_node_id
+                    && command.rgba == 0xFFFFFFFFU) {
+                    white_swatch_border_index = static_cast<int>(index);
+                    white_swatch_border = command;
+                }
+                if ((command.kind == 8U || command.kind == 11U)
+                    && command.rgba == 0x112233FFU) {
+                    selected_ring_border = command;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (white_swatch_index < 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        settings_index >= 0 && palette_index > settings_index
+            && white_swatch_index > palette_index,
+        "the nested fixed palette or its solid swatches painted behind the settings dialog: settings="
+            + std::to_string(settings_index) + " palette="
+            + std::to_string(palette_index) + " swatch="
+            + std::to_string(white_swatch_index));
+    require(
+        white_swatch_border_index > white_swatch_index
+            && std::abs(white_swatch_border.x - white_swatch_background.x - 0.5F) < 0.01F
+            && std::abs(white_swatch_border.y - white_swatch_background.y - 0.5F) < 0.01F
+            && std::abs(white_swatch_border.width - white_swatch_background.width + 1.0F) < 0.01F
+            && std::abs(white_swatch_border.height - white_swatch_background.height + 1.0F) < 0.01F
+            && std::abs(white_swatch_border.stroke_width - 1.0F) < 0.01F,
+        "the rounded swatch fill and border did not share one border-box geometry");
+    require(
+        selected_ring_border.node_id == white_swatch_node_id
+            && std::abs(selected_ring_border.x - white_swatch_background.x + 3.0F) < 0.01F
+            && std::abs(selected_ring_border.y - white_swatch_background.y + 3.0F) < 0.01F
+            && std::abs(selected_ring_border.width - 23.0F) < 0.01F
+            && std::abs(selected_ring_border.height - 23.0F) < 0.01F
+            && std::abs(selected_ring_border.stroke_width - 2.0F) < 0.01F,
+        "the selected pseudo-element ring was not centered four pixels outside the swatch border box: swatch="
+            + std::to_string(white_swatch_background.x) + ","
+            + std::to_string(white_swatch_background.y) + ","
+            + std::to_string(white_swatch_background.width) + ","
+            + std::to_string(white_swatch_background.height) + " ring="
+            + std::to_string(selected_ring_border.x) + ","
+            + std::to_string(selected_ring_border.y) + ","
+            + std::to_string(selected_ring_border.width) + ","
+            + std::to_string(selected_ring_border.height));
+}
+
 void test_non_rendered_dom_nodes_do_not_create_layout_items(webscene_engine* engine)
 {
     execute(engine, R"JS(
@@ -1912,6 +2432,84 @@ void test_current_color_and_color_mix_reach_element_and_pseudo_paint(
     require(observed_mix, "color-mix custom property did not reach pseudo-element paint");
 }
 
+void test_hsl_and_pseudo_gradients_reach_color_plane_paint(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              #plane {
+                position: relative;
+                width: 200px;
+                height: 184px;
+                overflow: hidden;
+                background-color: hsl(0, 100%, 50%);
+              }
+              #plane::before, #plane::after {
+                content: "";
+                display: block;
+                position: absolute;
+                inset: 0;
+              }
+              #plane::before { background-image: linear-gradient(90deg, #fff, #fff0); }
+              #plane::after { background-image: linear-gradient(0deg, #000, #0000); }
+            </style>
+            <div id="plane"></div>`;
+          const plane = document.getElementById('plane');
+          const rect = plane.getBoundingClientRect();
+          return {
+            color: getComputedStyle(plane).backgroundColor,
+            width: rect.width,
+            height: rect.height
+          };
+        })()
+    )JS", "native-hsl-pseudo-gradient-color-plane.js");
+    require(
+        result == R"JSON({"color":"rgb(255, 0, 0)","width":200,"height":184})JSON",
+        "HSL base color or color-plane geometry did not resolve: " + result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_base = false;
+    auto observed_horizontal = false;
+    auto observed_vertical = false;
+    for (auto attempt = 0;
+        attempt < 100 && (!observed_base || !observed_horizontal || !observed_vertical);
+        ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine); scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.rgba == 0xFF0000FFU
+                    && std::abs(command.width - 200.0F) < 0.01F
+                    && std::abs(command.height - 184.0F) < 0.01F) {
+                    observed_base = true;
+                }
+                if ((command.kind == 21U || command.kind == 22U)
+                    && command.flags < scene->string_count) {
+                    const auto& descriptor = scene->strings[command.flags];
+                    const auto resource = std::string(
+                        scene->string_bytes + descriptor.byte_offset,
+                        descriptor.byte_length);
+                    observed_horizontal = observed_horizontal
+                        || resource.find("linear-gradient(90deg, #fff, #fff0)")
+                            != std::string::npos;
+                    observed_vertical = observed_vertical
+                        || resource.find("linear-gradient(0deg, #000, #0000)")
+                            != std::string::npos;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_base || !observed_horizontal || !observed_vertical) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(observed_base, "HSL base color did not reach retained scene paint");
+    require(observed_horizontal, "::before horizontal gradient did not reach retained scene paint");
+    require(observed_vertical, "::after vertical gradient did not reach retained scene paint");
+}
+
 void test_adjacent_inline_spans_wrap_through_generated_whitespace(
     webscene_engine* engine)
 {
@@ -2042,6 +2640,54 @@ void test_absolute_flex_child_uses_container_static_position(
     require(
         result == "[0,0,18,18]",
         "an absolute flex child used the cursor after preceding flow items as its static position: "
+            + result);
+}
+
+void test_absolute_inset_stretch_accounts_for_negative_margins(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; }
+              .shell { display: inline-block; }
+              #control {
+                position: relative;
+                display: inline-flex;
+                box-sizing: border-box;
+                width: 34px;
+                height: 34px;
+                border: 1px solid #2962ff;
+                border-radius: 6px;
+              }
+              #shadow {
+                position: absolute;
+                inset: 0;
+                box-sizing: content-box;
+                margin: -1px;
+                border: 2px solid #2962ff;
+                border-radius: 6px;
+              }
+            </style>
+            <span class="shell"><button><span><div id="control">
+              <span id="shadow"></span>
+            </div></span></button></span>`;
+          const control = document.getElementById('control').getBoundingClientRect();
+          const shadow = document.getElementById('shadow').getBoundingClientRect();
+          return [
+            shadow.x - control.x,
+            shadow.y - control.y,
+            shadow.width,
+            shadow.height,
+            control.right - shadow.right,
+            control.bottom - shadow.bottom
+          ];
+        })()
+    )JS", "native-absolute-inset-stretch-negative-margin.js");
+    require(
+        result == "[0,0,34,34,0,0]",
+        "an inset-stretched absolute control child did not account for negative margins: "
             + result);
 }
 
@@ -3292,6 +3938,10 @@ void test_class_list_is_same_live_object(webscene_engine* engine)
 
 void test_bounded_css_named_color_palette()
 {
+    require(webscene_native::native_document::parse_color("hsl(0, 100%, 50%)") == 0xFF0000FFU,
+        "hsl() did not resolve the TradingView color-plane base hue");
+    require(webscene_native::native_document::parse_color("hsl(0.5turn 100% 50% / 25%)") == 0x00FFFF40U,
+        "modern hsl() hue and alpha syntax did not resolve");
     require(webscene_native::native_document::parse_color("silver") == 0xC0C0C0FFU,
         "CSS silver did not resolve to its standard RGBA value");
     require(webscene_native::native_document::parse_color("maroon") == 0x800000FFU,

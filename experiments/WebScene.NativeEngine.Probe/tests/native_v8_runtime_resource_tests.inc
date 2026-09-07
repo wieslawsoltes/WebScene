@@ -220,6 +220,15 @@ void test_fetch_carries_document_origin_to_resource_host()
         ".then(symbols => globalThis.__symbols = symbols)",
         "fetch-origin-fixture.js");
 
+    // execute_and_wait observes completion of the script that schedules the
+    // fetch, not settlement of the fetch promise. Wait for the fixture result
+    // before inspecting metadata populated by the asynchronous callback.
+    const auto result = evaluate_until_equals(
+        engine,
+        "globalThis.__symbols?.[0]?.symbol ?? ''",
+        "iframe-fetch-origin-result.js",
+        R"("AAPL")");
+
     require(
         server.origin == "https://www.tradingview-widget.test",
         "fetch did not carry the document origin: " + server.origin);
@@ -230,11 +239,6 @@ void test_fetch_carries_document_origin_to_resource_host()
         server.initiator == WEBSCENE_RESOURCE_INITIATOR_FETCH
             && server.mode == WEBSCENE_FETCH_MODE_CORS,
         "fetch request context did not identify a CORS fetch");
-    const auto result = evaluate_until_equals(
-        engine,
-        "globalThis.__symbols?.[0]?.symbol ?? ''",
-        "iframe-fetch-origin-result.js",
-        R"("AAPL")");
     require(result == R"("AAPL")", "symbol fetch did not populate results: " + result);
     webscene_engine_destroy(engine);
 }
@@ -716,6 +720,7 @@ void test_document_start_ordering_storage_and_fail_closed_errors()
         &server};
     auto* engine = webscene_engine_create_with_options(&engine_options);
     require(engine != nullptr, "document-start engine creation failed");
+    webscene_engine_configure_diagnostics(engine, WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE, nullptr, nullptr);
 
     constexpr std::string_view all_frames_source =
         "if (parent === window) {"

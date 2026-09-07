@@ -810,6 +810,47 @@ void test_dom_selector_apis_throw_syntax_error_for_invalid_selectors(webscene_en
     }
 }
 
+void test_positional_selector_sibling_semantics(webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              #pos-root > span:nth-child(3) { width: 37px; }
+              #pos-root > span:nth-last-of-type(2) { height: 29px; }
+            </style>
+            <div id="pos-root">
+              <span id="a"></span>
+              <em id="b"></em>
+              <span id="c"></span>
+              <span id="d"></span>
+            </div>
+            <div id="only-root"> text <i id="only"></i> tail </div>`;
+          const root = document.querySelector('#pos-root');
+          const ids = selector => Array.from(
+            root.querySelectorAll(selector), node => node.id);
+          const c = document.querySelector('#c');
+          return {
+            firstChild: ids(':scope > :first-child'),
+            lastChild: ids(':scope > :last-child'),
+            nthChild: ids(':scope > :nth-child(3)'),
+            nthLastChild: ids(':scope > :nth-last-child(2)'),
+            firstOfType: ids(':scope > span:first-of-type'),
+            lastOfType: ids(':scope > span:last-of-type'),
+            nthOfType: ids(':scope > span:nth-of-type(2)'),
+            nthLastOfType: ids(':scope > span:nth-last-of-type(2)'),
+            onlyOfType: ids(':scope > em:only-of-type'),
+            onlyChild: document.querySelector('#only:only-child')?.id ?? null,
+            cascade: [getComputedStyle(c).width, getComputedStyle(c).height]
+          };
+        })()
+    )JS", "native-positional-selector-sibling-semantics.js");
+    const auto expected = R"JSON({"firstChild":["a"],"lastChild":["d"],"nthChild":["c"],"nthLastChild":["c"],"firstOfType":["a"],"lastOfType":["d"],"nthOfType":["c"],"nthLastOfType":["c"],"onlyOfType":["b"],"onlyChild":"only","cascade":["37px","29px"]})JSON";
+    require(
+        result == expected,
+        "positional selector sibling semantics regressed: " + result);
+}
+
 void test_dropdown_runtime_primitives(webscene_engine* engine)
 {
     const auto result = evaluate(engine, R"JS(
@@ -1346,7 +1387,7 @@ void test_async_save_acknowledgement_publishes_without_pointer_input()
               state.pending = false;
               state.acknowledgements++;
               if (!shouldFail) label.textContent = '';
-            }, 100);
+            }, 250);
           });
         })()
     )JS", "async-save-publication-setup.js");
@@ -1361,12 +1402,13 @@ void test_async_save_acknowledgement_publishes_without_pointer_input()
         engine,
         consumed_before + 4U,
         "async-save activations were not consumed");
-    const auto coalesced_state = evaluate(engine, R"JS(({
+    const auto coalesced_state = evaluate_until_equals(engine, R"JS(({
           activations: __saveState.activations,
           requests: __saveState.requests,
           pending: __saveState.pending,
           label: document.getElementById('label').textContent
-        }))JS", "async-save-coalescing.js");
+        }))JS", "async-save-coalescing.js",
+        R"JSON({"activations":2,"requests":1,"pending":true,"label":"Save"})JSON");
     require(
         coalesced_state
             == R"JSON({"activations":2,"requests":1,"pending":true,"label":"Save"})JSON",

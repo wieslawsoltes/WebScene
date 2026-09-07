@@ -1,6 +1,7 @@
 #include "webscene_native_engine.h"
 #include "webscene_native_dom.h"
 #include "webscene_v8_runtime.h"
+#include "webscene_runtime_diagnostics.h"
 
 #include <algorithm>
 #include <array>
@@ -261,6 +262,15 @@ struct webscene_engine final {
 #include "webscene_native_engine_interop_api.inc"
 #include "webscene_native_engine_diagnostics.inc"
 #include "webscene_native_engine_metrics.inc"
+    void configure_diagnostics(uint32_t flags, webscene_diagnostic_available_callback callback, void* data) {
+        diagnostics_.configure(flags, callback, data);
+    }
+    size_t take_diagnostic(char* destination, size_t capacity) {
+        return diagnostics_.take(destination, capacity);
+    }
+    size_t copy_runtime_failure(char* destination, size_t capacity) {
+        return diagnostics_.copy_failure(destination, capacity);
+    }
 private:
 #include "webscene_native_engine_interop_work.inc"
 #include "webscene_native_engine_worker.inc"
@@ -276,6 +286,8 @@ private:
     void* resource_load_v2_user_data_{nullptr};
     webscene_resource_load_callback_v3 resource_load_callback_v3_{nullptr};
     void* resource_load_v3_user_data_{nullptr};
+    webscene_stylesheet_consumed_callback stylesheet_consumed_callback_{nullptr};
+    void* stylesheet_consumed_user_data_{nullptr};
     webscene_scene_published_callback scene_published_callback_{nullptr};
     void* scene_published_user_data_{nullptr};
     webscene_host_request_available_callback
@@ -305,8 +317,11 @@ private:
         WEBSCENE_PREFERRED_COLOR_SCHEME_LIGHT};
     std::atomic<bool> preferred_color_scheme_changed_{false};
     std::atomic<uint8_t> host_animation_frame_requested_{0U};
+    std::atomic<uint64_t> observed_host_timestamp_microseconds_{0U};
     std::atomic<uint64_t> observed_compositor_timestamp_microseconds_{0U};
+    std::atomic<bool> frame_paced_pointer_pending_{false};
     webscene_native::native_document document_;
+    webscene_native::runtime_diagnostics diagnostics_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -550,6 +565,7 @@ private:
 #endif
     std::atomic<uint32_t> current_cursor_{WEBSCENE_CURSOR_DEFAULT};
     std::atomic<bool> checkpoint_requested_{false};
+    std::atomic<uint32_t> pending_canvas_export_release_id_{0U};
     mutable std::mutex iframe_html_mutex_;
     std::string iframe_html_;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -742,6 +758,8 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 webscene_engine_options,
                 resource_load_callback_v3);
         const auto has_resource_callback_v3 =
+            options->struct_size >= offsetof(webscene_engine_options, stylesheet_consumed_callback);
+        const auto has_stylesheet_consumed_callback =
             options->struct_size >= sizeof(webscene_engine_options);
         return new webscene_engine(
             options->simulated_chart_command_count,
@@ -773,7 +791,9 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 : nullptr,
             has_animation_frame_requested_callback
                 ? options->animation_frame_requested_user_data
-                : nullptr);
+                : nullptr,
+            has_stylesheet_consumed_callback ? options->stylesheet_consumed_callback : nullptr,
+            has_stylesheet_consumed_callback ? options->stylesheet_consumed_user_data : nullptr);
     } catch (...) {
         return nullptr;
     }
@@ -836,6 +856,13 @@ uint8_t webscene_engine_enqueue_resize_frame(
 uint32_t webscene_engine_get_cursor(const webscene_engine* engine)
 {
     return engine == nullptr ? WEBSCENE_CURSOR_DEFAULT : engine->cursor();
+}
+
+void webscene_engine_observe_host_timeline(
+    webscene_engine* engine,
+    double timestamp_ms)
+{
+    if (engine != nullptr) engine->observe_host_timeline(timestamp_ms);
 }
 
 void webscene_engine_observe_compositor_frame(
@@ -1070,6 +1097,23 @@ size_t webscene_engine_take_host_request(
         : engine->take_host_request(destination, destination_capacity);
 }
 
+void webscene_engine_configure_diagnostics(
+    webscene_engine* engine, uint32_t flags,
+    webscene_diagnostic_available_callback callback, void* user_data)
+{
+    if (engine) engine->configure_diagnostics(flags, callback, user_data);
+}
+
+size_t webscene_engine_take_diagnostic(webscene_engine* engine, char* destination, size_t capacity)
+{
+    return engine ? engine->take_diagnostic(destination, capacity) : 0;
+}
+
+size_t webscene_engine_copy_runtime_failure(webscene_engine* engine, char* destination, size_t capacity)
+{
+    return engine ? engine->copy_runtime_failure(destination, capacity) : 0;
+}
+
 size_t webscene_engine_take_console_message(
     webscene_engine* engine,
     char* destination,
@@ -1151,6 +1195,13 @@ size_t webscene_engine_copy_canvas_layouts(
 uint8_t webscene_engine_request_scene_checkpoint(webscene_engine* engine)
 {
     return engine != nullptr && engine->request_scene_checkpoint() ? 1U : 0U;
+}
+
+uint8_t webscene_engine_release_canvas_export(
+    webscene_engine* engine,
+    uint32_t node_id)
+{
+    return engine != nullptr && engine->release_canvas_export(node_id) ? 1U : 0U;
 }
 
 uint8_t webscene_engine_request_low_memory(webscene_engine* engine)

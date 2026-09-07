@@ -732,7 +732,7 @@
             uint64_t inline_property_mask = 0U;
             for (const auto& declaration : parse_css_declarations(value, true)) {
                 if (!store_inline_declaration(*node, declaration)) continue;
-                self->apply_css_declaration(*node, declaration);
+                self->apply_css_declaration(*node, declaration, true);
                 inline_property_mask |= inline_style_mask(declaration.name);
             }
             node->style.inline_property_mask |= inline_property_mask;

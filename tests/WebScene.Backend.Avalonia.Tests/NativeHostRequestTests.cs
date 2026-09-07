@@ -47,6 +47,16 @@ public sealed class NativeHostRequestTests
     }
 
     [Fact]
+    public void EmptyPngDownloadIsRejectedInsteadOfCreatingAZeroByteFile()
+    {
+        var parsed = NativeHostRequest.TryGetDownload(
+            """{"kind":"download","suggestedFileName":"chart.png","url":"data:image/png;base64,"}""",
+            out _);
+
+        Assert.False(parsed);
+    }
+
+    [Fact]
     public void CanvasClipboardWriteRequestsHostRenderedPng()
     {
         var parsed = NativeHostRequest.TryGetClipboardWrite(

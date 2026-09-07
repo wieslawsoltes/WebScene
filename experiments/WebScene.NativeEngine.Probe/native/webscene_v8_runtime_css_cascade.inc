@@ -1,13 +1,66 @@
-    static void apply_scrollbar_css_declaration(
-        node_style& style,
+    void apply_scrollbar_css_declaration(
+        dom_node& node,
+        int pseudo_kind,
         const css_declaration& declaration)
     {
-        if (declaration.name != "display"
-            || (style.scrollbar_visibility_important && !declaration.important)) {
+        auto& style = node.style;
+        const auto contains_variable = declaration.value.find("var(") != std::string::npos;
+        auto resolved_value = std::string{};
+        const auto& value = contains_variable
+            ? (resolved_value = resolve_css_value(node, declaration.value))
+            : declaration.value;
+        if (value.empty() && contains_variable) return;
+        const auto lower = lower_html_name(trim_css(value));
+        auto& scrollbar = style.mutable_scrollbar();
+        if (pseudo_kind == 3) {
+            if (declaration.name == "display") {
+                if (style.scrollbar_visibility_important && !declaration.important) return;
+                style.scrollbar_hidden = lower == "none";
+                style.scrollbar_visibility_important = declaration.important;
+            } else if (declaration.name == "width") {
+                const auto length = native_document::parse_length(value);
+                if (length.unit == length_unit::pixels) {
+                    scrollbar.width = std::max(0.0F, length.value);
+                    scrollbar.overlay_inset = 0;
+                }
+            } else if (declaration.name == "height") {
+                const auto length = native_document::parse_length(value);
+                if (length.unit == length_unit::pixels) {
+                    scrollbar.height = std::max(0.0F, length.value);
+                    scrollbar.overlay_inset = 0;
+                }
+            }
             return;
         }
-        style.scrollbar_hidden = trim_css(declaration.value) == "none";
-        style.scrollbar_visibility_important = declaration.important;
+        if (pseudo_kind == 4) {
+            if (declaration.name == "background" || declaration.name == "background-color") {
+                scrollbar.thumb_rgba = lower == "initial" ? 0U
+                    : native_document::parse_color(value);
+            } else if (declaration.name == "border-radius") {
+                scrollbar.thumb_radius = std::max(
+                    0.0F, native_document::parse_length(value).value);
+            } else if (declaration.name == "border" || declaration.name == "border-width") {
+                std::istringstream stream(value);
+                for (std::string token; stream >> token;) {
+                    if (!token.empty() && (std::isdigit(static_cast<unsigned char>(token.front()))
+                            || token.front() == '.')) {
+                        scrollbar.thumb_border_width = std::max(
+                            0.0F, native_document::parse_length(token).value);
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+        if (pseudo_kind == 5) {
+            if (declaration.name == "background" || declaration.name == "background-color") {
+                scrollbar.track_rgba = lower == "initial" ? 0U
+                    : native_document::parse_color(value);
+            } else if (declaration.name == "border-radius") {
+                scrollbar.track_radius = std::max(
+                    0.0F, native_document::parse_length(value).value);
+            }
+        }
     }
 
     static bool layout_length_equal(css_length left, css_length right) noexcept
@@ -15,6 +68,29 @@
         return left.value == right.value
             && left.unit == right.unit
             && left.pixel_offset == right.pixel_offset;
+    }
+
+    static bool is_explicit_css_color_token(
+        std::string_view value,
+        uint32_t parsed) noexcept
+    {
+        if (parsed != 0U) return true;
+        const auto first = value.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) return false;
+        const auto last = value.find_last_not_of(" \t\r\n");
+        value = value.substr(first, last - first + 1U);
+        const auto lower = lower_html_name(std::string(value));
+        if (lower == "transparent" || lower == "currentcolor"
+            || lower.starts_with("hsl(") || lower.starts_with("hsla(")) return true;
+        if (value.front() != '#'
+            || (value.size() != 4U && value.size() != 5U
+                && value.size() != 7U && value.size() != 9U)) {
+            return false;
+        }
+        return std::all_of(
+            value.begin() + 1,
+            value.end(),
+            [](unsigned char character) { return std::isxdigit(character) != 0; });
     }
 
     static bool pseudo_layout_equal(
@@ -515,6 +591,7 @@
         } else if (name == "position") {
             pseudo.position = value == "absolute" ? position_mode::absolute
                 : value == "fixed" ? position_mode::fixed
+                : value == "sticky" ? position_mode::sticky
                 : value == "relative" ? position_mode::relative
                 : position_mode::normal;
         } else if (name == "z-index") {
@@ -563,6 +640,43 @@
             pseudo.margin_top = native_document::parse_length(value);
         } else if (name == "margin-bottom" || name == "margin-block-end") {
             pseudo.margin_bottom = native_document::parse_length(value);
+        } else if (name == "padding") {
+            std::vector<css_length> values;
+            std::istringstream stream(value);
+            for (std::string token; stream >> token;) {
+                values.push_back(native_document::parse_length(token));
+            }
+            if (!values.empty()) {
+                pseudo.padding_top = values[0];
+                pseudo.padding_right = values.size() > 1 ? values[1] : values[0];
+                pseudo.padding_bottom = values.size() > 2 ? values[2] : values[0];
+                pseudo.padding_left = values.size() > 3 ? values[3]
+                    : values.size() > 1 ? values[1] : values[0];
+            }
+        } else if (name == "padding-inline" || name == "padding-block") {
+            const auto tokens = split_transition_tokens(value);
+            if (!tokens.empty() && tokens.size() <= 2U) {
+                const auto& first = tokens[0];
+                const auto& second = tokens.size() == 2U ? tokens[1] : tokens[0];
+                const auto start = native_document::parse_length(first);
+                const auto end = second.empty()
+                    ? start : native_document::parse_length(second);
+                if (name == "padding-inline") {
+                    pseudo.padding_left = start;
+                    pseudo.padding_right = end;
+                } else {
+                    pseudo.padding_top = start;
+                    pseudo.padding_bottom = end;
+                }
+            }
+        } else if (name == "padding-left" || name == "padding-inline-start") {
+            pseudo.padding_left = native_document::parse_length(value);
+        } else if (name == "padding-right" || name == "padding-inline-end") {
+            pseudo.padding_right = native_document::parse_length(value);
+        } else if (name == "padding-top" || name == "padding-block-start") {
+            pseudo.padding_top = native_document::parse_length(value);
+        } else if (name == "padding-bottom" || name == "padding-block-end") {
+            pseudo.padding_bottom = native_document::parse_length(value);
         } else if (name == "box-sizing") {
             pseudo.border_box = value == "border-box";
         } else if (canonical_css_property_name(name).starts_with("border")
@@ -578,6 +692,10 @@
             border_style.border_top_rgba = pseudo.border_top_rgba;
             border_style.border_right_rgba = pseudo.border_right_rgba;
             border_style.border_bottom_rgba = pseudo.border_bottom_rgba;
+            border_style.border_left_current_color = pseudo.border_left_current_color;
+            border_style.border_top_current_color = pseudo.border_top_current_color;
+            border_style.border_right_current_color = pseudo.border_right_current_color;
+            border_style.border_bottom_current_color = pseudo.border_bottom_current_color;
             if (apply_border_declaration(border_style, name, value)) {
                 pseudo.border_left_width = border_style.border_left_width;
                 pseudo.border_top_width = border_style.border_top_width;
@@ -587,6 +705,10 @@
                 pseudo.border_top_rgba = border_style.border_top_rgba;
                 pseudo.border_right_rgba = border_style.border_right_rgba;
                 pseudo.border_bottom_rgba = border_style.border_bottom_rgba;
+                pseudo.border_left_current_color = border_style.border_left_current_color;
+                pseudo.border_top_current_color = border_style.border_top_current_color;
+                pseudo.border_right_current_color = border_style.border_right_current_color;
+                pseudo.border_bottom_current_color = border_style.border_bottom_current_color;
             } else {
                 decision.classification = "unsupported";
             }
@@ -635,11 +757,46 @@
             pseudo.outline_width = native_document::parse_length(value);
         } else if (name == "outline-color") {
             pseudo.outline_rgba = native_document::parse_color(value);
+        } else if (name == "background-image") {
+            pseudo.background_image.image_value = value;
+            pseudo.background_image.image_markup.clear();
+            pseudo.background_image.image_view_box.clear();
+            if (value != "none" && !lower_html_name(value).starts_with("linear-gradient(")) {
+                decision.classification = "unsupported";
+                decision.semantic_slice = "single linear-gradient layer";
+            }
+        } else if (name == "background-repeat") {
+            pseudo.background_image.repeat = value;
+        } else if (name == "background-position") {
+            pseudo.background_image.position_value = value;
+        } else if (name == "background-size") {
+            pseudo.background_image.size_value = value;
         } else if (name == "background" || name == "background-color") {
             pseudo.background_current_color = value == "currentcolor" || value == "currentColor";
             pseudo.background_rgba = pseudo.background_current_color
                 ? 0U
                 : native_document::parse_color(value);
+            if (name == "background") {
+                const auto lower = lower_html_name(value);
+                const auto gradient_start = lower.find("linear-gradient(");
+                if (gradient_start == std::string::npos) {
+                    pseudo.background_image.image_value = "none";
+                } else {
+                    auto depth = 0;
+                    auto gradient_end = value.size();
+                    for (auto index = gradient_start; index < value.size(); ++index) {
+                        if (value[index] == '(') ++depth;
+                        else if (value[index] == ')' && --depth == 0) {
+                            gradient_end = index + 1U;
+                            break;
+                        }
+                    }
+                    pseudo.background_image.image_value = value.substr(
+                        gradient_start, gradient_end - gradient_start);
+                }
+                pseudo.background_image.image_markup.clear();
+                pseudo.background_image.image_view_box.clear();
+            }
         } else if (name == "opacity") {
             pseudo.opacity = std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
         } else if (name == "color") {
@@ -807,13 +964,31 @@
         return result;
     }
 
+    static uint8_t margin_sides(std::string_view raw_name)
+    {
+        const auto name = canonical_css_property_name(raw_name);
+        if (name == "margin") return 15U;
+        if (name == "margin-inline") return 5U;
+        if (name == "margin-block") return 10U;
+        if (name == "margin-left" || name == "margin-inline-start") return 1U;
+        if (name == "margin-top" || name == "margin-block-start") return 2U;
+        if (name == "margin-right" || name == "margin-inline-end") return 4U;
+        if (name == "margin-bottom" || name == "margin-block-end") return 8U;
+        return 0U;
+    }
+
     static bool apply_margin_declaration(
         node_style& style,
         std::string_view raw_name,
-        const std::string& value)
+        const std::string& value,
+        uint8_t allowed_sides = 15U)
     {
         const auto name = canonical_css_property_name(raw_name);
         const auto assign = [&](css_length& length, bool& automatic, const std::string& token) {
+            const auto side = &length == &style.margin_left ? 1U
+                : &length == &style.margin_top ? 2U
+                : &length == &style.margin_right ? 4U : 8U;
+            if ((allowed_sides & side) == 0U) return;
             length = native_document::parse_length(token);
             automatic = lower_html_name(trim_css(token)) == "auto";
         };
@@ -1000,10 +1175,14 @@
             }
             return false;
         };
-        const auto parse_side = [&](css_length& width, uint32_t& color) {
+        const auto parse_side = [&] (
+            css_length& width,
+            uint32_t& color,
+            bool& current_color) {
+            current_color = true;
+            color = 0;
             if (value.empty() || value == "none") {
                 width = {};
-                color = 0;
                 return;
             }
             auto remaining = value;
@@ -1014,6 +1193,7 @@
                 if (color_end != std::string::npos) {
                     color = native_document::parse_color(
                         remaining.substr(color_start, color_end - color_start + 1U));
+                    current_color = false;
                     remaining.erase(color_start, color_end - color_start + 1U);
                 }
             }
@@ -1026,9 +1206,9 @@
                     && token != "solid" && token != "dashed" && token != "dotted"
                     && token != "double" && token != "hidden") {
                     const auto parsed = parse_color(token);
-                    if (parsed != 0U || token == "transparent"
-                        || lower_html_name(token) == "currentcolor") {
+                    if (is_explicit_css_color_token(token, parsed)) {
                         color = parsed;
+                        current_color = lower_html_name(token) == "currentcolor";
                     }
                 }
             }
@@ -1056,28 +1236,40 @@
             style.border_right_rgba = parse_color(right);
             style.border_bottom_rgba = parse_color(bottom);
             style.border_left_rgba = parse_color(left);
+            style.border_top_current_color = lower_html_name(top) == "currentcolor";
+            style.border_right_current_color = lower_html_name(right) == "currentcolor";
+            style.border_bottom_current_color = lower_html_name(bottom) == "currentcolor";
+            style.border_left_current_color = lower_html_name(left) == "currentcolor";
         };
         if (name == "border") {
-            parse_side(style.border_top_width, style.border_top_rgba);
-            parse_side(style.border_right_width, style.border_right_rgba);
-            parse_side(style.border_bottom_width, style.border_bottom_rgba);
-            parse_side(style.border_left_width, style.border_left_rgba);
+            parse_side(style.border_top_width, style.border_top_rgba,
+                style.border_top_current_color);
+            parse_side(style.border_right_width, style.border_right_rgba,
+                style.border_right_current_color);
+            parse_side(style.border_bottom_width, style.border_bottom_rgba,
+                style.border_bottom_current_color);
+            parse_side(style.border_left_width, style.border_left_rgba,
+                style.border_left_current_color);
             return true;
         }
         if (name == "border-top") {
-            parse_side(style.border_top_width, style.border_top_rgba);
+            parse_side(style.border_top_width, style.border_top_rgba,
+                style.border_top_current_color);
             return true;
         }
         if (name == "border-right") {
-            parse_side(style.border_right_width, style.border_right_rgba);
+            parse_side(style.border_right_width, style.border_right_rgba,
+                style.border_right_current_color);
             return true;
         }
         if (name == "border-bottom") {
-            parse_side(style.border_bottom_width, style.border_bottom_rgba);
+            parse_side(style.border_bottom_width, style.border_bottom_rgba,
+                style.border_bottom_current_color);
             return true;
         }
         if (name == "border-left") {
-            parse_side(style.border_left_width, style.border_left_rgba);
+            parse_side(style.border_left_width, style.border_left_rgba,
+                style.border_left_current_color);
             return true;
         }
         if (name == "border-width") {
@@ -1097,6 +1289,10 @@
                 style.border_right_rgba = 0;
                 style.border_bottom_rgba = 0;
                 style.border_left_rgba = 0;
+                style.border_top_current_color = true;
+                style.border_right_current_color = true;
+                style.border_bottom_current_color = true;
+                style.border_left_current_color = true;
             } else if (value.find("rgb(") != std::string::npos
                 || value.find("rgba(") != std::string::npos) {
                 const auto color = native_document::parse_color(value);
@@ -1104,6 +1300,10 @@
                 style.border_right_rgba = color;
                 style.border_bottom_rgba = color;
                 style.border_left_rgba = color;
+                style.border_top_current_color = false;
+                style.border_right_current_color = false;
+                style.border_bottom_current_color = false;
+                style.border_left_current_color = false;
             } else {
                 assign_colors(split_transition_tokens(value));
             }
@@ -1130,15 +1330,24 @@
             || set_width("border-left-width", style.border_left_width)) {
             return true;
         }
-        const auto set_color = [&](std::string_view candidate, uint32_t& color) {
+        const auto set_color = [&] (
+            std::string_view candidate,
+            uint32_t& color,
+            bool& current_color) {
             if (name != candidate) return false;
             color = value.empty() ? 0 : parse_color(value);
+            current_color = value.empty()
+                || lower_html_name(value) == "currentcolor";
             return true;
         };
-        return set_color("border-top-color", style.border_top_rgba)
-            || set_color("border-right-color", style.border_right_rgba)
-            || set_color("border-bottom-color", style.border_bottom_rgba)
-            || set_color("border-left-color", style.border_left_rgba);
+        return set_color("border-top-color", style.border_top_rgba,
+                style.border_top_current_color)
+            || set_color("border-right-color", style.border_right_rgba,
+                style.border_right_current_color)
+            || set_color("border-bottom-color", style.border_bottom_rgba,
+                style.border_bottom_current_color)
+            || set_color("border-left-color", style.border_left_rgba,
+                style.border_left_current_color);
     }
 
     static bool is_css_time(std::string_view value)
@@ -1209,7 +1418,12 @@
         const auto resolve = [&](std::string_view property) {
             node_style::transition_timing result;
             for (size_t index = 0; index < properties.size(); ++index) {
-                const auto candidate = lower_html_name(trim_css(properties[index]));
+                auto candidate = lower_html_name(trim_css(properties[index]));
+                // Transition matching uses the canonical physical property.
+                // A logical inset declaration and its physical alias address
+                // the same computed value (CSS Logical Properties §4.1).
+                if (candidate == "inset-inline-start") candidate = "left";
+                else if (candidate == "inset-block-start") candidate = "top";
                 if (candidate != property && candidate != "all") continue;
                 if (!durations.empty()) {
                     result.duration_ms = std::max(
@@ -1226,6 +1440,8 @@
             return result;
         };
         animations.transform_transition = resolve("transform");
+        animations.left_transition = resolve("left");
+        animations.top_transition = resolve("top");
         animations.opacity_transition = resolve("opacity");
         animations.color_transition = resolve("color");
     }
@@ -1463,7 +1679,39 @@
         }
     }
 
-    void apply_css_declaration(dom_node& node, const css_declaration& declaration)
+    void recompute_cascaded_line_height(dom_node& node, const std::vector<const css_rule*>& rules)
+    {
+        // Relative lengths compute against the final font-size, irrespective
+        // of declaration order. Unlike a number, an em/% value then inherits
+        // as a length. Include font shorthands because they reset line-height.
+        std::optional<std::string> winning_value;
+        bool winning_important = false;
+        const auto consider = [&](const css_declaration& declaration) {
+            if (declaration.name != "line-height" && declaration.name != "font") return;
+            if (winning_important && !declaration.important) return;
+            auto value = resolve_css_value(node, declaration.value);
+            if (value.empty()) return;
+            if (declaration.name == "font") {
+                if (value == "inherit" || value == "unset") value = "inherit";
+                else if (const auto font = parse_font_shorthand(node, value); font.has_value())
+                    value = font->line_height_token;
+                else return;
+            }
+            winning_value = std::move(value);
+            winning_important = declaration.important;
+        };
+        for (const auto* rule : rules)
+            for (const auto& declaration : rule->declarations()) consider(declaration);
+        for (const auto& [name, value] : node.authored_style().declarations)
+            consider({name, value, node.authored_style().important_declarations.contains(name)});
+        if (winning_value.has_value()) {
+            const auto font_size = node.style.font_size >= 0
+                ? node.style.font_size : inherited_font_size(node);
+            node.style.line_height = resolved_declared_line_height(node, *winning_value, font_size);
+        }
+    }
+
+    void apply_css_declaration(dom_node& node, const css_declaration& declaration, bool inline_origin = false)
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_css) {
@@ -1472,15 +1720,16 @@
 #endif
         const auto& name = declaration.name;
         if (name == "-moz-transform" || name == "-webkit-transform"
-            || name == "grid-gap") {
+            || name == "grid-gap" || name == "grid-row-gap" || name == "grid-column-gap") {
             feature_decision alias_decision(
                 *this,
                 "css",
                 "property:" + name,
                 "style-application");
             auto normalized = declaration;
-            normalized.name = name == "grid-gap" ? "gap" : "transform";
-            apply_css_declaration(node, normalized);
+            normalized.name = name.starts_with("grid-")
+                ? canonical_css_property_name(name) : "transform";
+            apply_css_declaration(node, normalized, inline_origin);
             return;
         }
         if (name.starts_with("--")) {
@@ -1536,6 +1785,23 @@
         if (contains_variable && is_paint_property(name)) {
             record_composition("css-custom-property-to-paint", node.id);
         }
+        if (const auto sides = margin_sides(name); sides != 0U) {
+            // The coarse inline_margin bit is an invalidation category, not
+            // a cascade priority shared by all four longhands.
+            uint8_t protected_sides = declaration.important
+                ? 0U : node.style.important_margin_sides;
+            for (const auto& [authored_name, authored_value] : node.authored_style().declarations) {
+                if (inline_origin) continue;
+                if (!declaration.important
+                    || node.authored_style().important_declarations.contains(authored_name)) {
+                    protected_sides |= margin_sides(authored_name);
+                }
+            }
+            const auto allowed = static_cast<uint8_t>(sides & ~protected_sides);
+            apply_margin_declaration(node.style, name, value, allowed);
+            if (declaration.important && !inline_origin) node.style.important_margin_sides |= allowed;
+            return;
+        }
         const auto property_mask = inline_style_mask(name);
         if (declaration.important && property_mask != 0U) {
             node.style.important_property_mask |= property_mask;
@@ -1565,6 +1831,7 @@
             reset.display = default_display_for_node(node);
             reset.inline_property_mask = previous.inline_property_mask;
             reset.important_property_mask = previous.important_property_mask;
+            reset.important_margin_sides = previous.important_margin_sides;
             reset.move_custom_properties_from(previous);
             reset.move_pseudo_elements_from(previous);
 
@@ -1586,6 +1853,11 @@
             if (is_inline(inline_bottom)) reset.bottom = previous.bottom;
             if (is_inline(inline_display)) reset.display = previous.display;
             if (is_inline(inline_position)) reset.position = previous.position;
+            if (is_inline(inline_contain)) {
+                reset.contain_stacking_context = previous.contain_stacking_context;
+                reset.mutable_textual().contain_value =
+                    previous.textual().contain_value;
+            }
             if (is_inline(inline_padding)) {
                 reset.padding_left = previous.padding_left;
                 reset.padding_top = previous.padding_top;
@@ -1652,6 +1924,8 @@
                 reset.transform_scale_y = previous.transform_scale_y;
                 reset.transform_rotate_degrees = previous.transform_rotate_degrees;
                 reset.transform_specified = previous.transform_specified;
+                reset.transform_stacking_context =
+                    previous.transform_stacking_context;
             }
             if (is_inline(inline_transform_origin)) {
                 reset.transform_origin_x = previous.transform_origin_x;
@@ -1727,6 +2001,10 @@
                 reset.border_top_rgba = previous.border_top_rgba;
                 reset.border_right_rgba = previous.border_right_rgba;
                 reset.border_bottom_rgba = previous.border_bottom_rgba;
+                reset.border_left_current_color = previous.border_left_current_color;
+                reset.border_top_current_color = previous.border_top_current_color;
+                reset.border_right_current_color = previous.border_right_current_color;
+                reset.border_bottom_current_color = previous.border_bottom_current_color;
             }
             if (has_inline({"outline", "outline-width", "outline-color"})) {
                 reset.outline_width = previous.outline_width;
@@ -1793,11 +2071,16 @@
             return;
         }
         const auto parse_declared_color = [&](const std::string& color_value) {
-            return lower_html_name(color_value) == "currentcolor"
-                ? node.style.foreground_rgba
-                : native_document::parse_color(color_value);
+            return native_document::parse_color(color_value);
         };
-        const auto parse_border = [&](css_length& width, uint32_t& color) {
+        const auto parse_border = [&] (
+            css_length& width,
+            uint32_t& color,
+            bool& current_color) {
+            // A border shorthand resets its omitted color longhand to the
+            // initial currentColor value. Keep that dependency deferred.
+            color = 0;
+            current_color = true;
             auto remaining = value;
             auto color_start = remaining.find("rgba(");
             if (color_start == std::string::npos) color_start = remaining.find("rgb(");
@@ -1806,6 +2089,7 @@
                 if (color_end != std::string::npos) {
                     color = native_document::parse_color(
                         remaining.substr(color_start, color_end - color_start + 1U));
+                    current_color = false;
                     remaining.erase(color_start, color_end - color_start + 1U);
                 }
             }
@@ -1825,8 +2109,10 @@
                     width = native_document::parse_length(token);
                 } else {
                     const auto parsed = parse_declared_color(token);
-                    if (parsed != 0U || token == "transparent"
-                        || lower_html_name(token) == "currentcolor") color = parsed;
+                    if (is_explicit_css_color_token(token, parsed)) {
+                        color = parsed;
+                        current_color = lower_html_name(token) == "currentcolor";
+                    }
                 }
             }
         };
@@ -1842,6 +2128,11 @@
                     node.style.border_right_rgba = single;
                     node.style.border_bottom_rgba = single;
                     node.style.border_left_rgba = single;
+                    const auto current = lower_html_name(value) == "currentcolor";
+                    node.style.border_top_current_color = current;
+                    node.style.border_right_current_color = current;
+                    node.style.border_bottom_current_color = current;
+                    node.style.border_left_current_color = current;
                     return;
                 }
             }
@@ -1859,6 +2150,14 @@
                 node.style.border_right_rgba = parse_declared_color(right);
                 node.style.border_bottom_rgba = parse_declared_color(bottom);
                 node.style.border_left_rgba = parse_declared_color(left);
+                node.style.border_top_current_color =
+                    lower_html_name(top) == "currentcolor";
+                node.style.border_right_current_color =
+                    lower_html_name(right) == "currentcolor";
+                node.style.border_bottom_current_color =
+                    lower_html_name(bottom) == "currentcolor";
+                node.style.border_left_current_color =
+                    lower_html_name(left) == "currentcolor";
             } else {
                 node.style.border_top_width = native_document::parse_length(top);
                 node.style.border_right_width = native_document::parse_length(right);
@@ -1892,6 +2191,8 @@
                     node.style.transform_scale_y,
                     node.style.transform_rotate_degrees);
                 node.style.transform_specified = true;
+                node.style.transform_stacking_context =
+                    lower_html_name(value) != "none";
             }
             return;
         } else if (name == "transform-origin") {
@@ -1948,30 +2249,42 @@
             && is_inline(inline_border)) {
             return;
         } else if (name == "border") {
-            parse_border(node.style.border_top_width, node.style.border_top_rgba);
-            parse_border(node.style.border_right_width, node.style.border_right_rgba);
-            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba);
-            parse_border(node.style.border_left_width, node.style.border_left_rgba);
+            parse_border(node.style.border_top_width, node.style.border_top_rgba,
+                node.style.border_top_current_color);
+            parse_border(node.style.border_right_width, node.style.border_right_rgba,
+                node.style.border_right_current_color);
+            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba,
+                node.style.border_bottom_current_color);
+            parse_border(node.style.border_left_width, node.style.border_left_rgba,
+                node.style.border_left_current_color);
             return;
         } else if (name == "border-top" || name == "border-block-start") {
-            parse_border(node.style.border_top_width, node.style.border_top_rgba);
+            parse_border(node.style.border_top_width, node.style.border_top_rgba,
+                node.style.border_top_current_color);
             return;
         } else if (name == "border-right" || name == "border-inline-end") {
-            parse_border(node.style.border_right_width, node.style.border_right_rgba);
+            parse_border(node.style.border_right_width, node.style.border_right_rgba,
+                node.style.border_right_current_color);
             return;
         } else if (name == "border-bottom" || name == "border-block-end") {
-            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba);
+            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba,
+                node.style.border_bottom_current_color);
             return;
         } else if (name == "border-left" || name == "border-inline-start") {
-            parse_border(node.style.border_left_width, node.style.border_left_rgba);
+            parse_border(node.style.border_left_width, node.style.border_left_rgba,
+                node.style.border_left_current_color);
             return;
         } else if (name == "border-inline") {
-            parse_border(node.style.border_left_width, node.style.border_left_rgba);
-            parse_border(node.style.border_right_width, node.style.border_right_rgba);
+            parse_border(node.style.border_left_width, node.style.border_left_rgba,
+                node.style.border_left_current_color);
+            parse_border(node.style.border_right_width, node.style.border_right_rgba,
+                node.style.border_right_current_color);
             return;
         } else if (name == "border-block") {
-            parse_border(node.style.border_top_width, node.style.border_top_rgba);
-            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba);
+            parse_border(node.style.border_top_width, node.style.border_top_rgba,
+                node.style.border_top_current_color);
+            parse_border(node.style.border_bottom_width, node.style.border_bottom_rgba,
+                node.style.border_bottom_current_color);
             return;
         } else if (name == "border-color") {
             parse_four_border_values(true);
@@ -1982,7 +2295,11 @@
         } else if (name == "outline") {
             node.style.outline_width = {};
             node.style.outline_rgba = 0;
-            parse_border(node.style.outline_width, node.style.outline_rgba);
+            auto ignored_current_color = false;
+            parse_border(
+                node.style.outline_width,
+                node.style.outline_rgba,
+                ignored_current_color);
             return;
         } else if (name == "outline-width") {
             node.style.outline_width = native_document::parse_length(value);
@@ -1999,26 +2316,42 @@
         } else if (name == "border-top-color"
             || name == "border-block-start-color") {
             node.style.border_top_rgba = parse_declared_color(value);
+            node.style.border_top_current_color =
+                lower_html_name(value) == "currentcolor";
             return;
         } else if (name == "border-right-color"
             || name == "border-inline-end-color") {
             node.style.border_right_rgba = parse_declared_color(value);
+            node.style.border_right_current_color =
+                lower_html_name(value) == "currentcolor";
             return;
         } else if (name == "border-bottom-color"
             || name == "border-block-end-color") {
             node.style.border_bottom_rgba = parse_declared_color(value);
+            node.style.border_bottom_current_color =
+                lower_html_name(value) == "currentcolor";
             return;
         } else if (name == "border-left-color"
             || name == "border-inline-start-color") {
             node.style.border_left_rgba = parse_declared_color(value);
+            node.style.border_left_current_color =
+                lower_html_name(value) == "currentcolor";
             return;
         } else if (name == "border-inline-color") {
             node.style.border_left_rgba = parse_declared_color(value);
             node.style.border_right_rgba = node.style.border_left_rgba;
+            node.style.border_left_current_color =
+                lower_html_name(value) == "currentcolor";
+            node.style.border_right_current_color =
+                node.style.border_left_current_color;
             return;
         } else if (name == "border-block-color") {
             node.style.border_top_rgba = parse_declared_color(value);
             node.style.border_bottom_rgba = node.style.border_top_rgba;
+            node.style.border_top_current_color =
+                lower_html_name(value) == "currentcolor";
+            node.style.border_bottom_current_color =
+                node.style.border_top_current_color;
             return;
         } else if (name == "border-top-width"
             || name == "border-block-start-width") {
@@ -2117,21 +2450,7 @@
             }
         } else if ((name == "padding-block" || name == "padding-inline")
             && !is_inline(inline_padding)) {
-            std::istringstream stream(value);
-            std::string first;
-            std::string second;
-            stream >> first >> second;
-            if (!first.empty()) {
-                const auto start = native_document::parse_length(first);
-                const auto end = native_document::parse_length(second.empty() ? first : second);
-                if (name == "padding-block") {
-                    node.style.padding_top = start;
-                    node.style.padding_bottom = end;
-                } else {
-                    node.style.padding_left = start;
-                    node.style.padding_right = end;
-                }
-            }
+            apply_padding_declaration(node.style, name, value);
         } else if ((name == "padding-left" || name == "padding-inline-start")
             && !is_inline(inline_padding)) {
             node.style.padding_left = native_document::parse_length(value);
@@ -2144,70 +2463,11 @@
         } else if ((name == "padding-bottom" || name == "padding-block-end")
             && !is_inline(inline_padding)) {
             node.style.padding_bottom = native_document::parse_length(value);
-        } else if (name == "margin" && !is_inline(inline_margin)) {
-            std::vector<css_length> values;
-            std::vector<bool> automatic;
-            size_t cursor = 0;
-            while (cursor < value.size()) {
-                while (cursor < value.size()
-                    && std::isspace(static_cast<unsigned char>(value[cursor]))) ++cursor;
-                if (cursor >= value.size()) break;
-                auto end = value.find(' ', cursor);
-                if (end == std::string::npos) end = value.size();
-                const auto token = value.substr(cursor, end - cursor);
-                values.push_back(native_document::parse_length(token));
-                automatic.push_back(token == "auto");
-                cursor = end + 1U;
-            }
-            if (!values.empty()) {
-                node.style.margin_top = values[0];
-                node.style.margin_right = values.size() > 1 ? values[1] : values[0];
-                node.style.margin_bottom = values.size() > 2 ? values[2] : values[0];
-                node.style.margin_left = values.size() > 3 ? values[3]
-                    : values.size() > 1 ? values[1] : values[0];
-                node.style.margin_top_auto = automatic[0];
-                node.style.margin_right_auto = automatic.size() > 1 ? automatic[1] : automatic[0];
-                node.style.margin_bottom_auto = automatic.size() > 2 ? automatic[2] : automatic[0];
-                node.style.margin_left_auto = automatic.size() > 3 ? automatic[3]
-                    : automatic.size() > 1 ? automatic[1] : automatic[0];
-            }
-        } else if ((name == "margin-block" || name == "margin-inline")
-            && !is_inline(inline_margin)) {
-            std::istringstream stream(value);
-            std::string first;
-            std::string second;
-            stream >> first >> second;
-            if (!first.empty()) {
-                const auto start = native_document::parse_length(first);
-                const auto end = native_document::parse_length(second.empty() ? first : second);
-                if (name == "margin-block") {
-                    node.style.margin_top = start;
-                    node.style.margin_bottom = end;
-                    node.style.margin_top_auto = first == "auto";
-                    node.style.margin_bottom_auto = (second.empty() ? first : second) == "auto";
-                } else {
-                    node.style.margin_left = start;
-                    node.style.margin_right = end;
-                    node.style.margin_left_auto = first == "auto";
-                    node.style.margin_right_auto = (second.empty() ? first : second) == "auto";
-                }
-            }
-        } else if ((name == "margin-left" || name == "margin-inline-start")
-            && !is_inline(inline_margin)) {
-            node.style.margin_left = native_document::parse_length(value);
-            node.style.margin_left_auto = value == "auto";
-        } else if ((name == "margin-right" || name == "margin-inline-end")
-            && !is_inline(inline_margin)) {
-            node.style.margin_right = native_document::parse_length(value);
-            node.style.margin_right_auto = value == "auto";
-        } else if ((name == "margin-top" || name == "margin-block-start")
-            && !is_inline(inline_margin)) {
-            node.style.margin_top = native_document::parse_length(value);
-            node.style.margin_top_auto = value == "auto";
-        } else if ((name == "margin-bottom" || name == "margin-block-end")
-            && !is_inline(inline_margin)) {
-            node.style.margin_bottom = native_document::parse_length(value);
-            node.style.margin_bottom_auto = value == "auto";
+        } else if (name.starts_with("margin") && !is_inline(inline_margin)
+            && apply_margin_declaration(node.style, name, value)) {
+            // Share the function-aware component parser with inline CSSOM
+            // updates. Whitespace inside calc()/min()/max() is not a side
+            // separator in a margin shorthand.
         } else if (name == "gap" && !is_inline(inline_gap)) {
             std::istringstream stream(value);
             std::string row;
@@ -2305,6 +2565,7 @@
                 ? node.parent->style.position
                 : value == "absolute" ? position_mode::absolute
                 : value == "fixed" ? position_mode::fixed
+                : value == "sticky" ? position_mode::sticky
                 : value == "relative" ? position_mode::relative
                 : position_mode::normal;
         } else if (name == "float" && !is_inline(inline_float)) {
@@ -2487,8 +2748,7 @@
                 node.style.background_current_color =
                     lower_html_name(value) == "currentcolor";
                 const auto parsed = parse_declared_color(value);
-                if (name == "background" || parsed != 0U || value == "transparent"
-                    || lower_html_name(value) == "currentcolor") {
+                if (name == "background" || is_explicit_css_color_token(value, parsed)) {
                     node.style.background_rgba = parsed;
                 }
             }
@@ -2534,6 +2794,20 @@
                 node.style.overflow_y = parse_overflow_mode(value);
             }
             refresh_overflow_state(node.style);
+        } else if (name == "contain" && !is_inline(inline_contain)) {
+            auto contain = lower_html_name(value);
+            if (contain == "inherit" && node.parent != nullptr) {
+                contain = node.parent->style.textual().contain_value;
+            }
+            if (contain == "initial" || contain == "unset" || contain == "revert"
+                || contain.empty()) {
+                contain = "none";
+            }
+            node.style.mutable_textual().contain_value = contain;
+            node.style.contain_stacking_context = contain == "content"
+                || contain == "strict"
+                || (" " + contain + " ").find(" layout ") != std::string::npos
+                || (" " + contain + " ").find(" paint ") != std::string::npos;
         } else if (name == "visibility" && !is_inline(inline_visibility)) {
             node.style.visibility_specified = value != "inherit" && value != "unset";
             node.style.visibility_hidden = value == "hidden" || value == "collapse";
@@ -2544,7 +2818,9 @@
             node.style.opacity = std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
         } else if (name == "color" && !is_inline(inline_color)) {
             const auto parsed = native_document::parse_color(value);
-            if (parsed != 0U || value == "transparent") node.style.foreground_rgba = parsed;
+            if (is_explicit_css_color_token(value, parsed)) {
+                node.style.foreground_rgba = parsed;
+            }
         } else if (name == "fill" && !is_inline(inline_svg_fill)) {
             node.style.mutable_textual().svg_fill =
                 value == "inherit" || value == "unset"
@@ -2715,8 +2991,10 @@
         }
         const auto previous_style = node.style;
         node.style.important_property_mask = 0;
+        node.style.important_margin_sides = 0;
         node.style.scrollbar_hidden = false;
         node.style.scrollbar_visibility_important = false;
+        node.style.reset_scrollbar_style();
         if ((node.style.inline_property_mask & inline_position) == 0U) {
             node.style.position = position_mode::normal;
         }
@@ -2749,7 +3027,7 @@
             node.style.padding_right = {};
             node.style.padding_bottom = {};
         }
-        if ((node.style.inline_property_mask & inline_margin) == 0U) {
+        {
             node.style.margin_left = {};
             node.style.margin_top = {};
             node.style.margin_right = {};
@@ -2758,6 +3036,16 @@
             node.style.margin_top_auto = false;
             node.style.margin_right_auto = false;
             node.style.margin_bottom_auto = false;
+            // Rebuild from authored inline values, not a previous computed
+            // value that may have been replaced by an important stylesheet.
+            for (const auto important : {false, true}) {
+                for (const auto& [name, value] : node.authored_style().declarations) {
+                    if (margin_sides(name) != 0U
+                        && node.authored_style().important_declarations.contains(name) == important) {
+                        apply_margin_declaration(node.style, name, resolve_css_value(node, value));
+                    }
+                }
+            }
         }
         if ((node.style.inline_property_mask & inline_border) == 0U) {
             node.style.border_left_width = {};
@@ -2768,6 +3056,10 @@
             node.style.border_top_rgba = 0;
             node.style.border_right_rgba = 0;
             node.style.border_bottom_rgba = 0;
+            node.style.border_left_current_color = true;
+            node.style.border_top_current_color = true;
+            node.style.border_right_current_color = true;
+            node.style.border_bottom_current_color = true;
         }
         node.style.outline_width = {};
         node.style.outline_rgba = 0;
@@ -2785,11 +3077,16 @@
             node.style.transform_scale_y = 1;
             node.style.transform_rotate_degrees = 0;
             node.style.transform_specified = false;
+            node.style.transform_stacking_context = false;
         }
         if ((node.style.inline_property_mask & inline_transform_origin) == 0U) {
             node.style.transform_origin_x = {50, length_unit::percent};
             node.style.transform_origin_y = {50, length_unit::percent};
             node.style.transform_origin_specified = false;
+        }
+        if ((node.style.inline_property_mask & inline_contain) == 0U) {
+            node.style.contain_stacking_context = false;
+            node.style.mutable_textual().contain_value = "none";
         }
         node.style.clear_animations();
         if ((node.style.inline_property_mask & inline_flex_direction) == 0U) {
@@ -2897,7 +3194,7 @@
             : std::chrono::steady_clock::time_point{};
 #endif
         std::vector<size_t> candidates = unindexed_css_rules;
-        const auto append_candidates = [&](const auto& index, const std::string& key) {
+        const auto append_candidates = [&](const auto& index, const auto& key) {
             const auto match = index.find(key);
             if (match != index.end()) {
                 candidates.insert(candidates.end(), match->second.begin(), match->second.end());
@@ -2933,9 +3230,23 @@
             while (class_cursor < classes.size()
                 && !std::isspace(static_cast<unsigned char>(classes[class_cursor]))) ++class_cursor;
             if (class_cursor > start) {
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+                media_refresh_class_lookups.fetch_add(1U, std::memory_order_relaxed);
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT)
+                append_candidates(
+                    css_rules_by_class,
+                    classes.substr(start, class_cursor - start));
+#else
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+                media_refresh_owned_class_lookup_keys.fetch_add(1U, std::memory_order_relaxed);
+                media_refresh_owned_class_lookup_bytes.fetch_add(
+                    class_cursor - start, std::memory_order_relaxed);
+#endif
                 append_candidates(
                     css_rules_by_class,
                     std::string(classes.substr(start, class_cursor - start)));
+#endif
             }
         }
         sort_css_candidates(candidates);
@@ -3011,7 +3322,7 @@
             apply_css_declaration(
                 node,
                 {name, value,
-                    node.authored_style().important_declarations.contains(name)});
+                    node.authored_style().important_declarations.contains(name)}, true);
             node.style.inline_property_mask = retained_inline_mask;
         }
         // Inline transition declarations are stored separately from the hot
@@ -3038,15 +3349,16 @@
         // Inline relative line-height is authored at a higher origin, but its
         // computed pixel value depends on the winning font-size. Re-resolve it
         // only after stylesheet declarations have completed their cascade.
+        recompute_cascaded_line_height(node, matched_rules);
         recompute_inline_font_relative_metrics(node);
         // Pseudo-elements inherit the originating element's completed
         // computed style. Apply them only after its custom and ordinary
         // declarations so `::before { background:var(--active-bg) }` resolves
         // the state variable authored on the active element.
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
-            if (pseudo_kind == 3) {
+            if (pseudo_kind >= 3 && pseudo_kind <= 6) {
                 for (const auto& declaration : rule->declarations()) {
-                    apply_scrollbar_css_declaration(node.style, declaration);
+                    apply_scrollbar_css_declaration(node, pseudo_kind, declaration);
                 }
                 continue;
             }
@@ -3243,11 +3555,12 @@
                 if (!declaration.name.starts_with("--")) apply_css_declaration(node, declaration);
             }
         }
+        recompute_cascaded_line_height(node, matched_rules);
         recompute_inline_font_relative_metrics(node);
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
-            if (pseudo_kind == 3) {
+            if (pseudo_kind >= 3 && pseudo_kind <= 6) {
                 for (const auto& declaration : rule->declarations()) {
-                    apply_scrollbar_css_declaration(node.style, declaration);
+                    apply_scrollbar_css_declaration(node, pseudo_kind, declaration);
                 }
                 continue;
             }
@@ -3538,7 +3851,7 @@
             apply_css_declaration(
                 node,
                 {name, value,
-                    node.authored_style().important_declarations.contains(name)});
+                    node.authored_style().important_declarations.contains(name)}, true);
             node.style.inline_property_mask = retained_inline_mask;
         }
         document.mark_dirty();
@@ -3912,22 +4225,14 @@
 #endif
     }
 
-    void rebuild_css_rule_indexes_and_root_variables()
+    void rebuild_root_variables()
     {
-        css_rules_by_class.clear();
-        css_rules_by_id.clear();
-        css_rules_by_tag.clear();
-        css_rules_by_attribute.clear();
-        css_rules_by_variable_reference.clear();
-        css_focus_rules.clear();
-        unindexed_css_rules.clear();
-        css_attribute_dependencies.clear();
-        css_descendant_attribute_dependencies.clear();
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+        media_refresh_root_variable_refreshes.fetch_add(1U, std::memory_order_relaxed);
+#endif
         css_variables.clear();
         important_css_variables.clear();
-        for (size_t index = 0; index < css_rules.size(); ++index) {
-            index_css_rule(index);
-            const auto& rule = css_rules[index];
+        for (const auto& rule : css_rules) {
             if (!rule.media_matches || rule.shadow_scope_root_id != 0U
                 || (rule.selector() != ":root" && rule.selector() != "html")) continue;
             for (const auto& declaration : rule.declarations()) {
@@ -3939,6 +4244,23 @@
                 else important_css_variables.erase(declaration.name);
             }
         }
+    }
+
+    void rebuild_css_rule_indexes_and_root_variables()
+    {
+        css_rules_by_class.clear();
+        css_rules_by_id.clear();
+        css_rules_by_tag.clear();
+        css_rules_by_attribute.clear();
+        css_rules_by_variable_reference.clear();
+        css_focus_rules.clear();
+        unindexed_css_rules.clear();
+        css_attribute_dependencies.clear();
+        css_descendant_attribute_dependencies.clear();
+        for (size_t index = 0; index < css_rules.size(); ++index) {
+            index_css_rule(index);
+        }
+        rebuild_root_variables();
     }
 
     void recascade_after_stylesheet_change()

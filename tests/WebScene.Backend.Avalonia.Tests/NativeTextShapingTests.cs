@@ -6,6 +6,7 @@ using Xunit;
 
 namespace WebScene.Backend.Avalonia.Tests;
 
+[Collection("Native web-font cache")]
 public sealed class NativeTextShapingTests
 {
     [Fact]

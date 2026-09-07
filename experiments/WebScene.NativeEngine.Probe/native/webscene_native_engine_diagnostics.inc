@@ -199,6 +199,14 @@
         return true;
     }
 
+    bool release_canvas_export(uint32_t node_id)
+    {
+        if (node_id == 0U) return false;
+        pending_canvas_export_release_id_.store(node_id, std::memory_order_release);
+        signal_worker();
+        return true;
+    }
+
     std::shared_ptr<acknowledgement_state> acknowledgement_state_handle() const
     {
         return acknowledgement_;

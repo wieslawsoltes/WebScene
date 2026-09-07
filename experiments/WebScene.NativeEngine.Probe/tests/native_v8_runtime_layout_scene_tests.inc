@@ -196,6 +196,60 @@ void test_native_overflow_scrolling_and_nowrap(webscene_engine* engine)
             + bounded);
 }
 
+void test_authored_scrollbar_style_and_thumb_drag(webscene_engine* engine)
+{
+    resize(engine, 320, 180, 5800U);
+    const auto initial = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            html,body { margin:0; }
+            #styled { width:120px; height:80px; overflow:auto; }
+            #styled::-webkit-scrollbar { width:5px; height:5px; }
+            #styled::-webkit-scrollbar-track {
+              background-color:transparent; border-radius:3px;
+            }
+            #styled::-webkit-scrollbar-thumb {
+              background-color:rgb(18,52,86); background-clip:content-box;
+              border:1px solid transparent; border-radius:3px;
+            }
+            #content { height:320px; }
+          </style><div id="styled"><div id="content"></div></div>`;
+          const styled = document.getElementById('styled');
+          globalThis.__styledScrollbar = styled;
+          globalThis.__styledScrollbarEvents = 0;
+          styled.addEventListener('scroll', () => __styledScrollbarEvents++);
+          return {
+            clientHeight:styled.clientHeight,
+            scrollHeight:styled.scrollHeight,
+            scrollTop:styled.scrollTop
+          };
+        })()
+    )JS", "native-authored-scrollbar-setup.js");
+    require(
+        initial == R"JSON({"clientHeight":80,"scrollHeight":320,"scrollTop":0})JSON",
+        "authored scrollbar fixture did not establish its overflow range: " + initial);
+
+    const auto consumed_before_drag = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 117, 10, 5801U, true);
+    pointer_move(engine, 117, 65, 5802U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 117, 65, 5803U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_drag + 3,
+        "authored scrollbar thumb drag inputs were not consumed");
+    const auto dragged = evaluate(engine, R"JS(
+        ({
+          scrollTop:Math.round(__styledScrollbar.scrollTop),
+          scrollEvents:__styledScrollbarEvents
+        })
+    )JS", "native-authored-scrollbar-drag-result.js");
+    require(
+        dragged == R"JSON({"scrollTop":220,"scrollEvents":1})JSON",
+        "dragging the authored scrollbar thumb did not update the finite scroll owner: "
+            + dragged);
+
+}
+
 void test_absolute_virtualized_rows_follow_ancestor_scroll_container(
     webscene_engine* engine)
 {
@@ -453,6 +507,165 @@ void test_toolbar_scroll_chevrons_use_single_rotation(webscene_engine* engine)
     require(
         std::abs(svg_rotation) < 0.1F,
         "toolbar top-chevron inherited its wrapper rotation twice");
+}
+
+void test_table_minimum_width_reaches_toolbar_overflow_navigation(
+    webscene_engine* engine)
+{
+    resize(engine, 320, 160, 5810U);
+    const auto initial = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            html,body { margin:0; }
+            #outer { position:relative; width:320px; height:38px; overflow:hidden; }
+            #toolbar { width:320px; height:38px;
+              overflow-x:auto; overflow-y:hidden; contain:content; }
+            #content { display:table; width:100%; height:38px; white-space:nowrap; }
+            #strip { display:flex; position:relative; width:640px; height:38px; }
+            #under { position:absolute; z-index:1; left:296px; top:0;
+              width:24px; height:38px; }
+            #next { position:absolute; right:0; top:0; width:24px; height:38px;
+              transform:translateX(100%); }
+            #outer:hover #next { transform:translateX(0); }
+          </style>
+          <div id="outer"><div id="toolbar"><div id="content"><div id="strip">
+            <button id="under">Under</button></div></div></div>
+            <div id="next"><svg width="24" height="38"><path d="M8 8 L16 19 L8 30"/></svg></div>
+          </div>`;
+          globalThis.__toolbarOverflow = document.getElementById('toolbar');
+          globalThis.__toolbarNextClicks = 0;
+          globalThis.__toolbarUnderClicks = 0;
+          document.getElementById('next').addEventListener('click', () => {
+            __toolbarNextClicks++;
+            __toolbarOverflow.scrollLeft = 240;
+          });
+          document.getElementById('under').addEventListener(
+            'click', () => __toolbarUnderClicks++);
+          const content = document.getElementById('content');
+          const strip = document.getElementById('strip');
+          const next = document.getElementById('next');
+          return {
+            toolbarClientWidth:__toolbarOverflow.clientWidth,
+            toolbarScrollWidth:__toolbarOverflow.scrollWidth,
+            contentWidth:content.getBoundingClientRect().width,
+            contentScrollWidth:content.scrollWidth,
+            stripWidth:strip.getBoundingClientRect().width,
+            contain:getComputedStyle(__toolbarOverflow).getPropertyValue('contain'),
+            nextX:next.getBoundingClientRect().x
+          };
+        })()
+    )JS", "native-toolbar-table-overflow-setup.js");
+    require(
+        initial == R"JSON({"toolbarClientWidth":320,"toolbarScrollWidth":640,"contentWidth":640,"contentScrollWidth":640,"stripWidth":640,"contain":"content","nextX":320})JSON",
+        "display-table minimum width did not establish toolbar overflow: " + initial);
+
+    const auto consumed_before_hover = consumed_input_count(engine);
+    pointer_move(engine, 160, 19, 5811U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_hover + 1,
+        "toolbar hover input was not consumed");
+    const auto hovered = evaluate(engine, R"JS(
+        (() => {
+          const next = document.getElementById('next');
+          const hit = document.elementFromPoint(308, 19);
+          return {
+            nextX:next.getBoundingClientRect().x,
+            hitId:hit?.id || '',
+            hitWithinNext:next.contains(hit)
+          };
+        })()
+    )JS", "native-toolbar-table-overflow-hover.js");
+    require(
+        hovered == R"JSON({"nextX":296,"hitId":"","hitWithinNext":true})JSON",
+        "translated overflow arrow was painted separately from its hit-test box: "
+            + hovered);
+
+    const auto consumed_before_click = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 308, 19, 5812U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 308, 19, 5813U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_click + 2,
+        "toolbar arrow click inputs were not consumed");
+    const auto clicked = evaluate(engine, R"JS(
+        ({
+          nextClicks:__toolbarNextClicks,
+          underClicks:__toolbarUnderClicks,
+          scrollLeft:__toolbarOverflow.scrollLeft
+        })
+    )JS", "native-toolbar-table-overflow-click.js");
+    require(
+        clicked == R"JSON({"nextClicks":1,"underClicks":0,"scrollLeft":240})JSON",
+        "translated overflow arrow did not receive the native click: " + clicked);
+}
+
+void test_dynamic_percentage_flex_list_keeps_intrinsic_inline_contribution(
+    webscene_engine* engine)
+{
+    resize(engine, 420, 300, 5901U);
+    wait_for_consumed_inputs(
+        engine,
+        1U,
+        "compact settings fixture resize was not consumed");
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            html, body { margin:0; }
+            #settings { display:flex; flex-direction:column; width:100%; height:300px; }
+            #content { display:flex; flex:1 1 auto; width:100%; min-height:0;
+              overflow:hidden; }
+            #detail { flex:1 1 auto; }
+            #category-host { flex:0 0 auto; padding:0 8px; overflow-x:hidden;
+              overflow-y:auto; }
+            #categories { display:flex; flex-direction:column; width:100%; }
+            .category { display:flex; flex:0 0 auto; box-sizing:border-box;
+              width:100%; height:60px; }
+          </style>
+          <section id="settings"><div id="content">
+            <article id="detail"><button id="back">Back</button><h1>Symbol</h1></article>
+          </div></section>
+          `;
+          const content = document.getElementById('content');
+          const host = document.createElement('nav');
+          host.id = 'category-host';
+          const categories = document.createElement('div');
+          categories.id = 'categories';
+          for (const label of ['Symbol', 'Status line', 'Scales and lines', 'Canvas', 'Trading']) {
+            const row = document.createElement('button');
+            row.className = 'category';
+            row.textContent = label;
+            categories.appendChild(row);
+          }
+          host.appendChild(categories);
+          content.replaceChildren(host);
+          host.style.width = '-webkit-fill-available';
+          host.style.width = 'stretch';
+          const first = categories.firstElementChild;
+          const hostStyle = getComputedStyle(host);
+          const categoriesStyle = getComputedStyle(categories);
+          return {
+            contentWidth:content.getBoundingClientRect().width,
+            hostWidth:host.getBoundingClientRect().width,
+            categoriesWidth:categories.getBoundingClientRect().width,
+            firstWidth:first.getBoundingClientRect().width,
+            hostFlex:[hostStyle.flexGrow, hostStyle.flexShrink, hostStyle.flexBasis],
+            hostPadding:[hostStyle.paddingLeft, hostStyle.paddingRight],
+            categoriesDisplay:categoriesStyle.display,
+            categoriesWidthStyle:categoriesStyle.width,
+            firstStyle:[getComputedStyle(first).display,
+              getComputedStyle(first).width, getComputedStyle(first).height],
+            firstText:first.textContent,
+            firstScroll:[first.scrollWidth, first.scrollHeight],
+            itemCount:categories.children.length,
+            inlineWidth:host.style.width
+          };
+        })()
+    )JS", "native-dynamic-percentage-flex-list.js");
+    require(
+        result == R"JSON({"contentWidth":420,"hostWidth":420,"categoriesWidth":404,"firstWidth":404,"hostFlex":["0","0",""],"hostPadding":["8px","8px"],"categoriesDisplay":"flex","categoriesWidthStyle":"404px","firstStyle":["flex","404px","60px"],"firstText":"Symbol","firstScroll":[404,60],"itemCount":5,"inlineWidth":"stretch"})JSON",
+        "dynamic percentage flex list lost its intrinsic inline contribution: "
+            + result);
 }
 
 void test_root_document_overflow_scrolls_and_paints_overlay(webscene_engine* engine)
@@ -1106,6 +1319,307 @@ void test_tradingview_settings_dialog_clips_and_scrolls_middle_region(
     require(
         scrolled == R"JSON({"scrollTop":60,"childTop":8})JSON",
         "TradingView settings pane did not scroll its nested viewport: " + scrolled);
+}
+
+void test_tradingview_settings_panel_switch_recomputes_scroll_range(
+    webscene_engine* engine)
+{
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; }
+            #dialog { width:718px; height:734px; overflow:hidden; }
+            #wrapper { display:flex; height:100%; flex-direction:column; }
+            #header { flex:0 0 68px; }
+            #frame { display:flex; flex:1 1 auto; min-height:0; overflow:hidden; }
+            #sidebar { flex:0 0 226px; }
+            #settings { flex:1 1 auto; min-height:0; overflow-y:auto;
+              overflow-x:hidden; background:rgb(11,22,33); }
+            .panel { height:100%; overflow:visible; }
+            .panel[hidden] { display:none; }
+            #canvas-content { height:760px; }
+            #scales-content { height:954px; background:rgb(220,1,2); }
+            #footer { flex:0 0 67px; }
+          </style>
+          <div id="dialog"><div id="wrapper"><div id="header"></div>
+            <div id="frame"><div id="sidebar"></div><div id="settings">
+              <div id="canvas" class="panel"><div id="canvas-content"></div></div>
+              <div id="scales" class="panel" hidden><div id="scales-content"></div></div>
+            </div></div><div id="footer"></div></div></div>`;
+          const settings = document.getElementById('settings');
+          const canvas = document.getElementById('canvas');
+          const scales = document.getElementById('scales');
+          const before = {
+            clientHeight: settings.clientHeight,
+            scrollHeight: settings.scrollHeight
+          };
+          settings.scrollTop = 999;
+          canvas.hidden = true;
+          scales.hidden = false;
+          const maximum = settings.scrollHeight - settings.clientHeight;
+          settings.scrollTop = 999;
+          globalThis.__switchedSettingsScroller = settings;
+          return {
+            before,
+            after: {
+              clientHeight: settings.clientHeight,
+              scrollHeight: settings.scrollHeight,
+              scrollTop: settings.scrollTop,
+              maximum,
+              canvasHeight: canvas.getBoundingClientRect().height,
+              scalesHeight: scales.getBoundingClientRect().height,
+              contentBottom: document.getElementById('scales-content')
+                .getBoundingClientRect().bottom,
+              viewportBottom: settings.getBoundingClientRect().bottom,
+              footerInside: document.getElementById('footer')
+                .getBoundingClientRect().bottom <= document.getElementById('dialog')
+                  .getBoundingClientRect().bottom
+            }
+          };
+        })()
+    )JS", "tradingview-settings-panel-switch-overflow.js");
+    require(
+        result == R"JSON({"before":{"clientHeight":599,"scrollHeight":760},"after":{"clientHeight":599,"scrollHeight":954,"scrollTop":355,"maximum":355,"canvasHeight":0,"scalesHeight":599,"contentBottom":667,"viewportBottom":667,"footerInside":true}})JSON",
+        "switching from Canvas to Scales retained stale overflow geometry: " + result);
+
+    // TradingView replaces the tab-content subtree when switching panels.
+    // Exercise the production-shaped column groups and their gaps through
+    // repeated tall/short/tall replacements so a stale scroll range cannot
+    // make the reduction pass accidentally.
+    const auto replacement_result = evaluate(engine, R"JS(
+        (() => {
+          const settings = document.getElementById('settings');
+          const makePanel = (name, rows) => {
+            const panel = document.createElement('div');
+            panel.id = name;
+            panel.style.cssText =
+              'display:flex;flex-direction:column;gap:20px;width:100%';
+            for (let index = 0; index < rows; ++index) {
+              const row = document.createElement('div');
+              row.style.cssText = 'height:40px;flex:0 0 40px';
+              panel.appendChild(row);
+            }
+            return panel;
+          };
+          const installPanel = (panel) => {
+            settings.replaceChildren(panel);
+            return {
+              clientHeight: settings.clientHeight,
+              scrollHeight: settings.scrollHeight,
+              firstTop: panel.firstElementChild.getBoundingClientRect().top,
+              secondTop: panel.children[1].getBoundingClientRect().top
+            };
+          };
+          const tallPanel = makePanel('scales-replacement', 14);
+          const shortPanel = makePanel('symbol-replacement', 2);
+          const canvas = installPanel(tallPanel);
+          const symbol = installPanel(shortPanel);
+          const scales = installPanel(tallPanel);
+          const trading = installPanel(shortPanel);
+          const finalScales = installPanel(tallPanel);
+          settings.scrollTop = 999;
+          globalThis.__switchedSettingsScroller = settings;
+          return {
+            canvas,
+            symbol,
+            scales,
+            trading,
+            finalScales,
+            finalScrollTop: settings.scrollTop,
+            finalMaximum: settings.scrollHeight - settings.clientHeight
+          };
+        })()
+    )JS", "tradingview-settings-react-panel-replacement.js");
+    require(
+        replacement_result == R"JSON({"canvas":{"clientHeight":599,"scrollHeight":820,"firstTop":-153,"secondTop":-93},"symbol":{"clientHeight":599,"scrollHeight":599,"firstTop":68,"secondTop":128},"scales":{"clientHeight":599,"scrollHeight":820,"firstTop":68,"secondTop":128},"trading":{"clientHeight":599,"scrollHeight":599,"firstTop":68,"secondTop":128},"finalScales":{"clientHeight":599,"scrollHeight":820,"firstTop":68,"secondTop":128},"finalScrollTop":221,"finalMaximum":221})JSON",
+        "replacing TradingView settings content lost its flex gaps or scroll range: "
+            + replacement_result);
+
+    webscene_engine_request_scene_checkpoint(engine);
+    animation_frame_and_wait(engine, 16.0, 9200U);
+    auto observed_switched_scroller = false;
+    auto observed_switched_scrollbar = false;
+    for (auto attempt = 0; attempt < 100 && !observed_switched_scrollbar; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            auto scroller_node_id = 0U;
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.rgba == 0x0B1621FFU) {
+                    scroller_node_id = command.node_id;
+                    observed_switched_scroller = true;
+                    break;
+                }
+            }
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.node_id == scroller_node_id
+                    && command.kind == 10U
+                    && command.rgba == 0xA0A0A0D0U) {
+                    observed_switched_scrollbar = true;
+                    break;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_switched_scrollbar) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        observed_switched_scroller,
+        "the switched TradingView settings scroller was absent from the scene");
+    require(
+        observed_switched_scrollbar,
+        "the switched TradingView settings scroller did not publish a scrollbar");
+
+    const auto consumed_before_wheel = consumed_input_count(engine);
+    wheel_input(engine, 400, 200, -60, 9202U);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_wheel + 1,
+        "switched TradingView settings wheel input was not consumed");
+    const auto scrolled = evaluate(engine, R"JS(
+        (() => ({
+          scrollTop: __switchedSettingsScroller.scrollTop,
+          childTop: __switchedSettingsScroller.firstElementChild
+            .getBoundingClientRect().top
+        }))()
+    )JS", "tradingview-settings-panel-switch-wheel.js");
+    require(
+        scrolled == R"JSON({"scrollTop":161,"childTop":-93})JSON",
+        "the newly visible settings panel did not respond to wheel scrolling: "
+            + scrolled);
+
+    // TradingView's adaptive-dialog helper synchronously clears the authored
+    // height, measures the natural dialog, and restores the viewport cap. A
+    // CSSOM removal must invalidate layout before getBoundingClientRect(); a
+    // stale capped measurement makes the helper leave the dialog auto-sized
+    // and removes the settings panel's nested scroll range.
+    const auto adaptive_dialog_result = evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; }
+            #dialog { position:fixed; width:718px; overflow:hidden; }
+            #wrapper { display:flex; height:100%; flex-direction:column; }
+            #header { flex:0 0 68px; }
+            #frame { display:flex; flex:1 1 auto; min-height:0;
+              overflow:hidden; }
+            #sidebar { flex:0 0 226px; }
+            #settings { flex:1 1 auto; min-height:0; overflow-y:auto;
+              overflow-x:hidden; }
+            #adaptive-panel { flex:0 0 auto; height:954px; }
+            #footer { flex:0 0 67px; }
+          </style>
+          <div id="dialog" style="height:734px"><div id="wrapper">
+            <div id="header"></div><div id="frame"><div id="sidebar"></div>
+              <div id="settings"><div id="adaptive-panel"></div></div>
+            </div><div id="footer"></div></div></div>`;
+          const dialog = document.getElementById('dialog');
+          const settings = document.getElementById('settings');
+          const measureAfter = clearHeight => {
+            dialog.style.height = '734px';
+            clearHeight();
+            const naturalHeight = dialog.getBoundingClientRect().height;
+            dialog.style.height = naturalHeight > 734 ? '734px' : '';
+            return {
+              naturalHeight,
+              authoredHeight: dialog.style.height,
+              dialogHeight: dialog.getBoundingClientRect().height,
+              clientHeight: settings.clientHeight,
+              scrollHeight: settings.scrollHeight
+            };
+          };
+          return {
+            namedSetter: measureAfter(() => { dialog.style.height = ''; }),
+            setProperty: measureAfter(() => dialog.style.setProperty('height', '')),
+            removeProperty: measureAfter(() => dialog.style.removeProperty('height'))
+          };
+        })()
+    )JS", "tradingview-settings-adaptive-dialog-measurement.js");
+    require(
+        adaptive_dialog_result
+            == R"JSON({"namedSetter":{"naturalHeight":954,"authoredHeight":"734px","dialogHeight":734,"clientHeight":599,"scrollHeight":954},"setProperty":{"naturalHeight":954,"authoredHeight":"734px","dialogHeight":734,"clientHeight":599,"scrollHeight":954},"removeProperty":{"naturalHeight":954,"authoredHeight":"734px","dialogHeight":734,"clientHeight":599,"scrollHeight":954}})JSON",
+        "clearing an adaptive dialog height reused stale capped geometry: "
+            + adaptive_dialog_result);
+
+    // ResizeObserver delivery after dynamic layout is independently required
+    // for applications that manage a dialog cap from observed content size.
+    evaluate(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `<style>
+            body { margin:0; }
+            #dialog { position:fixed; width:718px; height:734px;
+              overflow:hidden; }
+            #wrapper { display:flex; height:100%; flex-direction:column; }
+            #header { flex:0 0 68px; }
+            #frame { display:flex; flex:1 1 auto; min-height:0;
+              overflow:hidden; }
+            #sidebar { flex:0 0 226px; }
+            #settings { flex:1 1 auto; min-height:0; overflow-y:auto;
+              overflow-x:hidden; background:rgb(12,23,34); }
+            #panel { flex:0 0 auto; }
+            #observed-panel-content { height:599px; }
+            #footer { flex:0 0 67px; }
+            #switch-panel { position:fixed; left:0; top:0; z-index:9999;
+              width:40px; height:40px; }
+          </style>
+          <button id="switch-panel">Switch</button>
+          <div id="dialog"><div id="wrapper"><div id="header"></div>
+            <div id="frame"><div id="sidebar"></div><div id="settings">
+              <div id="panel"><div id="observed-panel-content"></div></div>
+            </div></div><div id="footer"></div></div></div>`;
+          const dialog = document.getElementById('dialog');
+          const panel = document.getElementById('observed-panel-content');
+          globalThis.__settingsResizeDeliveries = [];
+          globalThis.__settingsResizeObserver = new ResizeObserver(entries => {
+            __settingsResizeDeliveries.push(entries[0].contentRect.height);
+            dialog.style.height = '734px';
+          });
+          __settingsResizeObserver.observe(panel);
+          globalThis.__resizeManagedDialog = dialog;
+          globalThis.__resizeManagedSettings = document.getElementById('settings');
+          globalThis.__resizeManagedPanel = panel;
+          document.getElementById('switch-panel').addEventListener('click', () => {
+            dialog.style.removeProperty('height');
+            panel.style.height = '800px';
+          });
+          return 'ready';
+        })()
+    )JS", "tradingview-settings-resize-observer-setup.js");
+    animation_frame_and_wait(engine, 16.5, 9203U);
+    const auto consumed_before_switch = consumed_input_count(engine);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 9204U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 20, 20, 9205U, false);
+    wait_for_consumed_inputs(
+        engine,
+        consumed_before_switch + 2U,
+        "TradingView settings switch click was not consumed");
+    animation_frame_and_wait(engine, 17.0, 9206U);
+    auto resize_observer_result = std::string{};
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        resize_observer_result = evaluate(engine, R"JS(
+            (() => ({
+              deliveries: __settingsResizeDeliveries,
+              authoredHeight: __resizeManagedDialog.style.height,
+              dialogHeight: __resizeManagedDialog.getBoundingClientRect().height,
+              panelHeight: __resizeManagedPanel.getBoundingClientRect().height,
+              clientHeight: __resizeManagedSettings.clientHeight,
+              scrollHeight: __resizeManagedSettings.scrollHeight
+            }))()
+        )JS", "tradingview-settings-resize-observer-result.js");
+        if (resize_observer_result
+            == R"JSON({"deliveries":[599,800],"authoredHeight":"734px","dialogHeight":734,"panelHeight":800,"clientHeight":599,"scrollHeight":800})JSON") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(
+        resize_observer_result
+            == R"JSON({"deliveries":[599,800],"authoredHeight":"734px","dialogHeight":734,"panelHeight":800,"clientHeight":599,"scrollHeight":800})JSON",
+        "post-layout ResizeObserver delivery did not restore the settings dialog cap: "
+            + resize_observer_result);
 }
 
 void test_tradingview_symbol_info_auto_height_has_no_scrollbar(

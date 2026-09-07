@@ -3,6 +3,197 @@
 This project contains native ABI, binary interop, DOM lookup, context-memory, runtime
 work, and lifecycle measurements. It has no managed-engine dependency.
 
+## Layout scratch allocation
+
+The V8-free native layout benchmark provides deterministic fixtures for recurring
+layout scratch:
+
+- `four-chart-nested-flex-v1`: a 797-node, four-chart-shaped nested flex tree.
+- `intrinsic-table-select-v1`: a 1,061-node intrinsic/table/select tree covering
+  table-row, collapsed-select-option, and generic intrinsic-item vectors.
+- `inline-text-v1`: a 1,013-node, four-chart-shaped tree covering wrapped and aligned
+  text runs, positioned inline items, static anchors, and line geometry.
+- `inline-font-family-v1`: the same 1,013-node inline workload with a realistic inherited
+  font-family list long enough to expose owning-string copies.
+- `intrinsic-svg-view-box-v1`: 256 auto-sized SVG elements whose intrinsic dimensions
+  come from `viewBox`, isolating its four-number parser during repeated layout.
+
+A benchmark-local global allocator counts only allocations made while
+`native_document::layout` runs; fixture construction, warm-up, result serialization and
+the counter itself are outside the measured interval. Every sample must produce exactly
+the same allocation totals and geometry checksum.
+
+```bash
+cmake -S experiments/WebScene.NativeEngine.Probe \
+  -B artifacts/layout-scratch-benchmark \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=ON \
+  -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=OFF \
+  -DWEBSCENE_NATIVE_ENGINE_HTML_PARSER=legacy \
+  -DWEBSCENE_NATIVE_ENGINE_CSS_PARSER=legacy \
+  -DWEBSCENE_NATIVE_ENGINE_SELECTOR_PARSER=legacy \
+  -DWEBSCENE_NATIVE_ENGINE_DOM_BINDINGS=legacy \
+  -DWEBSCENE_NATIVE_ENGINE_BUILD_LAYOUT_SCRATCH_BENCHMARK=ON
+cmake --build artifacts/layout-scratch-benchmark \
+  --target webscene_layout_scratch_control_benchmark \
+           webscene_retained_paint_order_control_benchmark \
+           webscene_layout_callback_control_benchmark \
+           webscene_inline_layout_scratch_control_benchmark \
+           webscene_text_measurement_lookup_control_benchmark \
+           webscene_text_transform_copy_control_benchmark \
+           webscene_font_family_view_control_benchmark \
+           webscene_layout_scratch_benchmark
+artifacts/layout-scratch-benchmark/webscene_layout_scratch_benchmark \
+  --fixture four-chart-nested-flex-v1 \
+  --warmups 10 --samples 30 --iterations 100
+```
+
+`webscene_layout_scratch_control_benchmark` is built from the same source but defines
+`WEBSCENE_NATIVE_ENGINE_INTRINSIC_SCRATCH_CONTROL=1`. It preserves ordinary
+`std::vector` allocation for intrinsic/table/select scratch while retaining the already
+accepted general layout pool, allowing the second increment to be measured against its
+real accepted predecessor rather than the original runtime.
+
+`webscene_retained_paint_order_control_benchmark` retains both accepted scratch-pool
+increments but defines `WEBSCENE_NATIVE_ENGINE_RETAINED_PAINT_ORDER_CONTROL=1`, which
+keeps the unconditional composed-child copy. Compare it with
+`webscene_layout_scratch_benchmark` to isolate the default-z-index paint-order fast
+path from the already accepted cumulative source.
+
+`webscene_layout_callback_control_benchmark` retains the accepted scratch-pool and
+paint-order increments but defines `WEBSCENE_NATIVE_ENGINE_LAYOUT_CALLBACK_CONTROL=1`,
+which keeps the inline text-run collector's self-recursive `std::function`. Compare it
+with `webscene_layout_scratch_benchmark` to isolate the generic self-recursive lambda
+from all earlier accepted changes.
+
+`webscene_inline_layout_scratch_control_benchmark` retains the accepted recursive
+callback change but defines `WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL=1`,
+keeping inline text-run, positioned-item, static-anchor, and line-alignment vectors on
+the ordinary allocator. Compare it with `webscene_layout_scratch_benchmark` on
+`inline-text-v1` to isolate reuse through the bounded document pool.
+
+`webscene_text_measurement_lookup_control_benchmark` retains the accepted inline
+scratch-pool change but defines
+`WEBSCENE_NATIVE_ENGINE_TEXT_MEASUREMENT_LOOKUP_CONTROL=1`, constructing an owning
+text-measurement key before lookup. Compare it with
+`webscene_layout_scratch_benchmark` on `inline-text-v1` to isolate transparent lookup
+and owning-key construction only on cache miss.
+
+`webscene_text_transform_copy_control_benchmark` retains the accepted heterogeneous
+lookup but defines `WEBSCENE_NATIVE_ENGINE_TEXT_TRANSFORM_COPY_CONTROL=1`, preserving
+the owning mutable copy before resolving text transform. Compare it with
+`webscene_layout_scratch_benchmark` on `inline-text-v1` to isolate the
+`text-transform:none` string-copy fast path.
+
+`webscene_font_family_view_control_benchmark` retains the accepted text-transform fast
+path but defines `WEBSCENE_NATIVE_ENGINE_FONT_FAMILY_VIEW_CONTROL=1`, returning an
+owning font-family string. Compare it with `webscene_layout_scratch_benchmark` on
+`inline-font-family-v1` to isolate non-owning inherited font-family resolution.
+
+`webscene_canvas_save_benchmark` is a V8-aware save/restore fixture. It wraps all 18
+Canvas 2D state properties with deterministic accessors, validates those properties and
+line dash after every restore, and reports getter reads performed inside `save()`. Build
+the control with `WEBSCENE_NATIVE_ENGINE_CANVAS_SAVE_SNAPSHOT_CONTROL=ON`; the accepted
+candidate reuses the state just synchronized by `canvas_emit_paint_state`.
+
+`webscene_canvas_paint_state_benchmark` repeatedly draws text with a long unchanged
+font value and reports exact string-property probes, UTF-8 conversions, stack
+comparisons, and cached-value hits. Build the rejected cache candidate with
+`WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT=ON`; production keeps the
+direct comparison path. The experiment removes 99.70% of focused conversions but
+failed the product resize-publication cadence gate, so focused timing cannot promote it.
+
+`webscene_media_refresh_benchmark` alternates the viewport across a media-query
+boundary and validates the resulting root custom property, computed width, and
+`matchMedia` state after every refresh. Benchmark-only counters report calls to
+`index_css_rule`, root-variable refreshes, class-index lookups, and owned class-key
+copies. The production control performs the full
+rebuild; build the rejected candidate with
+`WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT=ON`. That candidate
+recomputes root variables while retaining selector indexes. Although it eliminates the
+targeted exact work, the cumulative product gate found a supported CPU and cadence
+regression, so the experiment is off by default.
+
+For the separate rejected class-key view experiment, build the candidate with
+`WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT=ON` and use
+`compare_css_class_lookup_benchmark.py` for an ABBA exact-counter report. It eliminates
+owned class lookup keys, but failed the product presentation-cadence gate and remains
+off by default.
+
+The layout benchmark also accepts `--phase scene`. The paired
+`webscene_scene_paint_order_control_benchmark` and
+`webscene_scene_paint_order_benchmark` targets count allocations made by
+`native_document::build_scene` after persistent output buffers are warmed, and preserve
+a deterministic command/string checksum. The candidate keeps eight local paint entries
+inline and uses the original reserved vector for larger sibling sets.
+
+The paired `webscene_intrinsic_size_direct_cache_control_benchmark` and
+`webscene_intrinsic_size_direct_cache_benchmark` targets compare the retained
+pointer/axis hash map with a document-owned memo table indexed by stable native node ID.
+Each entry shares one generation across its two axes, retaining direct O(1) lookup at
+24 bytes per native ID without increasing `dom_node` beyond 992 bytes. The fixture
+reports eliminated hash lookups and preserved allocation, geometry, and node-footprint
+work. Product ABBA evidence accepted the direct cache, so it is the production default;
+control builds can restore the hash table with
+`WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL=ON`.
+
+The paired `webscene_intrinsic_row_collector_control_benchmark` and
+`webscene_intrinsic_row_collector_benchmark` targets isolate the table-row traversal
+inside `compute_intrinsic_size`. The control retains `std::function` recursion; the
+candidate uses a generic self-recursive lambda. Use `intrinsic-table-select-v1` and
+accept only a reduction in exact allocation calls and requested bytes with identical
+node, geometry, node-size, and retained-scratch values.
+
+`webscene_intrinsic_size_branch_benchmark` adds thread-local diagnostic counters only
+to its own binary and reports the mutually selected intrinsic-size paths per layout.
+It must not add fields to `native_document` or `dom_node`. The paired
+`webscene_intrinsic_text_fast_path_control_benchmark` and
+`webscene_intrinsic_text_fast_path_benchmark` targets retain the legacy text traversal
+or take the early `dom_node_kind::text` path. Compare exact fast-path coverage and
+preserved branch, geometry, allocation, footprint, and scratch work; timing is
+informational only.
+
+The paired `webscene_intrinsic_item_copy_control_benchmark` and
+`webscene_intrinsic_item_copy_benchmark` targets isolate generic-container intrinsic
+item composition. The candidate directly iterates composed children when no inside
+marker, `::before`, or `::after` item exists; the control always materializes the
+temporary PMR pointer vector. Require identical branch selection, geometry,
+allocation totals, node footprint, and retained scratch, plus exact direct-view hits
+and eliminated pointer copies. The synthesized-item fallback remains unchanged.
+
+The paired `webscene_intrinsic_view_box_control_benchmark` and
+`webscene_intrinsic_view_box_benchmark` targets isolate the traced SVG `viewBox`
+allocation inside `compute_intrinsic_size`. The control retains `std::istringstream`;
+the candidate scans exactly four floating-point components without constructing a
+stream. Use `intrinsic-svg-view-box-v1` and require identical geometry, node footprint,
+and retained scratch plus a deterministic allocation reduction. Timing remains
+informational until the product ABBA gate.
+
+The paired `webscene_inline_box_bounds_control_benchmark` and
+`webscene_inline_box_bounds_benchmark` targets isolate the recursive bounds propagation
+for flattened inline boxes. The control retains `std::function`; the candidate uses a
+generic self-recursive lambda. Use `inline-font-family-v1` and
+`compare_inline_box_bounds_benchmark.py`; require identical geometry, footprint, and
+retained scratch plus lower exact allocation calls and requested bytes.
+
+Save control and candidate JSON output, then validate exact fixture equivalence,
+allocation-call reduction, requested bytes and bounded retained scratch storage:
+
+```bash
+python3 experiments/WebScene.NativeEngine.Probe/benchmarks/compare_layout_scratch_benchmark.py \
+  --control artifacts/layout-scratch-benchmark/control.json \
+  --candidate artifacts/layout-scratch-benchmark/candidate.json \
+  --minimum-call-reduction-percent 50 \
+  --output artifacts/layout-scratch-benchmark/comparison.evidence.json
+```
+
+Timing fields are informational because separate executable builds are not an
+interleaved timing experiment. An allocation result qualifies only the targeted causal
+boundary; a production change still requires standards/correctness tests and a neutral
+multi-instance product comparison. Pass the resulting JSON to Sandwich's ABBA
+comparator with `--exact-counter-evidence-file`; descriptive exact-counter notes do not
+qualify a candidate for acceptance.
+
 Set `WEBSCENE_NATIVE_ENGINE_PATH` to a built native library, then run BenchmarkDotNet
 or a focused probe:
 

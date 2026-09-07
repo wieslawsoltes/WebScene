@@ -42,6 +42,19 @@
       `${style.borderRightWidth} ${style.borderBottomWidth} ${style.borderLeftWidth}`);
   });
 
+  test("an omitted border color uses the element currentColor", () => {
+    target.style.color = "rgb(41, 98, 255)";
+    target.style.border = "3px solid";
+    let style = getComputedStyle(target);
+    assert(style.borderTopColor === "rgb(41, 98, 255)",
+      `omitted border color became ${style.borderTopColor}`);
+    target.style.borderColor = "transparent";
+    style = getComputedStyle(target);
+    assert(style.borderTopColor === "rgba(0, 0, 0, 0)",
+      `explicit transparent border became ${style.borderTopColor}`);
+    target.style.borderColor = "currentColor";
+  });
+
   test("content-box computed dimensions exclude borders while geometry includes them", () => {
     const style = getComputedStyle(target);
     const rect = target.getBoundingClientRect();

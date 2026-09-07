@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WebScene product contract: external YouTube embed fallback</title>
+<!-- This tests WebScene's deliberate unsupported-media fallback, not browser playback conformance. -->
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<style>html,body { margin:0 } iframe { border:0;display:block }</style>
+<iframe id="video" title="Demo &amp; guide" style="width:320px;height:180px" src="https://www.youtube.com/embed/CLnjOkR1vzk"></iframe>
+<script>
+promise_test(async t => {
+  const frame = document.getElementById('video');
+  for (let i = 0; i < 100 && !frame.contentDocument.getElementById('webscene-watch'); ++i)
+    await new Promise(resolve => t.step_timeout(resolve, 10));
+  const doc = frame.contentDocument;
+  const link = doc.getElementById('webscene-watch');
+  assert_not_equals(link, null, 'static parsed iframe gets a fallback');
+  assert_equals(link.href, 'https://www.youtube.com/watch?v=CLnjOkR1vzk');
+  assert_equals(doc.getElementById('webscene-title').textContent, 'Demo & guide');
+  assert_equals(doc.querySelectorAll('script').length, 0, 'no embedded player scripts');
+  assert_true(/^https:\/\/i\.ytimg\.com\/vi\/CLnjOkR1vzk\/(maxresdefault|hq720|hqdefault)\.jpg$/.test(doc.querySelector('img').src), 'thumbnail remains in the bounded quality fallback chain');
+  assert_true(link.textContent.includes('Watch on YouTube'), 'link does not depend on thumbnail success');
+  for (const [width, height] of [[320,180], [160,90], [600,340]]) {
+    frame.style.width = width + 'px'; frame.style.height = height + 'px';
+    const f = frame.getBoundingClientRect(), a = link.getBoundingClientRect();
+    assert_equals(f.width, width); assert_equals(f.height, height);
+    assert_equals(a.width, width); assert_equals(a.height, height);
+    assert_equals(a.x, f.x); assert_equals(a.y, f.y);
+    assert_equals(doc.defaultView.getComputedStyle(link).overflow, 'hidden');
+  }
+}, 'Fallback preserves iframe bounds across compact and expanded layouts');
+</script>

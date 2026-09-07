@@ -51,6 +51,7 @@ public sealed unsafe class UnoNativeSceneSurface : SKCanvasElement, INativeWebSc
         Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
         PointerMoved += OnPointerMoved;
+        PointerExited += OnPointerExited;
         PointerPressed += OnPointerPressed;
         PointerReleased += OnPointerReleased;
         PointerCanceled += OnPointerCanceled;
@@ -259,6 +260,11 @@ public sealed unsafe class UnoNativeSceneSurface : SKCanvasElement, INativeWebSc
     private void OnPointerMoved(object sender, PointerRoutedEventArgs args)
     {
         EnqueuePointer(1, args);
+    }
+
+    private void OnPointerExited(object sender, PointerRoutedEventArgs args)
+    {
+        EnqueuePointer(10, args);
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
@@ -538,7 +544,7 @@ internal static class NativeSceneDrawOperation
     public static int SvgCommandCount;
 }
 
-public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
+public sealed partial class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 {
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly UnoNativeSceneSurface _surface = new();
@@ -551,6 +557,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
         Content = _surface;
+        InitializeRuntimeDiagnostics();
     }
 
     public string? Source { get; private set; }
@@ -761,12 +768,15 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
         try
         {
             await UnloadCoreAsync();
-            var navigationToken = cancellationToken;
+            _runtimeDiagnostics.Begin();
+            using var diagnosticCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _runtimeDiagnostics.FailureToken);
+            var navigationToken = diagnosticCancellation.Token;
             if (lifetime is not null)
             {
                 lifetime.NavigationCancellation =
                     UnoNativeWebSceneLifecycle.CreateNavigationCancellation(
-                        cancellationToken,
+                        diagnosticCancellation.Token,
                         lifetime.GetLifetimeToken());
                 navigationToken = lifetime.NavigationCancellation.Token;
             }
@@ -796,6 +806,8 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
                     "The WebScene native engine could not be created.");
             }
             _engine = engine;
+            _runtimeDiagnostics.Attach(engine);
+            Content = _surface;
             _interopCallbackSignal = callbackSignal;
             _interop = new NativeInteropInvoker(engine);
 
@@ -834,7 +846,10 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
                 "webscene-uno-document-barrier.js",
                 timeout.Token);
             NativeWebSceneApi.EngineGetMetrics(engine, out var afterNavigation);
-            if (afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
+            _runtimeDiagnostics.CheckForNativeFailure();
+            if (_runtimeDiagnostics.LastFailure is { } terminalFailure)
+                throw new InvalidOperationException(terminalFailure.Message);
+            if (!_runtimeDiagnostics.HasNativeDiagnostics && afterNavigation.ScriptErrors > beforeNavigationMetrics.ScriptErrors)
             {
                 throw new InvalidOperationException(
                     $"Native WebScene failed to load {options.Source}: " +
@@ -853,10 +868,18 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
                     $"Native WebScene did not construct a document for {options.Source}: " +
                     NativeWebSceneApi.GetLastError(engine));
             }
+            _runtimeDiagnostics.Ready();
         }
-        catch
+        catch (Exception error)
         {
+            if (error is not OperationCanceledException ||
+                (!cancellationToken.IsCancellationRequested &&
+                 lifetime?.NavigationCancellation?.IsCancellationRequested != true &&
+                 lifetime?.LifetimeCancellation.IsCancellationRequested != true))
+                _runtimeDiagnostics.Fail(error.Message, error.StackTrace, "load", options.Source);
             await UnloadCoreAsync();
+            if (error is OperationCanceledException && _runtimeDiagnostics.LastFailure is { } failure)
+                throw new InvalidOperationException(failure.Message, error);
             throw;
         }
         finally
@@ -881,6 +904,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        _runtimeDiagnostics.Dispose();
         var lifetime = UnoNativeWebSceneLifetimeRegistry.TryGet(this);
         if (lifetime is null) return new ValueTask(DisposeWithoutInspectorAsync());
         lock (lifetime)
@@ -920,6 +944,7 @@ public sealed class UnoNativeWebSceneView : ContentControl, IAsyncDisposable
 
     private async Task UnloadCoreAsync()
     {
+        _runtimeDiagnostics.Detach();
         if (UnoNativeWebSceneLifetimeRegistry.TryGet(this) is { } lifetime)
         {
             lifetime.NavigationCancellation?.Cancel();
@@ -1138,7 +1163,9 @@ internal sealed class UnoResourceLoader : IWebSceneResourceLoader
                 inner: null,
                 response.StatusCode);
         }
-        var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var content = request.Kind == WebSceneResourceKind.Image
+            ? NativeImageResource.ToMarkup(response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult())
+            : response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         return new WebSceneTextResource(address, content, address, null)
         {
             EntityTag = responseEntityTag,

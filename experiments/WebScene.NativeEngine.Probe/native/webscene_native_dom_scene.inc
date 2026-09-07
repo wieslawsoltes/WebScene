@@ -10,7 +10,7 @@ void native_document::build_scene(
     append_scene(*body_, commands, strings, string_bytes, false, true);
     std::vector<dom_node*> fixed;
     for (auto* child : composed_children(*body_)) {
-        collect_fixed_positioned_nodes(*this, *child, fixed);
+        collect_outermost_fixed_positioned_nodes(*this, *child, fixed);
     }
     std::stable_sort(
         fixed.begin(),
@@ -38,7 +38,7 @@ void native_document::build_scene(
             strings,
             string_bytes,
             inherited_visibility_hidden,
-            true);
+            false);
     }
 }
 
@@ -77,21 +77,54 @@ void native_document::build_canvas_display_lists(
     std::vector<webscene_scene_string>& strings,
     std::vector<char>& string_bytes) const
 {
+    constexpr uint32_t offscreen_canvas_layer = 1U << 31U;
     layers.clear();
     canvas_commands.clear();
     strings.clear();
     string_bytes.clear();
 
+    std::unordered_set<uint32_t> retained_canvas_ids;
+    for (const auto& node : nodes_) {
+        if (node->tag != "canvas" || node->canvas().commands.empty()) continue;
+        if ((is_connected(*node)
+                && node->visible
+                && display_tree_allows_render(*this, *node))
+            || node->id == retained_export_canvas_id_) {
+            retained_canvas_ids.insert(node->id);
+        }
+    }
+    // An exported canvas can be a composition of otherwise detached source
+    // canvases. Retain the complete drawImage(canvas) dependency graph.
+    auto added_dependency = true;
+    while (added_dependency) {
+        added_dependency = false;
+        for (const auto& node : nodes_) {
+            if (!retained_canvas_ids.contains(node->id)) continue;
+            for (const auto& command : node->canvas().commands) {
+                if (command.kind == 27U
+                    && retained_canvas_ids.insert(command.resource_id).second) {
+                    added_dependency = true;
+                }
+            }
+        }
+    }
+
     uint32_t z_order = 0;
     for (const auto& node : nodes_) {
         const auto& canvas = node->canvas();
         if (node->tag != "canvas"
-            || !is_connected(*node)
-            || !node->visible
-            || !display_tree_allows_render(*this, *node)
-            || canvas.commands.empty()) {
+            || canvas.commands.empty()
+            || !retained_canvas_ids.contains(node->id)) {
             continue;
         }
+
+        // Browser canvas bitmaps exist independently of DOM attachment and CSS
+        // visibility. TradingView composes screenshots in a detached canvas and
+        // then exports it. Retain those display lists as non-viewport layers so
+        // drawImage(canvas) and host-side canvas export can still resolve them.
+        const auto offscreen = !is_connected(*node)
+            || !node->visible
+            || !display_tree_allows_render(*this, *node);
 
         const auto width = node->attributes.find("width");
         const auto height = node->attributes.find("height");
@@ -111,16 +144,16 @@ void native_document::build_canvas_display_lists(
 
         layers.push_back(webscene_canvas_layer{
             node->id,
-            z_order++,
+            0U,
             command_offset,
             static_cast<uint32_t>(canvas.commands.size()),
             string_offset,
             static_cast<uint32_t>(canvas.strings.size()),
-            0U,
-            node->layout.x,
-            node->layout.y,
-            node->layout.width,
-            node->layout.height,
+            z_order++ | (offscreen ? offscreen_canvas_layer : 0U),
+            offscreen ? 0.0F : node->layout.x,
+            offscreen ? 0.0F : node->layout.y,
+            offscreen ? 0.0F : node->layout.width,
+            offscreen ? 0.0F : node->layout.height,
             static_cast<uint32_t>(std::max(
                 0.0F,
                 width == node->attributes.end() ? 300.0F : parse_number(width->second, 300.0F))),
@@ -131,14 +164,39 @@ void native_document::build_canvas_display_lists(
     }
 }
 
+void native_document::retain_canvas_for_export(dom_node& node) noexcept
+{
+    if (node.tag != "canvas") return;
+    retained_export_canvas_id_ = node.id;
+    mark_scene_changed();
+}
+
+bool native_document::release_canvas_export(uint32_t node_id) noexcept
+{
+    if (node_id == 0U || retained_export_canvas_id_ != node_id) return false;
+    retained_export_canvas_id_ = 0U;
+    mark_scene_changed();
+    return true;
+}
+
 void native_document::append_scene(
     const dom_node& node,
     std::vector<webscene_scene_command>& commands,
     std::vector<webscene_scene_string>& strings,
     std::vector<char>& string_bytes,
     bool inherited_visibility_hidden,
-    bool defer_fixed_descendants) const
+    bool defer_fixed_descendants,
+    bool defer_positive_descendants,
+    const dom_node* paint_target,
+    const node_style::pseudo_element* paint_pseudo_target) const
 {
+    const auto elevated_target = paint_target == &node;
+    const auto pseudo_only = elevated_target && paint_pseudo_target != nullptr;
+    if (paint_target == &node) paint_target = nullptr;
+    const auto owns_stacking_scope = paint_target == nullptr && !pseudo_only
+        && (elevated_target || !defer_positive_descendants
+            || style_establishes_atomic_stacking_context(node)
+            || node.contains_retained_canvas);
     const auto* animation = node.animation_runtime();
     const auto opacity = std::clamp(
         animation != nullptr && animation->opacity_animation_initialized
@@ -231,7 +289,7 @@ void native_document::append_scene(
     const auto visibility_hidden = node.style.visibility_specified
         ? node.style.visibility_hidden
         : inherited_visibility_hidden;
-    const auto paint_self = !visibility_hidden;
+    const auto paint_self = !visibility_hidden && paint_target == nullptr && !pseudo_only;
     const auto paint_box_in_foreground = [&] {
         auto fixed_layer = false;
         auto outermost_z_index = 0;
@@ -342,7 +400,8 @@ void native_document::append_scene(
         return (radius_bits << 16U) | width_bits;
     };
     const auto append_pseudo = [&](const node_style::pseudo_element& pseudo) {
-        if (!paint_self || !pseudo.generated || pseudo.display_none || pseudo.visibility_hidden) return;
+        if ((!paint_self && !(pseudo_only && &pseudo == paint_pseudo_target && !visibility_hidden))
+            || !pseudo.generated || pseudo.display_none || pseudo.visibility_hidden) return;
         const auto after_retained_canvas = &pseudo == &node.style.after_pseudo()
             && node.contains_retained_canvas
             && !(pseudo.z_index < 0 && pseudo.position != position_mode::normal);
@@ -373,25 +432,25 @@ void native_document::append_scene(
                 ? pseudo.foreground_rgba
                 : resolved_foreground(node)
             : pseudo.background_rgba;
+        const auto pseudo_radii = resolve_radii(
+            pseudo.border_top_left_radius,
+            pseudo.border_top_right_radius,
+            pseudo.border_bottom_right_radius,
+            pseudo.border_bottom_left_radius,
+            pseudo.elliptical_border_radius
+                ? pseudo.border_top_left_radius_y : pseudo.border_top_left_radius,
+            pseudo.elliptical_border_radius
+                ? pseudo.border_top_right_radius_y : pseudo.border_top_right_radius,
+            pseudo.elliptical_border_radius
+                ? pseudo.border_bottom_right_radius_y : pseudo.border_bottom_right_radius,
+            pseudo.elliptical_border_radius
+                ? pseudo.border_bottom_left_radius_y : pseudo.border_bottom_left_radius,
+            width,
+            height);
         if ((pseudo_background & 0xFFU) != 0U && width > 0 && height > 0) {
-            const auto radii = resolve_radii(
-                pseudo.border_top_left_radius,
-                pseudo.border_top_right_radius,
-                pseudo.border_bottom_right_radius,
-                pseudo.border_bottom_left_radius,
-                pseudo.elliptical_border_radius
-                    ? pseudo.border_top_left_radius_y : pseudo.border_top_left_radius,
-                pseudo.elliptical_border_radius
-                    ? pseudo.border_top_right_radius_y : pseudo.border_top_right_radius,
-                pseudo.elliptical_border_radius
-                    ? pseudo.border_bottom_right_radius_y : pseudo.border_bottom_right_radius,
-                pseudo.elliptical_border_radius
-                    ? pseudo.border_bottom_left_radius_y : pseudo.border_bottom_left_radius,
-                width,
-                height);
-            append_ellipse_metadata(radii, x, y, width, height);
+            append_ellipse_metadata(pseudo_radii, x, y, width, height);
             commands.push_back(webscene_scene_command{
-                radii.any()
+                pseudo_radii.any()
                     ? pseudo_paints_in_foreground ? 10U : 7U
                     : pseudo_paints_in_foreground ? 9U : 1U,
                 0U,
@@ -401,13 +460,59 @@ void native_document::append_scene(
                 height,
                 with_pseudo_opacity(pseudo_background),
                 node.id,
-                radii.top_left,
-                radii.top_right,
-                radii.bottom_right,
-                radii.bottom_left,
+                pseudo_radii.top_left,
+                pseudo_radii.top_right,
+                pseudo_radii.bottom_right,
+                pseudo_radii.bottom_left,
+                0});
+        }
+        auto pseudo_background_image_lower = pseudo.background_image.image_value;
+        std::transform(
+            pseudo_background_image_lower.begin(),
+            pseudo_background_image_lower.end(),
+            pseudo_background_image_lower.begin(),
+            [](unsigned char character) {
+                return static_cast<char>(std::tolower(character));
+            });
+        if (pseudo_background_image_lower.starts_with("linear-gradient(")
+            && width > 0 && height > 0) {
+            auto gradient_resource = std::string{"webscene-bg-v2\t"};
+            gradient_resource += pseudo.background_image.image_value;
+            gradient_resource += '\t';
+            gradient_resource += pseudo.background_image.repeat;
+            gradient_resource += '\t';
+            gradient_resource += pseudo.background_image.position_value;
+            gradient_resource += '\t';
+            gradient_resource += pseudo.background_image.size_value;
+            append_ellipse_metadata(pseudo_radii, x, y, width, height);
+            commands.push_back(webscene_scene_command{
+                pseudo_paints_in_foreground ? 22U : 21U,
+                append_scene_string(gradient_resource, strings, string_bytes),
+                x,
+                y,
+                width,
+                height,
+                0U,
+                node.id,
+                pseudo_radii.top_left,
+                pseudo_radii.top_right,
+                pseudo_radii.bottom_right,
+                pseudo_radii.bottom_left,
                 0});
         }
         if (width > 0 && height > 0) {
+            const auto pseudo_foreground =
+                (pseudo.foreground_rgba & 0xFFU) != 0U
+                ? pseudo.foreground_rgba
+                : resolved_foreground(node);
+            const auto border_top_rgba = pseudo.border_top_current_color
+                ? pseudo_foreground : pseudo.border_top_rgba;
+            const auto border_right_rgba = pseudo.border_right_current_color
+                ? pseudo_foreground : pseudo.border_right_rgba;
+            const auto border_bottom_rgba = pseudo.border_bottom_current_color
+                ? pseudo_foreground : pseudo.border_bottom_rgba;
+            const auto border_left_rgba = pseudo.border_left_current_color
+                ? pseudo_foreground : pseudo.border_left_rgba;
             const auto top = std::clamp(
                 resolve_length(node, pseudo.border_top_width, height, 0),
                 0.0F,
@@ -428,9 +533,9 @@ void native_document::append_scene(
                 && std::abs(top - right) < 0.01F
                 && std::abs(top - bottom) < 0.01F
                 && std::abs(top - left) < 0.01F;
-            const auto uniform_color = pseudo.border_top_rgba == pseudo.border_right_rgba
-                && pseudo.border_top_rgba == pseudo.border_bottom_rgba
-                && pseudo.border_top_rgba == pseudo.border_left_rgba;
+            const auto uniform_color = border_top_rgba == border_right_rgba
+                && border_top_rgba == border_bottom_rgba
+                && border_top_rgba == border_left_rgba;
             const auto border_radii = resolve_radii(
                 pseudo.border_top_left_radius,
                 pseudo.border_top_right_radius,
@@ -447,7 +552,7 @@ void native_document::append_scene(
                 width,
                 height);
             if (border_radii.any() && uniform_width && uniform_color
-                && (pseudo.border_top_rgba & 0xFFU) != 0U) {
+                && (border_top_rgba & 0xFFU) != 0U) {
                 const auto inset = top * 0.5F;
                 const auto stroke_x = x + inset;
                 const auto stroke_y = y + inset;
@@ -475,7 +580,7 @@ void native_document::append_scene(
                     stroke_y,
                     stroke_width,
                     stroke_height,
-                    with_pseudo_opacity(pseudo.border_top_rgba),
+                    with_pseudo_opacity(border_top_rgba),
                     node.id,
                     stroke_radii.top_left,
                     stroke_radii.top_right,
@@ -509,10 +614,10 @@ void native_document::append_scene(
                         left,
                         0});
                 };
-                append_pseudo_border_side(1U, pseudo.border_top_rgba);
-                append_pseudo_border_side(2U, pseudo.border_right_rgba);
-                append_pseudo_border_side(4U, pseudo.border_bottom_rgba);
-                append_pseudo_border_side(8U, pseudo.border_left_rgba);
+                append_pseudo_border_side(1U, border_top_rgba);
+                append_pseudo_border_side(2U, border_right_rgba);
+                append_pseudo_border_side(4U, border_bottom_rgba);
+                append_pseudo_border_side(8U, border_left_rgba);
             }
         }
         const auto outline = std::max(
@@ -813,6 +918,15 @@ void native_document::append_scene(
             node.id});
     };
     if (paint_self && node.layout.width > 0 && node.layout.height > 0) {
+        const auto foreground_rgba = resolved_foreground(node);
+        const auto border_top_rgba = node.style.border_top_current_color
+            ? foreground_rgba : node.style.border_top_rgba;
+        const auto border_right_rgba = node.style.border_right_current_color
+            ? foreground_rgba : node.style.border_right_rgba;
+        const auto border_bottom_rgba = node.style.border_bottom_current_color
+            ? foreground_rgba : node.style.border_bottom_rgba;
+        const auto border_left_rgba = node.style.border_left_current_color
+            ? foreground_rgba : node.style.border_left_rgba;
         const auto top = std::clamp(
             resolve_length(node, node.style.border_top_width, node.layout.height, 0),
             0.0F,
@@ -832,9 +946,9 @@ void native_document::append_scene(
         const auto uniform_width = std::abs(top - right) < 0.01F
             && std::abs(top - bottom) < 0.01F
             && std::abs(top - left) < 0.01F;
-        const auto uniform_color = node.style.border_top_rgba == node.style.border_right_rgba
-            && node.style.border_top_rgba == node.style.border_bottom_rgba
-            && node.style.border_top_rgba == node.style.border_left_rgba;
+        const auto uniform_color = border_top_rgba == border_right_rgba
+            && border_top_rgba == border_bottom_rgba
+            && border_top_rgba == border_left_rgba;
         const auto rounded_stroke_width = std::max({top, right, bottom, left});
         const auto compatible_rounded_widths = rounded_stroke_width > 0
             && (top <= 0 || std::abs(top - rounded_stroke_width) < 0.01F)
@@ -891,10 +1005,10 @@ void native_document::append_scene(
                     rounded_stroke_width});
             };
             const std::array<uint32_t, 4> colors{
-                node.style.border_top_rgba,
-                node.style.border_right_rgba,
-                node.style.border_bottom_rgba,
-                node.style.border_left_rgba};
+                border_top_rgba,
+                border_right_rgba,
+                border_bottom_rgba,
+                border_left_rgba};
             for (size_t color_index = 0; color_index < colors.size(); ++color_index) {
                 const auto color = colors[color_index];
                 auto already_emitted = false;
@@ -903,10 +1017,10 @@ void native_document::append_scene(
                 }
                 if (already_emitted) continue;
                 const auto side_flags =
-                    (top > 0 && node.style.border_top_rgba == color ? border_top_flag : 0U)
-                    | (right > 0 && node.style.border_right_rgba == color ? border_right_flag : 0U)
-                    | (bottom > 0 && node.style.border_bottom_rgba == color ? border_bottom_flag : 0U)
-                    | (left > 0 && node.style.border_left_rgba == color ? border_left_flag : 0U);
+                    (top > 0 && border_top_rgba == color ? border_top_flag : 0U)
+                    | (right > 0 && border_right_rgba == color ? border_right_flag : 0U)
+                    | (bottom > 0 && border_bottom_rgba == color ? border_bottom_flag : 0U)
+                    | (left > 0 && border_left_rgba == color ? border_left_flag : 0U);
                 append_rounded_border(color, side_flags);
             }
         } else {
@@ -915,25 +1029,25 @@ void native_document::append_scene(
                 node.layout.y,
                 node.layout.width,
                 top,
-                node.style.border_top_rgba);
+                border_top_rgba);
             append_border_rect(
                 node.layout.x + node.layout.width - right,
                 node.layout.y,
                 right,
                 node.layout.height,
-                node.style.border_right_rgba);
+                border_right_rgba);
             append_border_rect(
                 node.layout.x,
                 node.layout.y + node.layout.height - bottom,
                 node.layout.width,
                 bottom,
-                node.style.border_bottom_rgba);
+                border_bottom_rgba);
             append_border_rect(
                 node.layout.x,
                 node.layout.y,
                 left,
                 node.layout.height,
-                node.style.border_left_rgba);
+                border_left_rgba);
         }
     }
     if (paint_self && node.layout.width > 0 && node.layout.height > 0
@@ -1258,9 +1372,9 @@ void native_document::append_scene(
             node, node.style.padding_left, node.layout.width, 0);
         const auto padding_right = resolve_length(
             node, node.style.padding_right, node.layout.width, 0);
-        const auto padding_top = resolve_length(
+        const auto padding_top = resolve_vertical_padding(
             node, node.style.padding_top, node.layout.height, 0);
-        const auto padding_bottom = resolve_length(
+        const auto padding_bottom = resolve_vertical_padding(
             node, node.style.padding_bottom, node.layout.height, 0);
         auto x = node.layout.x + padding_left;
         auto y = node.layout.y + padding_top;
@@ -1438,14 +1552,33 @@ void native_document::append_scene(
         int z_index{};
         size_t source_order{};
     };
-    std::vector<local_paint_entry> paint_order;
     const auto& children = composed_children(node);
-    paint_order.reserve(
-        children.size()
+    const auto paint_entry_count = children.size()
         + (before_paints_after_content ? 1U : 0U)
-        + (!after_paints_behind_content ? 1U : 0U));
+        + (!after_paints_behind_content ? 1U : 0U);
+#if defined(WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_CONTROL)
+    std::vector<local_paint_entry> paint_order;
+    paint_order.reserve(paint_entry_count);
+    const auto append_paint_entry = [&](local_paint_entry entry) {
+        paint_order.push_back(entry);
+    };
+#else
+    constexpr size_t inline_paint_capacity = 8U;
+    std::array<local_paint_entry, inline_paint_capacity> inline_paint_order{};
+    std::vector<local_paint_entry> spill_paint_order;
+    const auto uses_inline_paint_order = paint_entry_count <= inline_paint_capacity;
+    auto inline_paint_count = size_t{0U};
+    if (!uses_inline_paint_order) spill_paint_order.reserve(paint_entry_count);
+    const auto append_paint_entry = [&](local_paint_entry entry) {
+        if (uses_inline_paint_order) {
+            inline_paint_order[inline_paint_count++] = entry;
+        } else {
+            spill_paint_order.push_back(entry);
+        }
+    };
+#endif
     if (before_paints_after_content) {
-        paint_order.push_back(local_paint_entry{
+        append_paint_entry(local_paint_entry{
             nullptr,
             &node.style.before_pseudo(),
             node.style.before_pseudo().z_index,
@@ -1453,31 +1586,50 @@ void native_document::append_scene(
     }
     for (size_t index = 0; index < children.size(); ++index) {
         const auto* child = children[index];
-        paint_order.push_back(local_paint_entry{
+        append_paint_entry(local_paint_entry{
             child,
             nullptr,
             child->paint_z_index,
             index + 1U});
     }
     if (!after_paints_behind_content) {
-        paint_order.push_back(local_paint_entry{
+        append_paint_entry(local_paint_entry{
             nullptr,
             &node.style.after_pseudo(),
             node.style.after_pseudo().z_index,
             children.size() + 1U});
     }
+#if defined(WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_CONTROL)
+    auto ordered_paint = std::span<local_paint_entry>(paint_order);
+#else
+    auto ordered_paint = uses_inline_paint_order
+        ? std::span<local_paint_entry>(inline_paint_order.data(), inline_paint_count)
+        : std::span<local_paint_entry>(spill_paint_order);
+#endif
     std::stable_sort(
-        paint_order.begin(),
-        paint_order.end(),
+        ordered_paint.begin(),
+        ordered_paint.end(),
         [](const auto& left, const auto& right) {
             return left.z_index < right.z_index
                 || (left.z_index == right.z_index
                     && left.source_order < right.source_order);
         });
-    for (const auto& entry : paint_order) {
+    for (const auto& entry : ordered_paint) {
         if (entry.child != nullptr) {
+            if (pseudo_only) continue;
             if (defer_fixed_descendants
                 && entry.child->style.position == position_mode::fixed) {
+                continue;
+            }
+            if (paint_target != nullptr) {
+                auto* branch = paint_target;
+                while (branch != nullptr && composed_parent(*branch) != &node) {
+                    branch = composed_parent(*branch);
+                }
+                if (entry.child != branch) continue;
+            } else if (entry.child->style.z_index > 0) {
+                // Emitted by the nearest stacking scope below, without also
+                // repainting the z-index:auto ancestors' own content.
                 continue;
             }
             append_scene(
@@ -1486,9 +1638,49 @@ void native_document::append_scene(
                 strings,
                 string_bytes,
                 visibility_hidden,
-                defer_fixed_descendants);
+                defer_fixed_descendants,
+                true,
+                paint_target,
+                paint_pseudo_target);
         } else if (entry.pseudo != nullptr) {
+            if (!pseudo_only && entry.z_index > 0) continue;
             append_pseudo(*entry.pseudo);
+        }
+    }
+    if (owns_stacking_scope) {
+        std::vector<local_paint_entry> elevated_paint;
+        const auto collect = [&](const auto& self, const dom_node& current) -> void {
+            if (&current != &node) {
+                if (current.style.z_index > 0) {
+                    elevated_paint.push_back({&current,nullptr,current.style.z_index,elevated_paint.size()});
+                    return;
+                }
+                if (style_establishes_atomic_stacking_context(current) || current.contains_retained_canvas) return;
+            }
+            const auto add_pseudo = [&](const node_style::pseudo_element& pseudo) {
+                if (pseudo.generated && !pseudo.display_none && pseudo.z_index > 0) {
+                    elevated_paint.push_back({&current,&pseudo,pseudo.z_index,elevated_paint.size()});
+                }
+            };
+            add_pseudo(current.style.before_pseudo());
+            for (const auto* child : composed_children(current)) self(self,*child);
+            add_pseudo(current.style.after_pseudo());
+        };
+        collect(collect,node);
+        std::stable_sort(elevated_paint.begin(), elevated_paint.end(), [](const auto& a, const auto& b) {
+            return a.z_index < b.z_index;
+        });
+        for (const auto& entry : elevated_paint) {
+            const auto* target = entry.child;
+            if (target == &node) { append_pseudo(*entry.pseudo); continue; }
+            if (defer_fixed_descendants && target->style.position == position_mode::fixed) continue;
+            const auto* branch = target;
+            while (branch != nullptr && composed_parent(*branch) != &node) branch = composed_parent(*branch);
+            if (branch == nullptr) continue;
+            // Walk only this branch. Ancestors retain overflow clips and
+            // visibility inheritance but do not duplicate backgrounds or SVGs.
+            append_scene(*branch, commands, strings, string_bytes,
+                visibility_hidden, defer_fixed_descendants, true, target, entry.pseudo);
         }
     }
     if (clip_contents) {
@@ -1513,9 +1705,9 @@ void native_document::append_scene(
             node, node.style.padding_left, node.layout.width, 0);
         const auto padding_right = resolve_length(
             node, node.style.padding_right, node.layout.width, 0);
-        const auto padding_top = resolve_length(
+        const auto padding_top = resolve_vertical_padding(
             node, node.style.padding_top, node.layout.height, 0);
-        const auto padding_bottom = resolve_length(
+        const auto padding_bottom = resolve_vertical_padding(
             node, node.style.padding_bottom, node.layout.height, 0);
         const auto viewport_x = node.layout.x + border_left + padding_left;
         const auto viewport_y = node.layout.y + border_top + padding_top;
@@ -1540,10 +1732,7 @@ void native_document::append_scene(
             0.0F, snapped_content_width - snapped_viewport_width);
         const auto maximum_y = std::max(
             0.0F, snapped_content_height - snapped_viewport_height);
-        constexpr auto rail_rgba = 0x7F7F7F40U;
-        constexpr auto thumb_rgba = 0xA0A0A0D0U;
-        constexpr auto thickness = 6.0F;
-        constexpr auto inset = 2.0F;
+        const auto& scrollbar = node.style.scrollbar();
         constexpr auto minimum_thumb = 18.0F;
         const auto append_overlay_rect = [&](float x, float y, float width, float height,
                                              uint32_t rgba, float radius) {
@@ -1567,10 +1756,14 @@ void native_document::append_scene(
             && node.style.overflow_x == overflow_mode::visible;
         const auto root_viewport_scroll_y = node.parent == nullptr
             && node.style.overflow_y == overflow_mode::visible;
+        const auto vertical_thickness = scrollbar.width;
+        const auto horizontal_thickness = scrollbar.height;
+        const auto inset = scrollbar.overlay_inset;
         if ((node.style.scroll_y_enabled || root_viewport_scroll_y) && maximum_y > 0.01F
-            && viewport_width >= thickness + inset * 2
+            && vertical_thickness > 0
+            && viewport_width >= vertical_thickness + inset * 2
             && viewport_height > 0) {
-            const auto rail_x = viewport_x + viewport_width - thickness - inset;
+            const auto rail_x = viewport_x + viewport_width - vertical_thickness - inset;
             const auto rail_y = viewport_y + inset;
             const auto rail_height = std::max(0.0F, viewport_height - inset * 2);
             const auto thumb_height = std::min(
@@ -1582,16 +1775,20 @@ void native_document::append_scene(
             const auto thumb_travel = std::max(0.0F, rail_height - thumb_height);
             const auto thumb_y = rail_y + thumb_travel
                 * std::clamp(node.scroll_top / maximum_y, 0.0F, 1.0F);
-            append_overlay_rect(
-                rail_x, rail_y, thickness, rail_height, rail_rgba, thickness * 0.5F);
-            append_overlay_rect(
-                rail_x, thumb_y, thickness, thumb_height, thumb_rgba, thickness * 0.5F);
+            append_overlay_rect(rail_x, rail_y, vertical_thickness, rail_height,
+                scrollbar.track_rgba, scrollbar.track_radius);
+            const auto border = std::min(scrollbar.thumb_border_width,
+                std::min(vertical_thickness, thumb_height) * 0.5F);
+            append_overlay_rect(rail_x + border, thumb_y + border,
+                vertical_thickness - border * 2, thumb_height - border * 2,
+                scrollbar.thumb_rgba, std::max(0.0F, scrollbar.thumb_radius - border));
         }
         if ((node.style.scroll_x_enabled || root_viewport_scroll_x) && maximum_x > 0.01F
-            && viewport_height >= thickness + inset * 2
+            && horizontal_thickness > 0
+            && viewport_height >= horizontal_thickness + inset * 2
             && viewport_width > 0) {
             const auto rail_x = viewport_x + inset;
-            const auto rail_y = viewport_y + viewport_height - thickness - inset;
+            const auto rail_y = viewport_y + viewport_height - horizontal_thickness - inset;
             const auto rail_width = std::max(0.0F, viewport_width - inset * 2);
             const auto thumb_width = std::min(
                 rail_width,
@@ -1602,10 +1799,13 @@ void native_document::append_scene(
             const auto thumb_travel = std::max(0.0F, rail_width - thumb_width);
             const auto thumb_x = rail_x + thumb_travel
                 * std::clamp(node.scroll_left / maximum_x, 0.0F, 1.0F);
-            append_overlay_rect(
-                rail_x, rail_y, rail_width, thickness, rail_rgba, thickness * 0.5F);
-            append_overlay_rect(
-                thumb_x, rail_y, thumb_width, thickness, thumb_rgba, thickness * 0.5F);
+            append_overlay_rect(rail_x, rail_y, rail_width, horizontal_thickness,
+                scrollbar.track_rgba, scrollbar.track_radius);
+            const auto border = std::min(scrollbar.thumb_border_width,
+                std::min(horizontal_thickness, thumb_width) * 0.5F);
+            append_overlay_rect(thumb_x + border, rail_y + border,
+                thumb_width - border * 2, horizontal_thickness - border * 2,
+                scrollbar.thumb_rgba, std::max(0.0F, scrollbar.thumb_radius - border));
         }
     }
     if (has_rotate_transform) {

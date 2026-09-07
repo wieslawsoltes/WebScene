@@ -1,0 +1,110 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Go To tabs and percentage-height calendar do not create phantom overflow</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script id="fixture">
+// Production-shaped reduction of StackWich #1248. Keep the percentage-height
+// chain and function-valued stylesheet shorthands: literal margins miss the bug.
+globalThis.createGoToOverflowFixture = function () {
+  document.body.innerHTML = `
+    <style>
+      html, body { margin:0; font:14px Arial; }
+      #dialog { width:302px; display:flex; flex-direction:column; }
+      #tabs { padding:0 20px; --tab-padding:20px; }
+      #scroll-tabs { position:relative; width:100%; height:100%;
+        margin:-2px calc(max(var(--tab-padding, 0px), 10px)*-1) 0;
+        padding:2px max(var(--tab-padding,0px),10px) 0;
+        overflow-x:auto; overflow-y:hidden; }
+      #tab-list { display:inline-block; position:relative; white-space:nowrap; }
+      #scroll-tabs::before, #tab-list::before { content:''; position:absolute;
+        bottom:0; height:4px; background:#123456; }
+      #scroll-tabs::before { left:20px; right:20px; }
+      #tab-list::before { left:0; right:0; }
+      .tab { display:inline-grid; height:32px; width:40px;
+        box-sizing:border-box; padding-bottom:8px; font:16px/24px Arial; }
+      .tab + .tab { margin-left:24px; width:100px; }
+      #tab-list::after { content:''; width:20px; flex-shrink:0; }
+      #content { overflow:auto; padding-top:17px; }
+      #inputs { height:34px; margin-bottom:16px; }
+      #calendar { box-sizing:border-box; display:flex; flex-direction:column;
+        flex-shrink:0; height:100%; min-height:332px; padding:1px 12px 15px;
+        width:286px; margin:0 8px; }
+      #calendar-header { height:34px; }
+      #weekdays { height:22px; margin:12px 0; }
+      #weeks { height:226px; }
+      #definite { height:200px; }
+      #percentage { height:50%; }
+      #nested { height:50%; }
+      #flex-definite { height:200px; display:flex; flex-direction:column; }
+      #flex-header { height:40px; flex:none; }
+      #flex-body { flex:1 1 auto; padding:10px 0; }
+      #flex-percent { height:100%; }
+      #portal { height:0; }
+      #positioned { position:fixed; left:700px; top:0; width:10px; height:100%; }
+      #positioned-fill { height:100%; }
+      #logical { margin-inline:calc(10px + 2px) calc(20px + 3px);
+        margin-block:calc(2px + 3px) calc(4px + 5px); height:10px; }
+    </style>
+    <div id="dialog"><div id="tabs"><div id="scroll-tabs"><div id="tab-list"><i class="tab">Date</i><i class="tab">Range</i></div></div></div><div id="content"><div id="body-wrapper"><div id="inputs"></div><div id="calendar"><div id="calendar-header"></div><div id="weekdays"></div><div id="weeks"></div></div></div></div></div>
+    <div id="definite"><div id="percentage"><div id="nested"></div></div></div>
+    <div id="flex-definite"><div id="flex-header"></div><div id="flex-body"><div id="flex-percent"></div></div></div>
+    <div id="portal"><div id="positioned"><div id="positioned-fill"></div></div></div>
+    <div id="logical"></div>`;
+};
+globalThis.goToOverflowGeometry = function () {
+  const ids=['tabs','scroll-tabs','tab-list','content','body-wrapper','calendar','percentage','nested'];
+  return ids.map(id=>{const n=document.getElementById(id),r=n.getBoundingClientRect();
+    return [id,r.x,r.y,r.width,r.height,n.clientWidth,n.clientHeight,n.scrollWidth,n.scrollHeight];});
+};
+</script>
+<body>
+<script>
+createGoToOverflowFixture();
+const node=id=>document.getElementById(id);
+test(()=>{
+  const s=getComputedStyle(node('scroll-tabs'));
+  assert_equals(s.marginTop,'-2px');
+  assert_equals(s.marginRight,'-20px');
+  assert_equals(s.marginBottom,'0px');
+  assert_equals(s.marginLeft,'-20px');
+  assert_equals(s.paddingLeft,'20px');
+}, 'Nested math functions are single components of stylesheet box shorthands');
+test(()=>{
+  const s=getComputedStyle(node('logical'));
+  assert_equals(s.marginLeft,'12px'); assert_equals(s.marginRight,'23px');
+  assert_equals(s.marginTop,'5px'); assert_equals(s.marginBottom,'9px');
+}, 'Logical margin pairs preserve spaces inside calc functions');
+test(()=>{
+  assert_equals(node('scroll-tabs').getBoundingClientRect().x,0);
+  assert_equals(node('scroll-tabs').getBoundingClientRect().height,34);
+  assert_equals(node('tabs').getBoundingClientRect().height,32);
+  assert_equals(node('tab-list').getBoundingClientRect().y,0);
+}, 'Auto-sized tab strip treats the unresolved percentage height as auto');
+test(()=>{
+  assert_equals(node('calendar').getBoundingClientRect().height,332);
+  assert_equals(node('body-wrapper').getBoundingClientRect().height,382);
+  assert_equals(node('content').getBoundingClientRect().height,399);
+}, 'Percentage-height calendar uses intrinsic/minimum size in an auto-height wrapper');
+test(()=>{
+  for(const id of ['scroll-tabs','content']) {
+    const n=node(id);
+    assert_equals(n.scrollWidth,n.clientWidth,id+' has no horizontal overflow');
+    assert_equals(n.scrollHeight,n.clientHeight,id+' has no vertical overflow');
+    n.scrollTop=100; n.scrollLeft=100;
+    assert_equals(n.scrollTop,0,id+' has no vertical scroll range');
+    assert_equals(n.scrollLeft,0,id+' has no horizontal scroll range');
+  }
+}, 'Fitting tab and calendar content has no phantom scrolling');
+test(()=>{
+  assert_equals(node('percentage').getBoundingClientRect().height,100);
+  assert_equals(node('nested').getBoundingClientRect().height,50);
+}, 'Definite percentage-height chains still resolve');
+test(()=>{
+  assert_equals(node('flex-body').getBoundingClientRect().height,160);
+  assert_equals(node('flex-percent').getBoundingClientRect().height,140);
+}, 'A grown flex item in a definite-height column provides a percentage basis');
+test(()=>{
+  assert_equals(node('positioned-fill').getBoundingClientRect().height,innerHeight);
+}, 'A percentage-height fixed portal uses the viewport, not its zero-height DOM parent');
+</script>

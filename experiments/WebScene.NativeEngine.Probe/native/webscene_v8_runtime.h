@@ -215,7 +215,8 @@ public:
         std::function<void()> host_request_available = {},
         std::function<void()> interop_callback_available = {},
         interop_callback_sink_v3 interop_callback_sink = {},
-        std::function<void()> runtime_work_available = {});
+        std::function<void()> runtime_work_available = {},
+        class runtime_diagnostics* diagnostics = nullptr);
     ~v8_dom_runtime();
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;
@@ -227,6 +228,7 @@ public:
         const std::string& url,
         std::vector<document_start_script> document_start_scripts = {});
     void set_resource_root(std::string resource_root);
+    void set_stylesheet_consumer(std::function<void(const std::string&, const std::string&)> consumer);
     bool evaluate_interop_v3(
         const std::string& source,
         const std::string& document_name,
@@ -258,6 +260,7 @@ public:
     bool pump_inspector_task(std::stop_token shutdown_token = {});
     bool has_pending_inspector_tasks() const noexcept;
     bool dispatch_resize();
+    bool deliver_resize_observers();
     bool refresh_media_environment();
     bool set_visible(bool visible);
     bool dispatch_input(const webscene_input_event& event);

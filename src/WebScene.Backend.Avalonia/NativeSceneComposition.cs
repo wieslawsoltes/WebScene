@@ -369,6 +369,25 @@ internal sealed class NativeSceneCaptureRequest
         => _completion.TrySetCanceled();
 }
 
+internal sealed class NativeCanvasCaptureRequest(uint nodeId)
+{
+    private readonly TaskCompletionSource<byte[]?> _completion = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public uint NodeId { get; } = nodeId;
+
+    public Task<byte[]?> Completion => _completion.Task;
+
+    public bool TrySetResult(byte[]? bytes)
+        => _completion.TrySetResult(bytes);
+
+    public bool TrySetException(Exception error)
+        => _completion.TrySetException(error);
+
+    public bool TryCancel()
+        => _completion.TrySetCanceled();
+}
+
 internal static class NativeRetainedScenePngEncoder
 {
     public static byte[] Encode(
@@ -468,6 +487,19 @@ internal sealed unsafe class NativeSceneCompositionHandler
 
     public override void OnMessage(object message)
     {
+        if (message is NativeCanvasCaptureRequest canvasCapture)
+        {
+            try
+            {
+                canvasCapture.TrySetResult(
+                    _renderer.CaptureCanvasPng(canvasCapture.NodeId));
+            }
+            catch (Exception error)
+            {
+                canvasCapture.TrySetException(error);
+            }
+            return;
+        }
         if (message is NativeSceneCaptureRequest capture)
         {
             try

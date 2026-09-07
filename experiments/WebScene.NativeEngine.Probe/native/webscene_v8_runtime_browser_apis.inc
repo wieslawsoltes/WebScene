@@ -909,11 +909,39 @@
             ? unwrap_node(info[0].As<v8::Object>())
             : nullptr;
         if (observer == nullptr || node == nullptr) return;
+        auto box = resize_observer_box::content;
+        if (info.Length() > 1 && !info[1]->IsNullOrUndefined()) {
+            if (!info[1]->IsObject()) {
+                info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                    js_string(info.GetIsolate(), "ResizeObserver options must be a dictionary")));
+                return;
+            }
+            v8::Local<v8::Value> value;
+            if (!info[1].As<v8::Object>()->Get(info.GetIsolate()->GetCurrentContext(),
+                    js_string(info.GetIsolate(), "box")).ToLocal(&value)) return;
+            if (!value->IsUndefined()) {
+                v8::Local<v8::String> string;
+                if (!value->ToString(info.GetIsolate()->GetCurrentContext()).ToLocal(&string)) return;
+                const auto name = to_utf8(info.GetIsolate(), string);
+                if (name == "border-box") box = resize_observer_box::border;
+                else if (name == "device-pixel-content-box") box = resize_observer_box::device_pixel_content;
+                else if (name != "content-box") {
+                    info.GetIsolate()->ThrowException(v8::Exception::TypeError(
+                        js_string(info.GetIsolate(), "Invalid ResizeObserver box option")));
+                    return;
+                }
+            }
+        }
         if (std::find(observer->nodes.begin(), observer->nodes.end(), node) == observer->nodes.end()) {
             observer->nodes.push_back(node);
-            observer->delivered_sizes.erase(node->id);
-            current(info.GetIsolate())->resize_observers_pending = true;
+        } else if (observer->observed_boxes.at(node->id) == box) {
+            return;
         }
+        observer->observed_boxes[node->id] = box;
+        // Re-observing with another box replaces the delivery criterion.
+        // Device-pixel changes can occur with no CSS layout-size change.
+        observer->delivered_sizes.erase(node->id);
+        current(info.GetIsolate())->resize_observers_pending = true;
     }
 
     static void resize_observer_unobserve(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -924,6 +952,7 @@
             : nullptr;
         if (observer != nullptr && node != nullptr) {
             std::erase(observer->nodes, node);
+            observer->observed_boxes.erase(node->id);
             observer->delivered_sizes.erase(node->id);
         }
     }
@@ -933,6 +962,7 @@
         auto* observer = resize_observer(info);
         if (observer != nullptr) {
             observer->nodes.clear();
+            observer->observed_boxes.clear();
             observer->delivered_sizes.clear();
         }
     }
@@ -944,7 +974,7 @@
             "web-api",
             "ResizeObserver.constructor",
             "partially-supported",
-            "element content-box size delivery without the complete box-option surface",
+            "content, border, and device-pixel box delivery for unfragmented horizontal layout",
             "web-api-binding");
         auto local_context = info.GetIsolate()->GetCurrentContext();
         auto object = info.IsConstructCall() ? info.This() : v8::Object::New(info.GetIsolate());
@@ -1131,6 +1161,109 @@
         info.GetReturnValue().Set(controller);
     }
 
+    static media_query_list_state* media_query_list(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        return info.Data()->IsExternal()
+            ? static_cast<media_query_list_state*>(
+                info.Data().As<v8::External>()->Value(
+                    v8::kExternalPointerTypeTagDefault))
+            : nullptr;
+    }
+
+    static void add_media_query_list_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        bool legacy)
+    {
+        auto* state = media_query_list(info);
+        if (state == nullptr) return;
+        const auto callback_index = legacy ? 0 : 1;
+        if ((!legacy && (info.Length() < 2
+                || to_utf8(info.GetIsolate(), info[0]) != "change"))
+            || info.Length() <= callback_index
+            || info[callback_index]->IsNullOrUndefined()
+            || !info[callback_index]->IsObject()) {
+            return;
+        }
+        auto isolate = info.GetIsolate();
+        auto local_context = isolate->GetCurrentContext();
+        const auto requested = info[callback_index];
+        for (const auto& registration : state->listeners) {
+            auto callback = registration.callback.Get(isolate);
+            if (!callback.IsEmpty() && callback->StrictEquals(requested)) return;
+        }
+        auto once = false;
+        if (!legacy && info.Length() > 2 && info[2]->IsObject()) {
+            v8::Local<v8::Value> once_value;
+            if (info[2].As<v8::Object>()->Get(
+                    local_context,
+                    js_string(isolate, "once")).ToLocal(&once_value)) {
+                once = once_value->BooleanValue(isolate);
+            }
+        }
+        auto name = requested->IsFunction()
+            ? to_utf8(isolate, requested.As<v8::Function>()->GetName())
+            : std::string("<object listener>");
+        if (name.empty()) name = "<anonymous>";
+        state->listeners.push_back(event_listener_registration{
+            v8::Global<v8::Value>(isolate, requested),
+            v8::Global<v8::Context>(isolate, local_context),
+            std::move(name),
+            current(isolate)->current_input_sequence,
+            0U,
+            false,
+            once,
+            false,
+            {}});
+    }
+
+    static void media_query_list_add_event_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        add_media_query_list_listener(info, false);
+    }
+
+    static void media_query_list_add_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        add_media_query_list_listener(info, true);
+    }
+
+    static void remove_media_query_list_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info,
+        bool legacy)
+    {
+        auto* state = media_query_list(info);
+        if (state == nullptr) return;
+        const auto callback_index = legacy ? 0 : 1;
+        if ((!legacy && (info.Length() < 2
+                || to_utf8(info.GetIsolate(), info[0]) != "change"))
+            || info.Length() <= callback_index
+            || info[callback_index]->IsNullOrUndefined()) {
+            return;
+        }
+        const auto requested = info[callback_index];
+        for (auto& registration : state->listeners) {
+            auto callback = registration.callback.Get(info.GetIsolate());
+            if (callback.IsEmpty() || !callback->StrictEquals(requested)) continue;
+            registration.callback.Reset();
+            registration.signal.Reset();
+            break;
+        }
+    }
+
+    static void media_query_list_remove_event_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        remove_media_query_list_listener(info, false);
+    }
+
+    static void media_query_list_remove_listener(
+        const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        remove_media_query_list_listener(info, true);
+    }
+
     static void match_media(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -1142,20 +1275,59 @@
         self->record_feature(
             "web-api",
             "Window.matchMedia",
-            query_supported ? "partially-supported" : "unsupported",
+            query_supported ? "supported" : "unsupported",
             query_supported
-                ? "snapshot matches without MediaQueryList change-event delivery"
+                ? "live matches with modern and legacy change-event delivery"
                 : "query contains an unsupported media type or condition",
             "web-api-binding");
+        auto state = std::make_unique<media_query_list_state>();
+        state->query = query;
+        state->matches = self->media_query_matches(query);
+        state->context.Reset(isolate, local_context);
+        auto* state_pointer = state.get();
+        auto data = v8::External::New(
+            isolate,
+            state_pointer,
+            v8::kExternalPointerTypeTagDefault);
         result->Set(
             local_context,
             js_string(isolate, "matches"),
-            v8::Boolean::New(isolate, self->media_query_matches(query))).Check();
+            v8::Boolean::New(isolate, state->matches)).Check();
         result->Set(local_context, js_string(isolate, "media"), info.Length() > 0 ? info[0] : v8::Local<v8::Value>(js_string(isolate, ""))).Check();
-        result->Set(local_context, js_string(isolate, "addEventListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
-        result->Set(local_context, js_string(isolate, "removeEventListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
-        result->Set(local_context, js_string(isolate, "addListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
-        result->Set(local_context, js_string(isolate, "removeListener"), v8::Function::New(local_context, console_log).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "addEventListener"),
+            v8::Function::New(
+                local_context,
+                media_query_list_add_event_listener,
+                data).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "removeEventListener"),
+            v8::Function::New(
+                local_context,
+                media_query_list_remove_event_listener,
+                data).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "addListener"),
+            v8::Function::New(
+                local_context,
+                media_query_list_add_listener,
+                data).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "removeListener"),
+            v8::Function::New(
+                local_context,
+                media_query_list_remove_listener,
+                data).ToLocalChecked()).Check();
+        result->Set(
+            local_context,
+            js_string(isolate, "onchange"),
+            v8::Null(isolate)).Check();
+        state->wrapper.Reset(isolate, result);
+        self->media_query_lists.push_back(std::move(state));
         info.GetReturnValue().Set(result);
     }
 
@@ -1200,7 +1372,7 @@
                 1,
                 arguments).IsEmpty()) {
             last_error = "Document visibilitychange dispatch failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
             ++frame_script_error_count;
             return false;
         }
@@ -1243,7 +1415,7 @@
             if (dispatcher.As<v8::Function>()->Call(
                     local_context, target, 1, arguments).IsEmpty()) {
                 last_error = "CSS transition-event dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 ++frame_script_error_count;
                 return false;
             }
@@ -1384,7 +1556,7 @@
 
             self->frame_last_error_value = "Uncaught exception in '" + type
                 + "' event listener: "
-                + self->describe_exception(try_catch, local_context);
+                + self->describe_reported_exception(try_catch, local_context);
             ++self->frame_script_error_count;
             {
                 std::lock_guard lock(self->console_message_mutex);
@@ -1758,9 +1930,18 @@
         auto* self = current(info.GetIsolate());
         auto payload = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
         std::string download_payload;
+        uint32_t canvas_node_id = 0;
         if (info.Length() > 0 && info[0]->IsObject()) {
             auto local_context = info.GetIsolate()->GetCurrentContext();
             auto object = info[0].As<v8::Object>();
+            v8::Local<v8::Value> canvas_node_id_value;
+            if (object->Get(
+                    local_context,
+                    js_string(info.GetIsolate(), "_canvasNodeId"))
+                    .ToLocal(&canvas_node_id_value)
+                && canvas_node_id_value->IsUint32()) {
+                canvas_node_id = canvas_node_id_value.As<v8::Uint32>()->Value();
+            }
             v8::Local<v8::Value> bytes_value;
             if (object->Get(
                     local_context,
@@ -1794,6 +1975,9 @@
         self->object_urls[url] = std::move(payload);
         if (!download_payload.empty()) {
             self->object_url_download_payloads[url] = std::move(download_payload);
+        }
+        if (canvas_node_id != 0) {
+            self->object_url_canvas_node_ids[url] = canvas_node_id;
         }
         info.GetReturnValue().Set(js_string(info.GetIsolate(), url.c_str()));
     }
@@ -2021,10 +2205,15 @@
         auto* self = current(info.GetIsolate());
         auto* isolate = info.GetIsolate();
         auto local_context = isolate->GetCurrentContext();
-        const auto level_index = std::clamp(info.Data().As<v8::Int32>()->Value(), 0, 2);
-        constexpr std::array<std::string_view, 3> levels{"log", "warn", "error"};
+        const auto level_index = std::clamp(info.Data().As<v8::Int32>()->Value(), 0, 6);
+        if (level_index == 6 && info.Length() > 0 && info[0]->BooleanValue(isolate)) return;
+        constexpr std::array<std::string_view, 7> levels{"log", "warn", "error", "info", "debug", "trace", "assert"};
+        const auto capture = self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_CONSOLE);
+        const auto legacy = self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE);
+        bool report_to_inspector = false;
+        bool certification_console = false;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
-        const auto report_to_inspector =
+        report_to_inspector =
             self->inspector_instrumentation_active();
         constexpr std::array<v8::Isolate::MessageErrorLevel, 3> inspector_levels{
             v8::Isolate::kMessageLog,
@@ -2035,38 +2224,38 @@
             arguments.reserve(static_cast<size_t>(info.Length()));
         }
 #endif
-        std::ostringstream message;
-        for (int index = 0; index < info.Length(); ++index) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        certification_console = std::getenv("WEBSCENE_PROBE_CONSOLE") != nullptr;
+#endif
+        if (!capture && !legacy && !report_to_inspector && !certification_console) return;
+        runtime_diagnostic record;
+        record.kind = "console";
+        record.level = levels[static_cast<size_t>(level_index)];
+        self->diagnostic_location(record, local_context);
+        if (level_index == 6) record.message = "Assertion failed";
+        for (int index = level_index == 6 ? 1 : 0; index < info.Length() && index < 32; ++index) {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             if (report_to_inspector) arguments.push_back(info[index]);
 #endif
-            auto rendered = to_utf8(isolate, info[index]);
-            if (info[index]->IsObject()) {
-                v8::TryCatch try_catch(isolate);
-                v8::Local<v8::Value> stack;
-                if (info[index].As<v8::Object>()
-                        ->Get(local_context, js_string(isolate, "stack"))
-                        .ToLocal(&stack)
-                    && stack->IsString()) {
-                    const auto stack_text = to_utf8(isolate, stack);
-                    if (!stack_text.empty() && stack_text != rendered) {
-                        rendered += "\n" + stack_text;
-                    }
-                }
-            }
-            message << (index == 0 ? "" : " | ") << rendered;
+            auto value = self->diagnostic_value(info[index], record.truncated);
+            if (!record.message.empty()) record.message += " | ";
+            record.message += value.second;
+            record.arguments.push_back(std::move(value));
+            if (record.message.size() > runtime_diagnostics::maximum_text) { record.truncated = true; break; }
         }
+        record.truncated |= info.Length() > 32;
+        if (level_index == 5) self->diagnostic_stack(record, v8::StackTrace::CurrentStackTrace(isolate, 32));
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         if (report_to_inspector) {
             self->report_inspector_console_message(
                 local_context,
-                inspector_levels[static_cast<size_t>(level_index)],
+                inspector_levels[static_cast<size_t>(level_index <= 2 ? level_index : level_index == 6 ? 2 : 0)],
                 arguments);
         }
 #endif
         const auto payload = std::string(levels[static_cast<size_t>(level_index)])
-            + '\n' + message.str();
-        {
+            + '\n' + record.message;
+        if (legacy) {
             std::lock_guard lock(self->console_message_mutex);
             constexpr size_t maximum_console_messages = 1024U;
             if (self->console_messages.size() >= maximum_console_messages) {
@@ -2075,9 +2264,10 @@
             self->console_messages.push_back(payload);
         }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
-        if (std::getenv("WEBSCENE_PROBE_CONSOLE") != nullptr) {
+        if (certification_console) {
             std::cerr << "[V8 console." << levels[static_cast<size_t>(level_index)]
-                << "] " << message.str() << '\n';
+                << "] " << record.message << '\n';
         }
 #endif
+        if (capture) self->diagnostics->publish(std::move(record));
     }

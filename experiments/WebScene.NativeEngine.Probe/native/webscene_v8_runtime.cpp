@@ -1,4 +1,6 @@
 #include "webscene_v8_runtime.h"
+#include "webscene_runtime_diagnostics.h"
+#include "webscene_embed_fallback.h"
 
 #include "webscene_native_dom.h"
 #include "webscene_native_websocket.h"
@@ -69,6 +71,130 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+namespace {
+std::atomic<uint64_t> canvas_paint_string_property_probes{0U};
+std::atomic<uint64_t> canvas_paint_utf8_conversions{0U};
+std::atomic<uint64_t> canvas_paint_stack_comparisons{0U};
+std::atomic<uint64_t> canvas_paint_cached_value_hits{0U};
+}
+
+extern "C" WEBSCENE_API void webscene_canvas_paint_state_benchmark_reset_counters(void)
+{
+    canvas_paint_string_property_probes.store(0U, std::memory_order_relaxed);
+    canvas_paint_utf8_conversions.store(0U, std::memory_order_relaxed);
+    canvas_paint_stack_comparisons.store(0U, std::memory_order_relaxed);
+    canvas_paint_cached_value_hits.store(0U, std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_string_property_probes(void)
+{
+    return canvas_paint_string_property_probes.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_utf8_conversions(void)
+{
+    return canvas_paint_utf8_conversions.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_stack_comparisons(void)
+{
+    return canvas_paint_stack_comparisons.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_cached_value_hits(void)
+{
+    return canvas_paint_cached_value_hits.load(std::memory_order_relaxed);
+}
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+namespace {
+std::atomic<uint64_t> media_refresh_index_rule_calls{0U};
+std::atomic<uint64_t> media_refresh_root_variable_refreshes{0U};
+std::atomic<uint64_t> media_refresh_class_lookups{0U};
+std::atomic<uint64_t> media_refresh_owned_class_lookup_keys{0U};
+std::atomic<uint64_t> media_refresh_owned_class_lookup_bytes{0U};
+}
+
+extern "C" WEBSCENE_API void webscene_media_refresh_benchmark_reset_counters(void)
+{
+    media_refresh_index_rule_calls.store(0U, std::memory_order_relaxed);
+    media_refresh_root_variable_refreshes.store(0U, std::memory_order_relaxed);
+    media_refresh_class_lookups.store(0U, std::memory_order_relaxed);
+    media_refresh_owned_class_lookup_keys.store(0U, std::memory_order_relaxed);
+    media_refresh_owned_class_lookup_bytes.store(0U, std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_media_refresh_benchmark_index_rule_calls(void)
+{
+    return media_refresh_index_rule_calls.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_media_refresh_benchmark_root_variable_refreshes(void)
+{
+    return media_refresh_root_variable_refreshes.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_media_refresh_benchmark_class_lookups(void)
+{
+    return media_refresh_class_lookups.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_media_refresh_benchmark_owned_class_lookup_keys(void)
+{
+    return media_refresh_owned_class_lookup_keys.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_media_refresh_benchmark_owned_class_lookup_bytes(void)
+{
+    return media_refresh_owned_class_lookup_bytes.load(std::memory_order_relaxed);
+}
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+namespace {
+std::atomic<uint64_t> selector_sibling_positional_matches{0U};
+std::atomic<uint64_t> selector_sibling_scans{0U};
+std::atomic<uint64_t> selector_sibling_vector_materializations{0U};
+std::atomic<uint64_t> selector_sibling_pointer_copies{0U};
+}
+
+extern "C" WEBSCENE_API void webscene_selector_sibling_benchmark_reset_counters(void)
+{
+    selector_sibling_positional_matches.store(0U, std::memory_order_relaxed);
+    selector_sibling_scans.store(0U, std::memory_order_relaxed);
+    selector_sibling_vector_materializations.store(0U, std::memory_order_relaxed);
+    selector_sibling_pointer_copies.store(0U, std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_positional_matches(void)
+{
+    return selector_sibling_positional_matches.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_sibling_scans(void)
+{
+    return selector_sibling_scans.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_vector_materializations(void)
+{
+    return selector_sibling_vector_materializations.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_pointer_copies(void)
+{
+    return selector_sibling_pointer_copies.load(std::memory_order_relaxed);
+}
 #endif
 
 namespace webscene_native {
@@ -253,6 +379,8 @@ struct v8_dom_runtime::implementation final {
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "offsetParent"), get_offset_parent);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "width"), get_element_width, set_element_width);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "height"), get_element_height, set_element_height);
+        element->InstanceTemplate()->SetNativeDataProperty(
+            js_string(isolate, "hidden"), get_hidden, set_hidden);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "colSpan"), get_table_cell_span, set_table_cell_span);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "rowSpan"), get_table_cell_span, set_table_cell_span);
         element->InstanceTemplate()->SetNativeDataProperty(
@@ -505,9 +633,10 @@ struct v8_dom_runtime::implementation final {
         const char* properties[] = {
             "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
             "left", "top", "right", "bottom", "inset", "insetInlineStart", "insetInlineEnd",
-            "display", "position", "cssFloat", "flexDirection", "flexFlow",
+            "display", "position", "contain", "cssFloat", "flexDirection", "flexFlow",
             "flexGrow", "flexShrink", "flexBasis", "flexWrap",
             "alignItems", "alignSelf", "justifyContent", "gap", "rowGap", "columnGap",
+            "gridGap", "gridRowGap", "gridColumnGap",
             "padding", "paddingInline", "paddingBlock",
             "paddingLeft", "paddingTop", "paddingRight", "paddingBottom",
             "paddingInlineStart", "paddingInlineEnd", "paddingBlockStart", "paddingBlockEnd",
@@ -611,6 +740,10 @@ struct v8_dom_runtime::implementation final {
         frame_document->Set(
             js_string(isolate, "createEvent"),
             v8::FunctionTemplate::New(isolate, document_create_event));
+        frame_document->Set(
+            js_string(isolate, "execCommand"),
+            v8::FunctionTemplate::New(isolate, document_exec_command, {}, {}, 1,
+                v8::ConstructorBehavior::kThrow));
         frame_document->SetNativeDataProperty(
             js_string(isolate, "body"), get_body);
         frame_document->SetNativeDataProperty(
@@ -1182,6 +1315,9 @@ struct v8_dom_runtime::implementation final {
         auto prototype = constructor->Get(
             local_context,
             js_string(isolate, "prototype")).ToLocalChecked().As<v8::Object>();
+        prototype->Set(local_context, js_string(isolate, "execCommand"),
+            v8::Function::New(local_context, document_exec_command, {}, 1,
+                v8::ConstructorBehavior::kThrow).ToLocalChecked()).Check();
         const auto cookie_name = js_string(isolate, "cookie");
         auto cookie_getter = v8::Function::New(
             local_context,
@@ -1592,7 +1728,7 @@ struct v8_dom_runtime::implementation final {
                 1,
                 arguments).IsEmpty()) {
             last_error = "WebSocket event dispatch failed: "
-                + describe_exception(try_catch, event_context);
+                + describe_reported_exception(try_catch, event_context);
             if (value.type == native_websocket_transport::event_type::closed) {
                 websocket_bindings.erase(value.socket_id);
                 websocket_transport.release(value.socket_id);
@@ -2656,7 +2792,7 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "__webSceneActivateCustomElements")).Check();
         if (try_catch.HasCaught()) {
             last_error = "Custom-elements bootstrap failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 
@@ -2680,7 +2816,7 @@ struct v8_dom_runtime::implementation final {
             nullptr));
         if (try_catch.HasCaught()) {
             last_error = "TreeWalker bootstrap failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 
@@ -3012,14 +3148,7 @@ struct v8_dom_runtime::implementation final {
 
         install_navigator(isolate, local_context, global);
 
-        auto console = v8::Object::New(isolate);
-        console->Set(local_context, js_string(isolate, "log"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 0)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "warn"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 1)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "error"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 2)).ToLocalChecked()).Check();
-        global->Set(local_context, js_string(isolate, "console"), console).Check();
+        install_console(local_context, global);
         install_host_bridge(local_context);
 
         constexpr std::string_view crypto_source = R"JS(
@@ -3749,6 +3878,7 @@ struct v8_dom_runtime::implementation final {
         auto* anchor = &target;
         while (anchor != nullptr && anchor->tag != "a") anchor = anchor->parent;
         if (anchor == nullptr) return true;
+        v8::Context::Scope navigation_context_scope(context_for_node(*anchor));
         const auto authored = anchor->attributes.find("href");
         if (authored == anchor->attributes.end() || authored->second.empty()) return true;
         if (anchor->attributes.contains("download")) {
@@ -3790,6 +3920,22 @@ struct v8_dom_runtime::implementation final {
                     "native-binding");
                 return enqueue_host_request(local_context, request);
             }
+            const auto object_url_canvas =
+                object_url_canvas_node_ids.find(authored->second);
+            if (object_url_canvas != object_url_canvas_node_ids.end()) {
+                request->Set(
+                    local_context,
+                    js_string(isolate, "canvasNodeId"),
+                    v8::Integer::NewFromUnsigned(
+                        isolate, object_url_canvas->second)).Check();
+                record_feature(
+                    "canvas",
+                    "HTMLCanvasElement.toBlob",
+                    "partially-supported",
+                    "canvas-backed object URL handoff to the desktop host",
+                    "default-action");
+                return enqueue_host_request(local_context, request);
+            }
             const auto download_payload =
                 object_url_download_payloads.find(authored->second);
             const auto object_url = object_urls.find(authored->second);
@@ -3821,9 +3967,7 @@ struct v8_dom_runtime::implementation final {
         const auto lower = lower_html_name(resolved);
         if (!lower.starts_with("https://") && !lower.starts_with("http://")) return true;
 
-        auto local_context = frame_context.IsEmpty()
-            ? context.Get(isolate)
-            : frame_context.Get(isolate);
+        auto local_context = isolate->GetCurrentContext();
         auto request = v8::Object::New(isolate);
         request->Set(
             local_context,
@@ -3958,6 +4102,7 @@ struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_tasks.inc"
 #include "webscene_v8_runtime_resources.inc"
 #include "webscene_v8_runtime_dom_core.inc"
+#include "webscene_v8_runtime_diagnostics.inc"
 #include "webscene_v8_runtime_dom_properties.inc"
 #include "webscene_v8_runtime_canvas.inc"
 #include "webscene_v8_runtime_document.inc"
@@ -3998,17 +4143,11 @@ struct v8_dom_runtime::implementation final {
         }
         if (message.GetEvent() != v8::kPromiseRejectWithNoHandler) return;
         auto value = message.GetValue();
-        auto error = value.IsEmpty()
-            ? "Unhandled promise rejection"
-            : "Unhandled promise rejection: " + to_utf8(isolate, value);
-        if (!value.IsEmpty() && value->IsObject()) {
-            auto local_context = isolate->GetCurrentContext();
-            v8::Local<v8::Value> stack;
-            if (value.As<v8::Object>()->Get(local_context, js_string(isolate, "stack")).ToLocal(&stack)
-                && stack->IsString()) {
-                error += "\n" + to_utf8(isolate, stack);
-            }
-        }
+        auto rejection = self->exception_diagnostic(value,
+            value.IsEmpty() ? v8::Local<v8::Message>{} : v8::Exception::CreateMessage(isolate, value),
+            isolate->GetCurrentContext());
+        auto error = "Unhandled promise rejection: " + rejection.message;
+        if (!rejection.stack.empty()) error += "\n" + rejection.stack;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         auto local_context = isolate->GetCurrentContext();
         const auto inspector_exception_id = value.IsEmpty()
@@ -4035,13 +4174,26 @@ struct v8_dom_runtime::implementation final {
             }
         }
 #endif
+        if (self->pending_promise_rejections.size() >= runtime_diagnostics::maximum_records) {
+            self->pending_promise_rejections.pop_front();
+            if (self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_EXCEPTIONS))
+                self->diagnostics->note_dropped();
+        }
         self->pending_promise_rejections.push_back({
             v8::Global<v8::Promise>(isolate, promise),
-            std::move(error)});
+            std::move(error),
+            self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_EXCEPTIONS)
+                ? std::move(rejection) : runtime_diagnostic{}});
     }
 
 #include "webscene_v8_runtime_state.inc"
 };
+
+void v8_dom_runtime::set_stylesheet_consumer(
+    std::function<void(const std::string&, const std::string&)> consumer)
+{
+    impl_->stylesheet_consumer = std::move(consumer);
+}
 
 v8_dom_runtime::v8_dom_runtime(
     native_document& document,
@@ -4051,7 +4203,8 @@ v8_dom_runtime::v8_dom_runtime(
     std::function<void()> host_request_available,
     std::function<void()> interop_callback_available,
     interop_callback_sink_v3 interop_callback_sink,
-    std::function<void()> runtime_work_available)
+    std::function<void()> runtime_work_available,
+    runtime_diagnostics* diagnostics)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
@@ -4060,7 +4213,7 @@ v8_dom_runtime::v8_dom_runtime(
           std::move(host_request_available),
           std::move(interop_callback_available),
           std::move(interop_callback_sink),
-          std::move(runtime_work_available)))
+          std::move(runtime_work_available), diagnostics))
 {
 }
 
@@ -4236,6 +4389,20 @@ bool v8_dom_runtime::has_pending_inspector_tasks() const noexcept
 bool v8_dom_runtime::dispatch_resize()
 {
     return impl_->dispatch_resize()
+        && impl_->promote_pending_promise_error();
+}
+
+bool v8_dom_runtime::deliver_resize_observers()
+{
+    if (impl_->isolate == nullptr) return true;
+    auto isolate_locker = impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto local_context = impl_->frame_context.IsEmpty()
+        ? impl_->context.Get(impl_->isolate)
+        : impl_->frame_context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(local_context);
+    return impl_->deliver_resize_observer_checkpoint()
         && impl_->promote_pending_promise_error();
 }
 

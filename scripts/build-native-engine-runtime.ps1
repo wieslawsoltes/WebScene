@@ -286,16 +286,35 @@ Copy-Item $packagePath $packageZip -Force
 Expand-Archive -Path $packageZip -DestinationPath $packageSmokeDir -Force
 $packageNativePath = Join-Path $packageSmokeDir "runtimes/$Rid/native/webscene_native_engine.dll"
 
-& dotnet run `
-    --project (Join-Path $repoRoot "tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj") `
-    -c Release -- `
-    --selection required `
-    --native-library $packageNativePath `
-    --native-cache-directory (Join-Path $buildDir "code-cache") `
-    --output (Join-Path $buildDir "wpt-results")
-if ($LASTEXITCODE -ne 0) { throw "Required native compatibility profile failed." }
+$previousFontInstancing = $env:WEBSCENE_VARIABLE_FONT_INSTANCING
+$env:WEBSCENE_VARIABLE_FONT_INSTANCING = '1'
+try {
+    & dotnet run `
+        --project (Join-Path $repoRoot "tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj") `
+        -c Release -- `
+        --selection required `
+        --native-library $packageNativePath `
+        --native-cache-directory (Join-Path $buildDir "code-cache") `
+        --output (Join-Path $buildDir "wpt-results")
+    if ($LASTEXITCODE -ne 0) { throw "Required native compatibility profile failed." }
 
-$previousNativeEnginePath = $env:WEBSCENE_NATIVE_ENGINE_PATH
+    $previousNativeEnginePath = $env:WEBSCENE_NATIVE_ENGINE_PATH
+    $previousTestNativeLibrary = $env:WEBSCENE_TEST_NATIVE_LIBRARY
+    $env:WEBSCENE_TEST_NATIVE_LIBRARY = $packageNativePath
+    try {
+        & dotnet test (Join-Path $repoRoot "tests/WebScene.Backend.Avalonia.Tests/WebScene.Backend.Avalonia.Tests.csproj") `
+            -c Release -f net10.0 `
+            --filter 'FullyQualifiedName~NativeWebFontCacheTests|FullyQualifiedName~VariableWebFontTests|FullyQualifiedName~SvgPictureRenderingTests'
+        if ($LASTEXITCODE -ne 0) { throw "Native web-font/cache and SVG rendering regressions failed." }
+    }
+    finally {
+        $env:WEBSCENE_TEST_NATIVE_LIBRARY = $previousTestNativeLibrary
+    }
+}
+finally {
+    $env:WEBSCENE_VARIABLE_FONT_INSTANCING = $previousFontInstancing
+}
+
 $env:WEBSCENE_NATIVE_ENGINE_PATH = $packageNativePath
 try {
     & dotnet run `

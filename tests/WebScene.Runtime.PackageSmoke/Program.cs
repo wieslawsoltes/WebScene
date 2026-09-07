@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using WebScene.Testing;
 using WebScene.Backends.Avalonia.Native;
 using WebScene.Sdk.Avalonia;
 
@@ -33,6 +34,21 @@ foreach (var required in new[] { nativePath, icuPath, manifestPath })
 var library = NativeLibrary.Load(nativePath);
 try
 {
+    // Check the packaged binary against the public header, not a hand-maintained
+    // subset: macOS release dead-stripping can hide newly added ABI functions.
+    using var headerStream = typeof(GetAbiVersion).Assembly.GetManifestResourceStream("WebScene.NativeAbiHeader")
+        ?? throw new InvalidOperationException("The public native ABI header was not embedded.");
+    using var headerReader = new StreamReader(headerStream);
+    var publicFunctions = NativeAbiContract.PublicFunctions(headerReader.ReadToEnd());
+    if (publicFunctions.Length == 0)
+        return Fail("No public native ABI functions were found in the embedded header.");
+    foreach (var name in publicFunctions)
+    {
+        if (!NativeLibrary.TryGetExport(library, name, out _))
+            return Fail($"The packaged native runtime does not export public ABI function '{name}'.");
+    }
+    Console.WriteLine($"Public native ABI exports verified: {publicFunctions.Length}.");
+
     using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
     foreach (var (name, expected) in new[]
              {

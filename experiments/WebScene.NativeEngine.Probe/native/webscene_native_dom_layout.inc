@@ -1,5 +1,8 @@
 void native_document::layout(float viewport_width, float viewport_height)
 {
+    if (layout_scratch_ == nullptr) {
+        layout_scratch_ = std::make_unique<layout_scratch_storage>();
+    }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     const auto intrinsic_cache_disabled =
         std::getenv("WEBSCENE_DISABLE_INTRINSIC_SIZE_CACHE") != nullptr;
@@ -8,6 +11,16 @@ void native_document::layout(float viewport_width, float viewport_height)
 #endif
     intrinsic_size_cache_generation_ = 0;
     if (!intrinsic_cache_disabled) {
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+        if (++intrinsic_size_cache_next_generation_ == 0) {
+            if (intrinsic_size_direct_cache_ != nullptr) {
+                for (auto& entry : *intrinsic_size_direct_cache_) {
+                    entry.generation = 0;
+                }
+            }
+            ++intrinsic_size_cache_next_generation_;
+        }
+#else
         if (intrinsic_size_cache_ == nullptr) {
             intrinsic_size_cache_ = std::make_unique<std::unordered_map<
                 intrinsic_size_key,
@@ -25,6 +38,7 @@ void native_document::layout(float viewport_width, float viewport_height)
             intrinsic_size_cache_->clear();
             ++intrinsic_size_cache_next_generation_;
         }
+#endif
         intrinsic_size_cache_generation_ = intrinsic_size_cache_next_generation_;
     }
     if (shadow_dom_storage_ != nullptr) {
@@ -73,6 +87,85 @@ void native_document::layout(float viewport_width, float viewport_height)
     body_->visible = true;
     body_->used_height_is_definite = true;
     layout_children(*body_);
+    // Sticky offsets are visual adjustments to completed normal-flow geometry.
+    // Applying them during row layout uses unfinished table/group dimensions
+    // and can alter the virtualizer's scroll extent. Resolve outer sticky boxes
+    // first so nested header cells inherit the header's vertical displacement.
+    const auto translate = [&](const auto& self, dom_node& node, float dx, float dy) -> void {
+        node.layout.x += dx;
+        node.layout.y += dy;
+        for (auto& fragment : node.text_layout_fragments) { fragment.x += dx; fragment.y += dy; }
+        if (node.style.has_pseudo_elements()) {
+            for (auto* pseudo : {&node.style.mutable_before_pseudo(), &node.style.mutable_after_pseudo()}) {
+                if (pseudo->generated) { pseudo->layout.x += dx; pseudo->layout.y += dy; }
+            }
+        }
+        node.list_marker_layout.x += dx;
+        node.list_marker_layout.y += dy;
+        for (auto* child : composed_children(node)) self(self, *child, dx, dy);
+    };
+    const auto apply_sticky = [&](const auto& self, dom_node& node) -> void {
+        if (!node.visible || node.style.display == display_mode::none) return;
+        if (node.style.position == position_mode::sticky) {
+            auto* parent = composed_parent(node);
+            auto* scrollport = parent;
+            const auto scrolls = [](overflow_mode mode) {
+                return mode == overflow_mode::hidden || mode == overflow_mode::scroll
+                    || mode == overflow_mode::automatic;
+            };
+            while (scrollport != nullptr && !scrolls(scrollport->style.overflow_x)
+                && !scrolls(scrollport->style.overflow_y)) scrollport = composed_parent(*scrollport);
+            // Table rows/groups use the enclosing table as the flow containing
+            // block; the row itself is not the vertical limit of a rowspan cell.
+            if (parent != nullptr && (node.style.display == display_mode::table_cell
+                || node.style.display == display_mode::table_row
+                || is_table_row_group(node.style.display))) {
+                while (parent != nullptr && parent->style.display != display_mode::table
+                    && parent->style.display != display_mode::inline_table) parent = composed_parent(*parent);
+            }
+            if (parent != nullptr) {
+                const auto viewport = scrollport != nullptr ? scrollport->layout
+                    : layout_rect{0, 0, viewport_width_, viewport_height_};
+                const auto axis = [&](bool horizontal) {
+                    const auto start = horizontal ? node.style.left : node.style.top;
+                    const auto end = horizontal ? node.style.right : node.style.bottom;
+                    if (!is_specified(start) && !is_specified(end)) return 0.0F;
+                    const auto position = horizontal ? node.layout.x : node.layout.y;
+                    const auto size = horizontal ? node.layout.width : node.layout.height;
+                    const auto viewport_position = horizontal ? viewport.x : viewport.y;
+                    const auto viewport_size = horizontal ? viewport.width : viewport.height;
+                    const auto before = scrollport == nullptr ? 0.0F : resolve_length(*scrollport,
+                        horizontal ? scrollport->style.border_left_width : scrollport->style.border_top_width,
+                        viewport_size, 0);
+                    const auto after = scrollport == nullptr ? 0.0F : resolve_length(*scrollport,
+                        horizontal ? scrollport->style.border_right_width : scrollport->style.border_bottom_width,
+                        viewport_size, 0);
+                    const auto low = viewport_position + before + resolve_length(node,start,viewport_size,0);
+                    const auto high = std::max(low + size,
+                        viewport_position + viewport_size - after - resolve_length(node,end,viewport_size,0));
+                    auto target = position;
+                    if (is_specified(end)) target = std::min(target,high-size);
+                    if (is_specified(start)) target = std::max(target,low);
+                    const auto parent_position = horizontal ? parent->layout.x : parent->layout.y;
+                    const auto parent_size = horizontal ? parent->layout.width : parent->layout.height;
+                    // A scrolling parent contains the flow in its content space,
+                    // not just the visible scrollport rectangle.
+                    const auto flow_start = parent_position - (parent == scrollport
+                        ? (horizontal ? parent->scroll_left : parent->scroll_top) : 0.0F);
+                    const auto flow_size = parent == scrollport
+                        ? std::max(parent_size,horizontal ? parent->scroll_content_width : parent->scroll_content_height)
+                        : parent_size;
+                    if (target > position) target = std::max(position,std::min(target,flow_start+flow_size-size));
+                    if (target < position) target = std::min(position,std::max(target,flow_start));
+                    return target-position;
+                };
+                const auto dx=axis(true), dy=axis(false);
+                if (dx != 0 || dy != 0) translate(translate,node,dx,dy);
+            }
+        }
+        for (auto* child : composed_children(node)) self(self,*child);
+    };
+    apply_sticky(apply_sticky,*body_);
     update_paint_z_index(*this, *body_);
     auto retained_canvas_seen = false;
     auto retained_canvases_remaining = count_retained_canvases(*this, *body_);
@@ -81,12 +174,59 @@ void native_document::layout(float viewport_width, float viewport_height)
         *body_,
         retained_canvas_seen,
         retained_canvases_remaining);
+    // The pool normally retains only the high-water scratch blocks needed by
+    // repeated layout. Bound pathological one-off documents so a transient
+    // giant flex tree cannot become permanent per-context memory.
+    constexpr size_t maximum_retained_layout_scratch_bytes = 1024U * 1024U;
+    if (layout_scratch_->upstream.reserved_bytes()
+        > maximum_retained_layout_scratch_bytes) {
+        layout_scratch_->pool.release();
+    }
     intrinsic_size_cache_generation_ = 0;
     ++layout_passes_;
     dirty_ = false;
     globally_dirty_ = false;
     active_animation_demand_cache_valid_ = false;
     out_of_flow_geometry_dirty_roots_.clear();
+}
+
+static bool parse_intrinsic_view_box(
+    const std::string& value,
+    float& width,
+    float& height)
+{
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    ++intrinsic_view_box_parse_counts_for_benchmark[0];
+#endif
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT) \
+    || defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_STREAM_CONTROL)
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    ++intrinsic_view_box_parse_counts_for_benchmark[1];
+#endif
+    std::istringstream values(value);
+    float x = 0;
+    float y = 0;
+    const auto parsed = static_cast<bool>(values >> x >> y >> width >> height);
+#else
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    ++intrinsic_view_box_parse_counts_for_benchmark[2];
+#endif
+    const auto* current = value.c_str();
+    float components[4]{};
+    for (auto& component : components) {
+        char* end = nullptr;
+        component = std::strtof(current, &end);
+        if (end == current) return false;
+        current = end;
+    }
+    width = components[2];
+    height = components[3];
+    constexpr auto parsed = true;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    if (parsed) ++intrinsic_view_box_parse_counts_for_benchmark[3];
+#endif
+    return parsed;
 }
 
 void native_document::layout_children(dom_node& parent)
@@ -139,9 +279,9 @@ void native_document::layout_children(dom_node& parent)
         parent, parent.style.padding_left, parent.layout.width, 0);
     const auto padding_right = resolve_length(
         parent, parent.style.padding_right, parent.layout.width, 0);
-    const auto padding_top = resolve_length(
+    const auto padding_top = resolve_vertical_padding(
         parent, parent.style.padding_top, parent.layout.height, 0);
-    const auto padding_bottom = resolve_length(
+    const auto padding_bottom = resolve_vertical_padding(
         parent, parent.style.padding_bottom, parent.layout.height, 0);
     const layout_rect content{
         parent.layout.x + border_left + padding_left,
@@ -269,9 +409,16 @@ void native_document::layout_children(dom_node& parent)
                 table_width = std::max(table_width, candidate);
             }
         }
-        if (is_specified(parent.style.width)) table_width = content.width;
+        // CSS table width is a minimum, not a hard clamp. A display:table
+        // wrapper with width:100% must still expand to the minimum width of
+        // its anonymous row. TradingView measures that wrapper to decide
+        // whether its narrow header toolbar needs overflow navigation.
+        if (is_specified(parent.style.width)) {
+            table_width = std::max(table_width, content.width);
+        }
         table_width = std::max(0.0F, table_width);
-        if (!is_specified(parent.style.width) && table_width > 0.0F) {
+        if (table_width > content.width + 0.01F
+            || (!is_specified(parent.style.width) && table_width > 0.0F)) {
             parent.layout.width = table_width + border_left + border_right
                 + padding_left + padding_right;
         }
@@ -610,6 +757,27 @@ void native_document::layout_children(dom_node& parent)
                 }
             }
         }
+        // A row group's authored height is a minimum, including when a
+        // virtualizer temporarily removes all its data rows. Do not discard
+        // that reserved extent merely because another group has header rows.
+        for (auto* group : composed_children(parent)) {
+            if (!is_table_row_group(group->style.display)
+                || !is_specified(group->style.height)) continue;
+            auto group_rows = std::vector<dom_node*>{};
+            auto group_height = 0.0F;
+            for (auto& row : rows) {
+                if (composed_parent(*row.row) != group) continue;
+                group_rows.push_back(row.row);
+                group_height += row.row->table_layout().row_height;
+            }
+            if (group_rows.empty()) continue;
+            group_height += row_spacing * static_cast<float>(group_rows.size() - 1U);
+            const auto minimum = resolve_length(*group, group->style.height, content.height, 0);
+            if (minimum > group_height) {
+                const auto extra = (minimum - group_height) / static_cast<float>(group_rows.size());
+                for (auto* row : group_rows) row->mutable_table_layout().row_height += extra;
+            }
+        }
         for (size_t row_index = 0; row_index < rows.size(); ++row_index) {
             for (const auto& placement : rows[row_index].cells) {
                 auto& cell_table = placement.cell->mutable_table_layout();
@@ -648,6 +816,9 @@ void native_document::layout_children(dom_node& parent)
                 }
                 if (row_count > 1U) {
                     height += row_spacing * static_cast<float>(row_count - 1U);
+                }
+                if (is_specified(child->style.height)) {
+                    height = std::max(height, resolve_length(*child, child->style.height, content.height, 0));
                 }
             } else {
                 height = intrinsic_size(*child, false, content.height);
@@ -890,28 +1061,42 @@ void native_document::layout_children(dom_node& parent)
         parent.scroll_content_height = std::max(content.height, improper_height);
         return;
     }
-    const auto outer_authored_size = [&](const dom_node& node, bool horizontal_axis, float available) {
-        const auto authored = horizontal_axis ? node.style.width : node.style.height;
+    const auto outer_specified_size = [&](const dom_node& node,
+                                          bool horizontal_axis,
+                                          const css_length& authored,
+                                          float available) {
         const auto intrinsic_keyword = authored.unit == length_unit::max_content
                 || authored.unit == length_unit::min_content
                 || authored.unit == length_unit::fit_content;
-        auto size = intrinsic_keyword
+        const auto stretch = authored.unit == length_unit::stretch;
+        auto size = stretch
+            ? available
+            : intrinsic_keyword
             ? intrinsic_size(node, horizontal_axis, available)
             : resolve_length(node, authored, available, 0);
-        if (!intrinsic_keyword) {
+        if (!intrinsic_keyword && !stretch) {
             const auto box_edges = horizontal_axis
                 ? resolve_length(node, node.style.padding_left, available, 0)
                     + resolve_length(node, node.style.padding_right, available, 0)
                     + resolve_length(node, node.style.border_left_width, available, 0)
                     + resolve_length(node, node.style.border_right_width, available, 0)
-                : resolve_length(node, node.style.padding_top, available, 0)
-                    + resolve_length(node, node.style.padding_bottom, available, 0)
+                : resolve_vertical_padding(node, node.style.padding_top, available, 0)
+                    + resolve_vertical_padding(node, node.style.padding_bottom, available, 0)
                     + resolve_length(node, node.style.border_top_width, available, 0)
                     + resolve_length(node, node.style.border_bottom_width, available, 0);
             if (node.style.border_box) size = std::max(size, box_edges);
             else size += box_edges;
         }
         return size;
+    };
+    const auto outer_authored_size = [&](const dom_node& node,
+                                         bool horizontal_axis,
+                                         float available) {
+        return outer_specified_size(
+            node,
+            horizontal_axis,
+            horizontal_axis ? node.style.width : node.style.height,
+            available);
     };
     const auto layout_positioned_grid_child = [&](dom_node& child) {
         auto* containing_node = body_;
@@ -1000,8 +1185,8 @@ void native_document::layout_children(dom_node& parent)
                         + resolve_length(child, child.style.padding_right, available, 0)
                         + resolve_length(child, child.style.border_left_width, available, 0)
                         + resolve_length(child, child.style.border_right_width, available, 0)
-                    : resolve_length(child, child.style.padding_top, available, 0)
-                        + resolve_length(child, child.style.padding_bottom, available, 0)
+                    : resolve_vertical_padding(child, child.style.padding_top, available, 0)
+                        + resolve_vertical_padding(child, child.style.padding_bottom, available, 0)
                         + resolve_length(child, child.style.border_top_width, available, 0)
                         + resolve_length(child, child.style.border_bottom_width, available, 0);
             if (is_specified(maximum)) {
@@ -1054,14 +1239,26 @@ void native_document::layout_children(dom_node& parent)
                     || is_inline_level(child->style.display);
             });
     if (inline_formatting_context) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL)
         std::vector<dom_node*> text_runs;
+#else
+        std::pmr::vector<dom_node*> text_runs{&layout_scratch_->pool};
+#endif
         std::deque<dom_node> generated_whitespace_runs;
         struct positioned_inline_item final {
             dom_node* node;
             size_t preceding_text_runs;
         };
+#if defined(WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL)
         std::vector<positioned_inline_item> positioned_items;
+#else
+        std::pmr::vector<positioned_inline_item> positioned_items{&layout_scratch_->pool};
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_LAYOUT_CALLBACK_CONTROL)
         std::function<bool(dom_node&)> collect_runs = [&](dom_node& node) {
+#else
+        const auto collect_runs = [&](const auto& self, dom_node& node) -> bool {
+#endif
             node.text_layout_fragments.clear();
             node.visible = parent.visible && node.style.display != display_mode::none;
             if (!node.visible) return true;
@@ -1131,14 +1328,22 @@ void native_document::layout_children(dom_node& parent)
                     && !is_inline_level(child->style.display)) {
                     return false;
                 }
+#if defined(WEBSCENE_NATIVE_ENGINE_LAYOUT_CALLBACK_CONTROL)
                 if (!collect_runs(*child)) return false;
+#else
+                if (!self(self, *child)) return false;
+#endif
             }
             if (!append_generated_whitespace(node.style.after_pseudo())) return false;
             return true;
         };
         auto supported = true;
         for (auto* child : composed_children(parent)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_LAYOUT_CALLBACK_CONTROL)
             if (!collect_runs(*child)) {
+#else
+            if (!collect_runs(collect_runs, *child)) {
+#endif
                 supported = false;
                 break;
             }
@@ -1149,7 +1354,13 @@ void native_document::layout_children(dom_node& parent)
             auto current_line_height = 0.0F;
             auto pending_space = false;
             dom_node* pending_space_run = nullptr;
+#if defined(WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL)
             std::vector<layout_rect> static_anchors(text_runs.size() + 1U);
+#else
+            std::pmr::vector<layout_rect> static_anchors(
+                text_runs.size() + 1U,
+                &layout_scratch_->pool);
+#endif
             static_anchors[0] = {
                 content.x,
                 content.y,
@@ -1263,7 +1474,11 @@ void native_document::layout_children(dom_node& parent)
                     float right{0};
                     float offset{0};
                 };
+#if defined(WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL)
                 std::vector<flattened_line_alignment> lines;
+#else
+                std::pmr::vector<flattened_line_alignment> lines{&layout_scratch_->pool};
+#endif
                 for (const auto* run : text_runs) {
                     for (const auto& fragment : run->text_layout_fragments) {
                         auto line = std::find_if(
@@ -1320,8 +1535,14 @@ void native_document::layout_children(dom_node& parent)
                     generated.text_layout_fragments.end());
             }
 
+#if !defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT) \
+    || defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_CALLBACK_CONTROL)
             std::function<bool(dom_node&, layout_rect&)> update_inline_box =
                 [&](dom_node& node, layout_rect& bounds) {
+#else
+            const auto update_inline_box =
+                [&](const auto& self, dom_node& node, layout_rect& bounds) -> bool {
+#endif
                     auto has_bounds = false;
                     const auto include = [&](const layout_rect& item) {
                         if (!has_bounds) {
@@ -1341,7 +1562,12 @@ void native_document::layout_children(dom_node& parent)
                     }
                     for (auto* child : composed_children(node)) {
                         layout_rect child_bounds{};
+#if !defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT) \
+    || defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_CALLBACK_CONTROL)
                         if (update_inline_box(*child, child_bounds)) include(child_bounds);
+#else
+                        if (self(self, *child, child_bounds)) include(child_bounds);
+#endif
                     }
                     node.layout = has_bounds
                         ? bounds
@@ -1350,7 +1576,12 @@ void native_document::layout_children(dom_node& parent)
                 };
             for (auto* child : composed_children(parent)) {
                 layout_rect child_bounds{};
+#if !defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT) \
+    || defined(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_CALLBACK_CONTROL)
                 update_inline_box(*child, child_bounds);
+#else
+                update_inline_box(update_inline_box, *child, child_bounds);
+#endif
             }
 
             for (const auto& item : positioned_items) {
@@ -1369,7 +1600,37 @@ void native_document::layout_children(dom_node& parent)
                         }
                     }
                 }
-                const auto& containing = containing_node->layout;
+                auto containing = containing_node->layout;
+                if (child.style.position == position_mode::absolute) {
+                    const auto border_left = resolve_length(
+                        *containing_node,
+                        containing_node->style.border_left_width,
+                        containing.width,
+                        0);
+                    const auto border_right = resolve_length(
+                        *containing_node,
+                        containing_node->style.border_right_width,
+                        containing.width,
+                        0);
+                    const auto border_top = resolve_length(
+                        *containing_node,
+                        containing_node->style.border_top_width,
+                        containing.height,
+                        0);
+                    const auto border_bottom = resolve_length(
+                        *containing_node,
+                        containing_node->style.border_bottom_width,
+                        containing.height,
+                        0);
+                    containing.x += border_left;
+                    containing.y += border_top;
+                    containing.width = std::max(
+                        0.0F,
+                        containing.width - border_left - border_right);
+                    containing.height = std::max(
+                        0.0F,
+                        containing.height - border_top - border_bottom);
+                }
                 const auto has_left = is_specified(child.style.left);
                 const auto has_top = is_specified(child.style.top);
                 const auto has_right = is_specified(child.style.right);
@@ -1399,12 +1660,14 @@ void native_document::layout_children(dom_node& parent)
                 assigned.width = is_specified(child.style.width)
                     ? outer_authored_size(child, true, containing.width)
                     : has_left && has_right
-                        ? std::max(0.0F, containing.width - left - right)
+                        ? std::max(0.0F, containing.width - left - right
+                            - margin_left - margin_right)
                         : intrinsic_size(child, true, containing.width);
                 assigned.height = is_specified(child.style.height)
                     ? outer_authored_size(child, false, containing.height)
                     : has_top && has_bottom
-                        ? std::max(0.0F, containing.height - top - bottom)
+                        ? std::max(0.0F, containing.height - top - bottom
+                            - margin_top - margin_bottom)
                         : intrinsic_size(child, false, containing.height);
                 // Inline formatting collects out-of-flow descendants into a
                 // deferred positioned pass. They retain the same min/max used
@@ -1424,8 +1687,8 @@ void native_document::layout_children(dom_node& parent)
                                 + resolve_length(child, child.style.padding_right, available, 0)
                                 + resolve_length(child, child.style.border_left_width, available, 0)
                                 + resolve_length(child, child.style.border_right_width, available, 0)
-                            : resolve_length(child, child.style.padding_top, available, 0)
-                                + resolve_length(child, child.style.padding_bottom, available, 0)
+                            : resolve_vertical_padding(child, child.style.padding_top, available, 0)
+                                + resolve_vertical_padding(child, child.style.padding_bottom, available, 0)
                                 + resolve_length(child, child.style.border_top_width, available, 0)
                                 + resolve_length(child, child.style.border_bottom_width, available, 0);
                     if (is_specified(maximum)) {
@@ -1706,14 +1969,19 @@ void native_document::layout_children(dom_node& parent)
                 const auto authored_track = item.column < effective_columns.size()
                     ? &effective_columns[item.column] : nullptr;
                 if (authored_track != nullptr
-                    && authored_track->kind != grid_track::sizing::automatic) continue;
+                    && authored_track->kind != grid_track::sizing::automatic
+                    && authored_track->kind != grid_track::sizing::min_content) continue;
                 const auto margins = resolve_length(
                         *item.node, item.node->style.margin_left, content.width, 0)
                     + resolve_length(
                         *item.node, item.node->style.margin_right, content.width, 0);
                 column_widths[item.column] = std::max(
                     column_widths[item.column],
-                    intrinsic_size(*item.node, true, content.width) + margins);
+                    (authored_track != nullptr
+                            && authored_track->kind == grid_track::sizing::min_content
+                        ? min_content_inline_size(*item.node, content.width)
+                        : intrinsic_size(*item.node, true, content.width))
+                        + margins);
             }
         }
         const auto total_gap = column_gap * static_cast<float>(column_count - 1U);
@@ -1730,13 +1998,45 @@ void native_document::layout_children(dom_node& parent)
                         fractional_space * track.fraction / fractional_weight);
                 }
             } else if (committed_width < content.width && !column_widths.empty()) {
-                column_widths.back() += content.width - committed_width;
+                // `justify-content: normal` stretches auto grid tracks, not
+                // fixed tracks. Donating all free space to the final column
+                // changed TradingView's compact `150px 100px` Go To input
+                // grid into `150px 228px`, eliminating the trailing space
+                // that Chrome retains after the time field.
+                std::vector<size_t> stretchable_columns;
+                for (size_t column = 0; column < column_widths.size(); ++column) {
+                    if (column >= effective_columns.size()
+                        || effective_columns[column].kind
+                            == grid_track::sizing::automatic) {
+                        stretchable_columns.push_back(column);
+                    }
+                }
+                if (!stretchable_columns.empty()) {
+                    const auto extra = (content.width - committed_width)
+                        / static_cast<float>(stretchable_columns.size());
+                    for (const auto column : stretchable_columns) {
+                        column_widths[column] += extra;
+                    }
+                }
             }
         }
 
         const auto row_count = std::max<size_t>(
             occupied.size(), parent_grid.template_rows.size());
         std::vector<float> row_heights(row_count, 0.0F);
+        const auto contains_wrapping_flex = [&](const auto& self,
+                                                const dom_node& node) -> bool {
+            if (is_flex_container(node.style.display) && node.style.flex_wrap) {
+                return true;
+            }
+            for (const auto* descendant : composed_children(node)) {
+                if (descendant == nullptr
+                    || descendant->style.display == display_mode::none
+                    || is_out_of_flow(descendant->style.position)) continue;
+                if (self(self, *descendant)) return true;
+            }
+            return false;
+        };
         auto fractional_row_weight = 0.0F;
         for (size_t row = 0; row < parent_grid.template_rows.size(); ++row) {
             const auto& track = parent_grid.template_rows[row];
@@ -1768,10 +2068,97 @@ void native_document::layout_children(dom_node& parent)
                 item.node->style.height.unit == length_unit::percent
                 && (authored_track == nullptr
                     || authored_track->kind == grid_track::sizing::automatic);
-            const auto authored = is_specified(item.node->style.height)
-                    && !cyclic_percentage_height
+            const auto definite_height = is_specified(item.node->style.height)
+                && !cyclic_percentage_height;
+            auto authored = definite_height
                 ? outer_authored_size(*item.node, false, content.height)
                 : intrinsic_size(*item.node, false, content.height);
+            if (!definite_height) {
+                // Block-axis intrinsic sizing alone only sees an unwrapped
+                // line-height. Grid row sizing, however, happens after the
+                // inline tracks are known and must include the block size of
+                // content wrapped at that used track width. TradingView's
+                // compact property table uses `1fr min-content`: a wide
+                // control track intentionally leaves a narrow label track,
+                // whose multi-line labels must grow their rows rather than
+                // painting through the following rows.
+                const auto item_width = std::accumulate(
+                        column_widths.begin()
+                            + static_cast<std::ptrdiff_t>(item.column),
+                        column_widths.begin()
+                            + static_cast<std::ptrdiff_t>(
+                                item.column + item.column_span),
+                        0.0F)
+                    + column_gap * static_cast<float>(item.column_span - 1U);
+                const auto margin_left = resolve_length(
+                    *item.node, item.node->style.margin_left, item_width, 0);
+                const auto margin_right = resolve_length(
+                    *item.node, item.node->style.margin_right, item_width, 0);
+                const auto used_item_width = std::max(
+                    0.0F,
+                    item_width - margin_left - margin_right);
+                const auto wraps_at_used_width = intrinsic_size(
+                    *item.node, true, item_width) > used_item_width + 0.01F;
+                // max-width can cap a wrapping flex descendant's reported
+                // intrinsic inline contribution at the track width even when
+                // its children form multiple lines. Canvas settings use this
+                // exact composition for dropdown-plus-color rows. Detect the
+                // wrapping formatting context itself so its used block size
+                // still participates in row sizing.
+                const auto has_wrapping_flex = !wraps_at_used_width
+                    && contains_wrapping_flex(contains_wrapping_flex, *item.node);
+                if (!wraps_at_used_width && !has_wrapping_flex) {
+                    row_heights[item.row] = std::max(
+                        row_heights[item.row], authored + margins);
+                    continue;
+                }
+                if (item.node->style.grid().subgrid_columns) {
+                    auto& inherited = item.node->mutable_grid_layout();
+                    inherited.column_widths.assign(
+                        column_widths.begin()
+                            + static_cast<std::ptrdiff_t>(item.column),
+                        column_widths.begin()
+                            + static_cast<std::ptrdiff_t>(
+                                item.column + item.column_span));
+                    inherited.column_gap = column_gap;
+                }
+                layout_child(
+                    *item.node,
+                    parent.layout,
+                    {0, 0, used_item_width, 0},
+                    false);
+                // Cross-axis alignment against the zero-height provisional
+                // box can place an oversized child above its parent's top.
+                // scrollHeight only retains the positive overflow edge, so
+                // use the complete in-flow vertical range as the item's
+                // max-content block contribution. Once the row receives that
+                // size, the normal arrange pass centers the child without
+                // overflow. This is the shape used by compact Canvas rows:
+                // an align-items:center cell containing a two-line flex wrap.
+                const auto in_flow_vertical_bounds = [&](const auto& self,
+                                                         const dom_node& node)
+                    -> std::pair<float, float> {
+                    auto top = node.layout.y;
+                    auto bottom = node.layout.y + node.layout.height;
+                    for (const auto* descendant : composed_children(node)) {
+                        if (descendant == nullptr || !descendant->visible
+                            || is_out_of_flow(descendant->style.position)) continue;
+                        const auto bounds = self(self, *descendant);
+                        top = std::min(top, bounds.first);
+                        bottom = std::max(bottom, bounds.second);
+                    }
+                    return {top, bottom};
+                };
+                const auto flow_bounds = in_flow_vertical_bounds(
+                    in_flow_vertical_bounds, *item.node);
+                authored = std::max(
+                    authored,
+                    std::max(
+                        item.node->layout.height,
+                        std::max(
+                            item.node->scroll_content_height,
+                            flow_bounds.second - flow_bounds.first)));
+            }
             row_heights[item.row] = std::max(row_heights[item.row], authored + margins);
         }
         const auto total_row_gap = row_count > 0
@@ -1957,7 +2344,7 @@ void native_document::layout_children(dom_node& parent)
                     && !is_inline_level(descendant->style.display);
             });
     };
-    std::vector<dom_node*> layout_items;
+    std::pmr::vector<dom_node*> layout_items{&layout_scratch_->pool};
     layout_items.reserve(composed_children(parent).size() + 3U);
     if (has_inside_marker) {
         marker_item.emplace(make_list_marker_layout_node(parent, marker_text));
@@ -2003,7 +2390,8 @@ void native_document::layout_children(dom_node& parent)
         });
     const auto horizontal = (flex_container && parent.style.direction == flex_direction::row)
         || inline_flow;
-    std::vector<dom_node*> ordered_children = layout_items;
+    std::pmr::vector<dom_node*> ordered_children{&layout_scratch_->pool};
+    ordered_children = layout_items;
     if (flex_container && parent.style.flex_reverse) {
         std::reverse(ordered_children.begin(), ordered_children.end());
     }
@@ -2040,8 +2428,8 @@ void native_document::layout_children(dom_node& parent)
                 + resolve_length(node, node.style.padding_right, available, 0)
                 + resolve_length(node, node.style.border_left_width, available, 0)
                 + resolve_length(node, node.style.border_right_width, available, 0)
-            : resolve_length(node, node.style.padding_top, available, 0)
-                + resolve_length(node, node.style.padding_bottom, available, 0)
+            : resolve_vertical_padding(node, node.style.padding_top, available, 0)
+                + resolve_vertical_padding(node, node.style.padding_bottom, available, 0)
                 + resolve_length(node, node.style.border_top_width, available, 0)
                 + resolve_length(node, node.style.border_bottom_width, available, 0);
         if (is_specified(maximum)) {
@@ -2059,7 +2447,8 @@ void native_document::layout_children(dom_node& parent)
     float fixed = 0;
     float grow = 0;
     size_t automatic_main_margin_count = 0U;
-    std::unordered_map<const dom_node*, float> flex_base_main_sizes;
+    std::pmr::unordered_map<const dom_node*, float> flex_base_main_sizes{
+        &layout_scratch_->pool};
     const auto flow_count = static_cast<size_t>(std::count_if(
         ordered_children.begin(),
         ordered_children.end(),
@@ -2103,9 +2492,7 @@ void native_document::layout_children(dom_node& parent)
             const auto basis = constrain_size(
                 *child,
                 horizontal,
-                flex_main.unit == authored_main.unit && flex_main.value == authored_main.value
-                    ? outer_authored_size(*child, horizontal, main_available)
-                    : resolve_length(*child, flex_main, main_available, 0),
+                outer_specified_size(*child, horizontal, flex_main, main_available),
                 main_available);
             flex_base_main_sizes.emplace(child, basis);
             fixed += basis;
@@ -2131,11 +2518,17 @@ void native_document::layout_children(dom_node& parent)
     }
 
     struct flex_line final {
-        std::vector<const dom_node*> items;
+        explicit flex_line(std::pmr::memory_resource* memory)
+            : items(memory)
+        {
+        }
+
+        std::pmr::vector<const dom_node*> items;
         float outer_main_size{0};
     };
-    std::vector<flex_line> wrapped_flex_lines;
-    std::unordered_map<const dom_node*, size_t> wrapped_flex_line_indices;
+    std::pmr::vector<flex_line> wrapped_flex_lines{&layout_scratch_->pool};
+    std::pmr::unordered_map<const dom_node*, size_t> wrapped_flex_line_indices{
+        &layout_scratch_->pool};
     if (flex_container && horizontal && parent.style.flex_wrap) {
         for (const auto* child : ordered_children) {
             if (!participates_in_flow(child)) continue;
@@ -2144,7 +2537,9 @@ void native_document::layout_children(dom_node& parent)
             const auto margins = resolve_length(
                     *child, child->style.margin_left, main_available, 0)
                 + resolve_length(*child, child->style.margin_right, main_available, 0);
-            if (wrapped_flex_lines.empty()) wrapped_flex_lines.emplace_back();
+            if (wrapped_flex_lines.empty()) {
+                wrapped_flex_lines.emplace_back(&layout_scratch_->pool);
+            }
             auto* line = &wrapped_flex_lines.back();
             const auto candidate = line->outer_main_size
                 + (line->items.empty() ? 0.0F : main_gap)
@@ -2152,7 +2547,7 @@ void native_document::layout_children(dom_node& parent)
             // An oversized item still establishes a line of its own and is
             // flexed after collection. It must not create an empty first line.
             if (!line->items.empty() && candidate > main_available + 0.01F) {
-                wrapped_flex_lines.emplace_back();
+                wrapped_flex_lines.emplace_back(&layout_scratch_->pool);
                 line = &wrapped_flex_lines.back();
             }
             if (!line->items.empty()) line->outer_main_size += main_gap;
@@ -2166,7 +2561,8 @@ void native_document::layout_children(dom_node& parent)
     const auto remaining = std::max(0.0F, main_available - fixed);
     const auto overflow = flex_container && !parent.style.flex_wrap
         ? std::max(0.0F, fixed - main_available) : 0.0F;
-    std::unordered_map<const dom_node*, float> flex_shrunk_main_sizes;
+    std::pmr::unordered_map<const dom_node*, float> flex_shrunk_main_sizes{
+        &layout_scratch_->pool};
     const auto contains_replaced_content = [&](const auto& self,
                                                 const dom_node& candidate) -> bool {
         if (candidate.tag == "svg" || candidate.tag == "img"
@@ -2181,7 +2577,7 @@ void native_document::layout_children(dom_node& parent)
                 return descendant != nullptr && self(self, *descendant);
             });
     };
-    const auto resolve_flex_shrink = [&](const std::vector<const dom_node*>& line_items,
+    const auto resolve_flex_shrink = [&](const auto& line_items,
                                          float line_overflow) {
         if (line_overflow <= 0.001F) return;
         struct shrink_item final {
@@ -2192,7 +2588,7 @@ void native_document::layout_children(dom_node& parent)
             float weight;
             bool frozen;
         };
-        std::vector<shrink_item> items;
+        std::pmr::vector<shrink_item> items{&layout_scratch_->pool};
         for (const auto* child : line_items) {
             const auto known = flex_base_main_sizes.find(child);
             const auto base = known == flex_base_main_sizes.end() ? 0.0F : known->second;
@@ -2261,7 +2657,7 @@ void native_document::layout_children(dom_node& parent)
         }
     };
     if (overflow > 0) {
-        std::vector<const dom_node*> line_items;
+        std::pmr::vector<const dom_node*> line_items{&layout_scratch_->pool};
         for (const auto* child : ordered_children) {
             if (participates_in_flow(child)) line_items.push_back(child);
         }
@@ -2341,6 +2737,7 @@ void native_document::layout_children(dom_node& parent)
     auto right_float_edge = content.x + content.width;
     auto has_float_band = false;
     auto maximum_float_bottom = content.y;
+    std::optional<float> preceding_block_bottom_margin;
     for (auto* child : ordered_children) {
         // Out-of-flow generated boxes can have empty content while still
         // painting a background or border. They are not anonymous flex
@@ -2458,7 +2855,37 @@ void native_document::layout_children(dom_node& parent)
                     }
                 }
             }
-            const auto& containing = containing_node->layout;
+            auto containing = containing_node->layout;
+            if (child->style.position == position_mode::absolute) {
+                const auto border_left = resolve_length(
+                    *containing_node,
+                    containing_node->style.border_left_width,
+                    containing.width,
+                    0);
+                const auto border_right = resolve_length(
+                    *containing_node,
+                    containing_node->style.border_right_width,
+                    containing.width,
+                    0);
+                const auto border_top = resolve_length(
+                    *containing_node,
+                    containing_node->style.border_top_width,
+                    containing.height,
+                    0);
+                const auto border_bottom = resolve_length(
+                    *containing_node,
+                    containing_node->style.border_bottom_width,
+                    containing.height,
+                    0);
+                // The containing block of an absolutely positioned descendant
+                // is the padding box of its nearest positioned ancestor.
+                containing.x += border_left;
+                containing.y += border_top;
+                containing.width = std::max(
+                    0.0F, containing.width - border_left - border_right);
+                containing.height = std::max(
+                    0.0F, containing.height - border_top - border_bottom);
+            }
             layout_rect assigned{};
             const auto has_left = is_specified(child->style.left);
             const auto has_top = is_specified(child->style.top);
@@ -2501,12 +2928,14 @@ void native_document::layout_children(dom_node& parent)
             assigned.width = is_specified(child->style.width)
                 ? outer_authored_size(*child, true, containing.width)
                 : has_left && has_right
-                    ? std::max(0.0F, containing.width - left - right)
+                    ? std::max(0.0F, containing.width - left - right
+                        - margin_left - margin_right)
                     : intrinsic_width;
             assigned.height = is_specified(child->style.height)
                 ? outer_authored_size(*child, false, containing.height)
                 : has_top && has_bottom
-                    ? std::max(0.0F, containing.height - top - bottom)
+                    ? std::max(0.0F, containing.height - top - bottom
+                        - margin_top - margin_bottom)
                     : intrinsic_height;
             // Absolutely/fixed positioned boxes still participate in the CSS
             // min/max size constraints. Dialogs commonly combine
@@ -2554,17 +2983,13 @@ void native_document::layout_children(dom_node& parent)
                         + (horizontal ? 0.0F : flex_static_main_offset)
                         + margin_top);
             if (child->style.position != position_mode::fixed) {
-                // A virtualized absolute row is commonly nested below a static
-                // spacer while its containing block is the positioned scroll
-                // viewport. Its visual position follows every scroller between
-                // that DOM parent and the containing block, not just its direct
-                // parent's (usually zero) scroll offset.
-                for (auto* scroll_ancestor = &parent;
-                    scroll_ancestor != nullptr;
-                    scroll_ancestor = composed_parent(*scroll_ancestor)) {
-                    assigned.x -= scroll_ancestor->scroll_left;
-                    assigned.y -= scroll_ancestor->scroll_top;
-                    if (scroll_ancestor == containing_node) break;
+                // The containing block's rectangle already follows its own
+                // ancestors. Only its content scroll offset remains to apply.
+                // Static scrollers between the element and that containing
+                // block do not scroll an absolute overlay anchored outside them.
+                if (containing_node != nullptr) {
+                    assigned.x -= containing_node->scroll_left;
+                    assigned.y -= containing_node->scroll_top;
                 }
             }
             layout_child(*child, containing, assigned);
@@ -2608,7 +3033,7 @@ void native_document::layout_children(dom_node& parent)
             const auto intrinsic_width = intrinsic_size(*child, true, content.width);
             const auto intrinsic_height = intrinsic_size(*child, false, content.height);
             auto width = flex_container && is_specified(child->style.flex_basis)
-                ? resolve_length(*child, child->style.flex_basis, content.width, 0)
+                ? outer_specified_size(*child, true, child->style.flex_basis, content.width)
                     + (grow > 0
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
                         : 0.0F)
@@ -2703,7 +3128,24 @@ void native_document::layout_children(dom_node& parent)
             const auto margin_bottom = child->style.margin_bottom_auto
                 ? automatic_margin_share
                 : resolve_length(*child, child->style.margin_bottom, content.height, 0);
+            const auto adjoining_block = !flex_container && !inline_flow
+                && child->kind == dom_node_kind::element
+                && (child->style.display == display_mode::block
+                    || child->style.display == display_mode::list_item);
+            if (adjoining_block && preceding_block_bottom_margin.has_value() && !has_float_band) {
+                const auto previous = *preceding_block_bottom_margin;
+                const auto collapsed = std::max({0.0F, previous, margin_top})
+                    + std::min({0.0F, previous, margin_top});
+                cursor += collapsed - previous - margin_top;
+            }
             vertical_margin_bottom = margin_bottom;
+            // A definite flex main size makes each item's post-flexing main
+            // size definite (Flexbox 9.8), including items which grew rather
+            // than shrank. Their percentage-height descendants must resolve;
+            // an ordinary auto-sized block's provisional intrinsic size must
+            // not provide the same percentage basis.
+            assigned_height_is_definite = flex_container
+                && parent.used_height_is_definite;
             const auto intrinsic_height = intrinsic_size(*child, false, content.height);
             auto height = flex_container && is_specified(child->style.flex_basis)
                 ? resolve_length(*child, child->style.flex_basis, content.height, 0)
@@ -2711,6 +3153,8 @@ void native_document::layout_children(dom_node& parent)
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
                         : 0.0F)
                 : is_specified(child->style.height)
+                    && (child->style.height.unit != length_unit::percent
+                        || parent.used_height_is_definite)
                 ? outer_authored_size(*child, false, content.height)
                     + (flex_container && grow > 0
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
@@ -2809,6 +3253,41 @@ void native_document::layout_children(dom_node& parent)
             parent.layout,
             positioned,
             assigned_height_is_definite);
+        if (flex_container && horizontal && !parent.style.flex_wrap) {
+            const auto alignment = child->style.align_self_specified
+                ? child->style.align_self : parent.style.align_items;
+            if ((alignment == align_mode::center || alignment == align_mode::end)
+                && std::abs(child->layout.height - positioned.height) > 0.01F) {
+                // An auto-height flex item can grow while it is being laid
+                // out (most notably when a descendant flex row wraps). Cross
+                // alignment must use that final outer cross size. Centering
+                // the provisional intrinsic height and retaining that offset
+                // makes the grown item overflow into the next grid row.
+                const auto margin_top = resolve_length(
+                    *child, child->style.margin_top, content.height, 0);
+                const auto margin_bottom = resolve_length(
+                    *child, child->style.margin_bottom, content.height, 0);
+                const auto definite_cross_size = parent.used_height_is_definite
+                    || is_specified(parent.style.height);
+                const auto available_cross_size = definite_cross_size
+                    ? content.height
+                    : child->layout.height + margin_top + margin_bottom;
+                const auto aligned_y = alignment == align_mode::center
+                    ? content.y + margin_top
+                        + (available_cross_size - margin_top - margin_bottom
+                            - child->layout.height) * 0.5F
+                    : content.y + available_cross_size
+                        - margin_bottom - child->layout.height;
+                const auto relative_offset = positioned.y - assigned.y;
+                assigned.y = aligned_y;
+                positioned.y = aligned_y + relative_offset;
+                layout_child(
+                    *child,
+                    parent.layout,
+                    positioned,
+                    assigned_height_is_definite);
+            }
+        }
         // The retained native viewport owns scrolling while a loaded document
         // exposes HTML and BODY structural boxes beneath it. Those boxes remain
         // viewport-sized, but descendants can establish a larger scrollable
@@ -2851,6 +3330,16 @@ void native_document::layout_children(dom_node& parent)
                 + vertical_margin_bottom
                 + justify_gap;
         }
+        // This is adjacent nonempty sibling collapse only. Parent/child and
+        // self-collapsing empty-block chains require their own adjoining set.
+        if (!flex_container && !inline_flow && child->kind == dom_node_kind::element
+            && child->layout.height > 0
+            && (child->style.display == display_mode::block
+                || child->style.display == display_mode::list_item)) {
+            preceding_block_bottom_margin = vertical_margin_bottom;
+        } else {
+            preceding_block_bottom_margin.reset();
+        }
         ++placed_flow_count;
     }
     // Cross-axis alignment moves an already laid-out subtree. Generated boxes
@@ -2873,6 +3362,18 @@ void native_document::layout_children(dom_node& parent)
         }
         for (auto* descendant : composed_children(node)) self(self, *descendant, offset);
     };
+    if (parent.style.display == display_mode::table_cell) {
+        auto alignment = parent.style.textual().vertical_align;
+        if (alignment.empty() && (parent.tag == "td" || parent.tag == "th")) alignment = "middle";
+        if (alignment == "middle" || alignment == "bottom") {
+            const auto used = std::max(0.0F, maximum_flow_bottom - content.y);
+            const auto free_space = std::max(0.0F, content.height - used);
+            const auto offset = alignment == "middle" ? free_space * 0.5F : free_space;
+            for (auto* child : ordered_children) {
+                if (participates_in_flow(child) && child->visible) shift_subtree_y(shift_subtree_y,*child,offset);
+            }
+        }
+    }
     if (flex_container && horizontal && !parent.style.flex_wrap) {
         std::function<std::optional<float>(const dom_node&)> first_text_baseline =
             [&](const dom_node& node) -> std::optional<float> {
@@ -3067,14 +3568,26 @@ void native_document::layout_children(dom_node& parent)
     // the freshly computed extent in the same layout pass; clamping only at
     // the start used the previous extent and left a stale, apparently endless
     // offset until another unrelated relayout occurred.
+    const auto laid_out_scroll_left = parent.scroll_left;
+    const auto laid_out_scroll_top = parent.scroll_top;
     parent.scroll_left = std::clamp(
-        parent.scroll_left,
+        laid_out_scroll_left,
         0.0F,
         std::max(0.0F, parent.scroll_content_width - content.width));
     parent.scroll_top = std::clamp(
-        parent.scroll_top,
+        laid_out_scroll_top,
         0.0F,
         std::max(0.0F, parent.scroll_content_height - content.height));
+    if (std::abs(parent.scroll_left - laid_out_scroll_left) > 0.01F
+        || std::abs(parent.scroll_top - laid_out_scroll_top) > 0.01F) {
+        // Descendants above were positioned using the previous scroll offset.
+        // When React replaces a tall settings panel with a shorter one, the
+        // new range can clamp that offset to zero in this same pass. Re-run
+        // this formatting context with the fresh offset so geometry, hit
+        // testing, and retained scrollbar publication agree immediately.
+        layout_children(parent);
+        return;
+    }
     if (before_item.has_value()) {
         parent.style.mutable_before_pseudo().layout = before_item->layout;
     }
@@ -3084,6 +3597,96 @@ void native_document::layout_children(dom_node& parent)
     if (marker_item.has_value()) {
         parent.list_marker_layout = marker_item->layout;
     }
+}
+
+float native_document::min_content_inline_size(
+    const dom_node& node,
+    float available)
+{
+    const auto padding = resolve_length(node, node.style.padding_left, available, 0)
+        + resolve_length(node, node.style.padding_right, available, 0)
+        + resolve_length(node, node.style.border_left_width, available, 0)
+        + resolve_length(node, node.style.border_right_width, available, 0);
+    const auto constrain = [&](float size) {
+        const auto box_adjustment = node.style.border_box ? 0.0F : padding;
+        if (is_specified(node.style.max_width)) {
+            size = std::min(
+                size,
+                resolve_length(node, node.style.max_width, available, size)
+                    + box_adjustment);
+        }
+        if (is_specified(node.style.min_width)) {
+            size = std::max(
+                size,
+                resolve_length(node, node.style.min_width, available, 0)
+                    + box_adjustment);
+        }
+        return std::max(0.0F, size);
+    };
+    const auto authored = node.style.width;
+    if (authored.unit == length_unit::pixels
+        || authored.unit == length_unit::em
+        || authored.unit == length_unit::rem
+        || authored.unit == length_unit::viewport_width
+        || authored.unit == length_unit::viewport_height) {
+        return constrain(resolve_length(node, authored, available, 0)
+            + (node.style.border_box ? 0.0F : padding));
+    }
+    if (node.kind == dom_node_kind::text || has_visible_text(node.text_content)) {
+        const auto text = collapsed_text(
+            node,
+            resolved_text_transform(node, node.text_content));
+        if (!resolved_white_space_wraps(node)) {
+            return constrain(padding + measure_text_width(text, node));
+        }
+        auto widest_segment = 0.0F;
+        size_t start = 0U;
+        for (size_t index = 0U; index <= text.size(); ++index) {
+            const auto separator = index == text.size()
+                || std::isspace(static_cast<unsigned char>(text[index]));
+            if (!separator) continue;
+            if (index > start) {
+                widest_segment = std::max(
+                    widest_segment,
+                    measure_text_width(
+                        std::string_view{text}.substr(start, index - start),
+                        node));
+            }
+            start = index + 1U;
+        }
+        return constrain(padding + widest_segment);
+    }
+    if (node.tag == "input" || node.tag == "select" || node.tag == "textarea"
+        || node.tag == "img" || node.tag == "svg" || node.tag == "canvas") {
+        return intrinsic_size(node, true, available);
+    }
+
+    const auto flex = is_flex_container(node.style.display);
+    const auto horizontal_flex = flex && node.style.direction == flex_direction::row;
+    const auto accumulates = horizontal_flex && !node.style.flex_wrap;
+    auto result = 0.0F;
+    size_t contributing_children = 0U;
+    for (const auto* child : composed_children(node)) {
+        if (child == nullptr || child->style.display == display_mode::none
+            || is_out_of_flow(child->style.position)
+            || (flex && is_collapsible_whitespace_text(*child))) continue;
+        const auto contribution = min_content_inline_size(*child, available)
+            + resolve_length(*child, child->style.margin_left, available, 0)
+            + resolve_length(*child, child->style.margin_right, available, 0);
+        if (accumulates) {
+            if (contributing_children > 0U) {
+                result += resolve_length(node, node.style.column_gap, available, 0);
+            }
+            result += contribution;
+        } else {
+            // A wrapping row flex container can place each item on its own
+            // line, so its min-content contribution is the widest item. The
+            // same maximum rule applies to block/column descendants.
+            result = std::max(result, contribution);
+        }
+        ++contributing_children;
+    }
+    return constrain(result + padding);
 }
 
 float native_document::intrinsic_size(
@@ -3097,12 +3700,41 @@ float native_document::intrinsic_size(
     const auto stable_node = node.id != 0U
         && node.id <= native_id_index_.size()
         && native_id_index_[node.id - 1U] == &node;
-    if (intrinsic_size_cache_ == nullptr
-        || intrinsic_size_cache_generation_ == 0
-        || !stable_node) {
+    if (intrinsic_size_cache_generation_ == 0 || !stable_node) {
+        return compute_intrinsic_size(node, horizontal, available);
+    }
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    auto& direct_node_cached = (*intrinsic_size_direct_cache_)[node.id - 1U];
+    if (direct_node_cached.generation != intrinsic_size_cache_generation_) {
+        direct_node_cached.generation = intrinsic_size_cache_generation_;
+        direct_node_cached.available.fill(
+            std::numeric_limits<float>::quiet_NaN());
+    }
+    const auto axis = static_cast<size_t>(horizontal);
+    if (direct_node_cached.available[axis] == available) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+        ++intrinsic_size_cache_hits_;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
+        ++intrinsic_size_direct_cache_hits_;
+#endif
+        return direct_node_cached.size[axis];
+    }
+#if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
+    ++intrinsic_size_cache_misses_;
+#endif
+    const auto result = compute_intrinsic_size(node, horizontal, available);
+    direct_node_cached.available[axis] = available;
+    direct_node_cached.size[axis] = result;
+    return result;
+#else
+    if (intrinsic_size_cache_ == nullptr) {
         return compute_intrinsic_size(node, horizontal, available);
     }
     const intrinsic_size_key key{&node, horizontal};
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
+    ++intrinsic_size_hash_lookups_;
+#endif
     if (const auto cached = intrinsic_size_cache_->find(key);
         cached != intrinsic_size_cache_->end()
         && cached->second.generation == intrinsic_size_cache_generation_
@@ -3123,6 +3755,7 @@ float native_document::intrinsic_size(
             available,
             result});
     return result;
+#endif
 }
 
 float native_document::compute_intrinsic_size(
@@ -3130,13 +3763,16 @@ float native_document::compute_intrinsic_size(
     bool horizontal,
     float available)
 {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+    ++intrinsic_size_branch_counts_for_benchmark[0];
+#endif
     const auto padding = horizontal
         ? resolve_length(node, node.style.padding_left, available, 0)
             + resolve_length(node, node.style.padding_right, available, 0)
             + resolve_length(node, node.style.border_left_width, available, 0)
             + resolve_length(node, node.style.border_right_width, available, 0)
-        : resolve_length(node, node.style.padding_top, available, 0)
-            + resolve_length(node, node.style.padding_bottom, available, 0)
+        : resolve_vertical_padding(node, node.style.padding_top, available, 0)
+            + resolve_vertical_padding(node, node.style.padding_bottom, available, 0)
             + resolve_length(node, node.style.border_top_width, available, 0)
             + resolve_length(node, node.style.border_bottom_width, available, 0);
     const auto authored = horizontal ? node.style.width : node.style.height;
@@ -3163,24 +3799,60 @@ float native_document::compute_intrinsic_size(
         }
         return std::max(0.0F, size);
     };
+    const auto text_or_empty_leaf_size = [&]() {
+        if (!has_visible_text(node.text_content)) {
+            const auto measured = horizontal && is_collapsible_whitespace_text(node)
+                ? measure_text_width(" ", node)
+                : 0;
+            return constrain(padding + measured);
+        }
+        const auto font_size = resolved_font_size(node);
+        return constrain(padding + (horizontal
+            ? measure_text_width(
+                collapsed_text(
+                    node,
+                    resolved_text_transform(node, node.text_content)),
+                node)
+            : resolved_line_height(node, font_size)));
+    };
     // A percentage size is indefinite while shrink-to-fitting an auto-sized
     // ancestor. Resolving it against the viewport makes fixed popups with
     // descendants such as `width: 100%` or `height: 100%` measure as the whole
     // viewport. Use the descendant content contribution in that case; once the
     // ancestor has a definite box, layout_children resolves the percentage.
-    if (!(node.style.display == display_mode::table_cell && !horizontal)
+    if (authored.unit == length_unit::stretch) {
+        return constrain(available);
+    }
+    if (!((node.style.display == display_mode::table_cell
+            || is_table_row_group(node.style.display)) && !horizontal)
         && (authored.unit == length_unit::pixels
         || authored.unit == length_unit::em
         || authored.unit == length_unit::rem
         || authored.unit == length_unit::viewport_width
         || authored.unit == length_unit::viewport_height)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[1];
+#endif
         return constrain(resolve_length(node, authored, available, 0)
             + (node.style.border_box ? 0.0F : padding));
     }
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_TEXT_NODE_FAST_PATH_CONTROL)
+    if (node.kind == dom_node_kind::text) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[6];
+        ++intrinsic_size_branch_counts_for_benchmark[10];
+        ++intrinsic_size_branch_counts_for_benchmark[11];
+#endif
+        return text_or_empty_leaf_size();
+    }
+#endif
     if ((is_table_container(node.style.display)
             && has_table_row_descendant(*this, node))
         || is_table_row_group(node.style.display)
         || node.style.display == display_mode::table_row) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[2];
+#endif
         std::vector<float> authored_column_widths;
         if (is_table_container(node.style.display)) {
             const auto collect_column_widths = [&](const auto& self,
@@ -3206,7 +3878,12 @@ float native_document::compute_intrinsic_size(
             };
             collect_column_widths(collect_column_widths, node);
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SCRATCH_CONTROL)
         std::vector<const dom_node*> rows;
+#else
+        std::pmr::vector<const dom_node*> rows{&layout_scratch_->pool};
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_ROW_COLLECTOR_CONTROL)
         std::function<void(const dom_node&)> collect_rows = [&](const dom_node& current) {
             for (const auto* child : composed_children(current)) {
                 if (child->style.display == display_mode::table_row) rows.push_back(child);
@@ -3215,6 +3892,23 @@ float native_document::compute_intrinsic_size(
         };
         if (node.style.display == display_mode::table_row) rows.push_back(&node);
         else collect_rows(node);
+#else
+        const auto collect_rows = [&](const auto& self,
+                                      const dom_node& current) -> void {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+            ++intrinsic_size_branch_counts_for_benchmark[9];
+#endif
+            for (const auto* child : composed_children(current)) {
+                if (child->style.display == display_mode::table_row) {
+                    rows.push_back(child);
+                } else if (is_table_row_group(child->style.display)) {
+                    self(self, *child);
+                }
+            }
+        };
+        if (node.style.display == display_mode::table_row) rows.push_back(&node);
+        else collect_rows(collect_rows, node);
+#endif
         if (horizontal) {
             size_t count = 0;
             for (const auto* row : rows) {
@@ -3269,17 +3963,26 @@ float native_document::compute_intrinsic_size(
                 std::accumulate(columns.begin(), columns.end(), 0.0F)
                     + table_spacing + padding);
         }
-        auto height = 0.0F;
-        for (const auto* row : rows) {
-            auto row_height = is_specified(row->style.height)
-                ? resolve_length(*row, row->style.height, available, 0) : 0.0F;
-            for (const auto* cell : composed_children(*row)) {
-                if (cell->style.display == display_mode::table_cell) {
-                    row_height = std::max(row_height, intrinsic_size(*cell, false, available));
+        const auto group_height = [&](const auto& self, const dom_node& group) -> float {
+            auto height = 0.0F;
+            if (group.style.display == display_mode::table_row) {
+                for (const auto* cell : composed_children(group)) {
+                    if (cell->style.display == display_mode::table_cell) {
+                        height = std::max(height, intrinsic_size(*cell, false, available));
+                    }
+                }
+            } else {
+                for (const auto* child : composed_children(group)) {
+                    if (child->style.display == display_mode::table_row
+                        || is_table_row_group(child->style.display)) height += self(self, *child);
                 }
             }
-            height += row_height;
-        }
+            if (is_specified(group.style.height)) {
+                height = std::max(height, resolve_length(group, group.style.height, available, 0));
+            }
+            return height;
+        };
+        auto height = group_height(group_height, node);
         if (is_table_container(node.style.display)
             && !rows.empty()
             && !node.style.table().border_collapsed) {
@@ -3295,12 +3998,19 @@ float native_document::compute_intrinsic_size(
         return constrain(height + padding);
     }
     if (is_collapsed_select(node)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[3];
+#endif
         const auto font_size = resolved_font_size(node);
         if (!horizontal) {
             return constrain(resolved_line_height(node, font_size) + padding);
         }
         auto widest_label = 0.0F;
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SCRATCH_CONTROL)
         std::vector<const dom_node*> options;
+#else
+        std::pmr::vector<const dom_node*> options{&layout_scratch_->pool};
+#endif
         collect_option_nodes(node, options);
         for (const auto* option : options) {
             widest_label = std::max(
@@ -3312,6 +4022,9 @@ float native_document::compute_intrinsic_size(
         return constrain(widest_label + font_size * 1.75F + padding);
     }
     if (node.tag == "input") {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[4];
+#endif
         auto type = std::string{"text"};
         if (const auto value = node.attributes.find("type"); value != node.attributes.end()) {
             type = value->second;
@@ -3351,6 +4064,9 @@ float native_document::compute_intrinsic_size(
         return constrain(columns * measure_text_width("0", node) + padding);
     }
     if (node.tag == "svg" || node.tag == "img" || node.tag == "canvas") {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[5];
+#endif
         const auto attribute = node.attributes.find(horizontal ? "width" : "height");
         if (attribute != node.attributes.end()) {
             const auto intrinsic = parse_number(attribute->second, 0);
@@ -3359,12 +4075,9 @@ float native_document::compute_intrinsic_size(
         if (node.tag == "svg") {
             const auto view_box = node.attributes.find("viewBox");
             if (view_box != node.attributes.end()) {
-                std::istringstream values(view_box->second);
-                float x = 0;
-                float y = 0;
                 float width = 0;
                 float height = 0;
-                if (values >> x >> y >> width >> height) {
+                if (parse_intrinsic_view_box(view_box->second, width, height)) {
                     const auto intrinsic = horizontal ? width : height;
                     if (intrinsic > 0) return constrain(intrinsic + padding);
                 }
@@ -3377,24 +4090,16 @@ float native_document::compute_intrinsic_size(
     const auto has_inside_marker = !marker_text.empty()
         && resolved_list_style(node, true) == "inside";
     if (composed_children(node).empty() && !has_before && !has_after && !has_inside_marker) {
-        if (!has_visible_text(node.text_content)) {
-            const auto measured = horizontal && is_collapsible_whitespace_text(node)
-                ? measure_text_width(" ", node)
-                : 0;
-            // Empty auto-sized boxes still contribute their padding and border
-            // to their intrinsic border-box size. This matters in particular
-            // for non-stretch flex items, whose empty content box may be zero
-            // while their visible border box is not.
-            return constrain(padding + measured);
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[6];
+        if (node.kind == dom_node_kind::text) {
+            ++intrinsic_size_branch_counts_for_benchmark[10];
         }
-        const auto font_size = resolved_font_size(node);
-        return constrain(padding + (horizontal
-            ? measure_text_width(
-                collapsed_text(
-                    node,
-                    resolved_text_transform(node, node.text_content)),
-                node)
-            : resolved_line_height(node, font_size)));
+#endif
+        // Empty auto-sized boxes still contribute their padding and border to
+        // their intrinsic border-box size. The shared helper also preserves
+        // collapsed-whitespace and transformed-text measurement semantics.
+        return text_or_empty_leaf_size();
     }
 
     const auto& node_grid = node.style.grid();
@@ -3402,6 +4107,9 @@ float native_document::compute_intrinsic_size(
         && !node_grid.auto_columns.empty();
     if (is_grid_container(node.style.display)
         && (node_grid.two_columns || intrinsic_implicit_column_grid)) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[7];
+#endif
         const auto& grid = node.style.grid();
         auto effective_columns = grid.template_columns;
         if (effective_columns.empty() && intrinsic_implicit_column_grid) {
@@ -3539,18 +4247,54 @@ float native_document::compute_intrinsic_size(
             }
         }
         std::vector<float> columns(column_count, 0.0F);
+        for (size_t column = 0; column < effective_columns.size(); ++column) {
+            const auto& track = effective_columns[column];
+            if (track.kind == node_style::grid_data::track::sizing::fixed) {
+                columns[column] = resolve_length(
+                    node, track.maximum, available, 0);
+            } else if (track.kind == node_style::grid_data::track::sizing::minmax) {
+                columns[column] = resolve_length(
+                    node, track.minimum, available, 0);
+            }
+        }
         std::vector<float> rows(std::max<size_t>(occupied.size(), grid.template_rows.size()), 0.0F);
         for (const auto& item : items) {
-            const auto child_width = intrinsic_size(*item.node, true, available)
+            const auto single_track = item.column_span == 1U
+                && item.column < effective_columns.size()
+                ? &effective_columns[item.column] : nullptr;
+            const auto child_width = (single_track != nullptr
+                    && single_track->kind
+                        == node_style::grid_data::track::sizing::min_content
+                ? min_content_inline_size(*item.node, available)
+                : intrinsic_size(*item.node, true, available))
                 + resolve_length(*item.node, item.node->style.margin_left, available, 0)
                 + resolve_length(*item.node, item.node->style.margin_right, available, 0);
             const auto child_height = intrinsic_size(*item.node, false, available)
                 + resolve_length(*item.node, item.node->style.margin_top, available, 0)
                 + resolve_length(*item.node, item.node->style.margin_bottom, available, 0);
-            const auto width_share = child_width / static_cast<float>(item.column_span);
+            auto committed_width = 0.0F;
+            std::vector<size_t> growable_columns;
             for (size_t column = item.column;
                  column < item.column + item.column_span;
-                 ++column) columns[column] = std::max(columns[column], width_share);
+                 ++column) {
+                committed_width += columns[column];
+                const auto fixed = column < effective_columns.size()
+                    && effective_columns[column].kind
+                        == node_style::grid_data::track::sizing::fixed;
+                if (!fixed) growable_columns.push_back(column);
+            }
+            if (item.column_span > 1U) {
+                committed_width += resolve_length(
+                        node, node.style.column_gap, available, 0)
+                    * static_cast<float>(item.column_span - 1U);
+            }
+            if (!growable_columns.empty() && child_width > committed_width) {
+                const auto extra = (child_width - committed_width)
+                    / static_cast<float>(growable_columns.size());
+                for (const auto column : growable_columns) {
+                    columns[column] += extra;
+                }
+            }
             const auto height_share = child_height / static_cast<float>(item.row_span);
             for (size_t row = item.row; row < item.row + item.row_span; ++row) {
                 rows[row] = std::max(rows[row], height_share);
@@ -3567,25 +4311,14 @@ float native_document::compute_intrinsic_size(
             : total_height));
     }
 
-    std::optional<dom_node> marker_item;
-    std::optional<dom_node> before_item;
-    std::optional<dom_node> after_item;
-    std::vector<const dom_node*> intrinsic_items;
-    intrinsic_items.reserve(composed_children(node).size() + 3U);
-    if (has_inside_marker) {
-        marker_item.emplace(make_list_marker_layout_node(node, marker_text));
-        intrinsic_items.push_back(&*marker_item);
-    }
-    if (has_before) {
-        before_item.emplace(make_pseudo_layout_node(node, node.style.before_pseudo()));
-        intrinsic_items.push_back(&*before_item);
-    }
-    intrinsic_items.insert(intrinsic_items.end(), composed_children(node).begin(), composed_children(node).end());
-    if (has_after) {
-        after_item.emplace(make_pseudo_layout_node(node, node.style.after_pseudo()));
-        intrinsic_items.push_back(&*after_item);
-    }
-
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+    ++intrinsic_size_branch_counts_for_benchmark[8];
+    const auto synthetic_intrinsic_items = static_cast<uint64_t>(has_inside_marker)
+        + static_cast<uint64_t>(has_before)
+        + static_cast<uint64_t>(has_after);
+    ++intrinsic_size_branch_counts_for_benchmark[
+        synthetic_intrinsic_items == 0U ? 12U : 13U];
+#endif
     const auto flex_container = is_flex_container(node.style.display);
     const auto inline_item_contains_block_box = [&](const dom_node* child) {
         if (child == nullptr || child->style.display != display_mode::inline_flow) return false;
@@ -3598,43 +4331,86 @@ float native_document::compute_intrinsic_size(
                     && !is_inline_level(descendant->style.display);
             });
     };
-    const auto inline_flow = !flex_container && std::all_of(
-        intrinsic_items.begin(),
-        intrinsic_items.end(),
-        [&](const dom_node* child) {
-            return child->style.display == display_mode::none
+    const auto measure_intrinsic_items = [&](const auto& intrinsic_items) {
+        const auto inline_flow = !flex_container && std::all_of(
+            intrinsic_items.begin(),
+            intrinsic_items.end(),
+            [&](const dom_node* child) {
+                return child->style.display == display_mode::none
+                    || is_out_of_flow(child->style.position)
+                    || (is_inline_level(child->style.display)
+                        && !inline_item_contains_block_box(child));
+            });
+        const auto children_horizontal =
+            (flex_container && node.style.direction == flex_direction::row)
+            || inline_flow;
+        float result = 0;
+        size_t accumulated_children = 0U;
+        for (const auto* child : intrinsic_items) {
+            if (child->style.display == display_mode::none
                 || is_out_of_flow(child->style.position)
-                || (is_inline_level(child->style.display)
-                    && !inline_item_contains_block_box(child));
-        });
-    const auto children_horizontal = (flex_container && node.style.direction == flex_direction::row)
-        || inline_flow;
-    float result = 0;
-    size_t accumulated_children = 0U;
-    for (const auto* child : intrinsic_items) {
-        if (child->style.display == display_mode::none
-            || is_out_of_flow(child->style.position)
-            || (flex_container && is_collapsible_whitespace_text(*child))) continue;
-        const auto child_size = intrinsic_size(*child, horizontal, available);
-        const auto child_margin = horizontal
-            ? resolve_length(*child, child->style.margin_left, available, 0)
-                + resolve_length(*child, child->style.margin_right, available, 0)
-            : resolve_length(*child, child->style.margin_top, available, 0)
-                + resolve_length(*child, child->style.margin_bottom, available, 0);
-        const auto accumulates = horizontal == children_horizontal;
-        if (accumulates && flex_container && accumulated_children > 0U) {
-            result += resolve_length(
-                node,
-                horizontal ? node.style.column_gap : node.style.row_gap,
-                available,
-                0);
+                || (flex_container && is_collapsible_whitespace_text(*child))) continue;
+            const auto child_size = intrinsic_size(*child, horizontal, available);
+            const auto child_margin = horizontal
+                ? resolve_length(*child, child->style.margin_left, available, 0)
+                    + resolve_length(*child, child->style.margin_right, available, 0)
+                : resolve_length(*child, child->style.margin_top, available, 0)
+                    + resolve_length(*child, child->style.margin_bottom, available, 0);
+            const auto accumulates = horizontal == children_horizontal;
+            if (accumulates && flex_container && accumulated_children > 0U) {
+                result += resolve_length(
+                    node,
+                    horizontal ? node.style.column_gap : node.style.row_gap,
+                    available,
+                    0);
+            }
+            result = accumulates
+                ? result + child_size + child_margin
+                : std::max(result, child_size + child_margin);
+            ++accumulated_children;
         }
-        result = accumulates
-            ? result + child_size + child_margin
-            : std::max(result, child_size + child_margin);
-        ++accumulated_children;
+        return constrain(result + padding);
+    };
+
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_ITEM_COPY_CONTROL)
+    if (!has_inside_marker && !has_before && !has_after) {
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+        ++intrinsic_size_branch_counts_for_benchmark[15];
+        intrinsic_size_branch_counts_for_benchmark[16] += composed_children(node).size();
+#endif
+        return measure_intrinsic_items(composed_children(node));
     }
-    return constrain(result + padding);
+#endif
+
+    std::optional<dom_node> marker_item;
+    std::optional<dom_node> before_item;
+    std::optional<dom_node> after_item;
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SCRATCH_CONTROL)
+    std::vector<const dom_node*> intrinsic_items;
+#else
+    std::pmr::vector<const dom_node*> intrinsic_items{&layout_scratch_->pool};
+#endif
+    intrinsic_items.reserve(composed_children(node).size() + 3U);
+    if (has_inside_marker) {
+        marker_item.emplace(make_list_marker_layout_node(node, marker_text));
+        intrinsic_items.push_back(&*marker_item);
+    }
+    if (has_before) {
+        before_item.emplace(make_pseudo_layout_node(node, node.style.before_pseudo()));
+        intrinsic_items.push_back(&*before_item);
+    }
+    intrinsic_items.insert(
+        intrinsic_items.end(),
+        composed_children(node).begin(),
+        composed_children(node).end());
+    if (has_after) {
+        after_item.emplace(make_pseudo_layout_node(node, node.style.after_pseudo()));
+        intrinsic_items.push_back(&*after_item);
+    }
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+    intrinsic_size_branch_counts_for_benchmark[14] += intrinsic_items.size();
+#endif
+    return measure_intrinsic_items(intrinsic_items);
 }
 
 void native_document::layout_child(
@@ -3647,6 +4423,39 @@ void native_document::layout_child(
     // element occupies in its parent's flow. Percentage translations resolve
     // against the transformed element's own border box.
     const auto* animation = child.animation_runtime();
+    // Positional inset transitions likewise interpolate the positioned box
+    // without changing its flow allocation. Layout has already placed the box
+    // at the authored target inset, so apply only the animated delta here.
+    if (animation != nullptr && child.style.position != position_mode::normal) {
+        if (animation->left_animation_initialized
+            && animation->painted_left.unit != length_unit::automatic
+            && child.style.left.unit != length_unit::automatic) {
+            assigned.x += resolve_length(
+                    child,
+                    animation->painted_left,
+                    containing_block.width,
+                    0)
+                - resolve_length(
+                    child,
+                    child.style.left,
+                    containing_block.width,
+                    0);
+        }
+        if (animation->top_animation_initialized
+            && animation->painted_top.unit != length_unit::automatic
+            && child.style.top.unit != length_unit::automatic) {
+            assigned.y += resolve_length(
+                    child,
+                    animation->painted_top,
+                    containing_block.height,
+                    0)
+                - resolve_length(
+                    child,
+                    child.style.top,
+                    containing_block.height,
+                    0);
+        }
+    }
     const auto painted_translate_x =
         animation != nullptr && animation->transform_animation_initialized
         ? animation->painted_transform_translate_x
@@ -3672,6 +4481,13 @@ void native_document::layout_child(
                 && !parent->style.grid().auto_columns.empty()));
     if (!inherits_parent_grid_columns) child.clear_grid_layout();
     child.used_height_is_definite = assigned_height_is_definite
+        // All positioned layout paths (including deferred inline and grid
+        // children) resolve authored/inset heights against their containing
+        // block before arriving here. Preserve that definite used size for
+        // percentage descendants; the DOM parent need not itself be definite.
+        || (is_out_of_flow(child.style.position)
+            && (is_specified(child.style.height)
+                || (is_specified(child.style.top) && is_specified(child.style.bottom))))
         || (is_specified(child.style.height)
             && (child.style.height.unit != length_unit::percent
                 || (parent != nullptr && parent->used_height_is_definite)));
@@ -3721,7 +4537,7 @@ void native_document::layout_child(
                         child.layout.height,
                         0));
         }
-        const auto padding_bottom = resolve_length(
+        const auto padding_bottom = resolve_vertical_padding(
             child,
             child.style.padding_bottom,
             child.layout.height,
@@ -3751,12 +4567,12 @@ void native_document::layout_child(
                 child.style.border_bottom_width,
                 child.layout.height,
                 0);
-            const auto final_padding_top = resolve_length(
+            const auto final_padding_top = resolve_vertical_padding(
                 child,
                 child.style.padding_top,
                 child.layout.height,
                 0);
-            const auto final_padding_bottom = resolve_length(
+            const auto final_padding_bottom = resolve_vertical_padding(
                 child,
                 child.style.padding_bottom,
                 child.layout.height,
@@ -3777,13 +4593,27 @@ void native_document::layout_child(
                     child.scroll_content_height - child.scroll_viewport_height));
         }
 
-        // A one-track auto-sized grid takes its max-content contribution from
-        // the content inside transparent/scroll wrappers. Those wrappers can
-        // initially resolve percentage heights against the first intrinsic
-        // estimate, so considering only direct child boxes leaves the grid at
-        // that stale estimate and clips later inline reflow. Include in-flow
-        // descendants, then perform one definitive layout at the expanded size.
-        if (is_grid_container(child.style.display) && !child.style.grid().two_columns) {
+        // An auto-sized box can contain a 100%-high transparent/scroll wrapper.
+        // The percentage is indefinite while sizing that ancestor, so content
+        // deeper than the wrapper still contributes to the ancestor's automatic
+        // height. React portals commonly force an early measurement and append
+        // the remainder of a menu afterwards; retaining the provisional wrapper
+        // height leaves the fixed menu clipped with a phantom scrollbar. A
+        // one-track auto grid has the same max-content requirement. Include
+        // in-flow descendants, then reflow once at the expanded size.
+        const auto has_percentage_height_child = std::any_of(
+            composed_children(child).begin(),
+            composed_children(child).end(),
+            [](const dom_node* descendant) {
+                return descendant != nullptr
+                    && descendant->style.display != display_mode::none
+                    && !is_out_of_flow(descendant->style.position)
+                    && !is_flex_container(descendant->style.display)
+                    && !is_grid_container(descendant->style.display)
+                    && descendant->style.height.unit == length_unit::percent;
+            });
+        if ((is_grid_container(child.style.display) && !child.style.grid().two_columns)
+            || has_percentage_height_child) {
             std::function<float(const dom_node&)> deepest_flow_bottom =
                 [&](const dom_node& node) {
                     auto bottom = node.layout.y;

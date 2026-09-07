@@ -9,6 +9,7 @@ It runs JavaScript in V8, implements a deliberately bounded DOM/CSS/layout/Canva
 platform, and publishes immutable scene updates to native host presenters.
 
 It is not a browser, WebView, Chromium shell, or implementation of the full web platform.
+YouTube embeds use a [thumbnail and external-browser fallback](docs/embedded-media-fallback.md), not inline playback.
 The intended use is controlled UI that an application owns, tests, and ships: charts,
 dashboards, editors, diagramming surfaces, kiosks, and JavaScript UI plug-ins.
 

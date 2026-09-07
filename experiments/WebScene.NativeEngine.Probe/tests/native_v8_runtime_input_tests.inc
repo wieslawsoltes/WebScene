@@ -110,6 +110,111 @@ void animation_frame_and_wait(
         "animation frame was not consumed");
 }
 
+void test_host_pointer_exit_clears_tooltip_without_another_move()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "host-exit engine creation failed");
+    resize(engine, 400, 240, 1U);
+    execute(engine, R"JS(
+        document.body.innerHTML = `<style>
+          body { margin: 0; }
+          #quick { width: 80px; height: 40px; cursor: pointer; color: black; }
+          #quick:hover { color: red; }
+          #tip { display: none; }
+        </style><div id="quick">Quick Search</div><div id="tip">Tooltip</div>`;
+        globalThis.quick = document.getElementById('quick');
+        globalThis.tip = document.getElementById('tip');
+        globalThis.boundaries = [];
+        globalThis.moves = 0;
+        globalThis.ups = 0;
+        quick.addEventListener('mouseenter', () => tip.style.display = 'block');
+        quick.addEventListener('mouseleave', () => tip.style.display = 'none');
+        quick.addEventListener('pointermove', () => moves++);
+        quick.addEventListener('pointerup', () => ups++);
+        for (const type of ['pointerout', 'pointerleave', 'mouseout', 'mouseleave']) {
+          quick.addEventListener(type, e => boundaries.push([
+            type, e.relatedTarget === null, quick.matches(':hover'),
+            e.bubbles, e.shiftKey
+          ]));
+        }
+    )JS", "host-exit-fixture.js");
+    require(evaluate(engine, "quick.offsetWidth", "host-exit-ready.js") == "80",
+        "host-exit fixture did not complete layout");
+    pointer_move(engine, 20, 20, 2U);
+    require(evaluate(engine, "getComputedStyle(tip).display", "host-enter.js") == "\"block\"",
+        "hover did not show the tooltip");
+    const auto exit = [&](uint64_t sequence, uint32_t flags = 0U) {
+        // The host can report only a leave notification, with the last known
+        // position still INSIDE the control (not a fabricated outside move).
+        const webscene_input_event input{WEBSCENE_INPUT_POINTER_LEAVE, flags, sequence, 20, 20, 0, 0};
+        require(webscene_engine_enqueue(engine, &input) != 0, "host exit rejected");
+    };
+    exit(3U, WEBSCENE_INPUT_POINTER_MODIFIER_SHIFT);
+    const auto result = evaluate(engine, R"JS([
+        getComputedStyle(tip).display, getComputedStyle(quick).color, moves, boundaries
+    ])JS", "host-exit-result.js");
+    require(result == R"JSON(["none","rgb(0, 0, 0)",1,[["pointerout",true,false,true,true],["pointerleave",true,false,false,true],["mouseout",true,false,true,true],["mouseleave",true,false,false,true]]])JSON",
+        "host exit must clear hover and tooltip without a move: " + result);
+    require(webscene_engine_get_cursor(engine) == WEBSCENE_CURSOR_DEFAULT,
+        "host exit retained the hovered cursor");
+    exit(4U);
+    require(evaluate(engine, "boundaries.length", "duplicate-exit.js") == "4",
+        "duplicate host exits dispatched duplicate boundaries");
+    pointer_move(engine, 20, 20, 5U);
+    require(evaluate(engine, "getComputedStyle(tip).display", "host-reenter.js") == "\"block\"",
+        "reentering at the same point must restore hover/entry events");
+
+    // Exit is a discrete ordering barrier: a pending frame-paced move must not
+    // be applied after the leave and resurrect the tooltip.
+    exit(6U);
+    execute(engine, "boundaries = []; moves = 0;", "host-exit-reset.js");
+    require(evaluate(engine, "moves", "host-exit-reset-ready.js") == "0", "reset not applied");
+    webscene_engine_observe_compositor_frame(engine, 1000.0);
+    pointer_move(engine, 20, 20, 7U);
+    exit(8U);
+    require(evaluate(engine, "[getComputedStyle(tip).display, moves, boundaries.length]",
+        "host-exit-barrier.js") == R"(["none",1,4])",
+        "frame-paced move was not flushed before the host exit");
+
+    // Many chart gestures use document mousemove/up rather than DOM capture.
+    pointer_move(engine, 20, 20, 9U);
+    execute(engine, R"JS(
+        globalThis.dragMoves = 0;
+        globalThis.dragUps = 0;
+        document.addEventListener('mousemove', () => dragMoves++);
+        document.addEventListener('mouseup', () => dragUps++);
+    )JS", "host-exit-document-drag.js");
+    require(evaluate(engine, "dragUps", "host-exit-document-drag-ready.js") == "0",
+        "document drag fixture not ready");
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 10U, true);
+    exit(11U, 1U);
+    pointer_move(engine, -20, -20, 12U, true);
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, -20, -20, 13U, false);
+    require(evaluate(engine, "[dragMoves, dragUps, getComputedStyle(tip).display]",
+        "host-exit-document-drag-result.js") == R"([1,1,"none"])",
+        "host exit interrupted document-level drag movement or release");
+
+    pointer_move(engine, 20, 20, 14U);
+    execute(engine, R"JS(
+        boundaries = [];
+        quick.addEventListener('pointerdown', e => quick.setPointerCapture(e.pointerId));
+    )JS", "host-exit-capture.js");
+    require(evaluate(engine, "boundaries.length", "host-exit-capture-ready.js") == "0", "capture fixture not ready");
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 15U, true);
+    exit(16U, 1U);
+    require(evaluate(engine, "[quick.hasPointerCapture(1), boundaries.length]",
+        "host-exit-held.js") == "[true,0]",
+        "host exit cancelled a captured drag or fired premature leave events");
+    pointer_move(engine, -20, -20, 17U, true);
+    require(evaluate(engine, "boundaries.length", "host-exit-drag.js") == "0",
+        "captured movement outside the viewport fired leave events");
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, -20, -20, 18U, false);
+    require(evaluate(engine, "[ups, quick.hasPointerCapture(1), getComputedStyle(tip).display, boundaries.length]",
+        "host-exit-release.js") == R"([1,false,"none",4])",
+        "release outside must reach the capture target and then clear hover");
+    webscene_engine_destroy(engine);
+}
+
 void test_concurrent_input_producers_remain_consumable()
 {
     auto* engine = webscene_engine_create(0);
@@ -1098,6 +1203,130 @@ void test_pressed_drag_moves_remain_dispatchable_after_threshold()
     webscene_engine_destroy(engine);
 }
 
+void test_mouse_moves_are_raf_aligned_at_compositor_cadence()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "rAF-aligned mouse engine creation failed");
+    resize(engine, 640, 360, 1U);
+    execute(engine, R"JS(
+        (() => {
+          document.body.innerHTML = '';
+          const target = document.createElement('div');
+          target.style.width = '640px';
+          target.style.height = '360px';
+          globalThis.__pacedPointerMoves = [];
+          globalThis.__pacedMouseMoves = [];
+          globalThis.__pacedOrder = [];
+          target.addEventListener('pointermove', event => {
+            __pacedPointerMoves.push(event.clientX);
+            __pacedOrder.push(`move:${event.clientX}`);
+          });
+          target.addEventListener('mousemove', event => {
+            __pacedMouseMoves.push(event.clientX);
+          });
+          target.addEventListener('pointerup', event => {
+            __pacedOrder.push(`up:${event.clientX}`);
+          });
+          document.body.appendChild(target);
+        })()
+    )JS", "native-frame-paced-drag-setup.js");
+    require(
+        evaluate(engine, "document.body.firstElementChild.offsetWidth",
+            "native-frame-paced-drag-ready.js") == "640",
+        "frame-paced drag fixture did not complete layout");
+
+    webscene_engine_metrics before{};
+    webscene_engine_get_metrics(engine, &before);
+    webscene_engine_observe_compositor_frame(engine, 1000.0);
+    pointer_move(engine, 20, 20, 2U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    webscene_engine_observe_host_timeline(engine, 1004.0);
+    pointer_move(engine, 30, 20, 3U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    require(
+        consumed_input_count(engine) == before.consumed_inputs,
+        "host-time observation released mousemove without a compositor frame");
+    require(
+        webscene_engine_requires_animation_frame(engine) != 0U,
+        "queued mousemove did not request an otherwise-idle compositor frame");
+
+    // Chromium rAF-aligns mousemove regardless of button state. Two device
+    // samples that arrive during one display interval become one event at the
+    // newest position on the next BeginMainFrame.
+    webscene_engine_observe_compositor_frame(engine, 1008.333);
+    wait_for_consumed_inputs(
+        engine,
+        before.consumed_inputs + 2U,
+        "next compositor frame did not release the latest hover sample");
+    require(
+        evaluate(engine, R"JS(({
+          pointer: __pacedPointerMoves,
+          mouse: __pacedMouseMoves,
+          order: __pacedOrder
+        }))JS", "native-frame-paced-drag-first-frame.js")
+            == R"JSON({"pointer":[30],"mouse":[30],"order":["move:30"]})JSON",
+        "spaced hover movements were not reduced to the latest frame sample");
+
+    // A high-refresh compositor still receives one newest crosshair position
+    // on every boundary. This protects smooth 120 Hz chart interaction while
+    // avoiding redundant JavaScript work at the higher device sampling rate.
+    pointer_move(engine, 40, 20, 4U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    require(
+        consumed_input_count(engine) == before.consumed_inputs + 2U,
+        "mousemove dispatched between compositor boundaries");
+    webscene_engine_observe_compositor_frame(engine, 1016.666);
+    wait_for_consumed_inputs(
+        engine,
+        before.consumed_inputs + 3U,
+        "120 Hz compositor boundary did not release the next crosshair sample");
+    require(
+        evaluate(
+            engine,
+            "globalThis.__pacedPointerMoves",
+            "native-frame-paced-hover-second-frame.js") == "[30,40]",
+        "crosshair movement did not advance at compositor cadence");
+
+    // Pointer-up is a strict ordering barrier. It must flush the last pending
+    // position before dispatching the release, without waiting for a frame.
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 40, 20, 5U, true);
+    wait_for_consumed_inputs(
+        engine,
+        before.consumed_inputs + 4U,
+        "pointer-down ordering barrier was not consumed");
+    pointer_move(engine, 50, 20, 6U, true);
+    pointer_move(engine, 60, 20, 7U, true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 60, 20, 8U, false);
+    wait_for_consumed_inputs(
+        engine,
+        before.consumed_inputs + 7U,
+        "pointer-up did not flush the final paced drag position");
+    const auto result = evaluate(
+        engine,
+        R"JS(({
+          pointer: __pacedPointerMoves,
+          mouse: __pacedMouseMoves,
+          order: __pacedOrder
+        }))JS",
+        "native-frame-paced-drag-release.js");
+    require(
+        result
+            == R"JSON({"pointer":[30,40,60],"mouse":[30,40,60],"order":["move:30","move:40","move:60","up:60"]})JSON",
+        "paced drag lost its final position or crossed the pointer-up barrier: "
+            + result);
+
+    webscene_engine_metrics after{};
+    webscene_engine_get_metrics(engine, &after);
+    require(
+        after.applied_pointer_move_inputs
+                - before.applied_pointer_move_inputs == 3U
+            && after.coalesced_pointer_move_inputs
+                - before.coalesced_pointer_move_inputs == 2U,
+        "rAF-aligned mouse metrics did not report coalesced device samples");
+    webscene_engine_destroy(engine);
+}
+
 void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engine)
 {
     execute(engine, R"JS(
@@ -1280,25 +1509,28 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
           canvas.width = 320;
           canvas.height = 180;
           canvas.getContext('2d').fillRect(0, 0, 320, 180);
-          document.body.appendChild(canvas);
           globalThis.__screenshotCanvas = canvas;
-          const download = document.createElement('a');
-          download.href = canvas.toDataURL();
-          download.download = 'AAPL_2026-08-25_14-30-01.png';
-          download.click();
+          globalThis.__screenshotDownloadState = 'pending';
+          canvas.toBlob(blob => {
+            const download = document.createElement('a');
+            download.href = URL.createObjectURL(blob);
+            download.download = 'AAPL_2026-08-25_14-30-01.png';
+            download.click();
+            globalThis.__screenshotDownloadState = download.href;
+          }, 'image/png');
           return {
             hasToDataURL: typeof canvas.toDataURL === 'function',
             hasToBlob: typeof canvas.toBlob === 'function',
-            token: download.getAttribute('href')
+            state: globalThis.__screenshotDownloadState
           };
         })()
     )JS", "native-tradingview-canvas-download.js");
     require(
         screenshot_download_state.find(R"("hasToDataURL":true)") != std::string::npos
             && screenshot_download_state.find(R"("hasToBlob":true)") != std::string::npos
-            && screenshot_download_state.find("webscene-canvas-snapshot:")
+            && screenshot_download_state.find("blob:webscene-native/")
                 != std::string::npos,
-        "canvas export methods did not expose the host snapshot token: "
+        "canvas toBlob object URL did not expose the host snapshot token: "
             + screenshot_download_state);
     const auto screenshot_download_request = take_host_request(engine);
     require(
@@ -1307,9 +1539,36 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
                 R"("suggestedFileName":"AAPL_2026-08-25_14-30-01.png")")
                 != std::string::npos
             && screenshot_download_request.find(R"("canvasNodeId":)")
-                != std::string::npos,
-        "TradingView canvas download did not reach the host capture request: "
+                != std::string::npos
+            && screenshot_download_request.find(R"("url":)")
+                == std::string::npos,
+        "TradingView canvas Blob URL download did not preserve its retained canvas identity: "
             + screenshot_download_request);
+
+    auto detached_canvas_retained = false;
+    webscene_engine_request_scene_checkpoint(engine);
+    for (auto attempt = 0; attempt < 100 && !detached_canvas_retained; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.canvas_layer_count; ++index) {
+                const auto& layer = scene->canvas_layers[index];
+                if (layer.bitmap_width == 320U
+                    && layer.bitmap_height == 180U
+                    && (layer.reserved & (1U << 31U)) != 0U) {
+                    detached_canvas_retained = true;
+                    break;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!detached_canvas_retained) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        detached_canvas_retained,
+        "detached screenshot canvas was not retained for node-scoped export");
 
     execute(engine, R"JS(
         (() => {
@@ -1347,6 +1606,34 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
                 != std::string::npos,
         "TradingView canvas copy did not reach the typed host clipboard request: "
             + screenshot_clipboard_request);
+
+    const auto screenshot_node_id = static_cast<uint32_t>(std::stoul(evaluate(
+        engine,
+        "globalThis.__screenshotCanvas.__websceneNativeNodeId",
+        "native-screenshot-export-node-id.js")));
+    require(
+        webscene_engine_release_canvas_export(engine, screenshot_node_id) != 0U,
+        "the host could not release the retained screenshot canvas");
+    execute(engine, "true", "native-screenshot-export-release-barrier.js");
+    webscene_engine_request_scene_checkpoint(engine);
+    auto released = false;
+    for (auto attempt = 0; attempt < 100 && !released; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            released = true;
+            for (uint32_t index = 0; index < scene->header.canvas_layer_count; ++index) {
+                if (scene->canvas_layers[index].node_id == screenshot_node_id) {
+                    released = false;
+                    break;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!released) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(released,
+        "the exported screenshot canvas remained in later retained scenes");
 }
 
 void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine)
@@ -1355,12 +1642,30 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
         (() => {
           document.body.innerHTML = `<style>
             body { margin: 0; }
-            #swatch {
+            #opacity-slider {
               width: 40px;
-              height: 24px;
+              height: 10px;
+              color: rgb(41, 98, 255);
+              background-image: linear-gradient(135deg, #707070 50%, #121212 50%);
+              background-size: 8px 8px;
+              border-radius: 5px;
+            }
+            #swatch {
+              box-sizing: border-box;
+              width: 100%;
+              height: 100%;
+              color: inherit;
+              border: 1px solid;
               border-radius: 4px;
             }
-          </style><div id="swatch"></div>`;
+            #transparent-border {
+              width: 4px;
+              height: 4px;
+              color: rgb(41, 98, 255);
+              border: 1px solid transparent;
+            }
+          </style><div id="opacity-slider"><div id="swatch"></div></div>
+            <div id="transparent-border"></div>`;
           // TradingView's opacity control writes this exact named CSSOM
           // property on its gradient child rather than using a stylesheet.
           swatch.style.backgroundImage =
@@ -1372,20 +1677,34 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
             "native-linear-gradient-cssom.js")
             .find("linear-gradient") != std::string::npos,
         "an inline backgroundImage linear-gradient did not survive the CSS cascade");
+    const auto border_colors = evaluate(engine, R"JS(
+            ({
+              inheritedColor: getComputedStyle(swatch).color,
+              implicitBorder: getComputedStyle(swatch).borderTopColor,
+              explicitTransparent:
+                getComputedStyle(document.getElementById('transparent-border'))
+                  .borderTopColor
+            })
+        )JS", "tradingview-opacity-current-color.js");
+    require(
+        border_colors
+            == R"JSON({"inheritedColor":"rgb(41, 98, 255)","implicitBorder":"rgb(41, 98, 255)","explicitTransparent":"rgba(0, 0, 0, 0)"})JSON",
+        "border: 1px solid did not retain its deferred currentColor initial value: "
+            + border_colors);
 
     execute(engine, R"JS(
         swatch.style.backgroundImage =
-          'linear-gradient(90deg, transparent, #112233), '
-          + 'linear-gradient(135deg, #707070 50%, #121212 50%)';
-        swatch.style.backgroundSize = 'auto, 8px 8px';
+          'linear-gradient(90deg, transparent, #112233)';
     )JS", "native-linear-gradient-mutation.js");
 
     webscene_engine_request_scene_checkpoint(engine);
     auto found = false;
+    auto found_border = false;
     auto observed_resource = std::string{};
-    for (auto attempt = 0; attempt < 100 && !found; ++attempt) {
+    for (auto attempt = 0; attempt < 100 && (!found || !found_border); ++attempt) {
         const auto* scene = webscene_engine_acquire_latest_scene(engine);
         if (scene != nullptr) {
+            auto swatch_node_id = 0U;
             for (uint32_t index = 0; index < scene->header.command_count; ++index) {
                 const auto& command = scene->commands[index];
                 if (command.kind != 21U || command.flags >= scene->string_count) continue;
@@ -1396,20 +1715,35 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
                 observed_resource = resource;
                 found = command.node_id != 0U
                     && std::abs(command.width - 40.0F) < 0.1F
-                    && std::abs(command.height - 24.0F) < 0.1F
+                    && std::abs(command.height - 10.0F) < 0.1F
                     && resource.find("linear-gradient") != std::string::npos
                     && resource.find("transparent") != std::string::npos
                     && resource.find("#112233") != std::string::npos
-                    && resource.find("#707070") != std::string::npos
-                    && resource.starts_with("webscene-bg-v2\t")
-                    && resource.ends_with("\tauto, 8px 8px");
+                    && resource.starts_with("webscene-bg-v2\t");
+                if (found) swatch_node_id = command.node_id;
+            }
+            for (uint32_t index = 0;
+                swatch_node_id != 0U && index < scene->header.command_count;
+                ++index) {
+                const auto& command = scene->commands[index];
+                if ((command.kind == 8U || command.kind == 11U)
+                    && command.node_id == swatch_node_id
+                    && command.rgba == 0x2962FFFFU
+                    && std::abs(command.stroke_width - 1.0F) < 0.01F) {
+                    found_border = true;
+                    break;
+                }
             }
             webscene_scene_acknowledge(scene);
             webscene_scene_release(scene);
         }
-        if (!found) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        if (!found || !found_border) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
     }
     require(found,
         "a mutated inline backgroundImage linear-gradient was not published "
-        "as a retained gradient command: " + observed_resource);
+            "as a retained gradient command: " + observed_resource);
+    require(found_border,
+        "the rounded opacity swatch border did not remain above its layered gradient");
 }

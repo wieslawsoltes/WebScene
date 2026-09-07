@@ -315,6 +315,7 @@ internal static class NativeInspectorDisabledPerformanceProbe
             throw new InvalidOperationException("The native engine could not be created.");
         }
         NativeWebSceneApi.EngineRequestSceneCheckpoint(engine);
+        NativeWebSceneApi.SetLegacyConsoleCapture(engine, true);
         if (!firstScene.Wait(TimeSpan.FromSeconds(5)))
         {
             NativeWebSceneApi.EngineDestroy(engine);

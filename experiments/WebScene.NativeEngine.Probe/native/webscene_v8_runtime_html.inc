@@ -201,6 +201,7 @@
         }
         if (name == "display") return inline_display;
         if (name == "position") return inline_position;
+        if (name == "contain") return inline_contain;
         if (name == "float" || name == "cssFloat") return inline_float;
         if (name == "z-index" || name == "zIndex") return inline_z_index;
         if (name == "flex-direction" || name == "flexDirection") {
@@ -413,7 +414,7 @@
                         inventory_css_value_functions(
                             declaration.value, "inline-style-parser");
                         if (!store_inline_declaration(node, declaration)) continue;
-                        apply_css_declaration(node, declaration);
+                        apply_css_declaration(node, declaration, true);
                         inline_property_mask |= inline_style_mask(declaration.name);
                     }
                     node.style.inline_property_mask |= inline_property_mask;
@@ -441,11 +442,13 @@
                             node.attributes["object-html"] = object_url->second;
                         }
                     }
-                    node.style.width = {100, length_unit::percent};
-                    node.style.height = {100, length_unit::percent};
-                    node.style.background_rgba = 0x131722FFU;
-                    node.style.inline_property_mask |=
-                        inline_width | inline_height | inline_background;
+                    if (!install_embed_fallback(node)) {
+                        node.style.width = {100, length_unit::percent};
+                        node.style.height = {100, length_unit::percent};
+                        node.style.background_rgba = 0x131722FFU;
+                        node.style.inline_property_mask |=
+                            inline_width | inline_height | inline_background;
+                    }
                     if (node.attributes.contains("object-html")) {
                         pending_frame_hydrations.push_back(&node);
                     }
@@ -686,7 +689,7 @@
                 for (const auto& declaration : parse_css_declarations(style->second, true)) {
                     inventory_css_value_functions(declaration.value, "inline-style-parser");
                     if (!store_inline_declaration(node, declaration)) continue;
-                    apply_css_declaration(node, declaration);
+                    apply_css_declaration(node, declaration, true);
                     inline_property_mask |= inline_style_mask(declaration.name);
                 }
                 node.style.inline_property_mask |= inline_property_mask;
@@ -698,10 +701,12 @@
                     const auto object_url = object_urls.find(source->second);
                     if (object_url != object_urls.end()) node.attributes["object-html"] = object_url->second;
                 }
-                node.style.width = {100, length_unit::percent};
-                node.style.height = {100, length_unit::percent};
-                node.style.background_rgba = 0x131722FFU;
-                node.style.inline_property_mask |= inline_width | inline_height | inline_background;
+                if (!install_embed_fallback(node)) {
+                    node.style.width = {100, length_unit::percent};
+                    node.style.height = {100, length_unit::percent};
+                    node.style.background_rgba = 0x131722FFU;
+                    node.style.inline_property_mask |= inline_width | inline_height | inline_background;
+                }
                 if (node.attributes.contains("object-html")) pending_frame_hydrations.push_back(&node);
             }
 

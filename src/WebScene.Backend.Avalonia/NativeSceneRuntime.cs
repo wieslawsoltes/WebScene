@@ -224,6 +224,12 @@ public static unsafe partial class NativeWebSceneApi
 {
 
     private const string LibraryName = "webscene_native_engine";
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_configure_diagnostics", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void ConfigureLegacyDiagnostics(IntPtr engine, uint flags, IntPtr callback, IntPtr data);
+
+    /// <summary>Opts a raw engine into the legacy console pull queue. Do not use on an engine owned by a NativeWebSceneView.</summary>
+    public static void SetLegacyConsoleCapture(IntPtr engine, bool enabled)
+        => ConfigureLegacyDiagnostics(engine, enabled ? 4u : 0u, IntPtr.Zero, IntPtr.Zero);
     private static readonly object LibraryPathGate = new();
     private static readonly ConcurrentDictionary<IntPtr, GCHandle> EngineResourceBridges = new();
     private static readonly ResourceLoadCallback ResourceLoad = LoadResource;
@@ -232,6 +238,9 @@ public static unsafe partial class NativeWebSceneApi
     private static readonly IntPtr ResourceLoadV2Address =
         Marshal.GetFunctionPointerForDelegate(ResourceLoadV2);
     private static readonly ResourceLoadCallbackV3 ResourceLoadV3 = LoadResourceV3;
+    private static readonly StylesheetConsumedCallback StylesheetConsumed = NotifyStylesheetConsumed;
+    private static readonly IntPtr StylesheetConsumedAddress =
+        Marshal.GetFunctionPointerForDelegate(StylesheetConsumed);
     private static readonly IntPtr ResourceLoadV3Address =
         Marshal.GetFunctionPointerForDelegate(ResourceLoadV3);
     private static readonly ScenePublishedCallback ScenePublished = NotifyScenePublished;
@@ -355,7 +364,9 @@ public static unsafe partial class NativeWebSceneApi
                     ResourceLoadCallbackV2 = ResourceLoadV2Address,
                     ResourceLoadV2UserData = GCHandle.ToIntPtr(bridgeHandle),
                     ResourceLoadCallbackV3 = ResourceLoadV3Address,
-                    ResourceLoadV3UserData = GCHandle.ToIntPtr(bridgeHandle)
+                    ResourceLoadV3UserData = GCHandle.ToIntPtr(bridgeHandle),
+                    StylesheetConsumedCallback = StylesheetConsumedAddress,
+                    StylesheetConsumedUserData = GCHandle.ToIntPtr(bridgeHandle)
                 };
                 var engine = EngineCreateWithOptions(in options);
                 if (engine == IntPtr.Zero) return IntPtr.Zero;
@@ -576,6 +587,27 @@ public static unsafe partial class NativeWebSceneApi
         in NativeResourceRequestContextV3 requestContext,
         IntPtr destination,
         nuint destinationCapacity);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void StylesheetConsumedCallback(
+        IntPtr userData, IntPtr address, nuint addressLength, IntPtr css, nuint cssLength);
+
+    private static void NotifyStylesheetConsumed(
+        IntPtr userData, IntPtr address, nuint addressLength, IntPtr css, nuint cssLength)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            bridge?.ConsumeStylesheet(
+                Marshal.PtrToStringUTF8(address, checked((int)addressLength)) ?? string.Empty,
+                Marshal.PtrToStringUTF8(css, checked((int)cssLength)) ?? string.Empty);
+        }
+        catch (Exception error)
+        {
+            // A reverse-P/Invoke boundary must never propagate a managed exception.
+            Console.Error.WriteLine($"[WebScene stylesheet consumption] {error}");
+        }
+    }
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void ScenePublishedCallback(
@@ -1036,31 +1068,41 @@ public static unsafe partial class NativeWebSceneApi
                     : null
             };
             PreparedResource prepared;
-#if !WEBSCENE_UNO
-            if (loader is AvaloniaResourceLoader avaloniaLoader
-                && avaloniaLoader.TryLoadUtf8(request, out var utf8Resource))
+            var resourceStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+            try
             {
-                if (resourceKind == WebSceneResourceKind.StyleSheet)
+#if !WEBSCENE_UNO
+                if (loader is AvaloniaResourceLoader avaloniaLoader
+                    && avaloniaLoader.TryLoadUtf8(request, out var utf8Resource))
                 {
-                    RegisterWebFonts(
-                        Encoding.UTF8.GetString(utf8Resource.Content.Span),
-                        address,
-                        avaloniaLoader);
+                    prepared = PrepareResource(utf8Resource, entityTag);
                 }
-                prepared = PrepareResource(utf8Resource, entityTag);
+                else
+#endif
+                {
+                    var resource = loader.LoadText(request);
+                    prepared = PrepareResource(resource, entityTag);
+                }
             }
-            else
-#endif
+            catch (Exception error)
             {
-                var resource = loader.LoadText(request);
-#if !WEBSCENE_UNO
-                if (resourceKind == WebSceneResourceKind.StyleSheet
-                    && loader is AvaloniaResourceLoader textAvaloniaLoader)
+                // Preserve transport metadata across the ABI, not exception text which
+                // frequently contains credentials, query parameters or request bodies.
+                var category = error switch
                 {
-                    RegisterWebFonts(resource.Content, address, textAvaloniaLoader);
-                }
-#endif
-                prepared = PrepareResource(resource, entityTag);
+                    System.Net.Http.HttpRequestException { StatusCode: not null } => "http",
+                    System.Net.Http.HttpRequestException => "network",
+                    TimeoutException or TaskCanceledException => "timeout",
+                    OperationCanceledException => "cancelled",
+                    FileNotFoundException or DirectoryNotFoundException => "not-found",
+                    NotSupportedException => "unsupported",
+                    _ => "loader"
+                };
+                var status = error is System.Net.Http.HttpRequestException { StatusCode: { } code } ? (int)code : 0;
+                prepared = new PreparedResource(false, false, null, null, category,
+                    category.Length, null, default, false, 0,
+                    (nuint)(EnvelopeHeaderSize + category.Length), true, status,
+                    (long)(System.Diagnostics.Stopwatch.GetElapsedTime(resourceStarted).TotalMilliseconds * 1000));
             }
             if (destination == IntPtr.Zero || capacity < prepared.RequiredLength)
             {
@@ -1141,17 +1183,17 @@ public static unsafe partial class NativeWebSceneApi
         {
             var length = checked((int)resource.RequiredLength);
             var bytes = new Span<byte>((void*)destination, length);
-            bytes[0] = resource.NotModified ? (byte)2 : (byte)1;
+            bytes[0] = resource.Failed ? (byte)3 : resource.NotModified ? (byte)2 : (byte)1;
             bytes[1] = resource.IsCacheable ? (byte)1 : (byte)0;
             BinaryPrimitives.WriteUInt32LittleEndian(
                 bytes[2..],
                 checked((uint)resource.ResponseEntityTagLength));
             BinaryPrimitives.WriteInt64LittleEndian(
                 bytes[(2 + sizeof(uint))..],
-                (resource.LastModified ?? requestIfModifiedSince)?.ToUnixTimeSeconds() ?? 0);
+                resource.Failed ? resource.HttpStatus : (resource.LastModified ?? requestIfModifiedSince)?.ToUnixTimeSeconds() ?? 0);
             BinaryPrimitives.WriteInt64LittleEndian(
                 bytes[(2 + sizeof(uint) + sizeof(long))..],
-                resource.FreshUntil?.ToUnixTimeSeconds() ?? 0);
+                resource.Failed ? resource.DurationMicroseconds : resource.FreshUntil?.ToUnixTimeSeconds() ?? 0);
             Encoding.UTF8.GetBytes(
                 resource.ResponseEntityTag,
                 bytes.Slice(EnvelopeHeaderSize, resource.ResponseEntityTagLength));
@@ -1183,7 +1225,10 @@ public static unsafe partial class NativeWebSceneApi
             ReadOnlyMemory<byte> Utf8Content,
             bool ContentIsUtf8,
             int ContentLength,
-            nuint RequiredLength);
+            nuint RequiredLength,
+            bool Failed = false,
+            int HttpStatus = 0,
+            long DurationMicroseconds = 0);
 
         private sealed record PendingResourceCopy(
             ResourceBridge Owner,
@@ -1220,6 +1265,14 @@ public static unsafe partial class NativeWebSceneApi
                     && string.Equals(EntityTag, entityTag, StringComparison.Ordinal);
         }
 
+        internal void ConsumeStylesheet(string address, string css)
+        {
+#if !WEBSCENE_UNO
+            if (loader is AvaloniaResourceLoader avaloniaLoader)
+                RegisterWebFonts(css, address, avaloniaLoader);
+#endif
+        }
+
 #if !WEBSCENE_UNO
         private void RegisterWebFonts(
             string css,
@@ -1231,13 +1284,20 @@ public static unsafe partial class NativeWebSceneApi
                 var family = CssDeclarationValue(rule, "font-family")
                     ?.Trim().Trim('"', '\'');
                 var source = FirstCssUrl(CssDeclarationValue(rule, "src"));
+                var (minimumWeight, maximumWeight) = ParseFontFaceWeight(CssDeclarationValue(rule, "font-weight"));
+                var slant = CssDeclarationValue(rule, "font-style")?.Trim().ToLowerInvariant() switch
+                {
+                    "italic" => SKFontStyleSlant.Italic,
+                    "oblique" => SKFontStyleSlant.Oblique,
+                    _ => SKFontStyleSlant.Upright
+                };
                 if (string.IsNullOrWhiteSpace(family)
                     || string.IsNullOrWhiteSpace(source))
                 {
                     continue;
                 }
 
-                var sourceKey = $"{family}\u001f{stylesheetAddress}\u001f{source}";
+                var sourceKey = $"{family}\u001f{stylesheetAddress}\u001f{source}\u001f{minimumWeight}\u001f{maximumWeight}\u001f{slant}";
                 if (!_registeredFontSources.TryAdd(sourceKey, 0)) continue;
                 try
                 {
@@ -1245,7 +1305,7 @@ public static unsafe partial class NativeWebSceneApi
                         .LoadBytesAsync(source, stylesheetAddress, CancellationToken.None)
                         .GetAwaiter()
                         .GetResult();
-                    if (!WebTypefaces.Register(family, resource.Content))
+                    if (!WebTypefaces.Register(family, resource.Content, minimumWeight, maximumWeight, slant))
                     {
                         Console.Error.WriteLine(
                             $"[WebScene native web font] '{resource.DisplayName}' is not a supported font.");
@@ -1258,6 +1318,16 @@ public static unsafe partial class NativeWebSceneApi
                         + $"'{stylesheetAddress}': {error.Message}");
                 }
             }
+        }
+
+        internal static (int Minimum, int Maximum) ParseFontFaceWeight(string? value)
+        {
+            if (string.Equals(value?.Trim(), "bold", StringComparison.OrdinalIgnoreCase)) return (700, 700);
+            var tokens = value?.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries) ?? [];
+            if (tokens.Length is < 1 or > 2 || !int.TryParse(tokens[0], out var min) || min is < 1 or > 1000)
+                return (400, 400);
+            if (tokens.Length == 1) return (min, min);
+            return int.TryParse(tokens[1], out var max) && max >= min && max <= 1000 ? (min, max) : (400, 400);
         }
 
         private static IEnumerable<string> CssFontFaceRules(string css)
@@ -1343,6 +1413,13 @@ public static unsafe partial class NativeWebSceneApi
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_get_cursor")]
     public static extern uint EngineGetCursor(IntPtr engine);
+
+    [DllImport(
+        LibraryName,
+        EntryPoint = "webscene_engine_observe_host_timeline")]
+    internal static extern void EngineObserveHostTimeline(
+        IntPtr engine,
+        double timestampMilliseconds);
 
     [DllImport(
         LibraryName,
@@ -1675,6 +1752,9 @@ public static unsafe partial class NativeWebSceneApi
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_request_scene_checkpoint")]
     public static extern byte EngineRequestSceneCheckpoint(IntPtr engine);
+
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_release_canvas_export")]
+    internal static extern byte EngineReleaseCanvasExport(IntPtr engine, uint nodeId);
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_request_low_memory")]
     public static extern byte EngineRequestLowMemory(IntPtr engine);

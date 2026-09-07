@@ -37,7 +37,13 @@
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneInteropTypes.cs" Link="NativeSceneInteropTypes.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRenderingTypes.cs" Link="NativeSceneRenderingTypes.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRuntime.cs" Link="NativeSceneRuntime.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeImageResource.cs" Link="NativeImageResource.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeRuntimeDiagnostics.cs" Link="NativeRuntimeDiagnostics.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeWebSceneView.Diagnostics.cs" Link="NativeWebSceneView.Diagnostics.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeTextShaping.cs" Link="NativeTextShaping.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeVariableFontInstancer.cs" Link="NativeVariableFontInstancer.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeWebFontDecoder.cs" Link="NativeWebFontDecoder.cs" />
+    <None Include="..\WebScene.Backend.Avalonia\THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeTextRunPositioning.cs" Link="NativeTextRunPositioning.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\WindowsDirectWriteRunPositioner.cs" Link="WindowsDirectWriteRunPositioner.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeInteropCallbacks.cs" Link="NativeInteropCallbacks.cs" />

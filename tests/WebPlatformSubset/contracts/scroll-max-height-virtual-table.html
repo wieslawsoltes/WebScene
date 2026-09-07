@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8">
+<title>Virtual table mutation preserves a bounded scroll offset</title>
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>
+body{margin:0}.host{height:240px;width:400px;position:relative;overflow:hidden}
+#scroller{max-height:100%;overflow:auto}table{border-collapse:collapse;width:100%}td{padding:0;height:40px}
+</style>
+<div class="host"><div id="scroller"><table><thead><tr><td>Heading</td></tr></thead><tbody id="rows"></tbody></table></div></div>
+<script>
+const scroller=document.getElementById('scroller'),rows=document.getElementById('rows');
+const render=(offset,count,total)=>{
+  rows.style.height=total+'px';
+  rows.innerHTML=(offset?'<tr style="height:'+offset+'px"></tr>':'')+
+    Array.from({length:count},(_,i)=>'<tr><td>Row '+(offset/40+i)+'</td></tr>').join('')+
+    '<tr style="height:'+(total-offset-count*40)+'px"></tr>';
+};
+test(()=>{
+  render(0,12,4000);
+  assert_equals(scroller.clientHeight,240);
+  scroller.scrollTop=3200;
+  assert_equals(scroller.scrollTop,3200);
+  rows.style.height='-83px'; // transient getTotalSize() when the virtualizer count is zero
+  assert_equals(rows.style.height,'4000px','Invalid negative height preserves the previous virtual extent');
+  rows.innerHTML='';
+  assert_equals(scroller.scrollHeight,4040,'An empty explicitly-sized row group preserves the virtual extent during replacement');
+  assert_equals(scroller.scrollTop,3200,'Intermediate measurement must retain the scroll offset');
+  render(3000,12,4000);
+  assert_equals(scroller.clientHeight,240,'Resolve the updated layout');
+  assert_equals(scroller.scrollTop,3200,'Row replacement must not reset the viewport');
+  assert_equals(scroller.scrollHeight,4040,'Spacer and rows keep the same total extent');
+  const r=rows.querySelectorAll('tr')[6].getBoundingClientRect();
+  assert_equals(r.top,40,'Visible data row remains in the viewport');
+},'Replacing a virtual table window retains scrollTop with max-height:100%');
+</script>

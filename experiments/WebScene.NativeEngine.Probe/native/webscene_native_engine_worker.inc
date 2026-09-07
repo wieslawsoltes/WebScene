@@ -1,5 +1,33 @@
     void run(std::stop_token token)
     {
+        try { run_core(token); }
+        catch (const std::exception& error) {
+            set_last_error(error.what());
+            webscene_native::runtime_diagnostic failure;
+            failure.kind = "failure";
+            failure.stage = "runtime";
+            failure.message = error.what();
+            diagnostics_.publish(std::move(failure));
+        }
+        catch (...) {
+            set_last_error("Unknown native runtime failure");
+            webscene_native::runtime_diagnostic failure;
+            failure.kind = "failure";
+            failure.stage = "runtime";
+            failure.message = "Unknown native runtime failure";
+            diagnostics_.publish(std::move(failure));
+        }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+        inspector_runtime_.store(nullptr, std::memory_order_release);
+#endif
+        // V8 cleanup must stay on its owning worker even after a terminal throw.
+        runtime_.reset();
+#endif
+    }
+
+    void run_core(std::stop_token token)
+    {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
         runtime_ = std::make_unique<webscene_native::v8_dom_runtime>(
             document_,
@@ -21,6 +49,40 @@
                 if (resource_load_callback_v3_ == nullptr
                     && resource_load_callback_v2_ == nullptr
                     && resource_load_callback_ == nullptr) return false;
+                const auto started = std::chrono::steady_clock::now();
+                const auto failed = [&](const std::string& category, int http_status = 0,
+                                        double duration_ms = -1) {
+                    if (diagnostics_.enabled(WEBSCENE_DIAGNOSTIC_RESOURCE_FAILURES)) {
+                        // Resource diagnostics deliberately exclude credentials, query strings,
+                        // fragments and data payloads. Never copy request headers or bodies.
+                        const auto safe_url = [](std::string value) {
+                            if (value.rfind("data:", 0) == 0) return std::string{"data:[redacted]"};
+                            value.resize(value.find_first_of("?#") == std::string::npos
+                                ? value.size() : value.find_first_of("?#"));
+                            if (const auto scheme = value.find("://"); scheme != std::string::npos) {
+                                const auto end = value.find('/', scheme + 3);
+                                const auto at = value.find('@', scheme + 3);
+                                if (at != std::string::npos && (end == std::string::npos || at < end))
+                                    value.erase(scheme + 3, at - scheme - 2);
+                            }
+                            return value;
+                        };
+                        webscene_native::runtime_diagnostic record;
+                        record.kind = "resource-failure";
+                        record.url = safe_url(url);
+                        record.document_url = safe_url(request_context.referrer);
+                        record.method = request_context.method.empty() ? "GET" : request_context.method;
+                        record.resource_type = kind == 0 ? "document" : kind == 1 ? "script"
+                            : kind == 2 ? "stylesheet" : kind == 3 ? "image" : "data";
+                        record.error_code = category;
+                        record.message = "Resource request failed (" + category + ")";
+                        record.http_status = http_status;
+                        record.duration_ms = duration_ms >= 0 ? duration_ms
+                            : std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+                        diagnostics_.publish(std::move(record));
+                    }
+                    return false;
+                };
                 // Most web resources fit in this stack buffer. Supplying it on
                 // the first callback lets managed hosts encode directly into
                 // native-owned memory and avoids a size-probe transition plus
@@ -73,13 +135,13 @@
                 const auto required = invoke(inline_buffer.data(), inline_buffer.size());
                 constexpr size_t envelope_header_size =
                     2U + sizeof(uint32_t) + sizeof(int64_t) + sizeof(int64_t);
-                if (required < envelope_header_size) return false;
+                if (required < envelope_header_size) return failed("loader");
                 std::vector<char> overflow_buffer;
                 auto* buffer = inline_buffer.data();
                 if (required > inline_buffer.size()) {
                     overflow_buffer.resize(required);
                     if (invoke(overflow_buffer.data(), overflow_buffer.size()) != required) {
-                        return false;
+                        return failed("invalid-response");
                     }
                     buffer = overflow_buffer.data();
                 }
@@ -97,8 +159,16 @@
                     &response_fresh_until,
                     buffer + 2U + sizeof(response_tag_length) + sizeof(response_last_modified),
                     sizeof(response_fresh_until));
-                if (status < 1U || status > 2U
-                    || response_tag_length > required - envelope_header_size) return false;
+                if (response_tag_length > required - envelope_header_size) return failed("invalid-response");
+                // Failure envelope (status 3): tag = stable error category,
+                // first int64 = HTTP status (0 unknown), second = elapsed microseconds.
+                // No exception text is transported: it may contain credentials/URLs.
+                if (status == 3U) return failed(
+                    std::string(buffer + envelope_header_size, response_tag_length),
+                    response_last_modified >= 100 && response_last_modified <= 599
+                        ? static_cast<int>(response_last_modified) : 0,
+                    response_fresh_until >= 0 ? response_fresh_until / 1000.0 : -1);
+                if (status < 1U || status > 2U) return failed("invalid-response");
                 response.not_modified = status == 2U;
                 response.cacheable = cacheable;
                 response.last_modified_unix_seconds = response_last_modified;
@@ -130,11 +200,22 @@
             },
             [this] {
                 wake_.notify_all();
-            });
+            }, &diagnostics_);
         runtime_->set_work_metrics_enabled(
             runtime_work_metrics_enabled_.load(std::memory_order_acquire));
+        if (stylesheet_consumed_callback_ != nullptr) {
+            runtime_->set_stylesheet_consumer([this](const std::string& address, const std::string& css) {
+                stylesheet_consumed_callback_(stylesheet_consumed_user_data_,
+                    address.data(), address.size(), css.data(), css.size());
+            });
+        }
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
+            webscene_native::runtime_diagnostic failure;
+            failure.kind = "failure";
+            failure.stage = "bootstrap";
+            failure.message = runtime_->last_error();
+            diagnostics_.publish(std::move(failure));
             runtime_.reset();
         } else {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -155,25 +236,35 @@
             pending_paired_resize_publication;
         std::optional<std::chrono::steady_clock::time_point>
             hidden_low_memory_deadline;
-        uint32_t drag_moves_to_preserve = 0;
+        std::optional<webscene_input_event> frame_paced_pointer_move;
+        uint64_t frame_paced_pointer_move_count = 0;
+        uint64_t frame_paced_pointer_observed_after_frame = 0;
         while (!token.stop_requested()) {
             // Avalonia observes every compositor boundary even while no V8 RAF
             // or CSS animation is active. Import that clock without treating
             // the observation as input or waking this worker; a later input or
             // script mutation can then start its transition on the current
             // document timeline rather than a stale demanded-frame timestamp.
-            const auto observed_compositor_timestamp_microseconds =
-                observed_compositor_timestamp_microseconds_.load(
+            const auto observed_host_timestamp_microseconds =
+                observed_host_timestamp_microseconds_.load(
                     std::memory_order_acquire);
-            if (observed_compositor_timestamp_microseconds != 0U) {
+            if (observed_host_timestamp_microseconds != 0U) {
                 document_.signal_animation_frame(
                     static_cast<double>(
-                        observed_compositor_timestamp_microseconds) / 1000.0);
+                        observed_host_timestamp_microseconds) / 1000.0);
             }
             webscene_input_event event{};
             bool changed = checkpoint_requested_.exchange(
                 false,
                 std::memory_order_acq_rel);
+            const auto canvas_export_release_id =
+                pending_canvas_export_release_id_.exchange(
+                    0U,
+                    std::memory_order_acq_rel);
+            if (canvas_export_release_id != 0U) {
+                changed = document_.release_canvas_export(canvas_export_release_id)
+                    || changed;
+            }
             const auto starting_scene_generation =
                 document_.scene_generation();
             const auto starting_component_ready =
@@ -315,11 +406,59 @@
 
             const auto input_batch_started = std::chrono::steady_clock::now();
             uint32_t applied_input_groups = 0;
+            const auto apply_frame_paced_pointer_move = [&] {
+                const auto pointer_move = *frame_paced_pointer_move;
+                const auto pointer_move_count = frame_paced_pointer_move_count;
+                frame_paced_pointer_move.reset();
+                frame_paced_pointer_move_count = 0;
+                frame_paced_pointer_observed_after_frame = 0;
+                frame_paced_pointer_pending_.store(
+                    false,
+                    std::memory_order_release);
+                apply(pointer_move);
+                applied_pointer_move_inputs_.fetch_add(
+                    1,
+                    std::memory_order_relaxed);
+                if (pointer_move_count > 1) {
+                    coalesced_pointer_move_inputs_.fetch_add(
+                        pointer_move_count - 1,
+                        std::memory_order_relaxed);
+                }
+                consumed_inputs_.fetch_add(
+                    pointer_move_count,
+                    std::memory_order_relaxed);
+                changed = true;
+            };
+            const auto retain_frame_paced_pointer_move = [&] {
+                if (!frame_paced_pointer_pending_.exchange(
+                        true,
+                        std::memory_order_acq_rel)
+                    && host_animation_frame_requested_.load(
+                            std::memory_order_acquire) == 0U
+                    && animation_frame_requested_callback_ != nullptr) {
+                    // Chromium queues ordinary mousemove input for the next
+                    // BeginMainFrame. Wake an otherwise-idle host compositor so
+                    // the same rule does not strand pointer input on fallback
+                    // renderers that only request frames on demand.
+                    animation_frame_requested_callback_(
+                        animation_frame_requested_user_data_);
+                }
+            };
             while (applied_input_groups < 8U) {
                 // Yield as soon as another live-resize update arrives. The next
                 // worker iteration applies it before consuming more pointer input.
                 if (resize_pending_.load(std::memory_order_acquire)) {
                     break;
+                }
+                auto compositor_timestamp_microseconds =
+                    observed_compositor_timestamp_microseconds_.load(
+                        std::memory_order_acquire);
+                if (frame_paced_pointer_move.has_value()
+                    && compositor_timestamp_microseconds
+                        > frame_paced_pointer_observed_after_frame) {
+                    apply_frame_paced_pointer_move();
+                    ++applied_input_groups;
+                    continue;
                 }
                 if (deferred_input.has_value()) {
                     event = *deferred_input;
@@ -328,14 +467,44 @@
                     break;
                 }
 
-                const auto pressed_pointer_move = event.kind == WEBSCENE_INPUT_POINTER_MOVE
-                    && (event.flags & 1U) != 0U;
-                const auto threshold_drag_move = pressed_pointer_move
-                    && drag_moves_to_preserve != 0U;
+                compositor_timestamp_microseconds =
+                    observed_compositor_timestamp_microseconds_.load(
+                        std::memory_order_acquire);
+                if (frame_paced_pointer_move.has_value()) {
+                    const auto compatible_pointer_move =
+                        event.kind == WEBSCENE_INPUT_POINTER_MOVE
+                        && event.flags == frame_paced_pointer_move->flags
+                        && compositor_timestamp_microseconds
+                            <= frame_paced_pointer_observed_after_frame;
+                    if (compatible_pointer_move) {
+                        frame_paced_pointer_move = event;
+                        ++frame_paced_pointer_move_count;
+                        continue;
+                    }
+
+                    // A button/key/wheel event is an ordering barrier. Deliver
+                    // the latest preceding movement before that discrete input,
+                    // even when both arrived within one display interval.
+                    deferred_input = event;
+                    apply_frame_paced_pointer_move();
+                    ++applied_input_groups;
+                    continue;
+                }
+
+                const auto frame_paced_pointer =
+                    event.kind == WEBSCENE_INPUT_POINTER_MOVE
+                    && compositor_timestamp_microseconds != 0U;
+                if (frame_paced_pointer) {
+                    frame_paced_pointer_move = event;
+                    frame_paced_pointer_move_count = 1;
+                    frame_paced_pointer_observed_after_frame =
+                        compositor_timestamp_microseconds;
+                    retain_frame_paced_pointer_move();
+                    continue;
+                }
                 const auto may_coalesce = event.kind == WEBSCENE_INPUT_FRAME
                     || event.kind == WEBSCENE_INPUT_WHEEL
-                    || (event.kind == WEBSCENE_INPUT_POINTER_MOVE
-                        && (!pressed_pointer_move || drag_moves_to_preserve == 0U));
+                    || event.kind == WEBSCENE_INPUT_POINTER_MOVE;
                 if (may_coalesce) {
                     // Continuous device input commonly arrives as alternating
                     // wheel, hover-move, and display-frame records. Coalescing
@@ -502,16 +671,6 @@
                 }
 
                 apply(event);
-                if (event.kind == WEBSCENE_INPUT_POINTER_DOWN) {
-                    // Gesture recognizers commonly use the first two pressed moves
-                    // to cross the drag threshold. Yield between them, then
-                    // make any accumulated moves latest-position-wins.
-                    drag_moves_to_preserve = 2U;
-                } else if (pressed_pointer_move && drag_moves_to_preserve != 0U) {
-                    --drag_moves_to_preserve;
-                } else if (event.kind == WEBSCENE_INPUT_POINTER_UP) {
-                    drag_moves_to_preserve = 0U;
-                }
                 consumed_inputs_.fetch_add(1, std::memory_order_relaxed);
                 if (event.kind == WEBSCENE_INPUT_POINTER_MOVE) {
                     applied_pointer_move_inputs_.fetch_add(1, std::memory_order_relaxed);
@@ -523,10 +682,26 @@
                 // idle display frames should not force scene publication.
                 changed = changed || event.kind != WEBSCENE_INPUT_FRAME || document_.dirty();
                 ++applied_input_groups;
-                if (threshold_drag_move
-                    || std::chrono::steady_clock::now() - input_batch_started
+                if (std::chrono::steady_clock::now() - input_batch_started
                     >= std::chrono::milliseconds(4)) {
                     break;
+                }
+            }
+
+            if (frame_paced_pointer_move.has_value()) {
+                auto has_script_barrier = false;
+                {
+                    std::lock_guard lock(script_mutex_);
+                    has_script_barrier = !script_work_.empty();
+                }
+                if (has_script_barrier) {
+                    // Synchronous host script/evaluation work snapshots the
+                    // number of inputs accepted before it was queued. Treat it
+                    // like Chromium's non-rAF task barrier: dispatch the newest
+                    // preceding mousemove first so the host operation observes
+                    // ordered DOM state without waiting forever on an idle
+                    // compositor.
+                    apply_frame_paced_pointer_move();
                 }
             }
 
@@ -692,6 +867,12 @@
                         set_last_error(runtime_ == nullptr
                             ? "V8 runtime is unavailable"
                             : runtime_->last_error());
+                        webscene_native::runtime_diagnostic failure;
+                        failure.kind = "failure";
+                        failure.stage = "navigation";
+                        failure.document_url = url->url;
+                        failure.message = runtime_ == nullptr ? "V8 runtime is unavailable" : runtime_->last_error();
+                        diagnostics_.publish(std::move(failure));
                         update_compilation_metrics();
                     }
                     changed = true;

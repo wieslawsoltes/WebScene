@@ -19,6 +19,27 @@
         uint64_t hash = 1469598103934665603ULL;
         const auto width = static_cast<float>(viewport_width_);
         const auto height = static_cast<float>(viewport_height_);
+        if (native_scene_active_) {
+            // Style/layout and ResizeObserver delivery are a browser rendering
+            // checkpoint, not a compositor-mailbox operation. Complete them
+            // even when the host has not acknowledged the preceding scene;
+            // otherwise backpressure can strand an observer-dependent layout
+            // at its temporary measurement size.
+            if (document_.dirty()) {
+                const auto layout_started = std::chrono::steady_clock::now();
+                document_.layout(width, height);
+                last_layout_nanoseconds_.store(
+                    static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now() - layout_started).count()),
+                    std::memory_order_relaxed);
+            }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+            if (runtime_ != nullptr
+                && !runtime_->deliver_resize_observers()) {
+                set_last_error(runtime_->last_error());
+            }
+#endif
+        }
         uint64_t base_revision = 0;
         uint64_t acknowledged_dom_hash = 0;
         float acknowledged_width = 0;
@@ -70,14 +91,6 @@
             scene_builds_.fetch_add(1, std::memory_order_relaxed);
         }
         if (native_scene_active_) {
-            if (document_.dirty()) {
-                const auto layout_started = std::chrono::steady_clock::now();
-                document_.layout(width, height);
-                last_layout_nanoseconds_.store(
-                    static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                        std::chrono::steady_clock::now() - layout_started).count()),
-                    std::memory_order_relaxed);
-            }
             const auto scene_build_started = std::chrono::steady_clock::now();
             document_.build_scene(
                 next->commands,

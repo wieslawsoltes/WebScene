@@ -1,0 +1,176 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Replacing overflow panels recomputes the active scroll range</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  #dialog { display: flex; flex-direction: column; width: 718px; overflow: hidden; }
+  #header { flex: 0 0 68px; }
+  #frame { display: flex; flex: 1 1 auto; min-height: 0; }
+  #nav { flex: 0 0 119px; }
+  #settings { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .panel { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+  .row { flex: 0 0 40px; height: 40px; }
+  #footer { flex: 0 0 67px; }
+</style>
+<div id="dialog" style="height: 734px">
+  <div id="header"></div>
+  <div id="frame">
+    <div id="nav"></div>
+    <div id="settings"><div id="initial" style="height:954px"></div></div>
+  </div>
+  <div id="footer"></div>
+</div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+
+  function record(name, condition, detail) {
+    const error = condition ? null : new Error(detail);
+    state.results.push({
+      name,
+      status: error ? "FAIL" : "PASS",
+      message: error ? error.message : null,
+      stack: error ? error.stack : null
+    });
+  }
+
+  (async () => {
+    const settings = document.getElementById("settings");
+    const footer = document.getElementById("footer");
+    const makePanel = (id, rowCount) => {
+      const panel = document.createElement("div");
+      panel.id = id;
+      panel.className = "panel";
+      for (let index = 0; index < rowCount; ++index) {
+        const row = document.createElement("div");
+        row.className = "row";
+        panel.appendChild(row);
+      }
+      return panel;
+    };
+    const tall = makePanel("scales", 14);
+    const short = makePanel("symbol", 2);
+
+    record(
+      "the initial panel establishes an internal overflow range",
+      settings.clientHeight === 599 && settings.scrollHeight === 954,
+      `initial viewport/extent=${settings.clientHeight}/${settings.scrollHeight}`
+    );
+
+    settings.scrollTop = 355;
+    settings.replaceChildren(tall);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    record(
+      "replacing a scrolled panel clamps geometry to the new range",
+      settings.clientHeight === 599 && settings.scrollHeight === 820
+        && settings.scrollTop === 221
+        && Math.abs(tall.firstElementChild.getBoundingClientRect().top + 153) < 0.01,
+      `viewport/extent/offset=${settings.clientHeight}/${settings.scrollHeight}/${settings.scrollTop}, firstTop=${tall.firstElementChild.getBoundingClientRect().top}`
+    );
+
+    settings.replaceChildren(short);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    record(
+      "a short replacement clears the obsolete visual scroll offset",
+      settings.clientHeight === 599 && settings.scrollHeight === 599
+        && settings.scrollTop === 0
+        && Math.abs(short.firstElementChild.getBoundingClientRect().top - 68) < 0.01,
+      `viewport/extent/offset=${settings.clientHeight}/${settings.scrollHeight}/${settings.scrollTop}, firstTop=${short.firstElementChild.getBoundingClientRect().top}`
+    );
+
+    settings.replaceChildren(tall);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const settingsRect = settings.getBoundingClientRect();
+    const firstRect = tall.firstElementChild.getBoundingClientRect();
+    const secondRect = tall.children[1].getBoundingClientRect();
+    const footerRect = footer.getBoundingClientRect();
+    record(
+      "repeated replacement restores the scrollbar and authored row gap",
+      settings.scrollTop === 0 && settings.scrollHeight === 820
+        && Math.abs(secondRect.top - firstRect.top - 60) < 0.01
+        && footerRect.top === 667 && footerRect.bottom === 734,
+      `scrollTop=${settings.scrollTop}, extent=${settings.scrollHeight}, rowDelta=${secondRect.top - firstRect.top}, viewportBottom=${settingsRect.bottom}, footer=${footerRect.top}/${footerRect.bottom}`
+    );
+
+    const dialog = document.getElementById("dialog");
+    const measureAfterClearingHeight = clearHeight => {
+      dialog.style.height = "734px";
+      clearHeight();
+      const naturalHeight = dialog.getBoundingClientRect().height;
+      dialog.style.height = naturalHeight > 734 ? "734px" : "";
+      return {
+        naturalHeight,
+        authoredHeight: dialog.style.height,
+        dialogHeight: dialog.getBoundingClientRect().height,
+        clientHeight: settings.clientHeight,
+        scrollHeight: settings.scrollHeight
+      };
+    };
+    const adaptiveMeasurements = [
+      measureAfterClearingHeight(() => { dialog.style.height = ""; }),
+      measureAfterClearingHeight(() => dialog.style.setProperty("height", "")),
+      measureAfterClearingHeight(() => dialog.style.removeProperty("height"))
+    ];
+    record(
+      "CSSOM height removal flushes natural dialog geometry before restoring the cap",
+      adaptiveMeasurements.every(measurement =>
+        measurement.naturalHeight === 820
+          && measurement.authoredHeight === "734px"
+          && measurement.dialogHeight === 734
+          && measurement.clientHeight === 599
+          && measurement.scrollHeight === 820),
+      `measurements=${JSON.stringify(adaptiveMeasurements)}`
+    );
+
+    const resizeDeliveries = [];
+    const resizeObserver = new ResizeObserver(entries => {
+      resizeDeliveries.push(entries[0].contentRect.height);
+      dialog.style.height = "734px";
+    });
+    resizeObserver.observe(tall);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    dialog.style.height = "auto";
+    tall.appendChild(Object.assign(document.createElement("div"), { className: "row" }));
+    tall.appendChild(Object.assign(document.createElement("div"), { className: "row" }));
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    record(
+      "post-layout ResizeObserver delivery restores the dialog viewport cap",
+      resizeDeliveries.length >= 2
+        && resizeDeliveries.at(-1) === 940
+        && dialog.style.height === "734px"
+        && dialog.clientHeight === 734
+        && settings.clientHeight === 599
+        && settings.scrollHeight === 940,
+      `deliveries=${resizeDeliveries.join(",")}, dialog=${dialog.clientHeight}, viewport/extent=${settings.clientHeight}/${settings.scrollHeight}`
+    );
+    resizeObserver.disconnect();
+
+    state.diagnostics = [JSON.stringify({
+      clientHeight: settings.clientHeight,
+      scrollHeight: settings.scrollHeight,
+      scrollTop: settings.scrollTop,
+      rowDelta: secondRect.top - firstRect.top,
+      viewportBottom: settingsRect.bottom,
+      footerTop: footerRect.top,
+      footerBottom: footerRect.bottom,
+      adaptiveMeasurements,
+      resizeDeliveries
+    })];
+    const failure = state.results.find(result => result.status !== "PASS");
+    state.harness = failure
+      ? { status: 1, message: failure.message, stack: failure.stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  })().catch(error => {
+    state.results.push({
+      name: "dynamic overflow panel lifecycle",
+      status: "FAIL",
+      message: String(error && error.message || error),
+      stack: error && error.stack ? String(error.stack) : null
+    });
+    state.harness = { status: 1, message: state.results.at(-1).message, stack: state.results.at(-1).stack };
+    state.complete = true;
+  });
+</script>

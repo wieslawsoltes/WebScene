@@ -1274,7 +1274,7 @@ void test_unsupported_features_are_reported_at_native_decision_points(webscene_e
                 != std::string::npos
             && report.find(R"("feature":"Crypto.getRandomValues","classification":"partially-supported")")
                 != std::string::npos
-            && report.find(R"("feature":"Window.matchMedia","classification":"partially-supported")")
+            && report.find(R"("feature":"Window.matchMedia","classification":"supported")")
                 != std::string::npos
             && report.find(R"("feature":"Performance.getEntriesByName","classification":"unsupported")")
                 != std::string::npos

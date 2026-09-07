@@ -266,7 +266,7 @@
             for (const auto& declaration : parse_css_declarations(style->second, true)) {
                 inventory_css_value_functions(declaration.value, "inline-style-parser");
                 if (!store_inline_declaration(node, declaration)) continue;
-                apply_css_declaration(node, declaration);
+                apply_css_declaration(node, declaration, true);
                 inline_property_mask |= inline_style_mask(declaration.name);
             }
             node.style.inline_property_mask |= inline_property_mask;
@@ -290,6 +290,7 @@
         if (!execute_document_start_scripts(local_context, false)) return false;
 
         const auto report_document_script_error = [&](const std::string& error) {
+            if (diagnostics == nullptr || !diagnostics->enabled(WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE)) return;
             std::lock_guard lock(console_message_mutex);
             constexpr size_t maximum_console_messages = 1024U;
             if (console_messages.size() >= maximum_console_messages) {
@@ -389,7 +390,7 @@
                     arguments).IsEmpty()) {
                 frame_last_error_value = std::string("Document ") + type
                     + " dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 ++frame_script_error_count;
                 report_document_script_error(frame_last_error_value);
                 return false;

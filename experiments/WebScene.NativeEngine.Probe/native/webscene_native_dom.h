@@ -3,6 +3,7 @@
 #include "webscene_native_engine.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -31,7 +32,8 @@ enum class length_unit : uint8_t {
     viewport_height_floored,
     max_content,
     min_content,
-    fit_content
+    fit_content,
+    stretch
 };
 
 struct css_length final {
@@ -76,7 +78,8 @@ enum class position_mode : uint8_t {
     normal,
     relative,
     absolute,
-    fixed
+    fixed,
+    sticky
 };
 
 enum class flex_direction : uint8_t {
@@ -140,6 +143,8 @@ struct node_style final {
         std::string transition_delay_value{"0s"};
         std::string transition_timing_function_value{"ease"};
         transition_timing transform_transition{};
+        transition_timing left_transition{};
+        transition_timing top_transition{};
         transition_timing opacity_transition{};
         transition_timing color_transition{};
         std::string animation_name_value{"none"};
@@ -287,6 +292,7 @@ struct node_style final {
             enum class sizing : uint8_t {
                 fixed,
                 automatic,
+                min_content,
                 fractional,
                 minmax
             };
@@ -353,6 +359,10 @@ struct node_style final {
         css_length top{};
         css_length right{};
         css_length bottom{};
+        css_length padding_left{};
+        css_length padding_top{};
+        css_length padding_right{};
+        css_length padding_bottom{};
         css_length margin_left{};
         css_length margin_top{};
         css_length margin_right{};
@@ -376,9 +386,11 @@ struct node_style final {
         align_mode align_self{align_mode::stretch};
         int32_t z_index{0};
         float font_size{-1};
+        // -1: inherit, -2: normal, <= -3: unitless multiplier encoded as -3 - n.
         float line_height{-1};
         float opacity{1};
         uint32_t background_rgba{0};
+        background_image_data background_image{};
         uint32_t foreground_rgba{0};
         uint32_t border_left_rgba{0};
         uint32_t border_top_rgba{0};
@@ -386,6 +398,10 @@ struct node_style final {
         uint32_t border_bottom_rgba{0};
         uint32_t outline_rgba{0};
         bool background_current_color{false};
+        bool border_left_current_color{true};
+        bool border_top_current_color{true};
+        bool border_right_current_color{true};
+        bool border_bottom_current_color{true};
         std::string content;
         bool generated{false};
         bool display_none{false};
@@ -502,6 +518,13 @@ struct node_style final {
     uint32_t border_top_rgba{0};
     uint32_t border_right_rgba{0};
     uint32_t border_bottom_rgba{0};
+    // The initial value of every border-*-color longhand is currentColor.
+    // Keep that dependency deferred so declaration order and inherited color
+    // are resolved at paint time rather than collapsed to transparent.
+    bool border_left_current_color{true};
+    bool border_top_current_color{true};
+    bool border_right_current_color{true};
+    bool border_bottom_current_color{true};
     uint32_t outline_rgba{0};
     float box_shadow_offset_x{0};
     float box_shadow_offset_y{0};
@@ -512,6 +535,7 @@ struct node_style final {
     // Negative means unspecified/inherited. Zero is a valid CSS value and is
     // used by visually hidden accessibility content.
     float font_size{-1};
+    // -1: inherit, -2: normal, <= -3: unitless multiplier encoded as -3 - n.
     float line_height{-1};
     int32_t font_weight{0};
     float letter_spacing{0};
@@ -530,6 +554,16 @@ struct node_style final {
     };
 
     struct textual_style_data final {
+        struct scrollbar_style_data final {
+            float width{6};
+            float height{6};
+            float overlay_inset{2};
+            float thumb_border_width{0};
+            float thumb_radius{3};
+            float track_radius{3};
+            uint32_t thumb_rgba{0xA0A0A0D0U};
+            uint32_t track_rgba{0x7F7F7F40U};
+        } scrollbar;
         std::string font_family;
         // Non-standard but widely deployed on macOS. Keep the authored token
         // so inherited text runs can select the browser-compatible glyph
@@ -539,6 +573,7 @@ struct node_style final {
         std::string vertical_align;
         std::string text_transform;
         std::string white_space;
+        std::string contain_value;
         // Authored cursor token. Cursor is inherited, so an empty value means
         // the host projection resolves the nearest declaration or `auto`.
         std::string cursor;
@@ -590,6 +625,24 @@ struct node_style final {
                 std::make_shared<textual_style_data>(*textual_state);
         }
         return *textual_state;
+    }
+
+    const textual_style_data::scrollbar_style_data& scrollbar() const noexcept
+    {
+        static const textual_style_data::scrollbar_style_data defaults;
+        return textual_state == nullptr ? defaults : textual_state->scrollbar;
+    }
+
+    textual_style_data::scrollbar_style_data& mutable_scrollbar()
+    {
+        return mutable_textual().scrollbar;
+    }
+
+    void reset_scrollbar_style()
+    {
+        if (auto* data = mutable_textual_if_present(); data != nullptr) {
+            data->scrollbar = {};
+        }
     }
 
     textual_style_data* mutable_textual_if_present()
@@ -686,6 +739,7 @@ struct node_style final {
     bool scroll_y_enabled : 1 {false};
     bool scrollbar_hidden : 1 {false};
     bool scrollbar_visibility_important : 1 {false};
+    uint8_t important_margin_sides : 4 {0};
     bool visibility_hidden : 1 {false};
     bool visibility_specified : 1 {false};
     bool pointer_events_none : 1 {false};
@@ -694,6 +748,13 @@ struct node_style final {
     bool flex_reverse : 1 {false};
     bool align_self_specified : 1 {false};
     bool border_box : 1 {false};
+    // Unlike transform_specified, an authored `transform: none` does not
+    // establish a stacking context. Keep these hot flags in the existing
+    // packed style state so compatibility does not increase every DOM node's
+    // cross-library footprint.
+    bool transform_stacking_context : 1 {false};
+    // layout/paint containment establishes an atomic stacking context.
+    bool contain_stacking_context : 1 {false};
     // Margin parsing passes these four flags by reference, so unlike the other
     // hot boolean style state they remain addressable scalar values.
     bool margin_left_auto{false};
@@ -987,6 +1048,32 @@ struct dom_node final {
         bool transform_animation_initialized{false};
         bool transform_animation_active{false};
         bool transform_animation_start_event_sent{false};
+        css_length painted_left{};
+        css_length left_animation_from{};
+        css_length left_animation_target{};
+        float left_animation_duration_ms{0};
+        float left_animation_delay_ms{0};
+        float left_animation_x1{0.25F};
+        float left_animation_y1{0.1F};
+        float left_animation_x2{0.25F};
+        float left_animation_y2{1.0F};
+        double left_animation_started_ms{0};
+        bool left_animation_initialized{false};
+        bool left_animation_active{false};
+        bool left_animation_start_event_sent{false};
+        css_length painted_top{};
+        css_length top_animation_from{};
+        css_length top_animation_target{};
+        float top_animation_duration_ms{0};
+        float top_animation_delay_ms{0};
+        float top_animation_x1{0.25F};
+        float top_animation_y1{0.1F};
+        float top_animation_x2{0.25F};
+        float top_animation_y2{1.0F};
+        double top_animation_started_ms{0};
+        bool top_animation_initialized{false};
+        bool top_animation_active{false};
+        bool top_animation_start_event_sent{false};
         float painted_opacity{1};
         float opacity_animation_from{1};
         float opacity_animation_target{1};
@@ -1333,9 +1420,16 @@ struct dom_node final {
     // preventing a connected script from executing again after a reparent.
     script_execution_state script_state{script_execution_state::ready};
     bool visible{true};
+    // Temporary layout nodes created for ::before/::after are principal
+    // generated boxes, not anonymous whitespace text.  Keep that distinction
+    // even when content is empty so authored dimensions can participate in
+    // flex/grid sizing.
+    bool generated_pseudo_box{false};
 };
 
 display_mode blockified_display(const dom_node& node) noexcept;
+const dom_node& css_document_element(const dom_node& node) noexcept;
+float document_root_font_size(const dom_node& node) noexcept;
 
 class native_document final {
 public:
@@ -1357,6 +1451,8 @@ public:
         uint64_t node_object_bytes{0};
         uint64_t node_pool_reserved_bytes{0};
         uint64_t node_pool_peak_bytes{0};
+        uint64_t layout_scratch_reserved_bytes{0};
+        uint64_t layout_scratch_peak_bytes{0};
         uint64_t element_node_count{0};
         uint64_t text_node_count{0};
         uint64_t comment_node_count{0};
@@ -1406,6 +1502,8 @@ public:
         webscene_text_measure_callback text_measure_callback = nullptr,
         void* text_measure_user_data = nullptr);
 
+    void invalidate_font_measurements() { text_measurement_cache_.clear(); }
+
     dom_node& body() noexcept;
     const dom_node& body() const noexcept;
     dom_node& create_element(std::string tag);
@@ -1450,11 +1548,23 @@ public:
         std::vector<webscene_canvas_command>& canvas_commands,
         std::vector<webscene_scene_string>& strings,
         std::vector<char>& string_bytes) const;
+    void retain_canvas_for_export(dom_node& node) noexcept;
+    bool release_canvas_export(uint32_t node_id) noexcept;
 
     uint64_t layout_passes() const noexcept;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     uint64_t intrinsic_size_cache_hits() const noexcept;
     uint64_t intrinsic_size_cache_misses() const noexcept;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
+    uint64_t intrinsic_size_direct_cache_hits() const noexcept;
+    uint64_t intrinsic_size_hash_lookups() const noexcept;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+    std::array<uint64_t, 17U> intrinsic_size_branch_counts() const noexcept;
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+    std::array<uint64_t, 4U> intrinsic_view_box_parse_counts() const noexcept;
 #endif
     size_t node_count() const noexcept;
     allocation_metrics read_allocation_metrics() const noexcept;
@@ -1485,6 +1595,14 @@ public:
         float word_spacing = 0.0F) const;
 
     static css_length parse_length(const std::string& value);
+    float resolve_used_length(
+        const dom_node& context,
+        css_length value,
+        float available,
+        float fallback) const
+    {
+        return resolve_length(context, value, available, fallback);
+    }
     static void parse_transform_translate(
         const std::string& value,
         css_length& translate_x,
@@ -1538,6 +1656,11 @@ private:
 
         size_t reserved_bytes_{0};
         size_t peak_bytes_{0};
+    };
+
+    struct layout_scratch_storage final {
+        tracking_memory_resource upstream;
+        std::pmr::unsynchronized_pool_resource pool{&upstream};
     };
 
     // dom_node has one fixed allocation size and stable-address lifetime.
@@ -1655,19 +1778,46 @@ private:
         bool operator==(const text_measurement_key&) const = default;
     };
 
+    struct text_measurement_key_view final {
+        std::string_view text;
+        std::string_view family;
+        float font_size{0};
+        int32_t font_weight{0};
+        float letter_spacing{0};
+        float word_spacing{0};
+    };
+
     struct text_measurement_key_hash final {
-        size_t operator()(const text_measurement_key& value) const noexcept
+        using is_transparent = void;
+
+        template <typename Key>
+        size_t operator()(const Key& value) const noexcept
         {
-            auto result = std::hash<std::string>{}(value.text);
+            auto result = std::hash<std::string_view>{}(value.text);
             const auto mix = [&result](size_t next) {
                 result ^= next + 0x9e3779b9U + (result << 6U) + (result >> 2U);
             };
-            mix(std::hash<std::string>{}(value.family));
+            mix(std::hash<std::string_view>{}(value.family));
             mix(std::hash<float>{}(value.font_size));
             mix(std::hash<int32_t>{}(value.font_weight));
             mix(std::hash<float>{}(value.letter_spacing));
             mix(std::hash<float>{}(value.word_spacing));
             return result;
+        }
+    };
+
+    struct text_measurement_key_equal final {
+        using is_transparent = void;
+
+        template <typename Left, typename Right>
+        bool operator()(const Left& left, const Right& right) const noexcept
+        {
+            return std::string_view(left.text) == std::string_view(right.text)
+                && std::string_view(left.family) == std::string_view(right.family)
+                && left.font_size == right.font_size
+                && left.font_weight == right.font_weight
+                && left.letter_spacing == right.letter_spacing
+                && left.word_spacing == right.word_spacing;
         }
     };
 
@@ -1696,6 +1846,14 @@ private:
         float size{0};
     };
 
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    struct intrinsic_size_direct_node_cache final {
+        uint64_t generation{0};
+        std::array<float, 2U> available{};
+        std::array<float, 2U> size{};
+    };
+#endif
+
     webscene_text_metrics measure_text(
         std::string_view value,
         const dom_node& node) const;
@@ -1716,10 +1874,15 @@ private:
         float available,
         float fallback) const;
     float resolve_length(css_length value, float available, float fallback) const;
+    float resolve_vertical_padding(const dom_node& node, css_length value,
+        float available, float fallback) const;
     static bool is_specified(css_length value);
     float intrinsic_size(
         const dom_node& node,
         bool horizontal,
+        float available);
+    float min_content_inline_size(
+        const dom_node& node,
         float available);
     float compute_intrinsic_size(
         const dom_node& node,
@@ -1737,7 +1900,10 @@ private:
         std::vector<webscene_scene_string>& strings,
         std::vector<char>& string_bytes,
         bool inherited_visibility_hidden,
-        bool defer_fixed_descendants) const;
+        bool defer_fixed_descendants,
+        bool defer_positive_descendants = false,
+        const dom_node* paint_target = nullptr,
+        const node_style::pseudo_element* paint_pseudo_target = nullptr) const;
     static bool matches_selector(const dom_node& node, const std::string& selector);
     static void collect_matches(
         dom_node& node,
@@ -1770,7 +1936,16 @@ private:
     // trimmed when possible so short-lived text-node churn does not retain an
     // ever-growing pointer table.
     std::vector<dom_node*> native_id_index_;
+#if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+    // Mirror the native-ID index so intrinsic lookup remains direct without
+    // making every DOM node pay a cross-library object-footprint tax. The
+    // shared generation keeps each two-axis entry to 24 bytes instead of the
+    // previous 32-byte pair of per-axis generations.
+    std::unique_ptr<std::vector<intrinsic_size_direct_node_cache>>
+        intrinsic_size_direct_cache_;
+#endif
     dom_node* body_{nullptr};
+    uint32_t retained_export_canvas_id_{0};
     float viewport_width_{1};
     float viewport_height_{1};
     uint32_t next_node_id_{1};
@@ -1786,16 +1961,28 @@ private:
     mutable std::unordered_map<
         text_measurement_key,
         webscene_text_metrics,
-        text_measurement_key_hash> text_measurement_cache_;
+        text_measurement_key_hash,
+        text_measurement_key_equal> text_measurement_cache_;
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
     std::unique_ptr<std::unordered_map<
         intrinsic_size_key,
         intrinsic_size_cache_entry,
         intrinsic_size_key_hash>> intrinsic_size_cache_;
+#endif
+    // Layout containers are short-lived but recur at every resize/animation
+    // pass. Cache their allocator blocks per document so identical passes do
+    // not repeatedly enter the process allocator. The storage is lazy to keep
+    // never-laid-out documents pay-for-use and the document footprint bounded.
+    std::unique_ptr<layout_scratch_storage> layout_scratch_;
     uint64_t intrinsic_size_cache_generation_{0};
     uint64_t intrinsic_size_cache_next_generation_{0};
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     uint64_t intrinsic_size_cache_hits_{0};
     uint64_t intrinsic_size_cache_misses_{0};
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
+    uint64_t intrinsic_size_direct_cache_hits_{0};
+    uint64_t intrinsic_size_hash_lookups_{0};
 #endif
     bool dirty_{true};
     bool globally_dirty_{true};

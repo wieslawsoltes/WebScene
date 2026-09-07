@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Authored WebKit scrollbar track and thumb paint</title>
+<link rel="match" href="css-webkit-scrollbar-authored-paint-ref.html">
+<meta name="assert" content="Authored scrollbar width, transparent track, content-box thumb border, color, and radius reach the rendered overflow viewport.">
+<style>
+  html, body { margin:0; background:#202124; }
+  #scroller { position:absolute; left:20px; top:20px; width:120px; height:80px; overflow:auto; background:#111; }
+  #content { height:320px; }
+  #scroller::-webkit-scrollbar { width:5px; height:5px; }
+  #scroller::-webkit-scrollbar-track { background-color:transparent; border-radius:3px; }
+  #scroller::-webkit-scrollbar-thumb {
+    background-color:#345678; background-clip:content-box;
+    border:1px solid transparent; border-radius:3px;
+  }
+</style>
+<div id="scroller"><div id="content"></div></div>

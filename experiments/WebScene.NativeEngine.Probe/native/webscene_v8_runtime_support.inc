@@ -376,6 +376,7 @@ enum inline_style_property : uint64_t {
     inline_table_border_model = 1ULL << 53U,
     inline_font_smoothing = 1ULL << 54U,
     inline_background_image = 1ULL << 55U,
+    inline_contain = 1ULL << 56U,
     inline_transition = inline_transition_property | inline_transition_duration
         | inline_transition_delay | inline_transition_timing
 };
@@ -708,8 +709,10 @@ display_mode default_display_for_node(const dom_node& node)
 
 float inherited_font_size(const dom_node& node)
 {
+    if (node.tag == "html") return 16.0F;
     for (auto* parent = node.parent; parent != nullptr; parent = parent->parent) {
         if (parent->style.font_size >= 0) return parent->style.font_size;
+        if (parent->tag == "html") return 16.0F;
     }
     return 14.0F;
 }
@@ -766,9 +769,7 @@ float resolved_declared_font_size(const dom_node& node, const std::string& value
         return std::max(0.0F, parsed.value * inherited_font_size(node));
     }
     if (parsed.unit == length_unit::rem) {
-        auto* root = &node;
-        while (root->parent != nullptr) root = root->parent;
-        const auto root_size = root->style.font_size >= 0 ? root->style.font_size : 14.0F;
+        const auto root_size = node.tag == "html" ? 16.0F : document_root_font_size(node);
         return std::max(0.0F, parsed.value * root_size);
     }
     if (parsed.unit == length_unit::percent) {
@@ -792,9 +793,7 @@ float resolved_declared_line_height(
         return std::max(0.0F, parsed.value * font_size);
     }
     if (parsed.unit == length_unit::rem) {
-        auto* root = &node;
-        while (root->parent != nullptr) root = root->parent;
-        const auto root_size = root->style.font_size >= 0 ? root->style.font_size : 14.0F;
+        const auto root_size = document_root_font_size(node);
         return std::max(0.0F, parsed.value * root_size);
     }
     if (parsed.unit == length_unit::percent) {
@@ -806,14 +805,17 @@ float resolved_declared_line_height(
         value.begin(),
         value.end(),
         [](unsigned char character) { return std::isalpha(character) || character == '%'; });
-    return !has_explicit_unit && parsed_value <= 4.0F
-        ? parsed_value * font_size
+    // Preserve a <number> until used-value resolution. It inherits as a
+    // multiplier, not as the declaring element's pixel line-height.
+    return !has_explicit_unit
+        ? -3.0F - parsed_value
         : parsed_value;
 }
 
 struct parsed_font_shorthand final {
     float font_size{14.0F};
     float line_height{-2.0F};
+    std::string line_height_token{"normal"};
     int32_t font_weight{400};
     std::string font_family;
     bool complete{true};
@@ -897,6 +899,7 @@ std::optional<parsed_font_shorthand> parse_font_shorthand(
         if (family_index < tokens.size()) line_height_token = tokens[family_index++];
     }
     if (!line_height_token.empty()) {
+        result.line_height_token = line_height_token;
         result.line_height = resolved_declared_line_height(
             node,
             line_height_token,
@@ -944,6 +947,9 @@ std::string canonical_css_property_name(std::string_view name)
             result.push_back(character);
         }
     }
+    if (result == "grid-gap") return "gap";
+    if (result == "grid-row-gap") return "row-gap";
+    if (result == "grid-column-gap") return "column-gap";
     return result;
 }
 
@@ -987,6 +993,9 @@ std::string serialize_cssom_specified_value(
 
 std::string css_property_idl_name(std::string_view name)
 {
+    if (name == "gridGap" || name == "grid-gap") return "gap";
+    if (name == "gridRowGap" || name == "grid-row-gap") return "rowGap";
+    if (name == "gridColumnGap" || name == "grid-column-gap") return "columnGap";
     if (name == "float") return "cssFloat";
     if (name.find('-') == std::string_view::npos) return std::string(name);
     std::string result;
@@ -1033,6 +1042,21 @@ bool valid_cssom_declaration_value(std::string_view property_name, std::string_v
         return normalized_value == "static" || normalized_value == "relative"
             || normalized_value == "absolute" || normalized_value == "fixed"
             || normalized_value == "sticky" || normalized_value == "-webkit-sticky";
+    }
+
+    if (canonical_name == "width" || canonical_name == "height"
+        || canonical_name == "min-width" || canonical_name == "min-height"
+        || canonical_name == "max-width" || canonical_name == "max-height"
+        || canonical_name == "inline-size" || canonical_name == "block-size"
+        || canonical_name == "min-inline-size" || canonical_name == "min-block-size"
+        || canonical_name == "max-inline-size" || canonical_name == "max-block-size") {
+        // Plain negative sizes are invalid declarations, not zero-sized boxes.
+        // Ignoring the write preserves the previous value during transient
+        // virtualizer updates. Math functions above are valid at parse time
+        // and instead have their range enforced when resolving the used value.
+        char* end = nullptr;
+        const auto number = std::strtod(normalized_value.c_str(), &end);
+        if (end != normalized_value.c_str() && number < 0) return false;
     }
 
     if (canonical_name == "font-size") {
@@ -1131,9 +1155,14 @@ std::vector<node_style::grid_data::track> parse_simple_grid_tracks(
     const auto parse_track = [&](std::string_view raw) -> std::optional<grid_track> {
         const auto token = trim(raw);
         if (token.empty()) return std::nullopt;
-        if (token == "auto" || token == "min-content" || token == "max-content") {
+        if (token == "auto" || token == "max-content") {
             grid_track track;
             track.kind = grid_track::sizing::automatic;
+            return track;
+        }
+        if (token == "min-content") {
+            grid_track track;
+            track.kind = grid_track::sizing::min_content;
             return track;
         }
         if (const auto fraction = parse_fraction(token); fraction > 0) {
@@ -1599,8 +1628,7 @@ float resolve_connected_css_length(
     while (root->parent != nullptr) root = root->parent;
     const auto font_size = context.style.font_size >= 0
         ? context.style.font_size : inherited_font_size(context);
-    const auto root_font_size = root->style.font_size >= 0
-        ? root->style.font_size : 14.0F;
+    const auto root_font_size = document_root_font_size(context);
     switch (length.unit) {
     case length_unit::pixels:
         return length.value;
@@ -1634,6 +1662,7 @@ float resolve_connected_css_length(
     case length_unit::max_content:
     case length_unit::min_content:
     case length_unit::fit_content:
+    case length_unit::stretch:
     default:
         return 0.0F;
     }

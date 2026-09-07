@@ -675,7 +675,13 @@ void test_svg_dom_parser_preserves_fill_rule(webscene_engine* engine)
             + '  globalThis.__serializedSvg = serialized;'
             + '  const image = new Image();'
             + '  globalThis.__serializedSvgImageState = `pending`;'
-            + '  image.onload = () => globalThis.__serializedSvgImageState = `loaded`;'
+            + '  image.onload = () => {'
+            + '    globalThis.__serializedSvgImageState = `loaded`;'
+            + '    const canvas = document.createElement(`canvas`);'
+            + '    canvas.width = 24; canvas.height = 12;'
+            + '    canvas.getContext(`2d`).drawImage(image, 1, 2, 20, 8);'
+            + '    document.body.appendChild(canvas);'
+            + '  };'
             + '  image.onerror = () => globalThis.__serializedSvgImageState = `error`;'
             + '  image.src = URL.createObjectURL(new Blob([serialized], { type: `image/svg+xml` }));'
             + '} catch (error) {'
@@ -713,6 +719,36 @@ void test_svg_dom_parser_preserves_fill_rule(webscene_engine* engine)
     if (image_state != R"("loaded")") {
         fail("serialized SVG Blob did not dispatch Image.onload: " + image_state);
     }
+    webscene_engine_request_scene_checkpoint(engine);
+    auto observed_svg_image = false;
+    for (auto attempt = 0; attempt < 100 && !observed_svg_image; ++attempt) {
+        if (const auto* scene = webscene_engine_acquire_latest_scene(engine);
+            scene != nullptr) {
+            for (uint32_t index = 0; index < scene->canvas_command_count; ++index) {
+                const auto& command = scene->canvas_commands[index];
+                if (command.kind == 31U
+                    && std::abs(command.data.values[0]) < 0.001
+                    && std::abs(command.data.values[1]) < 0.001
+                    && std::abs(command.data.values[2] - 10.0) < 0.001
+                    && std::abs(command.data.values[3] - 10.0) < 0.001
+                    && std::abs(command.data.values[4] - 1.0) < 0.001
+                    && std::abs(command.data.values[5] - 2.0) < 0.001
+                    && std::abs(command.data.values[6] - 20.0) < 0.001
+                    && std::abs(command.data.values[7] - 8.0) < 0.001) {
+                    observed_svg_image = true;
+                    break;
+                }
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (!observed_svg_image) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    require(
+        observed_svg_image,
+        "drawImage did not retain the loaded SVG image in the canvas scene");
 }
 
 void test_compound_root_selector_applies_dark_custom_palette(webscene_engine* engine)
