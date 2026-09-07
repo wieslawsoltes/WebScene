@@ -768,3 +768,18 @@ The expanded allocations also exposed an existing GC test's unrooted probe being
 collected before its explicit GC step; that probe is now rooted until the test
 intentionally drops it. Runtime CTest passed. Hardware Windows/Linux fallback
 qualification, public exposure and rendering remain unfinished.
+
+### Owned native shader modules
+
+Dawn devices now own a bounded shader-module resource table with independent
+capacity, generation-checked handles, scoped borrowing and explicit reference
+release. Capacity is checked before native creation. Device close retires shader
+references alongside buffers; close/release during an active shader borrow is
+rejected. Invalid WGSL still produces Dawn's error shader-module object, with
+validation delivered through the native error scope.
+
+The macOS Dawn event tests verify capacity, stale/reused generations, borrow
+lifetime guards and actual error-scope outcomes for valid and invalid WGSL through
+the owned-module path. Dawn event and V8 runtime CTests both pass. Native shader
+ownership is now ready for the V8 module registry; JavaScript shader descriptors,
+compilation information and rendering pipeline/command bindings remain pending.

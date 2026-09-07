@@ -32,15 +32,17 @@ class dawn_device {
     std::shared_ptr<device_loss_signal> loss_;
     resource_table<wgpu::Buffer> buffers_;
     size_t active_buffer_scopes_{};
+    resource_table<wgpu::ShaderModule> shaders_;
+    size_t active_shader_scopes_{};
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
             throw std::logic_error("Dawn device requires its engine thread");
     }
 public:
     dawn_device(uint64_t engine,std::shared_ptr<completion_mailbox> mailbox,
-                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024)
+                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024)
         : owner_{engine,new_owner_token(),0},mailbox_(std::move(mailbox)),
-          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_) {
+          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_) {
         if (!engine || !mailbox_ || !adapter_ || !device_)
             throw std::invalid_argument("Dawn device requires native ownership");
     }
@@ -89,6 +91,25 @@ public:
         buffers_.destroy(handle,owner_);
     }
     size_t live_buffers() const { check_thread(); return buffers_.resident_count(); }
+    resource_handle<wgpu::ShaderModule> create_shader_module(const wgpu::ShaderModuleDescriptor& descriptor) {
+        const auto& device=native();
+        if(!shaders_.can_insert())throw std::length_error("Graphics shader-module capacity exhausted");
+        auto shader=device.CreateShaderModule(&descriptor);
+        if(!shader)throw std::runtime_error("Dawn did not return a shader module");
+        return shaders_.insert(owner_,std::make_unique<wgpu::ShaderModule>(std::move(shader)));
+    }
+    template<class Execute> void with_shader_module(resource_handle<wgpu::ShaderModule> handle,Execute execute) {
+        check_thread();
+        const auto& shader=shaders_.get(handle,owner_);
+        struct guard { size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;} } scope(active_shader_scopes_);
+        execute(shader);
+    }
+    void release_shader_module(resource_handle<wgpu::ShaderModule> handle) {
+        check_thread();
+        if(active_shader_scopes_)throw std::logic_error("Cannot release shader module during execution");
+        shaders_.destroy(handle,owner_);
+    }
+    size_t live_shader_modules() const {check_thread();return shaders_.resident_count();}
     bool loss_pending() const {
         check_thread();
         return !closed_ && !lost_ && loss_ && loss_->lost.load(std::memory_order_acquire);
@@ -102,7 +123,7 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_buffer_scopes_) throw std::logic_error("Cannot close device during buffer execution");
+        if (active_buffer_scopes_ || active_shader_scopes_) throw std::logic_error("Cannot close device during resource execution");
         process_loss();
         closed_=true;
         // Logical cancellation is independent of physical GPU completion.
@@ -111,6 +132,7 @@ public:
         if (!lost_) mailbox_->cancel_owner(owner_);
         device_.Destroy();
         buffers_.destroy_owner(owner_);
+        shaders_.destroy_owner(owner_);
     }
 };
 } // namespace webscene::graphics

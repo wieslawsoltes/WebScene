@@ -426,9 +426,29 @@ int main() {
     invalid_handles[0]=reinterpret_cast<void*>(uintptr_t{1});
     if (import_dxgi_fences(native_device->device,invalid_handles,wait_values,imported)
         !=dxgi_fence_status::missing_device_feature || !imported.fences.empty()) return 1;
-    auto owned_device=root.adopt_device(state->adapter,native_device->device,{},1);
+    auto owned_device=root.adopt_device(state->adapter,native_device->device,{},1,1);
     if (root.live_devices()!=1) return 1;
     root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
+    root.with_device(owned_device,[&](auto& device) {
+        wgpu::ShaderSourceWGSL source{};source.code="@compute @workgroup_size(1) fn main() {}";
+        wgpu::ShaderModuleDescriptor descriptor{};descriptor.nextInChain=&source;
+        auto shader=device.create_shader_module(descriptor);
+        bool capacity=false;
+        try{device.create_shader_module(descriptor);}catch(const std::length_error&){capacity=true;}
+        if(!capacity || device.live_shader_modules()!=1)throw std::runtime_error("Shader capacity admission failed");
+        device.with_shader_module(shader,[&](const auto& native) {
+            if(!native)throw std::runtime_error("Owned shader is null");
+            bool release_guard=false,close_guard=false;
+            try{device.release_shader_module(shader);}catch(const std::logic_error&){release_guard=true;}
+            try{device.close();}catch(const std::logic_error&){close_guard=true;}
+            if(!release_guard || !close_guard)throw std::runtime_error("Shader borrowing did not guard lifetime");
+        });
+        device.release_shader_module(shader);
+        bool stale=false;try{device.with_shader_module(shader,[](const auto&){});}catch(const std::invalid_argument&){stale=true;}
+        auto replacement=device.create_shader_module(descriptor);
+        if(!stale || replacement.generation==shader.generation)throw std::runtime_error("Shader generation identity reused");
+        device.release_shader_module(replacement);
+    });
     auto second_adapter=std::make_shared<result>();
     auto adapter_ticket=mailbox->reserve(19,owner).value();
     service.instance().RequestAdapter(&options,wgpu::CallbackMode::AllowProcessEvents,
@@ -717,6 +737,31 @@ int main() {
             if (!error_done) wake->wait_for(root.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
         }
         if (!error_done || mailbox->metrics().occupied!=0) return 1;
+    }
+    for(const bool invalid:{false,true}) {
+        second_native->device.PushErrorScope(wgpu::ErrorFilter::Validation);
+        root.with_device(second_owned,[&](auto& device) {
+            wgpu::ShaderSourceWGSL source{};
+            source.code=invalid?"@compute fn broken( {":"@compute @workgroup_size(1) fn main() {}";
+            wgpu::ShaderModuleDescriptor descriptor{};descriptor.nextInChain=&source;
+            auto shader=device.create_shader_module(descriptor);
+            // Invalid shader modules remain valid API objects; validation is
+            // delivered through the native scope rather than a null wrapper.
+            device.with_shader_module(shader,[&](const auto& native) {if(!native)throw std::runtime_error("Shader module wrapper missing");});
+            device.release_shader_module(shader);
+        });
+        auto shader_ticket=mailbox->reserve(30,second_owner).value();
+        second_native->device.PopErrorScope(wgpu::CallbackMode::AllowProcessEvents,
+            [mailbox,shader_ticket,invalid](wgpu::PopErrorScopeStatus status,wgpu::ErrorType type,wgpu::StringView) {
+                mailbox->publish(shader_ticket,status==wgpu::PopErrorScopeStatus::Success
+                    && type==(invalid?wgpu::ErrorType::Validation:wgpu::ErrorType::NoError)?completion_status::success:completion_status::failed);
+            });
+        bool compiled=false;auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        while(!compiled && std::chrono::steady_clock::now()<deadline) {
+            root.pump([&](auto record) {if(record.operation!=30 || record.status!=completion_status::success)throw std::runtime_error("Owned WGSL validation result incorrect");compiled=true;});
+            if(!compiled)wake->wait_for(std::chrono::milliseconds(1),[]{return false;});
+        }
+        if(!compiled)return 1;
     }
     auto loss_ticket=mailbox->reserve(22,second_owner).value();
     auto loss_buffer=second_native->device.CreateBuffer(&map_descriptor);
