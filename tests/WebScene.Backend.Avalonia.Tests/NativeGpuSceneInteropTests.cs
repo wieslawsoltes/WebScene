@@ -1,0 +1,71 @@
+using System.Runtime.InteropServices;
+using WebScene.Backends.Avalonia.Native;
+using WebScene.Backends.Avalonia;
+using Xunit;
+
+namespace WebScene.Backend.Avalonia.Tests;
+
+public sealed class NativeGpuSceneInteropTests
+{
+    private sealed class NativeRuntimeFactAttribute : FactAttribute
+    {
+        public NativeRuntimeFactAttribute()
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")))
+                Skip = "Set WEBSCENE_TEST_NATIVE_LIBRARY to verify native GPU scene ABI integration.";
+        }
+    }
+
+    [Fact]
+    public void LayoutMatchesNativeSceneAndImageAbi()
+    {
+        Assert.Equal(16, Marshal.SizeOf<NativeSceneAcquireOptionsV3>());
+        Assert.Equal(16 + 2 * IntPtr.Size, Marshal.SizeOf<NativeSceneViewV3>());
+        Assert.Equal(80, Marshal.SizeOf<NativeGpuImageInfoV3>());
+        Assert.Equal(8, Marshal.OffsetOf<NativeGpuImageInfoV3>(nameof(NativeGpuImageInfoV3.Canvas)).ToInt32());
+        Assert.Equal(56, Marshal.OffsetOf<NativeGpuImageInfoV3>(nameof(NativeGpuImageInfoV3.Width)).ToInt32());
+        Assert.Equal(0UL, NativeSceneAcquireOptionsV3.CpuOnly.ConsumerCapabilities);
+    }
+
+    [NativeRuntimeFact]
+    public void VersionedAcquisitionCrossesManagedNativeBoundary()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        var options = NativeSceneAcquireOptionsV3.CpuOnly;
+        Assert.Equal(NativeSceneAcquireStatus.InvalidArgument,
+            NativeWebSceneApi.AcquireLatestSceneV3(IntPtr.Zero, in options, out var scene));
+        Assert.Equal(IntPtr.Zero, scene);
+        var engine = NativeWebSceneApi.EngineCreate(0, null, new AvaloniaResourceLoader(), _ => { });
+        try
+        {
+            options.SceneVersion = 99;
+            Assert.Equal(NativeSceneAcquireStatus.UnsupportedVersion,
+                NativeWebSceneApi.AcquireNextSceneV3(engine, in options, out scene));
+            Assert.Equal(IntPtr.Zero, scene);
+            options = NativeSceneAcquireOptionsV3.CpuOnly;
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            NativeSceneAcquireStatus status;
+            do
+            {
+                status = NativeWebSceneApi.AcquireNextSceneV3(engine, in options, out scene);
+                if (status == NativeSceneAcquireStatus.Empty) Thread.Sleep(1);
+            } while (status == NativeSceneAcquireStatus.Empty && DateTime.UtcNow < deadline);
+            Assert.Equal(NativeSceneAcquireStatus.Success, status);
+            var view = Marshal.PtrToStructure<NativeSceneViewV3>(scene);
+            Assert.Equal(3U, view.SceneVersion);
+            Assert.NotEqual(IntPtr.Zero, view.CpuView);
+            Assert.Equal(0U, NativeWebSceneApi.SceneGpuImageCountV3(scene));
+            Assert.Equal(NativeSceneAcquireStatus.InvalidArgument,
+                NativeWebSceneApi.SceneRetainGpuImageV3(scene, 0, out var image));
+            Assert.Equal(IntPtr.Zero, image);
+            Assert.Equal(1, NativeWebSceneApi.SceneAcknowledgeV3(scene));
+            NativeWebSceneApi.EngineDestroy(engine); engine = IntPtr.Zero;
+            Assert.Equal(view.CpuView, Marshal.PtrToStructure<NativeSceneViewV3>(scene).CpuView);
+        }
+        finally
+        {
+            if (scene != IntPtr.Zero) NativeWebSceneApi.SceneReleaseV3(scene);
+            if (engine != IntPtr.Zero) NativeWebSceneApi.EngineDestroy(engine);
+        }
+    }
+}

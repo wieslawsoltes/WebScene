@@ -35,6 +35,7 @@
     <Compile Include="..\WebScene.Backend.Avalonia\NativeCanvasSceneRenderer.cs" Link="NativeCanvasSceneRenderer.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneComposition.cs" Link="NativeSceneComposition.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneInteropTypes.cs" Link="NativeSceneInteropTypes.cs" />
+    <Compile Include="..\WebScene.Backend.Avalonia\NativeGpuSceneInterop.cs" Link="NativeGpuSceneInterop.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRenderingTypes.cs" Link="NativeSceneRenderingTypes.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeSceneRuntime.cs" Link="NativeSceneRuntime.cs" />
     <Compile Include="..\WebScene.Backend.Avalonia\NativeImageResource.cs" Link="NativeImageResource.cs" />

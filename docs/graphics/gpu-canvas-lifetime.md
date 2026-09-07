@@ -402,3 +402,22 @@ Runtime fixtures now use this path and verify scene generation advances while
 layout stays clean, duplicate publication is quiet, and a foreign document rejects
 the canvas. Focused runtime CTest passes in 0.63 seconds. Browser GPU factories
 and their actual queue-to-publication calls still need implementation.
+
+## Shared managed ABI declarations
+
+Avalonia now declares the v3 acquisition, image metadata and lease functions in
+`NativeGpuSceneInterop.cs`; Uno links the same source under its native namespace.
+Managed layout uses fixed-width fields and pointer-sized borrowed views. The
+existing renderer is not switched to GPU capabilities. Consumer completion is
+explicitly separate from CPU disposal/finalization in this low-level API; higher-
+level presenter ownership wrappers remain to be implemented.
+
+Two focused tests pass without skips on both .NET 8 and .NET 10 using the rebuilt
+local native library. They check sizes/offsets and call native acquisition to
+verify null-engine rejection, unsupported version, ordered acquisition, image
+index rejection on a CPU scene, acknowledgement and scene retention after engine
+disposal. These are CPU scene ABI interoperability checks, not managed GPU
+presentation or non-null GPU image marshaling tests.
+
+Uno compiled successfully with zero warnings/errors after restoring its missing
+NuGet assets. This verifies the shared declarations compile in both backends.
