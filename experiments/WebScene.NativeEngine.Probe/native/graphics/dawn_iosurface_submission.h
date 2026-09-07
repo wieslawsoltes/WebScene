@@ -8,13 +8,13 @@ namespace webscene::graphics {
 // EndAccess alone never makes an image ready for the presenter.
 class dawn_iosurface_submission final {
 public:
-    enum class status { pending, ready, failed, consumed };
+    enum class status { pending, ready, failed, consumed, discarded };
 private:
     mutable std::mutex mutex_;
     status status_=status::pending;
     std::optional<owned_image_pool::retained> image_;
     wgpu::Future future_{}, validation_future_{};
-    bool queue_done_=false, validation_done_=false, valid_=true;
+    bool queue_done_=false, validation_done_=false, valid_=true, present_=true;
     void finish(bool queue,bool valid,const std::shared_ptr<completion_wake>& wake) {
         bool notify=false;
         {
@@ -22,7 +22,7 @@ private:
             (queue ? queue_done_ : validation_done_)=true;
             valid_ &= valid;
             if (queue_done_ && validation_done_) {
-                status_=valid_ ? status::ready : status::failed;
+                status_=valid_ ? (present_ ? status::ready : status::discarded) : status::failed;
                 if (!valid_) image_.reset();
                 notify=true;
             }
@@ -43,28 +43,34 @@ public:
     // Handoff for application work already submitted on this device's queue.
     // No command is resubmitted. Even publication backpressure must retain the
     // frame until queue completion because its allocation may already be in use.
+    // present=false retires resize/unconfigure work without exposing an image;
+    // discarded contents need not be initialized, but completion is still required.
     static std::shared_ptr<dawn_iosurface_submission> publish_submitted(
         iosurface_canvas_images::frame&& frame,const wgpu::Device& device,
         std::shared_ptr<dawn_shared_image> shared,std::shared_ptr<void> device_lifetime={},
-        std::shared_ptr<completion_wake> wake={}) {
+        std::shared_ptr<completion_wake> wake={},bool present=true) {
         if(!device||!frame.color||!shared||!shared->matches(device,frame.color->borrowed_handle()))
             throw std::invalid_argument("Submitted image must match its device and native allocation");
         auto result=std::make_shared<dawn_iosurface_submission>();
         auto pending=std::make_shared<iosurface_canvas_images::frame>(std::move(frame));
         pending->producer.begin();
-        auto image=pending->producer.publish();
-        result->valid_=bool(image);
-        if(image)result->image_.emplace(std::move(*image));
+        result->present_=present;
+        if(present) {
+            auto image=pending->producer.publish();
+            result->valid_=bool(image);
+            if(image)result->image_.emplace(std::move(*image));
+        }
         // Scope only host handoff operations, never application JS recording or
         // its error-scope stack. Undefined image contents cannot be presented.
         device.PushErrorScope(wgpu::ErrorFilter::Validation);
         wgpu::SharedTextureMemoryEndAccessState end;
         const bool ended=shared->end(end);
         const bool expired=ended&&shared->expire_texture();
-        const bool valid=expired&&end.initialized;
+        const bool valid=expired&&(!present||end.initialized);
         result->future_=device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
-            [result,pending,shared,device,device_lifetime,wake,valid](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
+            [result,pending,shared,device,device_lifetime,wake,valid,present](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
                 pending->producer.complete();
+                if(!present)pending->producer.cancel();
                 result->finish(true,valid&&status==wgpu::QueueWorkDoneStatus::Success,wake);
             });
         result->validation_future_=device.PopErrorScope(wgpu::CallbackMode::AllowSpontaneous,

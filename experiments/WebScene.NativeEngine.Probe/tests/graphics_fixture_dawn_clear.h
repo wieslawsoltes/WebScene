@@ -117,6 +117,32 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
         [expired_rejected](wgpu::PopErrorScopeStatus status,wgpu::ErrorType type,wgpu::StringView) {
             expired_rejected->store(status==wgpu::PopErrorScopeStatus::Success && type==wgpu::ErrorType::Validation);
         })) || !expired_rejected->load())return {};
+    // Unconfigure/resize must retire submitted work without producing a scene
+    // lease. Even an uninitialized current texture is safe to discard.
+    for(bool submit_work:{false,true}) {
+    auto discarded_frame=rejected.acquire(frame.metadata);
+    if(!discarded_frame)return {};
+    auto discarded_surface=discarded_frame->color->borrowed_handle();
+    std::shared_ptr<void> discarded_owner(const_cast<void*>(CFRetain(discarded_surface)),[](void* value){CFRelease(value);});
+    io.ioSurface=discarded_surface;
+    auto discarded_shared=dawn_shared_image::import(*device,import,description,std::move(discarded_owner));
+    if(!discarded_shared||!discarded_shared->begin(access))return {};
+    if(submit_work) {
+        auto discard_encoder=device->CreateCommandEncoder();
+        wgpu::RenderPassColorAttachment discard_color{};discard_color.view=discarded_shared->texture().CreateView();
+        discard_color.loadOp=wgpu::LoadOp::Clear;discard_color.storeOp=wgpu::StoreOp::Store;discard_color.clearValue={1,0,1,1};
+        wgpu::RenderPassDescriptor discard_pass{};discard_pass.colorAttachmentCount=1;discard_pass.colorAttachments=&discard_color;
+        auto discard_recording=discard_encoder.BeginRenderPass(&discard_pass);discard_recording.End();
+        auto discard_commands=discard_encoder.Finish();device->GetQueue().Submit(1,&discard_commands);
+    }
+    auto discarded_wake=std::make_shared<counted_wake>();
+    auto discarded=dawn_iosurface_submission::publish_submitted(std::move(*discarded_frame),*device,discarded_shared,storage,discarded_wake,false);
+    discarded_frame.reset();
+    if(!discarded||!wait(discarded->completion_future())||!wait(discarded->validation_future())||
+        discarded->state()!=dawn_iosurface_submission::status::discarded||discarded->take_ready()||
+        discarded_wake->count.load()!=1||rejected.busy_images()!=0||error->load())return {};
+    if(discarded_shared->begin(access)||!discarded_shared->expire_texture())return {};
+    }
     auto image=submitted->take_ready();
     if (submitted->take_ready()) return {}; // A publication transfers once.
     return image;

@@ -1263,3 +1263,20 @@ HTMLCanvasElement.getContext, shared IOSurface acquisition/publication and norma
 scene consumption remain unconnected. Presenter feature/color validation,
 invalid-texture and allocation-failure semantics, and host retirement failure
 handling still need qualification before exposing this as a complete API.
+
+### Submitted-frame discard retirement
+
+The IOSurface submission handoff accepts an explicit non-presenting retirement
+for canvas resize/unconfigure. This path ends shared access and expires the
+WebGPU texture, keeps the producer allocation alive through queue completion,
+and then cancels the pool reservation without creating a scene lease. Its
+terminal status is `discarded`; initialization is required for presentation but
+not for a discarded image. Validation and completion failures remain failures.
+
+The native Metal fixture exercises both an uninitialized texture and a texture
+with an application-submitted clear. Both reach discarded status, produce no
+scene image, wake once and leave no occupied pool slot after completion. The
+Ganesh window pixel probe still reports 32 frames, one import, completed GPU
+retirement, zero explicit transport copies and four diagnostic readbacks.
+Evidence: `evidence/ganesh-host/submitted-frame-discard.json`. This establishes
+native discard behavior; the JavaScript canvas host is not connected to it yet.

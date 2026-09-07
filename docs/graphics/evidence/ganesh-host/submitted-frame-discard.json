@@ -1,0 +1,14 @@
+{
+  "route": "Dawn-IOSurface-CGL-Ganesh",
+  "renderedFrames": 32,
+  "imports": 1,
+  "gpuRetirementCompleted": true,
+  "explicitTransportCopies": 0,
+  "diagnosticReadbacks": 4,
+  "physicalPresentationVerified": false,
+  "uninitializedTextureDiscardPassed": true,
+  "submittedTextureDiscardPassed": true,
+  "discardExposesNoSceneLease": true,
+  "poolReleasedAfterCompletion": true,
+  "javascriptCanvasConnected": false
+}
