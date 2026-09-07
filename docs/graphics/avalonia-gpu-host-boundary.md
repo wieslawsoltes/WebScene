@@ -76,3 +76,10 @@ import disposal precedes texture/context teardown. No CPU pixel upload/readback
 is used by the probe. This establishes successful API execution, not displayed
 pixel correctness: the surface is not yet attached to a visual, and the source
 is GL-produced rather than Dawn/Metal-produced. These remain separate gates.
+
+The host probe also attaches the updated surface to a composition visual and awaits
+its render-thread commit, then detaches and commits before releasing resources.
+Both commits complete on M4. Per Avalonia's API contract, this is render-thread
+state application, not a display/GPU-completion fence or a pixel correctness test.
+The next boundary test still needs independent displayed-pixel verification and
+connection of the Dawn-produced allocation to the host-compatible source.

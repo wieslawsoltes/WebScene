@@ -24,3 +24,9 @@ reports `sharedTextureUpdateCompleted=true` and exits successfully. Imported ima
 disposal is awaited before texture/context teardown. The surface is not attached
 to a visual and its snapshot pixels are not inspected, so `presentationVerified`
 remains false. This is not yet a Dawn-to-host bridge test.
+
+The updated surface is now attached to the window as a 128x128 composition surface
+visual. The probe awaits RequestCommitAsync before detaching, then awaits a second
+commit before teardown. M4 reports `visualCommitCompleted=true`. This proves the
+visual changes were applied on the render thread, not that pixels were displayed;
+`presentationVerified` remains false until an independent pixel observation exists.

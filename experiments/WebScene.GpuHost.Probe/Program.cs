@@ -30,6 +30,7 @@ internal sealed class ProbeApp : Application
                     var sharing = await visual.Compositor.TryGetRenderInterfaceFeature(typeof(IOpenGlTextureSharingRenderInterfaceContextFeature))
                         as IOpenGlTextureSharingRenderInterfaceContextFeature;
                     bool sharedTextureUpdateCompleted = false;
+                    bool visualCommitCompleted = false;
                     if (interop is not null && sharing?.CanCreateSharedContext == true)
                     {
                         using var glContext = sharing.CreateSharedContext()
@@ -57,6 +58,21 @@ internal sealed class ProbeApp : Application
                         await imported.ImportCompleted.WaitAsync(TimeSpan.FromSeconds(30));
                         await surface.UpdateAsync(imported).WaitAsync(TimeSpan.FromSeconds(30));
                         sharedTextureUpdateCompleted = true;
+                        var surfaceVisual = visual.Compositor.CreateSurfaceVisual();
+                        surfaceVisual.Size = new System.Numerics.Vector2(128,128);
+                        surfaceVisual.Surface = surface;
+                        ElementComposition.SetElementChildVisual(window, surfaceVisual);
+                        try
+                        {
+                            await visual.Compositor.RequestCommitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+                            visualCommitCompleted = true;
+                        }
+                        finally
+                        {
+                            ElementComposition.SetElementChildVisual(window, null);
+                            await visual.Compositor.RequestCommitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+                            surfaceVisual.Surface = null;
+                        }
                     }
                     Console.WriteLine(JsonSerializer.Serialize(new
                     {
@@ -70,6 +86,7 @@ internal sealed class ProbeApp : Application
                         isLost = interop?.IsLost,
                         canCreateSharedOpenGlContext = sharing?.CanCreateSharedContext ?? false,
                         sharedTextureUpdateCompleted,
+                        visualCommitCompleted,
                         presentationVerified = false
                     }));
                     if (interop is null) exit = 77;
