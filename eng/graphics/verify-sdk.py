@@ -32,6 +32,7 @@ def verify(sdk, component, rid):
         settings["DAWN_ENABLE_" + profile["dawnBackend"].upper()] = "ON"
         if rid.startswith("win-"):
             settings["CMAKE_MSVC_RUNTIME_LIBRARY"] = "MultiThreaded"
+            settings["ABSL_MSVC_STATIC_RUNTIME"] = "ON"
         if rid.startswith("osx-"):
             settings["CMAKE_OSX_ARCHITECTURES"] = "arm64"
     else:
