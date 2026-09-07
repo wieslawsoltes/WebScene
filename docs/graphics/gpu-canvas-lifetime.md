@@ -177,3 +177,26 @@ ctest --test-dir artifacts/graphics-build/native-v8-enabled -R 'webscene_graphic
 These checks validate the ABI envelope; callers must still provide a valid, live
 view returned by the library. They do not make arbitrary or already-freed pointers
 safe to pass. GPU lease export and backend image ownership remain outstanding.
+
+## Owner lifetime across engine disposal
+
+`owned_image_pool` adds move-only producer, retained-image and consumer handles
+that share ownership of the pool and a native provider lifetime anchor. Destroying
+the canvas/engine-facing owner closes writer admission; existing frames can still
+be retained and redrawn. Retained handles release their CPU tickets automatically.
+Producer and consumer handles keep the provider alive until explicit completion;
+destroying an unfinished submitted handle terminates rather than claiming that GPU
+work completed. Unsubmitted producer destruction cancels the writer reservation.
+Completion callbacks must own these handles until the backend signals completion.
+
+The provider's final destructor may run on a completion thread, so a provider with
+thread-affine objects must dispatch their destruction to its native owner thread.
+This is an explicit integration contract, not an implemented Dawn/ANGLE provider.
+The portable descriptors still contain no native pointers.
+
+The native fixture disposes the owner with a producer, retained redraw and GPU
+consumer outstanding, redraws after disposal, releases the final consumer on
+another thread, and verifies the provider is destroyed exactly once, only after
+completion. It also checks unsubmitted cancellation and ticket backpressure.
+Focused CTest and Clang ThreadSanitizer runs pass. Concrete GPU allocations,
+provider resolution, scene attachment and the exported lease ABI remain pending.

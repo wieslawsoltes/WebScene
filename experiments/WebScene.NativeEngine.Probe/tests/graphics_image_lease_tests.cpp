@@ -1,4 +1,6 @@
 #include "graphics/image_lease_pool.h"
+#include "graphics/owned_image_pool.h"
+#include <atomic>
 #include <iostream>
 using namespace webscene::graphics;
 void require(bool v) { if (!v) throw std::runtime_error("image lease requirement failed"); }
@@ -14,7 +16,53 @@ std::optional<image_lease_token> submit(image_lease_pool& pool,image_write_token
     pool.begin_producer(writer);
     return pool.publish(writer);
 }
+void test_owned_lifetime() {
+    struct provider final : image_provider_lifetime {
+        std::atomic<int>& destroyed;
+        explicit provider(std::atomic<int>& count):destroyed(count) {}
+        ~provider() override { ++destroyed; }
+    };
+    std::atomic<int> destroyed=0;
+    auto backend=std::make_shared<provider>(destroyed);
+    std::weak_ptr<provider> weak=backend;
+    auto owner=std::make_unique<owned_image_pool>(backend);
+    backend.reset();
+    auto producer=owner->acquire();
+    producer->set_metadata(metadata); producer->begin();
+    auto scene=producer->publish();
+    auto redraw=scene->retain();
+    auto pending=scene->begin_consumer();
+    scene.reset();
+    owner.reset(); // Engine/canvas ownership ends; GPU use is still outstanding.
+    require(!weak.expired() && destroyed==0);
+    producer->complete(); producer.reset();
+    require(redraw->describe().allocation==metadata.allocation);
+    auto second=redraw->begin_consumer(); // Retained redraw after engine disposal.
+    redraw.reset();
+    pending->complete(); pending.reset();
+    require(!weak.expired() && destroyed==0);
+    std::thread completion([use=std::move(*second)]() mutable {
+        require(use.describe().content_serial==metadata.content_serial);
+        use.complete();
+        rejects([&] { use.complete(); });
+    });
+    second.reset(); completion.join();
+    require(weak.expired() && destroyed==1);
+
+    auto bounded=std::make_unique<owned_image_pool>(std::make_shared<provider>(destroyed),1);
+    { auto abandoned=bounded->acquire(); } // Unsubmitted writers cancel automatically.
+    require(bounded->busy_images()==0);
+    auto frame=bounded->acquire(); frame->set_metadata(metadata); frame->begin();
+    auto held=frame->publish();
+    require(!held->retain() && !held->begin_consumer()); // Ticket backpressure.
+    frame->complete(); frame.reset();
+    require(bounded->busy_images()==1);
+    held.reset(); require(bounded->busy_images()==0);
+    bounded->close(); require(!bounded->acquire());
+    bounded.reset(); require(destroyed==2);
+}
 int main() {
+    test_owned_lifetime();
     image_lease_pool pool;
     auto a=write(pool),b=write(pool),c=write(pool);
     require(!pool.acquire_write() && pool.busy_images()==3);
