@@ -8,6 +8,7 @@
 #include "graphics/webgpu_prepared_device_descriptor.h"
 #include "graphics/v8_webgpu_buffers.h"
 #include "graphics/v8_webgpu_devices.h"
+#include "graphics/v8_webgpu_shaders.h"
 #include "graphics/v8_webgpu_adapters.h"
 #include "graphics/v8_webgpu_discovery.h"
 #include "graphics/webgpu_adapter_info.h"
@@ -1004,6 +1005,32 @@ int main() {
                         }
                         require(feature_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"size")).ToLocalChecked()->Uint32Value(context).FromJust()==enabled,"Device feature count differs from native enabled set");
                     });
+                    resource_handle<wgpu::ShaderModule> shader_handle;
+                    adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
+                        wgpu::ShaderSourceWGSL source{};source.code="@compute @workgroup_size(1) fn main() {}";
+                        wgpu::ShaderModuleDescriptor descriptor{};descriptor.nextInChain=&source;
+                        shader_handle=owned.create_shader_module(descriptor);
+                    });
+                    auto shaders=std::make_unique<v8_webgpu_shaders>(isolate,context,1);
+                    auto shader_object=shaders->wrap(context,*adapter_service,gc_buffer_device,shader_handle,device_object,"initial shader").ToLocalChecked();
+                    bool duplicate_shader=false,foreign_shader_realm=false;
+                    try{shaders->wrap(context,*adapter_service,gc_buffer_device,shader_handle,device_object);}catch(const std::invalid_argument&){duplicate_shader=true;}
+                    try{shaders->wrap(v8::Context::New(isolate),*adapter_service,gc_buffer_device,shader_handle,device_object);}catch(const std::logic_error&){foreign_shader_realm=true;}
+                    require(duplicate_shader && foreign_shader_realm,"Shader wrapper ownership duplicated");
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"shaderProbe"),shader_object).FromMaybe(false),"Shader wrapper publication failed");
+                    auto shader_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
+                        {if(Object.prototype.toString.call(shaderProbe)!=='[object GPUShaderModule]')throw new Error('shader tag');if(shaderProbe.label!=='initial shader')throw new Error('shader initial label');
+                        shaderProbe.label='shader\0\ud800';if(shaderProbe.label!=='shader\0\ufffd')throw new Error('shader USV label');
+                        let error={};try{shaderProbe.label={toString(){throw error}}}catch(e){if(e!==error)throw e}
+                        if(shaderProbe.label!=='shader\0\ufffd')throw new Error('shader failed label committed');
+                        let symbolError=false;try{shaderProbe.label=Symbol()}catch(e){symbolError=e instanceof TypeError}if(!symbolError)throw new Error('shader symbol label');
+                        let brand=false;try{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(shaderProbe),'label').get.call({})}catch(e){brand=e instanceof TypeError}if(!brand)throw new Error('shader receiver');}
+                    )JS");
+                    require(!v8::Script::Compile(context,shader_script).ToLocalChecked()->Run(context).IsEmpty(),"Shader wrapper label behavior failed");
+                    shaders.reset();
+                    {v8::TryCatch caught(isolate);require(shader_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"label")).IsEmpty()&&caught.HasCaught(),"Disposed shader retained native access");}
+                    adapter_service->with_device(gc_buffer_device,[&](auto& owned) {require(owned.live_shader_modules()==1,"Shader registry released native module inline");});
+                    require(context->Global()->Delete(context,v8::String::NewFromUtf8Literal(isolate,"shaderProbe")).FromMaybe(false),"Shader probe cleanup failed");
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {
                             const limits=deviceProbe.limits;globalThis.retainedLimits=limits;

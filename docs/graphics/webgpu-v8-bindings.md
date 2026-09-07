@@ -794,3 +794,20 @@ The macOS Dawn event test publishes releases from another thread, verifies no
 inline native retirement, and verifies a stale release cannot remove a replacement
 module in a reused table slot. Release storage returns to zero after draining.
 Dawn event and V8 runtime CTests pass. V8 shader-module wrappers remain pending.
+
+### Internal V8 shader-module wrappers
+
+A bounded realm-owned shader registry now wraps native device/module handles,
+rejects duplicate ownership, and keeps a private JavaScript edge to the parent
+device wrapper. Label getters retain content-side metadata; setters perform
+USVString conversion, recheck the receiver after coercion and call Dawn SetLabel.
+The prototype has the GPUShaderModule tag. Weak callbacks and registry disposal
+publish deferred module-release commands; disposal invalidates native receivers
+first. Neither path calls GPU APIs from GC.
+
+The macOS runtime test wraps an actual compiled shader, verifies initial label,
+NUL/lone-surrogate conversion, Symbol rejection, throwing coercion, receiver tag/
+brand, duplicate and foreign-realm checks, and deferred rather than inline native
+release on disposal. Runtime CTest passes. Device createShaderModule descriptor
+conversion/dispatch and getCompilationInfo are still pending; the internal
+wrapper is not a complete exposed GPUShaderModule implementation.
