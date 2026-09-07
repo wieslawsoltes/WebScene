@@ -68,4 +68,45 @@ public sealed class NativeGpuSceneInteropTests
             if (engine != IntPtr.Zero) NativeWebSceneApi.EngineDestroy(engine);
         }
     }
+    [NativeRuntimeFact]
+    public void SafeSceneLeaseProtectsBorrowedViewDuringConcurrentDispose()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        var options = NativeSceneAcquireOptionsV3.CpuOnly;
+        Assert.Equal(NativeSceneAcquireStatus.InvalidArgument,
+            NativeSceneLeaseV3.Acquire(IntPtr.Zero, in options, true, out var absent));
+        Assert.Null(absent);
+        var engine = NativeWebSceneApi.EngineCreate(0, null, new AvaloniaResourceLoader(), _ => { });
+        NativeSceneLeaseV3? lease = null;
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            NativeSceneAcquireStatus status;
+            do
+            {
+                status = NativeSceneLeaseV3.Acquire(engine, in options, true, out lease);
+                if (status == NativeSceneAcquireStatus.Empty) Thread.Sleep(1);
+            } while (status == NativeSceneAcquireStatus.Empty && DateTime.UtcNow < deadline);
+            Assert.Equal(NativeSceneAcquireStatus.Success, status);
+            Assert.NotNull(lease);
+            Assert.Equal(0U, lease.ImageCount);
+            Assert.True(lease.Acknowledge());
+            NativeWebSceneApi.EngineDestroy(engine); engine = IntPtr.Zero;
+            lease.WithView(view =>
+            {
+                Task.Run(lease.Dispose).GetAwaiter().GetResult();
+                // This read happens after Dispose on another thread. WithView
+                // still owns a SafeHandle reference until the callback returns.
+                Assert.Equal(2, Marshal.ReadInt32(view.CpuView, sizeof(uint)));
+            });
+            lease.Dispose(); // Idempotent: never double-release the native lease.
+            Assert.Throws<ObjectDisposedException>(() => lease.WithView(_ => { }));
+        }
+        finally
+        {
+            lease?.Dispose();
+            if (engine != IntPtr.Zero) NativeWebSceneApi.EngineDestroy(engine);
+        }
+    }
+
 }

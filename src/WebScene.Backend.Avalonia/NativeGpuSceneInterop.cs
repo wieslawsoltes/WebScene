@@ -71,3 +71,73 @@ public static unsafe partial class NativeWebSceneApi
     [DllImport(LibraryName, EntryPoint = "webscene_gpu_image_complete_consumer_v3", CallingConvention = CallingConvention.Cdecl)]
     internal static extern void GpuImageCompleteConsumerV3(IntPtr consumer);
 }
+
+// CPU scene retention only: disposing this handle does not complete GPU work.
+internal sealed class NativeSceneLeaseV3 : SafeHandle
+{
+    private NativeSceneLeaseV3() : base(IntPtr.Zero, ownsHandle: true) { }
+    public override bool IsInvalid => handle == IntPtr.Zero;
+
+    internal static NativeSceneAcquireStatus Acquire(IntPtr engine, in NativeSceneAcquireOptionsV3 options,
+        bool ordered, out NativeSceneLeaseV3? lease)
+    {
+        lease = null;
+        // Allocate managed ownership before native acquisition, so an allocation
+        // failure cannot strand a newly acquired native lease.
+        var candidate = new NativeSceneLeaseV3();
+        try
+        {
+            var status = ordered
+                ? NativeWebSceneApi.AcquireNextSceneV3(engine, in options, out var pointer)
+                : NativeWebSceneApi.AcquireLatestSceneV3(engine, in options, out pointer);
+            candidate.SetHandle(pointer);
+            if (status != NativeSceneAcquireStatus.Success)
+            {
+                candidate.Dispose();
+                return status;
+            }
+            if (candidate.IsInvalid) throw new InvalidOperationException("Native acquisition returned an empty successful lease.");
+            lease = candidate;
+            return status;
+        }
+        catch
+        {
+            candidate.Dispose();
+            throw;
+        }
+    }
+
+    internal bool Acknowledge() => NativeWebSceneApi.SceneAcknowledgeV3(this) != 0;
+    internal uint ImageCount => NativeWebSceneApi.SceneGpuImageCountV3(this);
+
+    // All borrowed pointers are valid only during this callback. The SafeHandle
+    // reference protects the native lease even if another thread calls Dispose.
+    internal void WithView(Action<NativeSceneViewV3> read)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        var added = false;
+        try
+        {
+            DangerousAddRef(ref added);
+            read(Marshal.PtrToStructure<NativeSceneViewV3>(handle));
+        }
+        finally
+        {
+            if (added) DangerousRelease();
+        }
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        NativeWebSceneApi.SceneReleaseV3(handle);
+        return true;
+    }
+}
+
+public static unsafe partial class NativeWebSceneApi
+{
+    [DllImport(LibraryName, EntryPoint = "webscene_scene_acknowledge_v3", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern byte SceneAcknowledgeV3(NativeSceneLeaseV3 scene);
+    [DllImport(LibraryName, EntryPoint = "webscene_scene_gpu_image_count_v3", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern uint SceneGpuImageCountV3(NativeSceneLeaseV3 scene);
+}

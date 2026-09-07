@@ -421,3 +421,19 @@ presentation or non-null GPU image marshaling tests.
 
 Uno compiled successfully with zero warnings/errors after restoring its missing
 NuGet assets. This verifies the shared declarations compile in both backends.
+
+## Managed scene ownership
+
+`NativeSceneLeaseV3` now owns the native scene through SafeHandle. Managed
+ownership is allocated before native acquisition; unsuccessful acquisition
+disposes that candidate. Acknowledge and image-count P/Invokes hold the SafeHandle
+for the native call. WithView holds a reference across its callback, keeping the
+borrowed CPU view alive even if another thread disposes the scene concurrently.
+Disposal/finalization releases CPU scene retention only, never GPU completion.
+
+The concurrent-disposal native test destroys the engine, disposes the managed
+scene on another thread while WithView is active, and then reads the borrowed
+CPU ABI version. Duplicate disposal is harmless and later WithView throws. All
+three focused managed tests pass without skips on .NET 8 and .NET 10; Uno builds
+with zero warnings/errors. Actual renderer adoption and managed GPU image/consumer
+ownership are still outstanding.
