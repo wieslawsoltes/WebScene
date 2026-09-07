@@ -178,7 +178,8 @@ def angle(args):
     if args.rid.startswith("linux-"):
         vulkan_headers = source / "third_party/vulkan-headers/src/include"
         for directory in ["vulkan", "vk_video"]:
-            shutil.copytree(vulkan_headers / directory, sdk / "include" / directory)
+            # ANGLE already ships include/vulkan/vulkan_fuchsia_ext.h.
+            shutil.copytree(vulkan_headers / directory, sdk / "include" / directory, dirs_exist_ok=True)
     (sdk / "lib").mkdir()
     suffixes = {"win": [".dll", ".lib"], "osx": [".dylib"], "linux": [".so"]}[args.rid.split("-")[0]]
     for library in ["libEGL", "libGLESv2"]:
