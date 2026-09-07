@@ -9,9 +9,31 @@
 #include <IOSurface/IOSurface.h>
 #include <vector>
 #include <cstdio>
+struct pending_host_blit {
+    CGLContextObj context{};
+    IOSurfaceRef surface{};
+    GLsync fence{};
+    GLuint texture{},framebuffer{},destinationFramebuffer{};
+};
+inline thread_local pending_host_blit host_blit;
+// 0 pending, 1 complete, -1 invalid/failure. Must run on the owning context.
+inline int poll_host_blit(bool drain=false) {
+    if (!host_blit.fence || CGLGetCurrentContext()!=host_blit.context) return -1;
+    if (drain) glFinish(); // Explicit error/timeout teardown only.
+    auto status=glClientWaitSync(host_blit.fence,0,0);
+    if (status==GL_TIMEOUT_EXPIRED) return 0;
+    if (status!=GL_ALREADY_SIGNALED && status!=GL_CONDITION_SATISFIED) return -1;
+    glDeleteSync(host_blit.fence);
+    glDeleteFramebuffers(1,&host_blit.framebuffer);
+    glDeleteFramebuffers(1,&host_blit.destinationFramebuffer);
+    glDeleteTextures(1,&host_blit.texture);
+    CFRelease(host_blit.surface); host_blit={};
+    return 1;
+}
 // Diagnostic-only CPU readback. Caller must establish producer GPU completion.
 inline bool check_iosurface_gl(IOSurfaceRef surface,unsigned width,unsigned height,
     const uint8_t* expected,unsigned expected_stride,GLuint hostTexture=0) {
+    if (hostTexture && host_blit.fence) return false;
     auto previous=CGLGetCurrentContext();
     CGLContextObj context=previous;
     if (!hostTexture) {
@@ -63,8 +85,16 @@ inline bool check_iosurface_gl(IOSurfaceRef surface,unsigned width,unsigned heig
             for (unsigned y=0;y<height;++y) for (unsigned x=0;x<width*4;++x)
                 valid &= std::abs(int(pixels[y*width*4+x])-int(expected[y*expected_stride+(x/4)*4+(x%4<3 ? 2-x%4 : x%4)]))<=1;
             } else {
-                // Transitional synchronous completion, with no pixel transfer.
-                glFinish(); valid &= glGetError()==GL_NO_ERROR;
+                if (valid && hostTexture) {
+                    auto fence=glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
+                    if (!fence) { glFinish(); valid=false; }
+                    else {
+                        CFRetain(surface);
+                        host_blit={context,surface,fence,texture,framebuffer,destinationFramebuffer};
+                        texture=framebuffer=destinationFramebuffer=0;
+                        glFlush();
+                    }
+                } else glFinish(); // Failure cleanup, never normal host submission.
             }
         }
     }

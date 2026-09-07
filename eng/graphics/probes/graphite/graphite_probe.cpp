@@ -299,7 +299,10 @@ int main(int argc, char** argv) {
 
 #if defined(__APPLE__) && defined(WEBSCENE_GRAPHITE_HOST_PROBE)
 // Diagnostic bridge only: caller supplies a current CGL context and a 17x4 2D
-// texture. Runs readback-based verification; not a production submission API.
+// texture. Uses a producer wait; not a production submission API.
+extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_poll(int drain) {
+    return poll_host_blit(drain!=0);
+}
 extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_probe(unsigned texture) {
     if (!texture || hostDestinationTexture) return 1;
     hostDestinationTexture=texture;

@@ -10,6 +10,8 @@ internal static class Program
 {
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_probe")]
     internal static extern int RenderGraphite(uint texture);
+    [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_poll")]
+    internal static extern int PollGraphite(int drain);
     [STAThread]
     public static int Main(string[] args) => AppBuilder.Configure<ProbeApp>()
         .UsePlatformDetect().StartWithClassicDesktopLifetime(args);
@@ -58,6 +60,19 @@ internal sealed class ProbeApp : Application
                             finally { gl.BindFramebuffer(GlConsts.GL_FRAMEBUFFER,0); gl.DeleteFramebuffer(framebuffer); }
                             if (graphiteSource && Program.RenderGraphite((uint)texture.TextureId) != 0)
                                 throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
+                        }
+                        if (graphiteSource) {
+                            var deadline = DateTime.UtcNow.AddSeconds(30);
+                            while (true) {
+                                int completion;
+                                using (glContext.EnsureCurrent()) completion = Program.PollGraphite(0);
+                                if (completion == 1) break;
+                                if (completion < 0 || DateTime.UtcNow >= deadline) {
+                                    using (glContext.EnsureCurrent()) Program.PollGraphite(1);
+                                    throw new InvalidOperationException("GL completion failed or timed out");
+                                }
+                                await Task.Delay(1);
+                            }
                         }
                         using var surface = visual.Compositor.CreateDrawingSurface();
                         await using var imported = interop.ImportImage(texture);

@@ -215,3 +215,17 @@ This supersedes the host's readback-dependent readiness above. It remains a
 synchronous prototype: queue waiting and glFinish must be replaced by asynchronous
 readiness and consumer retirement before performance acceptance. There is still
 one explicit GPU-local blit, plus any host snapshot work; this is not zero-copy.
+
+## Nonblocking GL consumer completion
+
+Normal host blits now insert GL_SYNC_GPU_COMMANDS_COMPLETE and flush, retaining
+IOSurface and temporary GL objects in one thread-local pending transfer. The host
+polls with glClientWaitSync(timeout=0) under the owning context, yielding between
+checks. Successful signal retires retained objects before the Avalonia update.
+A second pending transfer is rejected. The connected M4 host test passes without
+normal-path glFinish and without readback. glFinish remains only for error/timeout
+cleanup. Failure/device-loss cleanup still needs dedicated qualification.
+
+Dawn producer readiness still blocks, and this is a single-transfer diagnostic
+bridge, not the persistent production scheduler. The later engine implementation
+must use its wake/completion mechanisms instead of a polling UI prototype.
