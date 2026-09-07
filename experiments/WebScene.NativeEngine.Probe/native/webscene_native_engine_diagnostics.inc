@@ -180,16 +180,7 @@
 
     bool request_scene_checkpoint()
     {
-        {
-            std::lock_guard lock(acknowledgement_->mutex);
-            acknowledgement_->revision = 0;
-            acknowledgement_->dom_hash = 0;
-            acknowledgement_->viewport_width = 0;
-            acknowledgement_->viewport_height = 0;
-            acknowledgement_->layer_versions.clear();
-            acknowledgement_->value.reset();
-            acknowledgement_->pending_scenes.clear();
-        }
+        acknowledgement_->reset_for_checkpoint();
         std::atomic_store_explicit(
             &latest_,
             std::shared_ptr<const scene>{},

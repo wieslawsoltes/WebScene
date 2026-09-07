@@ -172,6 +172,11 @@ uint64_t retained_scene_bytes(const scene& value)
 }
 
 struct acknowledgement_state final {
+    void reset_for_checkpoint() {
+        std::lock_guard lock(mutex);
+        revision=0; dom_hash=0; viewport_width=0; viewport_height=0;
+        layer_versions.clear(); value.reset(); pending_scenes.clear();
+    }
     std::mutex mutex;
     uint64_t revision{0};
     uint64_t dom_hash{0};

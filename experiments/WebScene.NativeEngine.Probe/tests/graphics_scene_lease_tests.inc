@@ -41,7 +41,27 @@ void test_native_gpu_scene_leases()
     // already-submitted consumer work must survive acknowledgement of removal.
     require(acquire_scene_value_v3(removed,acknowledgement,0,&view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
     require(webscene_scene_gpu_image_count_v3(view)==0 && webscene_scene_acknowledge_v3(view));
-    webscene_scene_release_v3(view); removed.reset(); acknowledgement.reset(); pool.reset();
+    webscene_scene_release_v3(view); removed.reset();
+    auto stale=std::make_shared<scene>();
+    stale->header.revision=3; stale->header.base_revision=1; // Current base is 2.
+    stale->gpu_images.push_back(std::make_shared<webscene_gpu_image_lease_v3>(retained->value.retain().value()));
+    acknowledgement->pending_scenes.push_back(stale);
+    const webscene_scene_view_v3* stale_view=nullptr;
+    require(acquire_scene_value_v3(stale,acknowledgement,WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES,&stale_view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+    require(!webscene_scene_acknowledge_v3(stale_view) && acknowledgement->revision==2);
+    acknowledgement->reset_for_checkpoint(); // Same reset used by the engine API.
+    require(acknowledgement->pending_scenes.empty() && acknowledgement->revision==0);
+    require(webscene_scene_gpu_image_count_v3(stale_view)==1);
+    auto recovery=std::make_shared<scene>();
+    recovery->header.revision=4;
+    recovery->header.flags=scene_flag_checkpoint | scene_flag_dom_replacement;
+    recovery->gpu_images=stale->gpu_images;
+    acknowledgement->pending_scenes.push_back(recovery);
+    require(acquire_scene_value_v3(recovery,acknowledgement,WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES,&view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+    require(webscene_scene_acknowledge_v3(view) && acknowledgement->revision==4);
+    require(!webscene_scene_acknowledge_v3(stale_view));
+    webscene_scene_release_v3(stale_view); stale.reset();
+    webscene_scene_release_v3(view); recovery.reset(); acknowledgement.reset(); pool.reset();
     webscene_gpu_image_info_v3 info{}; info.struct_size=sizeof(info); info.version=3;
     require(webscene_gpu_image_describe_v3(retained,&info) && info.content_serial==1 && !weak.expired());
     webscene_gpu_image_release_v3(retained); require(!weak.expired());

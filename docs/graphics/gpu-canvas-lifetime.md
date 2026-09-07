@@ -487,3 +487,19 @@ blending and transform comparisons remain outstanding.
 
 The complete rebuilt native CTest suite passes all 16 tests in 13.21 seconds
 after the intrinsic-size fix and GPU paint-scope assertions.
+
+## GPU checkpoint recovery
+
+Checkpoint reset of acknowledgement state is now shared by the engine request
+path and its white-box fixture. The fixture acquires a GPU scene with a stale
+base, verifies rejection leaves the current base intact, resets pending state,
+and acknowledges a new checkpoint retaining the image. The old acquired scene
+remains readable across reset, but its late acknowledgement cannot replace the
+recovered base. Independent image/consumer leases still determine final provider
+release. The focused runtime test passes in 0.60 seconds.
+
+This exercises native scene/lease recovery; it does not establish rendered
+framework recovery or browser-driven GPU checkpoint publication.
+
+The native engine regression suite also passes against the rebuilt library
+(11.86 seconds) after sharing the checkpoint-reset implementation.
