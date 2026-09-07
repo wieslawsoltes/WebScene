@@ -10,7 +10,7 @@ class dawn_shared_image final {
     std::shared_ptr<void> native_owner_;
     wgpu::SharedTextureMemory memory_;
     wgpu::Texture texture_;
-    bool active_=false, failed_=false;
+    bool active_=false, failed_=false, expired_=false;
     dawn_shared_image(std::shared_ptr<void> owner,wgpu::SharedTextureMemory memory,
                       wgpu::Texture texture)
         :native_owner_(std::move(owner)),memory_(std::move(memory)),texture_(std::move(texture)) {}
@@ -39,12 +39,20 @@ public:
     }
     const wgpu::Texture& texture() const noexcept { return texture_; }
     bool begin(const wgpu::SharedTextureMemoryBeginAccessDescriptor& access) {
-        if (active_ || failed_) return false;
+        if (active_ || failed_ || expired_) return false;
         if (memory_.BeginAccess(texture_,&access)!=wgpu::Status::Success) {
             failed_=true;
             return false;
         }
         active_=true;
+        return true;
+    }
+    // Expire this frame's WebGPU texture object after EndAccess, before its
+    // native allocation can be recycled. Submitted work retains its resources;
+    // a JavaScript reference to the old texture cannot write a later frame.
+    bool expire_texture() {
+        if(active_ || failed_)return false;
+        if(!expired_){texture_.Destroy();expired_=true;}
         return true;
     }
     bool end(wgpu::SharedTextureMemoryEndAccessState& handoff) {

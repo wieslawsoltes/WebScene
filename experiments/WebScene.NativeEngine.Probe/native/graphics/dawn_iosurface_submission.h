@@ -94,11 +94,12 @@ public:
         queue.Submit(1,&command);
         wgpu::SharedTextureMemoryEndAccessState end;
         const bool ended=shared->end(end);
+        const bool expired=ended && shared->expire_texture();
         result->future_=queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
-            [result,pending,shared,device,device_lifetime,wake,ended]
+            [result,pending,shared,device,device_lifetime,wake,ended,expired]
             (wgpu::QueueWorkDoneStatus completed,wgpu::StringView) {
                 pending->producer.complete();
-                result->finish(true,ended && completed==wgpu::QueueWorkDoneStatus::Success,wake);
+                result->finish(true,ended && expired && completed==wgpu::QueueWorkDoneStatus::Success,wake);
             });
         scope.popped=true;
         result->validation_future_=device.PopErrorScope(wgpu::CallbackMode::AllowSpontaneous,

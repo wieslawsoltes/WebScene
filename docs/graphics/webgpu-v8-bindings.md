@@ -1152,3 +1152,22 @@ unconnected. The existing IOSurface submission helper owns recording/submission
 inside one callback; integration must instead span current-texture acquisition,
 application queue submissions, shared-image end access and versioned publication
 at the frame boundary, without introducing CPU texture readback.
+
+
+### Shared-frame texture expiration
+
+Shared Dawn images can now expire their texture object after EndAccess. Expiry
+is idempotent, refuses active/failed access and prevents later BeginAccess.
+IOSurface submission expires the per-frame texture before marking the image
+ready; queued native work retains the resources it needs. This closes the route
+by which an old canvas texture alias could otherwise submit writes after the
+underlying image allocation becomes eligible for reuse.
+
+The macOS fixture retains an old texture alias, attempts to clear through it
+after frame completion, and requires a native validation error. Creating a view
+alone does not establish invalid submission, so the test records and submits the
+attempted write. The real Ganesh window probe then verifies the original pixels:
+32 rendered frames, one import, completed GPU retirement, zero explicit transport
+copies and four diagnostic readbacks. Physical scanout is not verified. Evidence:
+`evidence/ganesh-host/frame-texture-expiry.json`. This validates native frame
+expiration/presentation; JavaScript GPUCanvasContext remains unconnected.

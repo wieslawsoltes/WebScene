@@ -76,8 +76,11 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
         invalid->state()!=dawn_iosurface_submission::status::failed || invalid->take_ready() ||
         invalid_wake->count.load()!=1 || rejected.busy_images()!=0) return {};
     auto ready_wake=std::make_shared<counted_wake>();
+    wgpu::Texture expired_texture;
     auto submitted=webscene::graphics::dawn_iosurface_submission::submit(std::move(frame),*device,
         [&](const wgpu::Texture& texture) {
+            // Diagnostic-only retained alias: verify old frame objects expire.
+            expired_texture=texture;
             auto encoder=device->CreateCommandEncoder();
             wgpu::RenderPassColorAttachment color{};
             color.view=texture.CreateView();
@@ -89,6 +92,20 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
         },storage,ready_wake);
     if (!submitted || !wait(submitted->completion_future()) || !wait(submitted->validation_future()) ||
         ready_wake->count.load()!=1 || error->load()) return {};
+    device->PushErrorScope(wgpu::ErrorFilter::Validation);
+    auto invalid_view=expired_texture.CreateView();
+    auto expired_encoder=device->CreateCommandEncoder();
+    wgpu::RenderPassColorAttachment expired_attachment{};expired_attachment.view=invalid_view;
+    expired_attachment.loadOp=wgpu::LoadOp::Clear;expired_attachment.storeOp=wgpu::StoreOp::Store;
+    expired_attachment.clearValue={1,0,1,1};
+    wgpu::RenderPassDescriptor expired_pass{};expired_pass.colorAttachmentCount=1;expired_pass.colorAttachments=&expired_attachment;
+    auto expired_recording=expired_encoder.BeginRenderPass(&expired_pass);expired_recording.End();
+    auto expired_commands=expired_encoder.Finish();device->GetQueue().Submit(1,&expired_commands);
+    auto expired_rejected=std::make_shared<std::atomic<bool>>(false);
+    if(!wait(device->PopErrorScope(wgpu::CallbackMode::WaitAnyOnly,
+        [expired_rejected](wgpu::PopErrorScopeStatus status,wgpu::ErrorType type,wgpu::StringView) {
+            expired_rejected->store(status==wgpu::PopErrorScopeStatus::Success && type==wgpu::ErrorType::Validation);
+        })) || !expired_rejected->load())return {};
     auto image=submitted->take_ready();
     if (submitted->take_ready()) return {}; // A publication transfers once.
     return image;
