@@ -212,3 +212,28 @@ This is a diagnostic control, not WebScene's retained DOM renderer. Production
 scene acquisition, paint ordering, live readiness delivery, resizing, teardown
 failure recovery and device recreation remain open. The diagnostic fails/exits on
 unsupported or lost host contexts; that is not qualified production loss recovery.
+
+### Retained import owner and host thread migration
+
+`NativeMacOSRetainedGpuImage` now owns the GL import, SKImage and native consumer
+in the Avalonia backend. Import admission preserves the scene lease on
+backpressure. Draw reuses the imported image under the owning Skia/CGL context;
+Retire prevents further draws and flushes through the host platform lease before
+creating a fence. TryComplete polls without a CPU GPU wait and releases the GL
+texture after native consumer completion. Failed fence creation keeps ownership
+and permits retirement retry. This object deliberately has no GC/Dispose-based
+GPU completion: the scene cache must retain it until retirement succeeds.
+
+The real-window probe now uses this backend owner rather than local import and
+fence fields. A first run exposed an incorrect fixed-thread ownership assumption:
+the first callback ran on managed thread 1 and the next on thread 4, with identical
+native Skia and CGL handles. Avalonia's active drawing lease serializes the
+GRContext while allowing that migration. The owner therefore checks the leased
+Skia/CGL context identity. NativeMacOSGpuConsumerFence also offers a host-platform-
+lease polling route for migration; its standalone polling still rejects a foreign
+thread. No context identity check was removed.
+
+Both real-window modes again completed 32 redraws, one import and retirement;
+the diagnostic mode verified both host pixels. General compositor loss recovery
+and automatic retirement scheduling are still unfinished, and the retained DOM
+renderer still needs to consume this owner.

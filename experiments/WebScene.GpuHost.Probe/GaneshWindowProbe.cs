@@ -47,11 +47,8 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate byte CreateImage(out NativeGpuImageLeaseV3 image);
     internal readonly TaskCompletionSource Completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private NativeGpuImageConsumerV3? _consumer;
-    private SKImage? _image;
-    private NativeMacOSGpuConsumerFence? _fence;
-    private IGlContext? _owner;
-    private int _texture;
+    private NativeGpuImageLeaseV3? _source;
+    private NativeMacOSRetainedGpuImage? _retained;
     internal int Frames, Imports, VerifiedPixels;
     private readonly bool _verifyPixels = Environment.GetCommandLineArgs().Contains("--verify-window-pixels");
     public GaneshImageControl()
@@ -63,9 +60,7 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
         var create = Marshal.GetDelegateForFunctionPointer<CreateImage>(
             NativeLibrary.GetExport(fixture, "webscene_test_create_dawn_iosurface"));
         if (create(out var image) == 0) throw new InvalidOperationException("Dawn fixture creation failed");
-        using (image)
-            if (NativeGpuImageConsumerV3.Acquire(image, out _consumer) != NativeSceneAcquireStatus.Success)
-                throw new InvalidOperationException("Native consumer acquisition failed");
+        _source = image;
     }
     public override void Render(DrawingContext context) => context.Custom(this);
     Rect ICustomDrawOperation.Bounds => new(0, 0, Bounds.Width, Bounds.Height);
@@ -80,32 +75,17 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
             var feature = context.TryGetFeature(typeof(ISkiaSharpApiLeaseFeature)) as ISkiaSharpApiLeaseFeature
                 ?? throw new NotSupportedException("Host has no Skia API lease");
             using var lease = feature.Lease();
-            var gr = lease.GrContext ?? throw new NotSupportedException("Host Skia context is not GPU-backed");
-            if (_image is null && _fence is null)
+            if (_retained is null)
             {
-                using var platform = lease.TryLeasePlatformGraphicsApi()
-                    ?? throw new NotSupportedException("Host has no graphics API lease");
-                _owner = platform.Context as IGlContext ?? throw new NotSupportedException("Host is not GL");
-                _texture = _owner.GlInterface.GenTexture();
-                _owner.GlInterface.BindTexture(0x84F5, _texture);
-                if (!NativeMacOSGpuImageImport.TryBindCurrentRectangleTexture(_consumer!))
-                    throw new NotSupportedException("Host CGL IOSurface import failed");
-                _image = NativeMacOSGpuImageImport.TryWrapRectangleTexture(_consumer!, gr,
-                    (uint)_texture, GRSurfaceOrigin.TopLeft, SKAlphaType.Premul)
-                    ?? throw new NotSupportedException("Host Ganesh rectangle wrapping failed");
+                _retained = NativeMacOSRetainedGpuImage.Import(_source!, lease,
+                    GRSurfaceOrigin.TopLeft, SKAlphaType.Premul);
+                if (_retained is null) return; // Admission backpressure: retry on the next callback.
+                _source!.Dispose(); _source = null;
                 ++Imports;
             }
-            if (_fence is not null)
+            if (_retained.IsRetiring)
             {
-                using var platform = lease.TryLeasePlatformGraphicsApi()
-                    ?? throw new NotSupportedException("Host graphics API lease disappeared");
-                if (!ReferenceEquals(platform.Context, _owner)) throw new InvalidOperationException("Host context changed");
-                if (_fence.TryComplete())
-                {
-                    _consumer = null;
-                    _owner!.GlInterface.DeleteTexture(_texture); _texture = 0;
-                    Completed.TrySetResult();
-                }
+                if (_retained.TryComplete(lease)) Completed.TrySetResult();
                 return;
             }
             var canvas = lease.SkCanvas;
@@ -113,7 +93,7 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
             canvas.Clear(SKColors.MidnightBlue);
             canvas.ClipRect(new SKRect(30, 25, 350, 165));
             using var paint = new SKPaint { Color = new SKColor(255, 255, 255, 192) };
-            canvas.DrawImage(_image!, new SKRect(10, 10, 370, 185), paint);
+            _retained.Draw(lease, new SKRect(10, 10, 370, 185), paint);
             canvas.RestoreToCount(save);
             if (_verifyPixels && Frames == 0)
             {
@@ -133,14 +113,7 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
                     ++VerifiedPixels;
                 }
             }
-            if (++Frames == 32)
-            {
-                _image!.Dispose(); _image = null;
-                using var platform = lease.TryLeasePlatformGraphicsApi()
-                    ?? throw new NotSupportedException("Host graphics API lease disappeared");
-                // Avalonia flushes Skia on entering this platform lease.
-                _fence = NativeMacOSGpuConsumerFence.Create(_owner!.GlInterface.GetProcAddress, _consumer!);
-            }
+            if (++Frames == 32) _retained.Retire(lease);
         }
         catch (Exception error) { Completed.TrySetException(error); }
     }

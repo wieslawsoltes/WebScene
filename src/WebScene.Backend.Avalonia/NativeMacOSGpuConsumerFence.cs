@@ -1,5 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
+using Avalonia.Skia;
+using Avalonia.OpenGL;
 
 namespace WebScene.Backends.Avalonia.Native;
 
@@ -55,9 +57,22 @@ internal sealed class NativeMacOSGpuConsumerFence
         return result;
     }
 
-    internal bool TryComplete()
+    internal bool TryComplete() => Poll(requireOriginalThread: true);
+
+    // Avalonia can migrate its context between UI and compositor threads. The
+    // live platform lease supplies host serialization; native context identity
+    // must still match. Standalone callers retain the strict thread check above.
+    internal bool TryCompleteInHostLease(ISkiaSharpPlatformGraphicsApiLease lease)
     {
-        if (_thread != Environment.CurrentManagedThreadId || _context != NativeMacOSGpuImageImport.CurrentContext)
+        ArgumentNullException.ThrowIfNull(lease);
+        if (lease.Context is not IGlContext) throw new NotSupportedException("A host GL lease is required.");
+        return Poll(requireOriginalThread: false);
+    }
+
+    private bool Poll(bool requireOriginalThread)
+    {
+        if ((requireOriginalThread && _thread != Environment.CurrentManagedThreadId) ||
+            _context != NativeMacOSGpuImageImport.CurrentContext)
             throw new InvalidOperationException("GPU fence polling requires its owning thread and CGL context.");
         if (_fence == IntPtr.Zero) return true;
         var status = _wait(_fence, 0, 0); // Zero timeout: never wait for the device on the CPU.
