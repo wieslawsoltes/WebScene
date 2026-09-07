@@ -415,3 +415,25 @@ This is the native entry point for the forthcoming GPUDevice.createBuffer method
 it does not install a public device object. Full device creation, error-scope/event
 exposure, native allocation failure/admission policy and loss integration still
 require implementation or qualification.
+
+### Internal V8 device objects
+
+`v8_webgpu_devices.h` introduces bounded, branded device wrappers with createBuffer
+and destroy methods. createBuffer calls the descriptor/allocation/wrapper path and
+privately links each returned buffer to its parent device wrapper. destroy first
+cancels/detaches that device's buffer mappings, then invokes native Dawn destruction;
+repeated destruction is inert. Explicit native device table release remains a
+separate teardown step. Registry disposal invalidates device and buffer receivers
+before cancellation can construct JavaScript exceptions, and queues native release.
+
+The rebuilt macOS runtime test now calls device.createBuffer from JavaScript,
+checks descriptors/metadata and receiver/arity errors, writes a mapped view,
+destroys the device twice, and verifies view detachment, retained buffer metadata
+and rejected mapped access. Calls through a retained device object after registry
+disposal also fail safely. The runtime CTest passes.
+
+No global GPUDevice or navigator.gpu is installed by this factory. Adapter requestDevice,
+queue/resources beyond buffers, capabilities, labels, device.lost/error events,
+full WebIDL prototypes and automatic loss/navigation integration remain unfinished.
+The parent-device GC edge and asynchronous completion routing through this new
+device registry still need dedicated qualification.

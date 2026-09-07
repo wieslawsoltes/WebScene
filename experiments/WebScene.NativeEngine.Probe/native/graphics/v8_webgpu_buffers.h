@@ -280,9 +280,9 @@ public:
     ~v8_webgpu_buffers() {
         check_scope();
         for (auto& item:entries_) if (item) {
-            cancel_map(*item);
-            item->mapping.reset(); // Detach before native release or wrapper invalidation.
             if (!item->wrapper.IsEmpty()) item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
+            cancel_map(*item);
+            item->mapping.reset(); // Detach before releasing native storage.
             item->wrapper.Reset();
             if (!item->published) item->releases->publish(item->ticket);
         }

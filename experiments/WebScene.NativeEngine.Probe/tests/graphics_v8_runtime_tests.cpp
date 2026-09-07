@@ -5,6 +5,7 @@
 #include "graphics/v8_release_registry.h"
 #include "graphics/v8_webgpu_adapter_request.h"
 #include "graphics/v8_webgpu_buffers.h"
+#include "graphics/v8_webgpu_devices.h"
 #include "graphics/v8_webgpu_mapped_ranges.h"
 #include "graphics/v8_webgpu_map_request.h"
 #include "graphics/image_lease_abi.h"
@@ -656,6 +657,34 @@ int main() {
                         require(gc_buffers->detach_device(*adapter_service,gc_buffer_device)==0,"Device detachment was not idempotent");
 
                     });
+                    auto device_registry=std::make_unique<v8_webgpu_devices>(isolate,context,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),1,2);
+                    auto device_object=device_registry->wrap(context,*adapter_service,gc_buffer_device).ToLocalChecked();
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"deviceProbe"),device_object).FromMaybe(false),"Device wrapper publication failed");
+                    auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
+                        {
+                            if(deviceProbe.createBuffer.length!==1)throw new Error('createBuffer arity');
+                            for(let operation of [()=>deviceProbe.createBuffer(),()=>deviceProbe.createBuffer.call({},{}),()=>deviceProbe.destroy.call({})]) {
+                                let rejected=false;try{operation()}catch(e){rejected=e instanceof TypeError}
+                                if(!rejected)throw new Error('device brand or required descriptor');
+                            }
+                            let buffer=deviceProbe.createBuffer({size:32,usage:8,mappedAtCreation:true,label:'via device'});
+                            if(buffer.size!==32||buffer.usage!==8||buffer.label!=='via device')throw new Error('device-created buffer metadata');
+                            let range=buffer.getMappedRange(),words=new Uint32Array(range);words[0]=123;
+                            deviceProbe.destroy();deviceProbe.destroy();
+                            if(range.byteLength!==0||words.length!==0||buffer.mapState!=='unmapped'||buffer.size!==32)throw new Error('device destroy mapping lifetime');
+                            let rejected=false;try{buffer.getMappedRange()}catch(e){rejected=e instanceof DOMException&&e.name==='OperationError'}
+                            if(!rejected)throw new Error('destroyed device mapping remained available');
+                            delete globalThis.deviceProbe;
+                        }
+                    )JS");
+                    v8::Local<v8::Script> device_test;
+                    require(v8::Script::Compile(context,device_script).ToLocal(&device_test) && !device_test->Run(context).IsEmpty(),"JavaScript device buffer creation/destruction failed");
+                    device_registry.reset();
+                    {
+                        v8::TryCatch caught(isolate);
+                        auto method=device_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"destroy")).ToLocalChecked().As<v8::Function>();
+                        require(method->Call(context,device_object,0,nullptr).IsEmpty() && caught.HasCaught(),"Retired device wrapper retained native access");
+                    }
                     async_buffers.reset();
                     adapter_service->destroy_device(gc_buffer_device);
                     gc_buffers.reset(); // Delayed wrapper releases tolerate retired native devices.
