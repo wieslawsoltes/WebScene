@@ -1147,3 +1147,13 @@ if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS AND WEBSCENE_NATIVE_
     add_test(NAME webscene_graphics_v8_runtime_tests COMMAND webscene_graphics_v8_runtime_tests)
     set_tests_properties(webscene_graphics_v8_runtime_tests PROPERTIES TIMEOUT 30 LABELS "graphics;runtime")
 endif()
+
+if(BUILD_TESTING AND APPLE AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    # Private managed-interop fixture, deliberately excluded from install/package targets.
+    add_library(webscene_graphics_iosurface_fixture SHARED EXCLUDE_FROM_ALL tests/graphics_iosurface_fixture.cpp)
+    target_compile_features(webscene_graphics_iosurface_fixture PRIVATE cxx_std_20)
+    target_compile_options(webscene_graphics_iosurface_fixture PRIVATE -fno-rtti)
+    target_include_directories(webscene_graphics_iosurface_fixture PRIVATE native)
+    target_link_libraries(webscene_graphics_iosurface_fixture PRIVATE
+        "-framework CoreFoundation" "-framework IOSurface" "-framework CoreVideo")
+endif()

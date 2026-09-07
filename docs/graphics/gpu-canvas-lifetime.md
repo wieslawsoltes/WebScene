@@ -576,3 +576,26 @@ on net8.0 and net10.0, with no skips. This covers layouts, null lookup clearing 
 existing scene ABI ownership tests. The managed GPU consumer's positive import
 and concurrent completion paths still need an actual GPU scene fixture; they
 are not claimed hardware-qualified by these tests.
+
+### Positive managed IOSurface lifetime fixture
+
+A separate EXCLUDE_FROM_ALL native test library now creates an actual IOSurface
+lease and reports whether its native provider remains alive. It has no install
+rule and adds no test export to the production runtime. Build it explicitly:
+
+```sh
+cmake --build artifacts/graphics-build/native-v8-enabled --target webscene_graphics_iosurface_fixture
+```
+
+Set WEBSCENE_TEST_NATIVE_LIBRARY to the enabled native runtime and
+WEBSCENE_TEST_GPU_FIXTURE_LIBRARY to libwebscene_graphics_iosurface_fixture.dylib,
+then run NativeGpuSceneInteropTests with dotnet test for net8.0 and net10.0.
+
+Both targets passed all five tests without skips. The positive fixture verifies
+managed SafeHandle acquisition, native IOSurface lookup after retained-image
+release, completion on a different thread during the import callback, allocation
+survival until callback return, eventual release, duplicate completion rejection,
+and importer-exception unwinding followed by a successful retry.
+
+The fixture submits no GPU commands. It proves the managed/native ownership
+protocol and race behavior, not Metal/CGL fence completion or rendered pixels.
