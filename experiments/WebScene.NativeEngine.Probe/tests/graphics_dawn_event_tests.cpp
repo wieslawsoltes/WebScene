@@ -229,6 +229,13 @@ int main() {
     if (info.adapterType!=wgpu::AdapterType::IntegratedGPU && info.adapterType!=wgpu::AdapterType::DiscreteGPU) return 77;
     struct device_result { wgpu::Device device; };
 #if !defined(_WIN32)
+    dawn_dxgi_image unopened;
+    wgpu::SharedTextureMemoryEndAccessState handoff;
+    if (unopened.begin(false)!=dxgi_access_status::invalid_state
+        || unopened.end(handoff)!=dxgi_access_status::invalid_state || unopened.abandon_lost_device()) return 1;
+    bool unopened_rejected=false;
+    try { unopened.texture(); } catch (const std::logic_error&) { unopened_rejected=true; }
+    if (!unopened_rejected) return 1;
     std::unique_ptr<dawn_dxgi_image> unsupported;
     if (dawn_dxgi_image::import({},nullptr,{},{},{},wgpu::TextureUsage::TextureBinding,unsupported)
         !=dxgi_import_status::unsupported_platform || unsupported) return 1;

@@ -2,6 +2,8 @@
 #include "dxgi_bridge_contract.h"
 #include "nt_handle.h"
 #include <memory>
+#include <span>
+#include <thread>
 #include <webgpu/webgpu_cpp.h>
 
 namespace webscene::graphics {
@@ -9,8 +11,9 @@ enum class dxgi_import_status {
     success,unsupported_platform,invalid_argument,unsupported_pairing,
     missing_device_feature,handle_failure,import_failure,property_mismatch,out_of_memory
 };
-// Import ownership only. No texture is exposed for GPU use until the explicit
-// BeginAccess/EndAccess integration is implemented.
+enum class dxgi_access_status { success,invalid_state,invalid_fences,native_failure,device_lost };
+// Thread-confined import/access owner. EndAccess is a fence handoff, not CPU/GPU
+// completion; the external consumer must wait on every returned fence/value.
 class dawn_dxgi_image {
     struct handle_anchor { virtual ~handle_anchor()=default; };
 #if defined(_WIN32)
@@ -23,6 +26,11 @@ class dawn_dxgi_image {
     wgpu::SharedTextureMemory memory_;
     wgpu::Texture texture_;
     wgpu::SharedTextureMemoryProperties properties_{};
+    const std::thread::id thread_=std::this_thread::get_id();
+    bool active_{},failed_{};
+    void check_thread() const {
+        if (thread_!=std::this_thread::get_id()) throw std::logic_error("DXGI access requires its owner thread");
+    }
     static wgpu::TextureFormat native_format(image_format format) {
         switch (format) {
             case image_format::rgba8_unorm: return wgpu::TextureFormat::RGBA8Unorm;
@@ -54,7 +62,49 @@ public:
     dawn_dxgi_image()=default;
     dawn_dxgi_image(const dawn_dxgi_image&)=delete;
     dawn_dxgi_image& operator=(const dawn_dxgi_image&)=delete;
+    ~dawn_dxgi_image() { if (active_) std::terminate(); }
     const wgpu::SharedTextureMemoryProperties& properties() const noexcept { return properties_; }
+    dxgi_access_status begin(bool initialized,std::span<const wgpu::SharedFence> fences={},
+        std::span<const uint64_t> values={}) {
+        check_thread();
+        if (!memory_ || !texture_ || active_ || failed_) return dxgi_access_status::invalid_state;
+        if (fences.size()!=values.size()) return dxgi_access_status::invalid_fences;
+        for (const auto& fence:fences) if (!fence) return dxgi_access_status::invalid_fences;
+        if (memory_.IsDeviceLost()) return dxgi_access_status::device_lost;
+        wgpu::SharedTextureMemoryBeginAccessDescriptor descriptor{};
+        descriptor.initialized=initialized;
+        descriptor.fenceCount=fences.size(); descriptor.fences=fences.data();
+        descriptor.signaledValueCount=values.size(); descriptor.signaledValues=values.data();
+        if (memory_.BeginAccess(texture_,&descriptor)!=wgpu::Status::Success)
+            return dxgi_access_status::native_failure;
+        active_=true; return dxgi_access_status::success;
+    }
+    const wgpu::Texture& texture() const {
+        check_thread();
+        if (!active_) throw std::logic_error("DXGI texture access has not begun");
+        return texture_;
+    }
+    dxgi_access_status end(wgpu::SharedTextureMemoryEndAccessState& handoff) {
+        check_thread();
+        if (!memory_ || !active_) return dxgi_access_status::invalid_state;
+        wgpu::SharedTextureMemoryEndAccessState result;
+        const auto status=memory_.EndAccess(texture_,&result);
+        // Dawn may end access before failing to export a fence. Never retry an
+        // ambiguous handoff or expose this allocation for further sampling.
+        active_=false;
+        if (status!=wgpu::Status::Success) {
+            failed_=true; handoff=wgpu::SharedTextureMemoryEndAccessState{};
+            return memory_.IsDeviceLost() ? dxgi_access_status::device_lost : dxgi_access_status::native_failure;
+        }
+        handoff=std::move(result); return dxgi_access_status::success;
+    }
+    // Device removal cannot yield a valid fence handoff. Permit cleanup only
+    // after Dawn confirms loss; callers must invalidate the external image.
+    bool abandon_lost_device() {
+        check_thread();
+        if (!memory_ || !memory_.IsDeviceLost()) return false;
+        active_=false; failed_=true; return true;
+    }
     static dxgi_import_status import(const wgpu::Device& device,void* borrowed_nt_handle,
         const dxgi_endpoint& producer,const dxgi_endpoint& consumer,const image_metadata& image,
         wgpu::TextureUsage usage,std::unique_ptr<dawn_dxgi_image>& result) {

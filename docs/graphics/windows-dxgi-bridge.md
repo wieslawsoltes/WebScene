@@ -52,7 +52,7 @@ revision or from the same-device Metal test path.
 `nt_handle.h` implements move-only adoption, duplication, release and idempotent
 reset. The Windows adapter uses DuplicateHandle with non-inheritable, same-access
 semantics and closes only its owned handles. Legacy DXGI shared-handle values must
-not enter this NT-handle wrapper. No texture/fence import uses it yet.
+not enter this NT-handle wrapper. The Dawn texture importer now uses this wrapper; native fence import remains outstanding.
 
 Portable ownership tests cover moves, replacement, duplicate failure, explicit
 transfer and preservation of the borrowed source. CTest passes locally in 0.32
@@ -71,8 +71,8 @@ endpoint pairings, require enabled Dawn DXGI texture/fence features, duplicate t
 borrowed NT handle, import SharedTextureMemory and validate dimensions, format,
 array depth and requested usage. The duplicate outlives the imported texture and
 memory objects. Failures return explicit statuses and unwind owned references.
-No texture accessor is exposed for GPU use yet; BeginAccess/EndAccess remains
-outstanding. Adapter capabilities are currently supplied by native callers; real
+Texture access is restricted to an explicit BeginAccess/EndAccess interval, as
+described below. Adapter capabilities are currently supplied by native callers; real
 LUID/format queries still need to be wired in. Unknown API values are rejected by
 the capability contract.
 
@@ -83,3 +83,22 @@ the importer header so hosted Windows builds compile its Windows branch. A fresh
 local Dawn probe build also passes. None of these results proves Windows import:
 the Windows branch, duplicated DXGI resource handles, property-failure paths and
 GPU access require Windows compilation and hardware execution still outstanding.
+
+## Dawn access handoff implementation
+
+The thread-confined importer now validates incoming fence/value arrays, begins
+exclusive access, exposes its texture only during access, and returns Dawn's
+EndAccess state to the caller. A successful handoff does not prove GPU completion:
+the next consumer must wait on all returned fences and values. Dropping an active
+access is a programming error; confirmed device loss permits explicit abandonment.
+
+The pinned Dawn SharedResourceMemory implementation can end access before fence
+export fails. Accordingly, a failed EndAccess permanently invalidates this owner
+and clears the outgoing handoff rather than allowing a retry with stale fences.
+Native fence import/export and consumer wait/signal integration remain outstanding.
+
+The Dawn hardware test passes locally (0.45 seconds), including negative checks
+for access on an unopened importer, and the standalone Dawn probe builds. These
+checks compile the common access API but do not exercise a successful DXGI access
+interval. Windows GPU execution, synchronization, device-removal and handle-leak
+qualification are still required before this bridge can be considered working.
