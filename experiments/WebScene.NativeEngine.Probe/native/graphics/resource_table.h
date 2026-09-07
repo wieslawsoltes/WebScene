@@ -51,6 +51,7 @@ template<class T> class resource_table {
     const uint64_t identity_ = new_owner_token();
     const std::thread::id thread_ = std::this_thread::get_id();
     const size_t capacity_;
+    const resource_owner owner_;
     std::vector<entry> entries_;
     uint64_t completed_{};
 
@@ -78,8 +79,10 @@ template<class T> class resource_table {
         }
     }
 public:
-    explicit resource_table(size_t capacity) : capacity_(capacity)
+    explicit resource_table(size_t capacity, resource_owner owner) : capacity_(capacity), owner_(owner)
     {
+        if (!owner.engine || !owner.device)
+            throw std::invalid_argument("graphics table requires a device owner");
         if (capacity > std::numeric_limits<uint32_t>::max())
             throw std::invalid_argument("graphics table capacity too large");
         entries_.reserve(capacity);
@@ -97,7 +100,7 @@ public:
     resource_handle<T> insert(resource_owner owner, std::unique_ptr<T> value)
     {
         check_thread();
-        if (!value || !owner.engine || !owner.device)
+        if (!value || owner != owner_)
             throw std::invalid_argument("graphics resource requires an owner and value");
         for (uint32_t i = 0; i < entries_.size(); ++i) {
             auto& item = entries_[i];
@@ -134,7 +137,8 @@ public:
             if (item.value && item.owner == owner) item.destroyed = true;
         release_ready();
     }
-    // completion is a contiguous completed prefix for this table's queue.
+    // Each table belongs to exactly one device/context submission timeline.
+    // completion is a contiguous completed prefix for that queue only.
     void complete(uint64_t submission)
     {
         check_thread();
