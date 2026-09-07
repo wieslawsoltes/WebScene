@@ -151,3 +151,30 @@ pending-map destruction test uses service readiness/idle recommendations while
 waiting for native retirement. All 12 local tests passed in 13.56 seconds; after
 adding the scheduling assertions, all eight graphics tests passed in 0.43 seconds.
 The completion test also passed with Clang ThreadSanitizer.
+
+## V8 runtime completion integration test
+
+A separate `webscene_graphics_v8_runtime_tests` executable compiles the production
+engine source graph with its include paths, definitions, dependencies and
+compiler/toolchain settings. It avoids exporting test hooks from the production
+C ABI and is enabled only for graphics + V8 test builds.
+
+On the runtime's owning worker thread, the fixture initializes V8, creates a JS
+promise and schedules RAF, then hides the runtime. A separate native thread
+publishes a completion record without entering V8. The normal runtime readiness
+and task pump deliver the record; the dispatcher verifies the current isolate,
+context and thread, resolves the promise, and the runtime checkpoint runs its
+continuation while RAF remains unexecuted. A second case publishes a record and
+uses `execute()` to reach task draining after script execution, proving explicit
+context entry works on that route too. Wrong-thread graphics initialization is
+rejected and completion storage returns to zero occupied slots.
+
+This closes the earlier lack of direct runtime pump evidence. It still does not
+prove JavaScript WebGPU bindings, automatic binding-triggered initialization,
+navigation cancellation or full device-loss promise behavior; those are not
+implemented by the fixture. No adapter/hardware qualification is claimed by this
+test, which uses a native completion record and a real V8 promise.
+
+```sh
+ctest --test-dir artifacts/graphics-build/native-v8-enabled -R graphics_v8_runtime --output-on-failure
+```

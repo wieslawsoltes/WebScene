@@ -1094,3 +1094,30 @@ if(WEBSCENE_NATIVE_ENGINE_DENSE_LINK)
         endif()
     endif()
 endif()
+
+# White-box runtime coverage without adding test hooks to the production C ABI.
+# Compile the same source/configuration graph into a separate executable.
+if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS AND WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    get_target_property(graphics_runtime_sources webscene_native_engine SOURCES)
+    add_executable(webscene_graphics_v8_runtime_tests
+        tests/graphics_v8_runtime_tests.cpp ${graphics_runtime_sources})
+    target_compile_features(webscene_graphics_v8_runtime_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,INCLUDE_DIRECTORIES>")
+    target_compile_definitions(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_DEFINITIONS>")
+    target_compile_options(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_OPTIONS>")
+    target_link_libraries(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,LINK_LIBRARIES>" Threads::Threads)
+    # Preserve toolchain/LTO options, excluding the production ABI export lists.
+    target_link_options(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<FILTER:$<TARGET_PROPERTY:webscene_native_engine,LINK_OPTIONS>,EXCLUDE,exported_symbols_list|version-script>")
+    get_target_property(graphics_runtime_ipo webscene_native_engine INTERPROCEDURAL_OPTIMIZATION)
+    if(graphics_runtime_ipo)
+        set_property(TARGET webscene_graphics_v8_runtime_tests PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+    add_dependencies(webscene_graphics_v8_runtime_tests webscene_native_engine)
+    add_test(NAME webscene_graphics_v8_runtime_tests COMMAND webscene_graphics_v8_runtime_tests)
+    set_tests_properties(webscene_graphics_v8_runtime_tests PROPERTIES TIMEOUT 30 LABELS "graphics;runtime")
+endif()
