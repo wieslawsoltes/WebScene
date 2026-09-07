@@ -53,14 +53,29 @@ public:
         const auto bytes=pixels*pixel_bytes;
         auto writer=pool_.acquire();
         if (!writer) return {};
+        // Reserve idle slots until eviction finishes. Normal rollback is quiet;
+        // exceptional unwinding releases storage's mutex before wake callbacks.
+        std::array<std::optional<owned_image_pool::producer>,2> idle;
         std::lock_guard lock(storage_->mutex);
         auto& slot=storage_->slots[writer->slot()];
-        if (bytes>byte_limit_-(storage_->resident_bytes-slot.bytes)) return {};
         const bool reuse=slot.texture && slot.metadata.width==metadata.width
             && slot.metadata.height==metadata.height && slot.metadata.format==metadata.format;
         metadata.allocation=reuse ? slot.metadata.allocation : new_owner_token();
         // Validate all portable fields before changing native storage.
         writer->set_metadata(metadata);
+        for (auto& reservation:idle) {
+            if (bytes<=byte_limit_-(storage_->resident_bytes-slot.bytes)) break;
+            auto candidate=pool_.acquire();
+            if (!candidate) break; // Retained/submitted images cannot be evicted.
+            reservation.emplace(std::move(*candidate));
+            auto& cached=storage_->slots[reservation->slot()];
+            cached.texture=nullptr;
+            storage_->resident_bytes-=cached.bytes; cached.bytes=0;
+        }
+        for (auto& reservation:idle) if (reservation) reservation->cancel(false);
+        if (bytes>byte_limit_-(storage_->resident_bytes-slot.bytes)) {
+            writer->cancel(false); return {};
+        }
         if (!reuse) {
             // Only an idle slot can be acquired. Drop its old allocation before
             // replacement so this allocator does not temporarily exceed budget.

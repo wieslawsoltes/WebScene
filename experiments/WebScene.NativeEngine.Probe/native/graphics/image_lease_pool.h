@@ -128,13 +128,13 @@ public:
         return token;
     }
     // Cancel before submission, or after an abandoned producer has completed.
-    void cancel_write(image_write_token writer) {
+    void cancel_write(image_write_token writer,bool notify_capacity=true) {
         std::unique_lock lock(mutex_);
         auto& item=image(writer);
         if (item.state!=phase::writing) throw std::invalid_argument("cannot cancel published image");
         if (item.producer_started && !item.producer_done) throw std::invalid_argument("producer still uses cancelled image");
         item.state=phase::idle;
-        lock.unlock(); signal_capacity();
+        lock.unlock(); if (notify_capacity) signal_capacity();
     }
     std::optional<image_lease_token> retain(image_lease_token source) {
         std::lock_guard lock(mutex_);

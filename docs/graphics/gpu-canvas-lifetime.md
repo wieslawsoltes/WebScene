@@ -437,3 +437,19 @@ CPU ABI version. Duplicate disposal is harmless and later WithView throws. All
 three focused managed tests pass without skips on .NET 8 and .NET 10; Uno builds
 with zero warnings/errors. Actual renderer adoption and managed GPU image/consumer
 ownership are still outstanding.
+
+## Resize budget recovery
+
+Dawn allocation now evicts idle cached textures when they would otherwise block
+a resize within the configured byte budget. Each candidate is reserved through
+the lease pool before eviction; retained, submitted or consumed slots cannot be
+selected. Temporary reservations roll back quietly so an unsuccessful allocation
+does not wake itself into a retry loop. Real external capacity release retains
+its normal wake behavior.
+
+The hardware fixture fills all three slots, retains one image and requests a
+larger frame. The request remains blocked while the retained image makes it
+exceed budget, without generating a wake. After releasing that image, the larger
+frame succeeds by reclaiming idle cache storage, with one new texture and resident
+logical color bytes equal to the requested frame. Pool and Dawn CTests pass in
+0.71 seconds. Driver heap residency remains outside these logical byte counters.

@@ -88,6 +88,12 @@ public:
             if (started_ && !completed_) std::terminate();
             if (!published_) state_->pool.cancel_write(token_);
         }
+        // Allocator-internal temporary reservations may cancel quietly to avoid
+        // waking themselves for capacity they just borrowed and restored.
+        void cancel(bool notify_capacity=true) {
+            if (!state_) throw std::invalid_argument("moved image producer");
+            state_->pool.cancel_write(token_,notify_capacity); state_.reset();
+        }
         uint32_t slot() const {
             if (!state_) throw std::invalid_argument("moved image producer");
             return token_.slot;

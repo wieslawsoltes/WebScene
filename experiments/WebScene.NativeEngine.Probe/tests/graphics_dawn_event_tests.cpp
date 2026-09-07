@@ -101,6 +101,24 @@ void test_canvas_storage(dawn_event_service& service,const wgpu::Device& device,
     m.width=512; m.height=512;
     require(!images.acquire(m) && images.created_images()==4);
     images.close(); require(!images.acquire(image_metadata{100,0,1,200,200,2,64,64}));
+    // A retained image must block an over-budget resize, but idle cache entries
+    // must not permanently strand it after that retained image is released.
+    auto capacity_signal=std::make_shared<engine_wake>();
+    dawn_canvas_images tight(device,3*64*64*4,128,capacity_signal);
+    auto small=image_metadata{500,0,1,1,600,1,64,64};
+    std::vector<dawn_canvas_images::frame> cached;
+    for (int i=0;i<3;++i) cached.push_back(std::move(tight.acquire(small).value()));
+    cached[1].producer.begin(); auto busy=cached[1].producer.publish();
+    cached[1].producer.complete(); cached.clear();
+    auto large=small; large.width=96; large.height=96; ++large.allocation_generation;
+    capacity_signal->wait_for(std::chrono::milliseconds(0),[] { return false; });
+    require(!tight.acquire(large) && tight.created_images()==3);
+    require(!capacity_signal->wait_for(std::chrono::milliseconds(0),[] { return false; }));
+    require(busy->describe().width==64 && tight.busy_images()==1);
+    busy.reset();
+    auto replacement=tight.acquire(large);
+    require(replacement && tight.created_images()==4 && tight.resident_bytes()==96*96*4);
+    replacement.reset(); require(tight.busy_images()==0);
     auto detached=std::make_unique<dawn_canvas_images>(device,64*64*4);
     auto frame=detached->acquire(image_metadata{101,0,1,1,200,3,64,64});
     const auto native_identity=frame->texture.Get();
