@@ -21,6 +21,7 @@
 #include <webgpu/webgpu_cpp.h>
 
 #include <array>
+#include <functional>
 #include <atomic>
 #include <cmath>
 #include <iostream>
@@ -58,6 +59,7 @@ bool wait(const wgpu::Instance& instance, wgpu::Future future) {
 } // namespace
 
 static thread_local unsigned hostDestinationTexture=0;
+static thread_local std::function<int(bool)> pendingProducer;
 int main(int argc, char** argv) {
     if (argc < 2 || argc > 3) return finish("failed", "Specify d3d12, metal or vulkan", 1);
     const std::string backend = argv[1];
@@ -69,7 +71,7 @@ int main(int argc, char** argv) {
     else return finish("failed", "Unsupported backend", 1);
     options.forceFallbackAdapter = false;
 
-    std::atomic<bool> error{false}; // Outlives the instance and every device callback.
+    auto error=std::make_shared<std::atomic<bool>>(false); // Retained through asynchronous device use.
     constexpr auto timedWait = wgpu::InstanceFeatureName::TimedWaitAny;
     wgpu::InstanceDescriptor instanceDescriptor{};
     instanceDescriptor.requiredFeatureCount = 1;
@@ -109,7 +111,7 @@ int main(int argc, char** argv) {
     deviceDescriptor.SetUncapturedErrorCallback(
         [](const wgpu::Device&, wgpu::ErrorType, wgpu::StringView, std::atomic<bool>* state) {
             state->store(true);
-        }, &error);
+        }, error.get());
     auto deviceFuture = adapter.RequestDevice(&deviceDescriptor, wgpu::CallbackMode::WaitAnyOnly,
         [deviceResult](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
             if (status == wgpu::RequestDeviceStatus::Success) deviceResult->device = std::move(device);
@@ -244,13 +246,38 @@ int main(int argc, char** argv) {
     const uint8_t* pixels=nullptr;
     bool valid=true;
     if (!verifyPixels) {
-        auto completed=std::make_shared<bool>(false);
-        auto future=device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::WaitAnyOnly,
+#if defined(__APPLE__)
+        auto completed=std::make_shared<std::atomic<int>>(0);
+        auto future=device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
             [completed](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
-                *completed=status==wgpu::QueueWorkDoneStatus::Success;
+                completed->store(status==wgpu::QueueWorkDoneStatus::Success ? 1 : -1,std::memory_order_release);
             });
-        if (!wait(instance,future) || !*completed || error.load())
-            return finish("failed","Producer completion failed",1);
+        // Keep every source lease and Graphite object alive while native GPU
+        // work is outstanding. Delivery runs later on the host's CGL thread.
+        auto deliver=[completed,future,instance,device,error,sharedSurface,sharedMemory,
+            target=hostDestinationTexture,context=CGLGetCurrentContext(),
+            graphite=std::move(graphite),recorder=std::move(recorder),recording=std::move(recording),
+            surface=std::move(surface),texture=std::move(texture),image=std::move(image),
+            replacementImage=std::move(replacementImage),retainedTexture=std::move(retainedTexture),
+            replacementTexture=std::move(replacementTexture),consumer=std::move(consumer),
+            replacementConsumer=std::move(replacementConsumer)](bool drain) mutable -> int {
+            if (CGLGetCurrentContext()!=context) return 0; // Never retire on a foreign context.
+            if (drain && completed->load(std::memory_order_acquire)==0) wait(instance,future);
+            const auto status=completed->load(std::memory_order_acquire);
+            if (!status) return 0;
+            bool delivered=status==1 && !error->load();
+            if (delivered) delivered=check_iosurface_gl(static_cast<IOSurfaceRef>(sharedSurface.get()),
+                width,height,nullptr,rowBytes,target);
+            consumer->complete(); consumer.reset();
+            replacementConsumer->complete(); replacementConsumer.reset();
+            return delivered ? 1 : -1;
+        };
+        auto owner=std::make_shared<decltype(deliver)>(std::move(deliver));
+        pendingProducer=[owner](bool drain) { return (*owner)(drain); };
+        return 0;
+#else
+        return finish("unavailable","Host delivery requires macOS",77);
+#endif
     } else {
     auto mapped = std::make_shared<bool>(false);
     auto mapFuture = buffer.MapAsync(wgpu::MapMode::Read, 0, bufferSize,
@@ -258,7 +285,7 @@ int main(int argc, char** argv) {
         [mapped](wgpu::MapAsyncStatus status, wgpu::StringView) {
             *mapped = status == wgpu::MapAsyncStatus::Success;
         });
-    if (!wait(instance, mapFuture) || !*mapped || error.load())
+    if (!wait(instance, mapFuture) || !*mapped || error->load())
         return finish("failed", "GPU clear/copy/map failed or timed out", 1);
     pixels = static_cast<const uint8_t*>(buffer.GetConstMappedRange(0, bufferSize));
     if (!pixels) return finish("failed", "Mapped range is null", 1);
@@ -299,12 +326,18 @@ int main(int argc, char** argv) {
 
 #if defined(__APPLE__) && defined(WEBSCENE_GRAPHITE_HOST_PROBE)
 // Diagnostic bridge only: caller supplies a current CGL context and a 17x4 2D
-// texture. Uses a producer wait; not a production submission API.
+// texture. Defers producer delivery and GL retirement; not a production API.
 extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_poll(int drain) {
+    if (pendingProducer) {
+        const auto status=pendingProducer(drain!=0);
+        if (!status) return 0;
+        pendingProducer={};
+        if (status<0) return -1;
+    }
     return poll_host_blit(drain!=0);
 }
 extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_probe(unsigned texture) {
-    if (!texture || hostDestinationTexture || host_blit.fence || !CGLGetCurrentContext()) return 1;
+    if (!texture || hostDestinationTexture || pendingProducer || host_blit.fence || !CGLGetCurrentContext()) return 1;
     hostDestinationTexture=texture;
     char name[]="graphite-probe",backend[]="metal",mode[]="iosurface";
     char* args[]={name,backend,mode};

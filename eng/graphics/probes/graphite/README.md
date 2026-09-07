@@ -237,3 +237,20 @@ attempts a second submission while the first fence is pending, verifies rejectio
 then checks that polling after retirement rejects duplicate completion. The full
 host update/commit test passes on M4. These checks do not qualify context-loss
 recovery or replace the remaining synchronous Dawn producer wait.
+
+## Deferred Dawn producer delivery
+
+The host submission now returns after registering AllowSpontaneous queue completion.
+A pending owner retains Graphite context/recorder/recording, output IOSurface and
+both source consumers. Host polling checks the completion flag without waiting;
+once ready, it performs the CGL blit on the owning context, retires source consumers
+and then polls GL completion. Overlap rejection covers both pending stages. An
+explicit timeout drain can still wait, but normal producer and consumer completion
+do not block. The M4 host import/update/commit test passes, and standalone diagnostic
+verification still passes all 68 pixels.
+
+This supersedes the normal producer wait noted above. Adapter/device initialization
+still uses synchronous request waits and is recreated per invocation. Pending state
+is single-transfer and thread-local; cancellation, allocation-failure and device-loss
+paths need further qualification. Production requires persistent engine-owned state,
+bounded pooling and completion wakes rather than this diagnostic polling interface.
