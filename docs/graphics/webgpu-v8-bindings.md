@@ -1377,3 +1377,26 @@ It verifies the shared-image pixels and checks that a retained discovery wrapper
 rejects calls after realm destruction. Rebuilt runtime CTest passes. This provides
 the ownership and dispatch unit for runtime installation; navigator exposure and
 normal DOM canvas/frame scheduling are still outstanding.
+
+### Runtime Navigator installation entry point
+
+`v8_dom_runtime::install_webgpu` is a host-only opt-in before application scripts.
+It requires the host's secure-context decision and negotiated interop policy,
+installs a stable navigator.gpu getter, and routes realm completions through the
+runtime's existing graphics task pump. A denied decision returns false without
+initializing graphics. Runtime ownership retires the realm before its graphics
+service and enters the owning isolate during direct destruction.
+
+Navigation explicitly removes the installed GPU property because this runtime
+retains its Navigator object across loads. The next document requires another
+host installation decision. Explicit shutdown invalidates retained GPU receivers.
+Tests cover denied exposure, stable identity, actual JavaScript adapter/device
+creation through the ordinary runtime task pump, navigation/removal/reinstall,
+shutdown and direct destruction with a live realm. Rebuilt runtime CTest passes;
+the V8-disabled native library also builds successfully.
+
+This is an integration entry point, not automatic enablement in desktop hosts.
+The host's origin/secure-context computation and full Navigator/WebIDL semantics
+still need qualification. HTMLCanvasElement.getContext, automatic GPU frame
+expiration and normal scene presentation are still pending; installing discovery
+alone does not make Kestrel runnable.

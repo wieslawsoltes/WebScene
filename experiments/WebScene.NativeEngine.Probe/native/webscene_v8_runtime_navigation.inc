@@ -10,6 +10,11 @@
         } guard(graphics_transitioning);
         // Detach admission before cancellation delivery can run JS. The local
         // service survives dispatch and closes native publication before reset.
+        if(!webgpu_navigator.IsEmpty()) {
+            webgpu_navigator.Get(isolate)->Delete(context.Get(isolate),js_string(isolate,"gpu")).FromMaybe(false);
+            webgpu_navigator.Reset();
+        }
+        webgpu.reset();
         auto previous=std::move(graphics);
         auto deliver=std::move(graphics_deliver);
         graphics_deliver={};

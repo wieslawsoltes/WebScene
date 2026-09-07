@@ -1,6 +1,7 @@
 #include "webscene_v8_runtime.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
 #include "graphics/graphics_service.h"
+#include "graphics/v8_webgpu_realm.h"
 #endif
 #include "webscene_runtime_diagnostics.h"
 #include "webscene_embed_fallback.h"
@@ -218,6 +219,8 @@ struct v8_dom_runtime::implementation final {
     bool graphics_shutdown{};
     const std::thread::id graphics_thread = std::this_thread::get_id();
     std::unique_ptr<webscene::graphics::graphics_service> graphics;
+    std::unique_ptr<webscene::graphics::v8_webgpu_realm> webgpu;
+    v8::Global<v8::Object> webgpu_navigator;
     std::function<void(webscene::graphics::completion_record)> graphics_deliver;
 #endif
 #include "webscene_v8_runtime_state_types.inc"
@@ -4565,6 +4568,38 @@ void v8_dom_runtime::shutdown_graphics()
     auto context=impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(context);
     impl_->retire_document_graphics();
+}
+
+bool v8_dom_runtime::install_webgpu(std::shared_ptr<webscene::graphics::completion_wake> wake,
+    bool secure_context,webscene::graphics::webgpu_canvas_interop interop)
+{
+    if (!secure_context) return false;
+    if(std::this_thread::get_id()!=impl_->graphics_thread)throw std::logic_error("WebGPU installation requires the runtime owner thread");
+    if (!impl_->isolate || impl_->context.IsEmpty()) throw std::logic_error("WebGPU requires an initialized runtime");
+    auto isolate_locker=impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto context=impl_->context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(context);
+    auto& service=initialize_graphics(std::move(wake),[self=impl_.get()](auto record) {
+        if(self->webgpu)self->webgpu->complete(record);
+    });
+    try {
+        auto global=context->Global();v8::Local<v8::Value> navigator,exception;
+        if(!global->Get(context,js_string(impl_->isolate,"navigator")).ToLocal(&navigator)||!navigator->IsObject()||
+            !global->Get(context,js_string(impl_->isolate,"DOMException")).ToLocal(&exception)||!exception->IsFunction())
+            throw std::logic_error("WebGPU requires installed Navigator and DOMException");
+        impl_->webgpu=std::make_unique<webscene::graphics::v8_webgpu_realm>(impl_->isolate,context,service,
+            exception.As<v8::Function>(),interop);
+        auto getter=v8::Function::New(context,[](const v8::FunctionCallbackInfo<v8::Value>& info) {
+            info.GetReturnValue().Set(info.Data());
+        },impl_->webgpu->object()).ToLocalChecked();
+        navigator.As<v8::Object>()->SetAccessorProperty(js_string(impl_->isolate,"gpu"),getter);
+        impl_->webgpu_navigator.Reset(impl_->isolate,navigator.As<v8::Object>());
+        return true;
+    } catch(...) {
+        impl_->webgpu.reset();impl_->graphics.reset();impl_->graphics_deliver={};throw;
+    }
 }
 
 webscene::graphics::graphics_service& v8_dom_runtime::initialize_graphics(

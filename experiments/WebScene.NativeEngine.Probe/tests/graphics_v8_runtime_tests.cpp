@@ -101,10 +101,48 @@ void test_scene_acquisition_v3() {
     require(view->cpu_view->header.revision==revision,"retained scene did not survive engine disposal");
     webscene_scene_release_v3(view);
 }
+void test_runtime_webgpu_installation() {
+    webscene_native::native_document document;
+    webscene_native::v8_dom_runtime runtime(document,[]{return webscene_native::v8_dom_runtime::viewport_metrics{64,64,1,0};},
+        {},[](uint32_t,const std::string&,const auto&,const std::string&,int64_t,auto& response){response.content="<!doctype html><html><body>next</body></html>";return true;});
+    require(runtime.initialize(),"WebGPU installation runtime failed");
+    auto wake=std::make_shared<engine_wake>();
+    require(!runtime.install_webgpu(wake,false,webgpu_canvas_interop::none),"Insecure WebGPU installation accepted");
+    require(runtime.execute("if('gpu' in navigator)throw new Error('insecure GPU exposure');","denied-gpu"),"Denied GPU exposure failed");
+    require(runtime.install_webgpu(wake,true,webgpu_canvas_interop::none),"Secure WebGPU installation failed");
+    require(runtime.execute(R"JS(
+        if(navigator.gpu!==navigator.gpu)throw new Error('GPU identity');
+        navigator.gpu.requestAdapter().then(adapter=>{
+            if(!adapter)throw new Error('adapter unavailable');
+            return adapter.requestDevice();
+        }).then(device=>{
+            globalThis.installedDevice=device;
+            const ready=document.createElement('div');ready.id='gpu-installed-ready';document.body.appendChild(ready);
+        });
+    )JS","installed-gpu"),"Installed WebGPU request failed");
+    auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(!document.find_by_id("gpu-installed-ready")&&std::chrono::steady_clock::now()<deadline){
+        require(runtime.pump_task(),"Installed GPU completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(document.find_by_id("gpu-installed-ready")!=nullptr,"Installed GPU did not create a device");
+    require(runtime.load_url("https://graphics.test/webgpu-next"),"WebGPU navigation failed");
+    require(runtime.execute("if('gpu' in navigator)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");
+    require(runtime.install_webgpu(wake,true,webgpu_canvas_interop::none),"Navigated GPU reinstall failed");
+    require(runtime.execute("globalThis.retiredGPU=navigator.gpu;","retain-gpu"),"GPU retention failed");
+    runtime.shutdown_graphics();
+    require(runtime.execute("let invalidated=false;try{retiredGPU.getPreferredCanvasFormat()}catch(e){invalidated=e instanceof TypeError}if(!invalidated)throw new Error('shutdown GPU callable');","shutdown-gpu"),"GPU shutdown failed to invalidate receiver");
+    // Direct runtime destruction must enter the isolate before cancelling a
+    // live realm; hosts are not required to call shutdown_graphics separately.
+    webscene_native::native_document direct_document;
+    webscene_native::v8_dom_runtime direct(direct_document,[]{return webscene_native::v8_dom_runtime::viewport_metrics{64,64,1,0};});
+    require(direct.initialize()&&direct.install_webgpu(wake,true,webgpu_canvas_interop::none),"Direct disposal GPU setup failed");
+    require(direct.execute("navigator.gpu.requestAdapter();","pending-disposal-gpu"),"Direct disposal request failed");
+}
 int main() {
     std::exception_ptr failure;
     std::thread worker([&] {
         try {
+            test_runtime_webgpu_installation();
             webscene_native::native_document document;
             webscene_native::v8_dom_runtime runtime(document,[] {
                 return webscene_native::v8_dom_runtime::viewport_metrics{640,480,1,0};

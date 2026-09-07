@@ -15,6 +15,7 @@ namespace webscene::graphics {
 class graphics_service;
 struct completion_wake;
 struct completion_record;
+enum class webgpu_canvas_interop;
 }
 #endif
 
@@ -285,6 +286,11 @@ public:
     // exposed merely by creating this service.
     // Normal engine disposal: terminate records before releasing the context.
     void shutdown_graphics();
+    // Host-only opt-in, before application scripts. The host must establish the
+    // document's secure-context status and negotiate the presenter policy.
+    // Denied exposure does not initialize graphics. Reinstall after navigation.
+    bool install_webgpu(std::shared_ptr<webscene::graphics::completion_wake> wake,
+        bool secure_context,webscene::graphics::webgpu_canvas_interop interop);
     webscene::graphics::graphics_service& initialize_graphics(
         std::shared_ptr<webscene::graphics::completion_wake> wake,
         std::function<void(webscene::graphics::completion_record)> deliver);

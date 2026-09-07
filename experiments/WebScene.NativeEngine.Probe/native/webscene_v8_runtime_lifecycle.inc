@@ -52,6 +52,14 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
         // Stop native publication before releasing the dispatcher and isolate.
         // Context disposal discards its JS promises; no late callback may enter it.
+        if(webgpu && isolate && !context.IsEmpty()) {
+            auto locker=lock_shared_isolate();
+            v8::Isolate::Scope isolate_scope(isolate);
+            v8::HandleScope handle_scope(isolate);
+            v8::Context::Scope context_scope(context.Get(isolate));
+            webgpu.reset();
+        }
+        webgpu_navigator.Reset();
         graphics.reset();
         graphics_deliver = {};
 #endif
