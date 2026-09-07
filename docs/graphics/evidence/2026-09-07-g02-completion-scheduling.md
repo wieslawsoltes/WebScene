@@ -331,3 +331,19 @@ case is synthetic; actual pending-map destruction is covered separately. Complet
 loss reason/message propagation, browser promise semantics, simultaneous live-
 device loss isolation and recovery/recreation remain outstanding. This is native
 loss-path evidence, not a hardware driver-reset or full browser conformance pass.
+
+## Pending-map loss and asynchronous pipeline coverage
+
+The forced-loss hardware case now issues a real MapAsync before ForceLoss,
+replacing its earlier synthetic pending record. The service delivers one logical
+device_lost record and continues pumping via its readiness/idle-wait API until
+the actual mapping callback retires. That callback cannot publish a second
+outcome; both occupied completion storage and native-pending counts return to
+zero before deferred device release.
+
+The same hardware fixture now compiles a WGSL compute shader through native Dawn
+and calls CreateComputePipelineAsync. It verifies a successful, non-null pipeline
+arrives through the service's bounded completion mailbox and headless event pump.
+No presentation or RAF is involved. This proves native asynchronous compilation
+progress for the fixture, not compute correctness or WebGPU CTS conformance.
+The focused hardware test passed in 0.56 seconds on Apple M4 / Metal.

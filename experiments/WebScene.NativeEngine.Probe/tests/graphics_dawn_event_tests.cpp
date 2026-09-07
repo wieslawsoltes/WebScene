@@ -239,7 +239,43 @@ int main() {
     for (size_t i=0;i<1024;++i) if (uploaded[i]!=0x13579bdfu) return 1;
     survivor_buffer.Unmap();
     survivor_buffer.Destroy();
+    wgpu::ShaderSourceWGSL wgsl{};
+    wgsl.code="@compute @workgroup_size(1) fn main() {}";
+    wgpu::ShaderModuleDescriptor shader_descriptor{};
+    shader_descriptor.nextInChain=&wgsl;
+    auto shader=second_native->device.CreateShaderModule(&shader_descriptor);
+    wgpu::ComputePipelineDescriptor pipeline_descriptor{};
+    pipeline_descriptor.compute.module=shader;
+    pipeline_descriptor.compute.entryPoint="main";
+    auto pipeline_ticket=mailbox->reserve(24,second_owner).value();
+    auto pipeline=std::make_shared<wgpu::ComputePipeline>();
+    second_native->device.CreateComputePipelineAsync(&pipeline_descriptor,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,pipeline_ticket,pipeline](wgpu::CreatePipelineAsyncStatus status,wgpu::ComputePipeline result,wgpu::StringView) {
+            *pipeline=std::move(result);
+            mailbox->publish(pipeline_ticket,status==wgpu::CreatePipelineAsyncStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
+    bool pipeline_done=false;
+    const auto pipeline_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+    while (!pipeline_done && std::chrono::steady_clock::now()<pipeline_deadline) {
+        if (root.has_ready_work()) root.pump([&](auto record) {
+            if (record.operation!=24 || record.status!=completion_status::success)
+                throw std::runtime_error("asynchronous native compute pipeline failed");
+            pipeline_done=true;
+        });
+        if (!pipeline_done) wake->wait_for(root.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
+    }
+    if (!pipeline_done || !*pipeline) return 1;
     auto loss_ticket=mailbox->reserve(22,second_owner).value();
+    auto loss_buffer=second_native->device.CreateBuffer(&map_descriptor);
+    struct loss_map_result { bool called{},accepted{}; };
+    auto loss_map=std::make_shared<loss_map_result>();
+    loss_buffer.MapAsync(wgpu::MapMode::Read,0,4096,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,loss_ticket,loss_map](wgpu::MapAsyncStatus status,wgpu::StringView) {
+            loss_map->called=true;
+            loss_map->accepted=mailbox->publish(loss_ticket,status==wgpu::MapAsyncStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
     second_native->device.ForceLoss(wgpu::DeviceLostReason::Unknown,"G02 loss test");
     const auto loss_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
     while (!second_loss->lost.load(std::memory_order_acquire) && std::chrono::steady_clock::now()<loss_deadline)
@@ -255,7 +291,16 @@ int main() {
     root.with_device(second_owned,[&](auto& device) {
         try { device.native(); } catch (const std::logic_error&) { lost_rejected=true; }
     });
-    if (!loss_delivered || !lost_rejected || mailbox->publish(loss_ticket,completion_status::success)) return 1;
+    const auto map_retirement_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while (!loss_map->called && std::chrono::steady_clock::now()<map_retirement_deadline) {
+        if (root.has_ready_work()) root.pump([](auto) {
+            throw std::runtime_error("lost mapping delivered twice");
+        });
+        if (!loss_map->called) wake->wait_for(root.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
+    }
+    if (!loss_delivered || !lost_rejected || !loss_map->called || loss_map->accepted
+        || mailbox->metrics().occupied!=0 || mailbox->metrics().native_pending!=0) return 1;
+    loss_buffer.Destroy();
     auto releases=root.command_endpoint(2,0);
     auto release=graphics_service::deferred_device_release(second_owned);
     std::thread finalizer([&] {
