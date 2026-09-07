@@ -158,6 +158,34 @@ int main() {
             image_writer.reset();
             captured.clear(); canvas_image.reset();
             require(images.busy_images()==0,"captured image leaked pool slot");
+            auto verify_attribute_reset=[&](const char* script,uint32_t expected_width,uint32_t expected_height,bool changes_size) {
+                const auto generation=backing.allocation_generation(),serial=backing.content_serial();
+                auto before=images.acquire();
+                before->set_metadata({backing.identity(),101,generation,serial,1,2,backing.width(),backing.height()});
+                before->begin(); auto ticket=before->publish(); before->complete(); before.reset();
+                auto old_image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*ticket)); ticket.reset();
+                canvas_node->mutable_canvas().publish_gpu_image(old_image);
+                require(runtime.execute(script,"canvas-attribute-reset"),"canvas attribute operation failed");
+                require(backing.width()==expected_width && backing.height()==expected_height
+                    && backing.content_serial()==serial+1
+                    && backing.allocation_generation()==generation+(changes_size ? 1 : 0),
+                    "canvas attribute reset missed bitmap version");
+                require(!canvas_node->canvas().gpu_image && old_image->value.describe().content_serial==serial,
+                    "attribute reset kept current image or mutated retained content");
+            };
+            verify_attribute_reset("canvasProbe.setAttribute('width','800');",800,150,false);
+            verify_attribute_reset("canvasProbe.setAttribute('height','200');",800,200,true);
+            verify_attribute_reset("canvasProbe.removeAttribute('width');",300,200,true);
+            verify_attribute_reset("canvasProbe.setAttributeNS(null,'width','400');",400,200,true);
+            verify_attribute_reset("canvasProbe.removeAttributeNS(null,'width');",300,200,true);
+            verify_attribute_reset("globalThis.widthAttr=document.createAttribute('width'); widthAttr.value='500'; canvasProbe.setAttributeNode(widthAttr);",500,200,true);
+            verify_attribute_reset("widthAttr.value='600';",600,200,true);
+            verify_attribute_reset("canvasProbe.removeAttributeNode(widthAttr);",300,200,true);
+            verify_attribute_reset("canvasProbe.toggleAttribute('width',true);",300,200,false);
+            verify_attribute_reset("canvasProbe.toggleAttribute('width',false);",300,200,false);
+            const auto removed_serial=backing.content_serial();
+            require(runtime.execute("canvasProbe.removeAttribute('width'); canvasProbe.toggleAttribute('width',false); widthAttr.value='700';","detached-attribute"),"detached attribute mutation failed");
+            require(backing.content_serial()==removed_serial,"absent or detached attribute reset canvas");
             runtime.set_visible(false);
             auto wake=std::make_shared<engine_wake>();
             const auto owner_thread=std::this_thread::get_id();

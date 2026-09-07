@@ -710,6 +710,7 @@
             return;
         }
         node->attributes[name] = value;
+        if ((name == "width" || name == "height")) reset_canvas_backing_store(*self, *node);
         if (name == "id") node->id_attribute = value;
         else if (name == "class") node->class_name = value;
         else if (name == "value" && node->tag == "input") {
@@ -778,6 +779,7 @@
             : std::optional<std::string>(previous->second);
         self->record_html_attribute_feature(name, "setAttributeNS");
         node->attributes[name] = value;
+        if ((!namespace_uri || namespace_uri->empty()) && (name == "width" || name == "height")) reset_canvas_backing_store(*self, *node);
         if (name == "id") node->id_attribute = value;
         else if (name == "class") node->class_name = value;
         if (self->attribute_requires_recascade(name)) {
@@ -807,6 +809,7 @@
         const auto old_value = std::optional<std::string>(node->attributes.at(name));
         self->detach_attr(*node, name, *old_value);
         node->attributes.erase(name);
+        if ((name == "width" || name == "height")) reset_canvas_backing_store(*self, *node);
         if (name == "id") node->id_attribute.clear();
         else if (name == "class") node->class_name.clear();
         else if (name == "src" && node->tag == "img") {
@@ -879,6 +882,7 @@
         const auto old_value = std::optional<std::string>(match->second);
         self->detach_attr(*node, name, *old_value);
         node->attributes.erase(name);
+        if ((!namespace_uri || namespace_uri->empty()) && (name == "width" || name == "height")) reset_canvas_backing_store(*self, *node);
         if (name == "id") node->id_attribute.clear();
         else if (name == "class") node->class_name.clear();
         else if (name == "src" && node->tag == "img") node->clear_replaced_image();
@@ -917,6 +921,7 @@
         }
         if (force_present) {
             node->attributes[name] = {};
+            if (name == "width" || name == "height") reset_canvas_backing_store(*self, *node);
             if (name == "id") node->id_attribute.clear();
             else if (name == "class") node->class_name.clear();
             self->notify_custom_element_attribute(
@@ -924,6 +929,7 @@
         } else {
             const auto old_value = std::optional<std::string>(node->attributes.at(name));
             node->attributes.erase(name);
+            if (name == "width" || name == "height") reset_canvas_backing_store(*self, *node);
             if (name == "id") node->id_attribute.clear();
             else if (name == "class") node->class_name.clear();
             self->notify_custom_element_attribute(

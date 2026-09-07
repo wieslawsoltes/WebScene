@@ -3283,6 +3283,8 @@
             ? std::optional<std::string>(state->owner->attributes.at(state->name))
             : std::nullopt;
         state->owner->attributes[state->name] = text;
+        if (state->namespace_uri.empty() && (state->name == "width" || state->name == "height"))
+            reset_canvas_backing_store(*self, *state->owner);
         if (state->name == "id") state->owner->id_attribute = text;
         else if (state->name == "class") state->owner->class_name = text;
         if (state->name == "class") {
@@ -3353,6 +3355,8 @@
             ? std::optional<std::string>(owner->attributes.at(state->name))
             : std::nullopt;
         owner->attributes[state->name] = value;
+        if (state->namespace_uri.empty() && (state->name == "width" || state->name == "height"))
+            reset_canvas_backing_store(*self, *owner);
         if (state->name == "id") owner->id_attribute = value;
         else if (state->name == "class") owner->class_name = value;
         if (state->name == "class") {
@@ -3390,6 +3394,8 @@
         }
         const auto old_value = owner->attributes.at(state->name);
         owner->attributes.erase(state->name);
+        if (state->namespace_uri.empty() && (state->name == "width" || state->name == "height"))
+            reset_canvas_backing_store(*self, *owner);
         if (state->name == "id") owner->id_attribute.clear();
         else if (state->name == "class") owner->class_name.clear();
         state->value = old_value;

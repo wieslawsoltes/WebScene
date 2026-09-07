@@ -350,3 +350,23 @@ alive until consumer completion. Focused runtime CTest passes in 0.61 seconds.
 This tests production scene acquisition/acknowledgement code with native fixture
 images. Browser-driven worker publication and rendered Skia integration remain
 outstanding; it is not an end-to-end WebGPU browser test.
+
+## Attribute-driven backing resets
+
+Canvas width/height changes through setAttribute/removeAttribute, null-namespace
+setAttributeNS/removeAttributeNS, attached Attr.value, setAttributeNode,
+removeAttributeNode and toggleAttribute now invoke the same backing reset as
+property assignment. Same-value sets reset content; removing an absent attribute
+or forcing toggleAttribute to its existing state does not. Detached Attr mutation
+does not touch its former canvas. Nonempty namespaces do not invoke this bitmap
+reset hook; the existing attribute namespace representation is not redesigned.
+
+The runtime fixture publishes a retained image before each effective mutation,
+checks bitmap dimensions and generation/content increments, and verifies that the
+canvas drops its current image while an independent reference keeps the old
+metadata. Dimension parsing and complete 2D drawing-state reset conformance still
+need separate verification; these changes address backing lifetime invalidation.
+
+The complete graphics-enabled rebuild and CTest run after attribute reset wiring
+passed all 16 tests in 13.07 seconds. SDK CI was checked once between work and
+remained pending; no hosted or cross-platform qualification pass is inferred.
