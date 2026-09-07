@@ -1,5 +1,6 @@
 #pragma once
 #include "graphics/dawn_iosurface_submission.h"
+#include "graphics/dawn_iosurface_canvas_host.h"
 #include <IOSurface/IOSurface.h>
 #include <atomic>
 
@@ -143,7 +144,38 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
         discarded_wake->count.load()!=1||rejected.busy_images()!=0||error->load())return {};
     if(discarded_shared->begin(access)||!discarded_shared->expire_texture())return {};
     }
+    dawn_iosurface_canvas_host canvas_provider(1024*1024);
+    auto host_texture=canvas_provider.acquire(frame.metadata,*device,description,storage);
+    if(!host_texture)return {};
+    bool duplicate_acquire=false;
+    try{canvas_provider.acquire(frame.metadata,*device,description,storage);}
+    catch(const std::logic_error&){duplicate_acquire=true;}
+    if(!duplicate_acquire)return {};
+    bool foreign_retirement=false;
+    try{canvas_provider.retire(expired_texture,false);}
+    catch(const std::invalid_argument&){foreign_retirement=true;}
+    if(!foreign_retirement)return {};
+    canvas_provider.retire(host_texture,false);
+    auto host_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(!canvas_provider.idle()&&std::chrono::steady_clock::now()<host_deadline) {
+        instance.ProcessEvents();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    if(!canvas_provider.idle()||canvas_provider.take_ready()||canvas_provider.busy_images()!=0)return {};
     auto image=submitted->take_ready();
     if (submitted->take_ready()) return {}; // A publication transfers once.
-    return image;
+    if(!image)return {};image.reset();
+    host_texture=canvas_provider.acquire(frame.metadata,*device,description,storage);
+    if(!host_texture)return {};
+    auto host_encoder=device->CreateCommandEncoder();
+    color.view=host_texture.CreateView();
+    auto host_recording=host_encoder.BeginRenderPass(&pass);host_recording.End();
+    auto host_commands=host_encoder.Finish();device->GetQueue().Submit(1,&host_commands);
+    canvas_provider.retire(host_texture,true);
+    host_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    do {
+        auto ready=canvas_provider.take_ready();
+        if(ready)return ready;
+        instance.ProcessEvents();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }while(std::chrono::steady_clock::now()<host_deadline);
+    return {};
 }

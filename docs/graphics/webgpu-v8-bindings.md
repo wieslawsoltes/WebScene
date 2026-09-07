@@ -1297,3 +1297,21 @@ Ganesh window pixel test passes with 32 frames, one import, zero explicit
 transport copies and four diagnostic readbacks. This importer currently targets
 the negotiated BGRA8 pool; it does not establish RGBA16/HDR support or connect
 ordinary JavaScript canvas acquisition by itself.
+
+### Native canvas frame provider
+
+`dawn_iosurface_canvas_host` now combines the IOSurface pool, descriptor-preserving
+import and submitted-frame retirement. It permits one active current texture,
+reserves one of three pending retirement slots before acquisition, rejects foreign
+texture retirement and exposes completed retained images through `take_ready`.
+Failed/discarded/consumed retirements are pruned on the engine thread. The caller
+must retire the active texture before destroying the provider; pending GPU work
+retains its allocation independently. Scene publication must still filter canvas
+generations and content serials when consuming completed images.
+
+The Metal fixture verifies duplicate acquisition and foreign retirement
+rejection, discarded-frame cleanup, then renders and returns the provider's own
+image to the Ganesh window probe. The probe passes with 32 frames, one import,
+completed GPU retirement, zero explicit transport copies and four diagnostic
+readbacks, including presentation after provider destruction. Ordinary V8 canvas
+host callbacks and scene scheduling still need to be connected to this provider.
