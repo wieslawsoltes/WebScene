@@ -16,6 +16,11 @@ if(BUILD_TESTING)
     target_include_directories(webscene_graphics_queue_tests PRIVATE native)
     target_link_libraries(webscene_graphics_queue_tests PRIVATE Threads::Threads)
     add_test(NAME webscene_graphics_queue_tests COMMAND webscene_graphics_queue_tests)
+    add_executable(webscene_graphics_completion_tests tests/graphics_completion_tests.cpp)
+    target_compile_features(webscene_graphics_completion_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_completion_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_completion_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_completion_tests COMMAND webscene_graphics_completion_tests)
 endif()
 
 # CMake 3.24 made extracted archive timestamps deterministic through CMP0135.
