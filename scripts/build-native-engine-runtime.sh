@@ -18,10 +18,11 @@ thin_lto=false
 upstream_v8=false
 disable_wasm=false
 partition_alloc=false
+graphics_sdk=
 cmake_build_type=Release
 
 usage() {
-  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--cmake-build-type Release|RelWithDebInfo] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
+  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--cmake-build-type Release|RelWithDebInfo] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc] [--graphics-sdk DIR]" >&2
 }
 
 while (($# > 0)); do
@@ -43,6 +44,7 @@ while (($# > 0)); do
     --thin-lto) thin_lto=true; shift ;;
     --disable-wasm) disable_wasm=true; shift ;;
     --partition-alloc) partition_alloc=true; shift ;;
+    --graphics-sdk) graphics_sdk="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -88,6 +90,12 @@ fi
 
 v8_configuration=Release
 build_variant="-$html_parser-$css_parser-$selector_parser-$dom_bindings-$v8_snapshot"
+graphics_cmake=OFF
+if [[ -n "$graphics_sdk" ]]; then
+  graphics_sdk="$(cd "$graphics_sdk" && pwd)"
+  graphics_cmake=ON
+  build_variant+=-graphics
+fi
 if [[ "$cmake_build_type" == RelWithDebInfo ]]; then
   build_variant+=-symbols
 fi
@@ -298,6 +306,8 @@ cmake_args=(
   -B "$build_dir"
   -DCMAKE_BUILD_TYPE="$cmake_build_type"
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON
+  -DWEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS="$graphics_cmake"
+  -DWEBSCENE_GRAPHICS_SDK_ROOT="$graphics_sdk"
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON
   -DWEBSCENE_V8_POINTER_COMPRESSION=ON
   -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON
@@ -428,6 +438,12 @@ pack_args=(
   "-p:WebSceneNativeEngineV8Snapshot=$v8_snapshot"
   "-p:WebSceneNativeEngineConfiguration=$cmake_build_type"
 )
+if [[ -n "$graphics_sdk" ]]; then
+  graphics_stage_root="$(mktemp -d "$build_dir/graphics-package.XXXXXX")"
+  python3 "$repo_root/eng/graphics/stage-runtime.py" --sdk "$graphics_sdk" --native "$build_dir" \
+    --rid "$rid" --output "$graphics_stage_root/assets"
+  pack_args+=("-p:WebSceneGraphicsPackageProps=$graphics_stage_root/assets/GraphicsPackage.props")
+fi
 if [[ "$v8_snapshot" == bootstrap ]]; then
   pack_args+=(
     "-p:WebSceneNativeEngineSnapshotPath=$snapshot_path"
@@ -498,6 +514,11 @@ NUGET_PACKAGES="$consumer_root/packages" dotnet restore \
 NUGET_PACKAGES="$consumer_root/packages" dotnet build \
   "$consumer_dir/consumer.csproj" -c Release -r "$rid" --no-restore
 copied_assets=("$native_name" icudtl.dat webscene-native-runtime.json)
+if [[ -n "$graphics_sdk" ]]; then
+  graphics_suffix=.so
+  if [[ "$expected_kernel" == Darwin ]]; then graphics_suffix=.dylib; fi
+  copied_assets+=("libwebgpu_dawn$graphics_suffix" "libEGL$graphics_suffix" "libGLESv2$graphics_suffix" webscene-graphics-runtime.json)
+fi
 if [[ "$v8_snapshot" == bootstrap ]]; then
   copied_assets+=(webscene_bootstrap_snapshot.bin webscene_bootstrap_snapshot.meta)
 fi

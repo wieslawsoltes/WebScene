@@ -46,6 +46,8 @@ ctest --test-dir artifacts/native-graphics --output-on-failure
 
 This checks the existing parser tests and native library linkage. V8-enabled native runtime builds, wrappers and NuGet distribution still require their own integration/qualification. Creating a GPU device remains an explicit probe action; no device is created by these CMake changes.
 
+The runtime wrappers accept `--graphics-sdk /absolute/path/to/graphics-sdk/<rid>` (Bash) or `-GraphicsSdk` (PowerShell). Omission explicitly configures graphics OFF; enabled builds use a separate build-directory suffix. Before packing, `stage-runtime.py` verifies both SDK manifests and checks that the libraries beside the native engine match them. It stages Dawn/ANGLE libraries, the full SDK manifests, and license bytes with a map from original paths to short content-hash filenames. The generated package targets copy all graphics dependencies on build and publish and reject missing assets. This packages native prerequisites; it does not advertise WebGPU/WebGL browser support. Windows/Linux package and driver/compiler dependency qualification remain required.
+
 After building the native engine in separate `artifacts/graphics-build/native-enabled` and `native-disabled` directories (toggle `WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS`), reproduce the SDK boundary and macOS loader checks with:
 
 ```sh

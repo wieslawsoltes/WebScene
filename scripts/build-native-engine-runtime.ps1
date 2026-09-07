@@ -10,6 +10,7 @@ param(
     [string] $V8Root,
     [string] $V8Workspace,
     [string] $V8Revision = "15.3.10",
+    [string] $GraphicsSdk,
 
     [ValidateSet("legacy", "html5ever")]
     [string] $HtmlParser = "html5ever",
@@ -43,6 +44,12 @@ $buildVariant = "-$HtmlParser-$CssParser-$SelectorParser-$DomBindings-$V8Snapsho
 $buildVariant += if ($ThinLto) { "-thinlto" } else { "" }
 $buildVariant += if ($PartitionAlloc) { "-partitionalloc" } else { "" }
 $buildVariant += "-inspector"
+$graphicsCMake = "OFF"
+if ($GraphicsSdk) {
+    $GraphicsSdk = (Resolve-Path $GraphicsSdk).Path
+    $graphicsCMake = "ON"
+    $buildVariant += "-graphics"
+}
 if (($CssParser -eq "cssparser" -or $SelectorParser -eq "servo") -and $HtmlParser -ne "html5ever") {
     throw "Servo CSS components require -HtmlParser html5ever."
 }
@@ -199,6 +206,8 @@ $buildDir = if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
 & cmake -S (Join-Path $repoRoot "experiments/WebScene.NativeEngine.Probe") -B $buildDir `
     -A $(if ($cpu -eq "arm64") { "ARM64" } else { "x64" }) `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON `
+    "-DWEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=$graphicsCMake" `
+    "-DWEBSCENE_GRAPHICS_SDK_ROOT=$GraphicsSdk" `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON `
     -DWEBSCENE_V8_POINTER_COMPRESSION=ON `
     -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON `
@@ -273,6 +282,13 @@ if ($HtmlParser -eq "html5ever") {
     $packArguments += "-p:WebSceneNativeEngineHtmlParserNoticesPath=$(Join-Path $repoRoot 'experiments/WebScene.NativeEngine.Probe/native/html_parser/THIRD-PARTY-NOTICES.md')"
 }
 $packArguments += "-p:PackageVersion=$PackageVersion"
+if ($GraphicsSdk) {
+    $graphicsStage = Join-Path $buildDir ("graphics-package-" + [guid]::NewGuid().ToString('N'))
+    & python (Join-Path $repoRoot 'eng/graphics/stage-runtime.py') --sdk $GraphicsSdk `
+        --native (Join-Path $buildDir 'Release') --rid $Rid --output $graphicsStage
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to stage verified graphics dependencies.' }
+    $packArguments += "-p:WebSceneGraphicsPackageProps=$(Join-Path $graphicsStage 'GraphicsPackage.props')"
+}
 & dotnet @packArguments
 if ($LASTEXITCODE -ne 0) { throw "Failed to pack the native WebScene engine." }
 
@@ -354,6 +370,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Failed to build the native runtime package consumer." }
     $consumerOutput = Join-Path $consumerDir "bin/Release/net8.0/$Rid"
     $copiedAssets = @("webscene_native_engine.dll", "icudtl.dat", "webscene-native-runtime.json")
+    if ($GraphicsSdk) {
+        $copiedAssets += @("webgpu_dawn.dll", "libEGL.dll", "libGLESv2.dll", "webscene-graphics-runtime.json")
+    }
     if ($V8Snapshot -eq "bootstrap") {
         $copiedAssets += @("webscene_bootstrap_snapshot.bin", "webscene_bootstrap_snapshot.meta")
     }
