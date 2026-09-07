@@ -199,6 +199,16 @@ void test_runtime_webgpu_installation() {
     }
     require(document.find_by_id("gpu-installed-ready")!=nullptr,"Installed GPU did not create a device");
     require(runtime.execute(R"JS(
+        const namespaces={GPUBufferUsage:{MAP_READ:1,MAP_WRITE:2,COPY_SRC:4,COPY_DST:8,INDEX:16,VERTEX:32,UNIFORM:64,STORAGE:128,INDIRECT:256,QUERY_RESOLVE:512},
+          GPUTextureUsage:{COPY_SRC:1,COPY_DST:2,TEXTURE_BINDING:4,STORAGE_BINDING:8,RENDER_ATTACHMENT:16,TRANSIENT_ATTACHMENT:32},
+          GPUMapMode:{READ:1,WRITE:2},GPUShaderStage:{VERTEX:1,FRAGMENT:2,COMPUTE:4},GPUColorWrite:{RED:1,GREEN:2,BLUE:4,ALPHA:8,ALL:15}};
+        for(const [name,values] of Object.entries(namespaces)){
+          const object=globalThis[name];if(Object.prototype.toString.call(object)!=='[object '+name+']')throw new Error('namespace brand');
+          for(const [key,value] of Object.entries(values)){const d=Object.getOwnPropertyDescriptor(object,key);
+            if(d.value!==value||d.writable||d.configurable||!d.enumerable)throw new Error('flag descriptor');}
+        }
+    )JS","gpu-constants"),"GPU flag namespaces failed");
+    require(runtime.execute(R"JS(
         if(installedDevice.pushErrorScope.length!==1)throw new Error('push scope arity');
         for(const filter of ['validation','out-of-memory','internal'])installedDevice.pushErrorScope(filter);
         for(const call of [
@@ -301,7 +311,7 @@ void test_runtime_webgpu_installation() {
     require(runtime.execute("domGPUContext.unconfigure();","gpu-raf-cleanup"),"GPU RAF cleanup failed");
 #endif
     require(runtime.load_url("https://graphics.test/webgpu-next"),"WebGPU navigation failed");
-    require(runtime.execute("if('gpu' in navigator)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");
+    require(runtime.execute("if('gpu' in navigator||'GPUBufferUsage' in globalThis)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");
     require(runtime.install_webgpu(wake,true,webgpu_canvas_interop::none),"Navigated GPU reinstall failed");
     require(runtime.execute("globalThis.retiredGPU=navigator.gpu;","retain-gpu"),"GPU retention failed");
     runtime.shutdown_graphics();

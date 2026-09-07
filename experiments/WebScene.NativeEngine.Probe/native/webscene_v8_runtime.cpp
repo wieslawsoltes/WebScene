@@ -2,6 +2,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
 #include "graphics/graphics_service.h"
 #include "graphics/v8_webgpu_realm.h"
+#include "graphics/v8_webgpu_constants.h"
 #if defined(__APPLE__)
 #include "graphics/v8_webgpu_iosurface_canvas_host.h"
 #endif
@@ -4646,6 +4647,8 @@ bool v8_dom_runtime::install_webgpu(std::shared_ptr<webscene::graphics::completi
         auto getter=v8::Function::New(context,[](const v8::FunctionCallbackInfo<v8::Value>& info) {
             info.GetReturnValue().Set(info.Data());
         },impl_->webgpu->object()).ToLocalChecked();
+        if(!webscene::graphics::install_webgpu_flag_namespaces(impl_->isolate,context))
+            throw std::runtime_error("WebGPU flag namespace installation failed");
         navigator.As<v8::Object>()->SetAccessorProperty(js_string(impl_->isolate,"gpu"),getter);
         impl_->webgpu_navigator.Reset(impl_->isolate,navigator.As<v8::Object>());
         impl_->webgpu_dom_exception.Reset(impl_->isolate,exception.As<v8::Function>());

@@ -1779,3 +1779,17 @@ delivery, not a full conformance claim.
 
 The unchanged Kestrel check still exits 1, now with "GPUBufferUsage is not defined".
 Its shader diagnostic step completes and initialization advances to buffer setup.
+
+### WebGPU flag namespaces (2026-09-08)
+
+Host-approved installation now exposes GPUBufferUsage, GPUTextureUsage,
+GPUMapMode, GPUShaderStage, and GPUColorWrite. Namespace constants are enumerable,
+non-writable and non-configurable; namespace globals are non-enumerable and
+carry their toStringTag. Navigation retirement removes their global bindings.
+Values follow the WebGPU draft: https://www.w3.org/TR/2026/CRD-webgpu-20260820/
+Tests verify every defined value/property descriptor, tags, and navigation
+removal; the native runtime suite passes. Worker exposure and full namespace
+WebIDL harness qualification remain part of the broader conformance work.
+
+Unchanged Kestrel was rerun and exits 1 with "d.createBindGroupLayout is not a
+function". Buffer setup now advances to explicit binding-layout creation.
