@@ -93,7 +93,14 @@ internal sealed class WebGpuDocumentProbeApp : Application
                             await Task.Delay(500);
                         }
                     }
-                    await Task.Delay(1000);
+                    if (Environment.GetCommandLineArgs().Contains("--stress-webgpu"))
+                    {
+                        var deadline = DateTime.UtcNow.AddSeconds(10);
+                        while (await view.EvaluateTextAsync("webGpuDemoFrames>=120||!!globalThis.webGpuDemoError") != "true"
+                            && DateTime.UtcNow < deadline)
+                            await Task.Delay(100);
+                    }
+                    else await Task.Delay(1000);
                     Console.WriteLine(await view.EvaluateTextAsync("({submitted:globalThis.webGpuDemoSubmitted,error:globalThis.webGpuDemoError,gpu:!!navigator.gpu,frames:globalThis.webGpuDemoFrames,width:document.getElementById('gpu').width,height:document.getElementById('gpu').height})"));
                     Console.WriteLine(view.SceneDiagnostics);
                 }

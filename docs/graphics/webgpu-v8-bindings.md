@@ -1687,3 +1687,21 @@ not a performance-qualified GC scheduling policy; latency and native-memory
 accounting still need qualification. The normal-window stress rerun still
 failed after three frames with canvas texture acquisition unavailable, so
 continuous rendering remains unqualified independently of this ticket fix.
+
+### RAF canvas-capacity admission (2026-09-08)
+
+The runtime now defers releasing a new RAF batch when a configured GPU canvas
+has no current texture and its bounded provider cannot acquire an image.
+Already-acquired textures still receive their end-of-frame opportunity. Pending
+callbacks keep their waiting deadline and are reconsidered at a later host
+frame; this adds no GPU wait, readback, or storage. Provider readiness accounts
+for both the three image slots and submission retirement slots.
+
+Native runtime tests pass. After rebuilding, --webgpu-document --stress-webgpu
+--resize-webgpu completed 124 submissions without a demo error and ended at
+400x240 after the four-size sequence. Extra submissions come from resize redraws.
+The probe now waits up to ten seconds for stress completion/error before reporting.
+This verifies producer progress through combined rendering and discrete resizing,
+not display of every submitted frame or live-drag timing. Non-RAF acquisition
+under pressure, multi-canvas fairness, device loss, Retina resolution, and
+smooth-presentation qualification remain open.

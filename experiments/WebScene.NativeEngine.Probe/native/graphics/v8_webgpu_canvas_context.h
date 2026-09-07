@@ -99,6 +99,7 @@ public:
     }
     ~v8_webgpu_canvas_context(){check_scope();wrapper_.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);end_frame(false);}
     v8::Local<v8::Object> object()const{check_scope();return wrapper_.Get(isolate_);}
+    bool is_configured()const noexcept{return configuration_.has_value();}
     bool has_current_texture()const noexcept{return !current_.IsEmpty();}
     void end_frame(bool present){check_scope();if(current_.IsEmpty())return;host_.retire(native_current_,present);current_.Reset();native_current_=nullptr;}
     void resize(uint32_t width,uint32_t height){check_scope();end_frame(false);width_=width;height_=height;}

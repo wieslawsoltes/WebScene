@@ -4517,6 +4517,13 @@ void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
         : std::chrono::duration<double, std::milli>(now.time_since_epoch()).count();
     impl_->last_animation_frame_timestamp_ms = timestamp;
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+    // Admit a new RAF batch only when configured canvases can obtain storage.
+    // Existing current textures still need their rendering opportunity to end.
+    // Pending callbacks retain their sentinel until a later host frame; no wait
+    // or GPU work is performed here.
+    for(auto& [key,canvas]:impl_->gpu_canvases)
+        if(canvas.context->is_configured()&&!canvas.context->has_current_texture()&&!canvas.provider->can_acquire())
+            return;
     if(impl_->webgpu)impl_->gpu_rendering_opportunity=true;
 #endif
     if (impl_->is_text_control(impl_->active_element)
