@@ -1003,3 +1003,23 @@ MacOS runtime tests cover extent defaults, single iterator acquisition, exact
 property order, binding/view-format storage, late shape validation, range errors
 and atomic failure. Runtime and generator checks pass. Texture/view wrappers and
 createTexture dispatch remain pending.
+
+
+### Texture-view conversion and wrappers
+
+A typed texture-view registry now uses the shared labeled-resource lifetime
+machinery, with its own interface brand and retained native-reference conversion.
+The descriptor converter preserves optional mip/layer counts, format/dimension,
+aspect, base offsets, usage and DOMString swizzle. Nonidentity swizzles use Dawn's
+component-swizzle chain. Explicit UINT_MAX counts cannot silently become native
+unspecified sentinels; these and unknown usage bits produce an invalid native
+dimension for subsequent Dawn validation. Invalid swizzle characters likewise
+remain native validation errors, not WebIDL enum exceptions.
+
+MacOS runtime coverage verifies descriptor defaults, explicit sentinel
+preservation, invalid inputs and DOMString surrogate preservation. A real native
+view is wrapped, retained and disposed; native table removal happens only after
+engine release draining, and cross-interface conversion is rejected. Runtime and
+generator checks pass. Public createTexture/createView dispatch remains pending;
+full native error-scope qualification of translated invalid view descriptors is
+also still required before conformance claims.

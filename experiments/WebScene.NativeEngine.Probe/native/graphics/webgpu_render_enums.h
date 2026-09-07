@@ -262,4 +262,11 @@ template<> struct webgpu_enum_names<wgpu::TextureViewDimension> {
         {"3d",wgpu::TextureViewDimension::e3D},
     }};
 };
+template<> struct webgpu_enum_names<wgpu::TextureAspect> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::TextureAspect>,3> values{{
+        {"all",wgpu::TextureAspect::All},
+        {"stencil-only",wgpu::TextureAspect::StencilOnly},
+        {"depth-only",wgpu::TextureAspect::DepthOnly},
+    }};
+};
 } // namespace webscene::graphics

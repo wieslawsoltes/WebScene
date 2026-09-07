@@ -1,5 +1,6 @@
 #pragma once
 #include "graphics/v8_webgpu_texture_descriptor.h"
+#include "graphics/v8_webgpu_texture_view_descriptor.h"
 inline void test_v8_webgpu_texture_descriptor(v8::Isolate* isolate,v8::Local<v8::Context> context) {
     const auto evaluate=[&](const char* source){return v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocalChecked()->Run(context).ToLocalChecked();};
     webgpu_texture_descriptor texture;
@@ -21,4 +22,14 @@ inline void test_v8_webgpu_texture_descriptor(v8::Isolate* isolate,v8::Local<v8:
         v8::TryCatch caught(isolate);texture.label="unchanged";
         require(!read_webgpu_texture_descriptor(isolate,context,evaluate(source),texture)&&caught.HasCaught()&&texture.label=="unchanged","Invalid texture descriptor accepted or committed");
     }
+    webgpu_texture_view_descriptor view;
+    require(read_webgpu_texture_view_descriptor(isolate,context,v8::Undefined(isolate),view)&&!view.mip_count&&!view.layer_count&&view.swizzle==u"rgba","View defaults failed");
+    require(read_webgpu_texture_view_descriptor(isolate,context,evaluate("({mipLevelCount:4294967295,swizzle:'bgra'})"),view)&&view.mip_count==4294967295u,"Explicit view sentinel lost");
+    view.with_native([&](const auto& native){require(native.dimension==static_cast<wgpu::TextureViewDimension>(0xffffffffu)&&native.nextInChain,"Invalid explicit count became unspecified");});
+    require(read_webgpu_texture_view_descriptor(isolate,context,evaluate("({swizzle:'\\ud800gba'})"),view)&&view.swizzle[0]==0xd800,"Swizzle DOMString surrogate changed");
+    for(const char* source:{"({mipLevelCount:-1})","({aspect:'invalid'})","({swizzle:Symbol()})"}) {
+        v8::TryCatch caught(isolate);view.label="unchanged";
+        require(!read_webgpu_texture_view_descriptor(isolate,context,evaluate(source),view)&&caught.HasCaught()&&view.label=="unchanged","Invalid view accepted or committed");
+    }
+
 }

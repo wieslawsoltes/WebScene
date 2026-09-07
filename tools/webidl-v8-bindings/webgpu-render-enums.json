@@ -227,5 +227,10 @@
     "cube": "Cube",
     "cube-array": "CubeArray",
     "3d": "e3D"
+  },
+  "TextureAspect": {
+    "all": "All",
+    "stencil-only": "StencilOnly",
+    "depth-only": "DepthOnly"
   }
 }

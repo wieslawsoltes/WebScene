@@ -10,6 +10,7 @@
 #include "graphics/v8_webgpu_devices.h"
 #include "graphics/v8_webgpu_shaders.h"
 #include "graphics/v8_webgpu_render_pipelines.h"
+#include "graphics/v8_webgpu_texture_views.h"
 #include "graphics/v8_webgpu_adapters.h"
 #include "graphics/v8_webgpu_discovery.h"
 #include "graphics/webgpu_adapter_info.h"
@@ -1036,6 +1037,23 @@ int main() {
                     )JS");
                     require(!v8::Script::Compile(context,shader_script).ToLocalChecked()->Run(context).IsEmpty(),"Shader wrapper label behavior failed");
                     test_v8_webgpu_programmable_stage(isolate,context);
+                    {
+                        resource_handle<wgpu::Texture> texture;resource_handle<wgpu::TextureView> view;
+                        adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
+                            wgpu::TextureDescriptor descriptor{};descriptor.size={4,4,1};descriptor.format=wgpu::TextureFormat::RGBA8Unorm;descriptor.usage=wgpu::TextureUsage::RenderAttachment;
+                            texture=owned.create_texture(descriptor);view=owned.create_texture_view(texture,{});
+                        });
+                        auto views=std::make_unique<v8_webgpu_texture_views>(isolate,context,1);
+                        auto object=views->wrap(context,*adapter_service,gc_buffer_device,view,device_object,"view").ToLocalChecked();
+                        auto retained=v8_webgpu_texture_views::native_reference(object);
+                        bool wrong=false;try{v8_webgpu_shaders::native_reference(object);}catch(const std::invalid_argument&){wrong=true;}
+                        require(wrong&&retained,"Texture view interface conversion failed");
+                        views.reset();bool retired=false;
+                        try{v8_webgpu_texture_views::native_reference(object);}catch(const std::invalid_argument&){retired=true;}
+                        adapter_service->with_device(gc_buffer_device,[&](auto& owned) {require(retired&&owned.live_texture_views()==1,"Texture view released inline");});
+                        adapter_service->drain_commands();
+                        adapter_service->with_device(gc_buffer_device,[&](auto& owned) {require(owned.live_texture_views()==0,"Texture view deferred release failed");owned.release_texture(texture);});
+                    }
                     auto retained_shader=v8_webgpu_shaders::native_reference(shader_object);
                     resource_handle<wgpu::RenderPipeline> pipeline_handle;
                     adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
