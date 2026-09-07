@@ -2,10 +2,12 @@
 #include "webscene_native_dom.h"
 #include "graphics/graphics_service.h"
 #include "graphics/engine_wake.h"
+#include "graphics/v8_release_registry.h"
 #include <v8.h>
 #include <iostream>
 using namespace webscene::graphics;
 void require(bool value,const char* message) { if (!value) throw std::runtime_error(message); }
+int weak_releases=0;
 int main() {
     std::exception_ptr failure;
     std::thread worker([&] {
@@ -24,6 +26,8 @@ int main() {
             auto wake=std::make_shared<engine_wake>();
             const auto owner_thread=std::this_thread::get_id();
             bool delivered=false;
+            std::shared_ptr<release_channel> releases;
+            std::unique_ptr<v8_release_registry> wrappers;
             auto& graphics=runtime.initialize_graphics(wake,[&](completion_record record) {
                 require(((record.operation==1 || record.operation==2) && record.status==completion_status::success)
                     || (record.operation==3 && record.status==completion_status::cancelled),"unexpected completion");
@@ -41,6 +45,20 @@ int main() {
                 auto* isolate=v8::Isolate::GetCurrent();
                 require(isolate!=nullptr && isolate->InContext(),"completion has no V8 context");
                 auto context=isolate->GetCurrentContext();
+                if (record.operation==1) {
+                    wrappers=std::make_unique<v8_release_registry>(isolate,releases,1);
+                    graphics_command release{[](graphics_service&,std::span<const std::byte>,const graphics_command::arguments&) noexcept { ++weak_releases; }};
+                    require(wrappers->attach(v8::Object::New(isolate),release),"weak wrapper registration failed");
+                    require(!wrappers->attach(v8::Object::New(isolate),release),"weak wrapper capacity was not bounded");
+                }
+                if (record.operation==2) {
+                    graphics_command release{[](graphics_service&,std::span<const std::byte>,const graphics_command::arguments&) noexcept { ++weak_releases; }};
+                    auto reachable=v8::Object::New(isolate);
+                    require(wrappers->attach(reachable,release),"weak wrapper slot was not reusable");
+                    wrappers.reset();
+                    require(weak_releases==1,"registry disposal executed graphics inline");
+                }
+
                 auto key=v8::String::NewFromUtf8Literal(isolate,"gpuResolve");
                 auto resolve=context->Global()->Get(context,key).ToLocalChecked().As<v8::Function>();
                 v8::Local<v8::Value> outcome=v8::Integer::New(isolate,record.status==completion_status::cancelled ? 2 : 1);
@@ -54,6 +72,7 @@ int main() {
             });
             wrong.join();
             require(wrong_thread_rejected,"wrong-thread initialization accepted");
+            releases=graphics.release_endpoint(1);
             auto mailbox=graphics.dawn().completions();
             auto ticket=mailbox->reserve(1,{graphics.engine_identity(),new_owner_token(),0}).value();
             std::thread native_callback([mailbox,ticket] { mailbox->publish(ticket,completion_status::success); });
@@ -65,6 +84,11 @@ int main() {
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
             require(delivered,"hidden completion did not progress");
+            runtime.notify_low_memory();
+            require(weak_releases==0,"GC callback executed a native graphics release");
+            require(runtime.has_pending_tasks(),"GC did not enqueue release work");
+            require(runtime.pump_task(),"GC release task failed");
+            require(weak_releases==1 && releases->occupied()==0,"weak wrapper release did not drain");
             require(runtime.execute("if(gpuDone!==1 || rafDone!==0) throw new Error('completion or RAF scheduling failed');","graphics-check"),"promise continuation failed without RAF");
             require(runtime.execute("globalThis.gpuDone=0; new Promise(r=>globalThis.gpuResolve=r).then(()=>globalThis.gpuDone=1);","graphics-second-setup"),"second promise setup failed");
             delivered=false;
@@ -73,6 +97,7 @@ int main() {
             require(runtime.execute("void 0","graphics-execute-drain"),"execute completion drain failed");
             require(delivered,"execute did not drain completion");
             require(runtime.execute("if(gpuDone!==1 || rafDone!==0) throw new Error('execute checkpoint failed');","graphics-second-check"),"execute promise checkpoint failed");
+            require(weak_releases==2 && releases->occupied()==0,"registry disposal release did not drain");
             require(mailbox->metrics().occupied==0,"completion storage not reclaimed");
             require(!runtime.load_url("https://graphics.test/missing"),"missing navigation unexpectedly succeeded");
             const auto old_identity=graphics.engine_identity();

@@ -246,3 +246,27 @@ slot reuse and shutdown of an unpublished registration. All 13 local CTests
 passed in 13.62 seconds. The service test also passed under Clang ThreadSanitizer;
 Dawn/ANGLE SDK binaries themselves were not rebuilt with sanitizer instrumentation.
 Actual V8 weak-handle registration is the next integration step, not claimed here.
+
+## V8 weak-wrapper release registry
+
+The binding utility `graphics/v8_release_registry.h` owns bounded weak wrapper
+entries and reserves native release slots before registration succeeds. It follows
+the pinned V8 15.3.10 weak-callback contract: the first pass resets the triggering
+persistent handle and schedules a second pass; the second pass publishes native
+release work without executing JavaScript or GPU APIs. The engine later drains
+that release through the command-prefix barrier. Registry disposal in its owning
+isolate scope resets remaining handles and publishes their reserved releases.
+
+The real V8 runtime fixture registers an unreachable object, triggers collection
+through notify_low_memory, verifies no native release ran inside GC, then pumps
+the runtime and observes exactly one release and zero occupied release slots.
+It verifies bounded wrapper registration, reuses the collected entry, and disposes
+the registry while a new wrapper is still held by a local handle. That disposal
+also queues release instead of executing it inline. The focused runtime test
+passed in 0.58 seconds with both cases.
+
+This utility is exercised with real V8 objects and native dispatch records. Future
+WebGPU/WebGL bindings must own a registry, attach each resource wrapper before
+exposure and dispose the registry in its isolate scope. Those browser API wrapper
+classes are not introduced here. The explicit low-memory call is test stimulus,
+not a new production GC policy.
