@@ -421,3 +421,17 @@ Apple M4 runs passed with 64 updates and nativeShutdownsCompleted=2, both with
 cycle reused two source textures and one output with one device/context.
 This qualifies orderly quiescent teardown in the diagnostic; forced device loss,
 failed drain and application shutdown during outstanding work remain unqualified.
+
+### Native IOSurface allocation owner
+
+The allocation/CF ownership code now lives in the native graphics layer's
+iosurface_color.h. The probe retains its typed owner through an aliasing shared
+reference while importing the same IOSurface into Dawn. Allocation rejects zero
+or unrepresentable dimensions and handles failed CF allocation without leaking
+the dictionary or surface. Ownership is explicitly separate from GPU completion.
+
+On Apple M4 this path passed 64 marker-checked host updates, two orderly runtime
+shutdown cycles and the standalone 68-pixel IOSurface/CGL test. This is extraction
+of the proven allocation boundary for macOS integration, not a completed scene
+import hook. Format negotiation, allocation budgets and the ANGLE producer path
+remain required before general runtime use.

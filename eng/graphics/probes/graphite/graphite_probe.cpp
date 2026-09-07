@@ -1,6 +1,6 @@
 #if defined(__APPLE__)
 #include <IOSurface/IOSurface.h>
-#include <CoreVideo/CoreVideo.h>
+#include "../../../../experiments/WebScene.NativeEngine.Probe/native/graphics/iosurface_color.h"
 #include "iosurface_gl_check.h"
 #endif
 #include "../../../../experiments/WebScene.NativeEngine.Probe/native/graphics/dawn_canvas_images.h"
@@ -167,18 +167,12 @@ int main(int argc, char** argv) {
             sharedMemory=runtime.outputMemory;
             texture=runtime.outputTexture;
         } else {
-            auto dictionary=CFDictionaryCreateMutable(nullptr,0,&kCFTypeDictionaryKeyCallBacks,&kCFTypeDictionaryValueCallBacks);
-            auto add=[&](CFStringRef key,int32_t value) {
-                auto number=CFNumberCreate(nullptr,kCFNumberSInt32Type,&value);
-                CFDictionarySetValue(dictionary,key,number); CFRelease(number);
-            };
-            add(kIOSurfaceWidth,width); add(kIOSurfaceHeight,height);
-            add(kIOSurfaceBytesPerElement,4); add(kIOSurfacePixelFormat,kCVPixelFormatType_32BGRA);
-            auto ioSurface=IOSurfaceCreate(dictionary); CFRelease(dictionary);
-            if (!ioSurface) return finish("failed","IOSurface allocation failed",1);
+            auto owner=webscene::graphics::iosurface_color::create_bgra8(width,height);
+            if (!owner) return finish("failed","IOSurface allocation failed",1);
+            auto ioSurface=owner->borrowed_handle();
             wgpu::SharedTextureMemoryIOSurfaceDescriptor io{}; io.ioSurface=ioSurface;
             wgpu::SharedTextureMemoryDescriptor descriptor{}; descriptor.nextInChain=&io;
-            sharedSurface=std::shared_ptr<void>(ioSurface,[](void* value) { CFRelease(value); });
+            sharedSurface=std::shared_ptr<void>(owner,ioSurface);
             sharedMemory=device.ImportSharedTextureMemory(&descriptor);
             wgpu::SharedTextureMemoryProperties properties{};
             if (!sharedMemory || sharedMemory.GetProperties(&properties)!=wgpu::Status::Success)
