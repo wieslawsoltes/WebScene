@@ -1133,3 +1133,22 @@ into the composition path. navigator.gpu installation, GPUCanvasContext,
 ordinary scene image consumption and window presentation are still pending.
 Queue completion promises, writes and other APIs also remain incomplete. This
 result does not establish Kestrel readiness or cross-platform qualification.
+
+
+### Canvas configuration conversion
+
+GPUCanvasConfiguration conversion now preserves device identity, required format,
+usage, view formats, alpha mode, color space and tone mapping in WebIDL order.
+PredefinedColorSpace comes from the pinned @webref/idl html.idl, including its
+linear sRGB/P3 values. Requested modes are preserved for subsequent capability
+negotiation; conversion does not claim the current presenter supports every mode.
+The device resolver retains a genuine native GPUDevice and rejects forged
+interfaces. Conversion commits only on success and propagates getter exceptions.
+
+The macOS runtime test covers defaults, full member order, iterable view formats,
+requested HDR/color modes, invalid values and atomic failure. It passes together
+with the existing JavaScript triangle pixel assertion. GPUCanvasContext remains
+unconnected. The existing IOSurface submission helper owns recording/submission
+inside one callback; integration must instead span current-texture acquisition,
+application queue submissions, shared-image end access and versioned publication
+at the frame boundary, without introducing CPU texture readback.

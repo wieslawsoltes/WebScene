@@ -29,6 +29,7 @@ void require(bool value,const char* message) { if (!value) throw std::runtime_er
 #include "graphics_v8_webgpu_render_state.h"
 #include "graphics_v8_webgpu_texture_descriptor.h"
 #include "graphics_v8_webgpu_render_pass_descriptor.h"
+#include "graphics_v8_webgpu_canvas_configuration.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
 void test_image_lease_abi() {
@@ -657,6 +658,7 @@ int main() {
                     }
                     require(requested_device_promise->State()==v8::Promise::kFulfilled,"Adapter request did not produce a native device wrapper");
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"adapterDeviceProbe"),requested_device_promise->Result()).FromMaybe(false),"Adapter device publication failed");
+                    test_v8_webgpu_canvas_configuration(isolate,context);
                     require(run(R"JS(
                         if(adapterWrapperProbe.requestDevice.length!==0)throw new Error('requestDevice arity');
                         const ai=adapterWrapperProbe.info,di=adapterDeviceProbe.adapterInfo;
