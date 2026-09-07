@@ -1,6 +1,7 @@
 #include "graphics/nt_handle.h"
 #include "graphics/dxgi_device_identity.h"
 #include "graphics/d3d12_shared_color.h"
+#include "graphics/d3d12_canvas_images.h"
 #include <set>
 using namespace webscene::graphics;
 struct test_ops {
@@ -53,6 +54,10 @@ int main() {
     require(query_dxgi_color_formats(static_cast<ID3D11Device*>(nullptr),formats)==E_INVALIDARG && formats==0);
     formats=31;
     require(query_dxgi_color_formats(static_cast<ID3D12Device*>(nullptr),formats)==E_INVALIDARG && formats==0);
+    bool invalid_pool=false;
+    try { d3d12_canvas_images invalid(nullptr,1024); }
+    catch (const std::invalid_argument&) { invalid_pool=true; }
+    require(invalid_pool);
     std::unique_ptr<d3d12_shared_color> color;
     require(d3d12_shared_color::create(nullptr,{},1024,color)==E_INVALIDARG && !color);
     adapter_luid identity{1,2,true};

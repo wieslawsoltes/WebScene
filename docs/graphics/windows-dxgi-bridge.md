@@ -202,3 +202,24 @@ and [shared handle contract](https://learn.microsoft.com/en-us/windows/win32/api
 The hosted test target includes the allocator and a null-device rejection check.
 Portable tests pass locally (0.20 seconds); the Windows branch still requires
 compilation, successful allocation/import, budget/failure tests and GPU qualification.
+
+## D3D12 lease-provider integration
+
+`d3d12_canvas_images` anchors three shared-color slots in `owned_image_pool`.
+Writers reserve idle slots, freeze validated image metadata and reuse matching
+allocations. Changed dimensions/formats replace only an idle allocation. Aggregate
+allocation bytes are bounded, and retained scenes/consumers keep the storage alive
+after canvas closure. Typed native lookup checks provider, allocation generation,
+content serial and adapter identity; it returns a borrowed allocation valid only
+while the consumer remains alive. Producer and consumer GPU completion still must
+be reported explicitly by the submission/fence path.
+
+The new provider is not yet wired to Dawn submission or presenter waits. Unlike
+the existing Dawn allocator, it does not yet evict other idle cached slots to admit
+a larger allocation; this can conservatively return memory pressure until those
+caches are replaced. Hardware tests must cover this before performance acceptance.
+
+The portable NT ownership target passes (0.20 seconds) and the existing image-lease
+test passes (0.01 seconds). The Windows target includes the provider and validates
+null-device rejection, but Windows compilation and successful provider allocation,
+retention, resize, lookup and GPU completion remain unverified locally.
