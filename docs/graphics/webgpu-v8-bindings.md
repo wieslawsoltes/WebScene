@@ -874,3 +874,21 @@ inline GPU release. Existing JavaScript shader-creation tests still pass through
 the shared implementation. Public createRenderPipeline descriptor dispatch,
 getBindGroupLayout, async pipeline creation and rendering from JavaScript are
 still pending; this internal wrapper is not a complete GPURenderPipeline API.
+
+
+### Programmable pipeline-stage conversion
+
+The shared GPUProgrammableStage converter now reads constants, entryPoint and
+required module in WebIDL order. It retains the native shader reference, keeps
+omitted entry points distinct from empty strings, and converts constants as a
+record of USVString keys to finite doubles. Record conversion snapshots own keys,
+checks current enumerability before each value, propagates exceptions, and
+replaces values when distinct UTF-16 keys normalize to the same USVString. The
+native constant-entry view borrows stable converted key storage and explicitly
+disallows access through a temporary descriptor.
+
+MacOS V8 runtime coverage verifies defaults, shader identity, numeric coercion,
+USVString replacement/NUL handling, normalized-key collisions, proxy property
+order, property deletion during enumeration, invalid values and atomic failure.
+The test passes against real shader wrappers. Derived vertex-buffer and fragment
+color-target conversion plus complete render-pipeline dispatch remain pending.

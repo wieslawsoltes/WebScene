@@ -24,6 +24,7 @@ void require(bool value,const char* message) { if (!value) throw std::runtime_er
 #include "graphics_v8_webgpu_buffer_descriptor.h"
 #include "graphics_v8_webgpu_device_descriptor.h"
 #include "graphics_v8_webgpu_shader_descriptor.h"
+#include "graphics_v8_webgpu_programmable_stage.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
 void test_image_lease_abi() {
@@ -1030,6 +1031,7 @@ int main() {
                         let brand=false;try{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(shaderProbe),'label').get.call({})}catch(e){brand=e instanceof TypeError}if(!brand)throw new Error('shader receiver');}
                     )JS");
                     require(!v8::Script::Compile(context,shader_script).ToLocalChecked()->Run(context).IsEmpty(),"Shader wrapper label behavior failed");
+                    test_v8_webgpu_programmable_stage(isolate,context);
                     auto retained_shader=v8_webgpu_shaders::native_reference(shader_object);
                     resource_handle<wgpu::RenderPipeline> pipeline_handle;
                     adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
