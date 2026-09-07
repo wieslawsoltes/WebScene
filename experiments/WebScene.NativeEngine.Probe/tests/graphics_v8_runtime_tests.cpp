@@ -283,7 +283,7 @@ int main() {
                         descriptor.mappedAtCreation=true;
                         buffer_handle=device.create_buffer(descriptor);
                     });
-                    auto buffer_registry=std::make_unique<v8_webgpu_buffers>(isolate,context,1);
+                    auto buffer_registry=std::make_unique<v8_webgpu_buffers>(isolate,context,1,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>());
                     auto object=buffer_registry->wrap(context,*adapter_service,device_handle,buffer_handle).ToLocalChecked();
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"bufferProbe"),object).FromMaybe(false),"Buffer wrapper publication failed");
                     bool duplicate_rejected=false,realm_rejected=false;
@@ -329,7 +329,48 @@ int main() {
                             require(detached_rejected,"Detached mapping accepted a new view");
                         });
                     });
+                    require(run(R"JS(
+                        globalThis.publicMapped=bufferProbe.getMappedRange(32,16);
+                        globalThis.publicMappedWords=new Uint32Array(publicMapped);
+                        publicMappedWords[0]=0x87654321;
+                        if(bufferProbe.getMappedRange(48).byteLength!==16)throw new Error('default mapped size');
+                        for(let args of [[32,8],[4,4],[64,4]]){
+                            let rejected=false;try{bufferProbe.getMappedRange(...args)}catch(e){rejected=e instanceof DOMException&&e.name==='OperationError'}
+                            if(!rejected)throw new Error('mapped range validation');
+                        }
+                        for(let args of [[-1],[Infinity],[1n],[0,9007199254740992]]){
+                            let rejected=false;try{bufferProbe.getMappedRange(...args)}catch(e){rejected=e instanceof TypeError}
+                            if(!rejected)throw new Error('mapped range WebIDL');
+                        }
+                    )JS"),"JavaScript getMappedRange failed");
+                    adapter_service->with_device(device_handle,[&](auto& device) { device.with_buffer(buffer_handle,[&](const auto& buffer) {
+                        uint32_t word{}; std::memcpy(&word,static_cast<const uint8_t*>(buffer.GetConstMappedRange(0,64))+32,sizeof(word));
+                        require(word==0x87654321,"Public mapped range write missed native memory");
+                    }); });
                     require(run("if(bufferProbe.size!==64||bufferProbe.usage!==8||bufferProbe.mapState!=='mapped')throw new Error('buffer metadata'); let p=Object.getPrototypeOf(bufferProbe); for(let f of [p.destroy,Object.getOwnPropertyDescriptor(p,'size').get,Object.getOwnPropertyDescriptor(p,'usage').get,Object.getOwnPropertyDescriptor(p,'mapState').get]){let ok=false;try{f.call({})}catch(e){ok=e instanceof TypeError}if(!ok)throw new Error('buffer brand')} bufferProbe.destroy();bufferProbe.destroy();if(bufferProbe.size!==64||bufferProbe.mapState!=='unmapped')throw new Error('destroy metadata/state');"),"Native buffer wrapper behavior failed");
+                    require(run("if(publicMapped.byteLength!==0||publicMappedWords.length!==0)throw new Error('destroy did not detach');delete globalThis.publicMapped;delete globalThis.publicMappedWords;bufferProbe.unmap();"),"Destroy mapping detachment failed");
+                    auto unmap_registry=std::make_unique<v8_webgpu_buffers>(isolate,context,1,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>());
+                    adapter_service->with_device(device_handle,[&](auto& device) {
+                        wgpu::BufferDescriptor descriptor{}; descriptor.size=32; descriptor.usage=wgpu::BufferUsage::CopyDst; descriptor.mappedAtCreation=true;
+                        auto handle=device.create_buffer(descriptor);
+                        auto wrapped=unmap_registry->wrap(context,*adapter_service,device_handle,handle).ToLocalChecked();
+                        require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"unmapProbe"),wrapped).FromMaybe(false),"Unmap fixture publication failed");
+                    });
+                    require(run(R"JS(
+                        {
+                            let view=unmapProbe.getMappedRange(), bytes=new Uint8Array(view);
+                            if(view.byteLength!==32)throw new Error('default full mapped range');
+                            let conversionUnmapped=false;
+                            try{unmapProbe.getMappedRange({valueOf(){unmapProbe.unmap();return 0}})}catch(e){conversionUnmapped=e instanceof DOMException&&e.name==='OperationError'}
+                            if(!conversionUnmapped)throw new Error('mapping state not rechecked after conversion');
+                            unmapProbe.unmap();
+                            if(view.byteLength!==0||bytes.length!==0||unmapProbe.mapState!=='unmapped')throw new Error('unmap did not detach');
+                            let rejected=false;try{unmapProbe.getMappedRange()}catch(e){rejected=e instanceof DOMException&&e.name==='OperationError'}
+                            if(!rejected)throw new Error('unmapped range accepted');
+                            delete globalThis.unmapProbe;
+                        }
+                    )JS"),"JavaScript unmap failed");
+                    unmap_registry.reset();
                     require(run(R"JS(
                         if(bufferProbe.label!=='')throw new Error('label default');
                         bufferProbe.label='a\0\ud800';
@@ -348,7 +389,7 @@ int main() {
                     buffer_registry.reset();
                     require(run("let stale=false;try{bufferProbe.destroy()}catch(e){stale=e instanceof TypeError}if(!stale)throw new Error('stale buffer realm');delete globalThis.bufferProbe;"),"Buffer wrapper teardown left native access");
                     gc_buffer_device=device_handle;
-                    gc_buffers=std::make_unique<v8_webgpu_buffers>(isolate,context,1);
+                    gc_buffers=std::make_unique<v8_webgpu_buffers>(isolate,context,1,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>());
                     adapter_service->with_device(device_handle,[&](auto& device) {
                         wgpu::BufferDescriptor descriptor{};
                         descriptor.size=32; descriptor.usage=wgpu::BufferUsage::CopyDst;

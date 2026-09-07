@@ -1,5 +1,7 @@
 #pragma once
 #include "graphics_service.h"
+#include "v8_webgpu_mapped_ranges.h"
+#include <cmath>
 #include <v8.h>
 #include <string>
 
@@ -16,6 +18,8 @@ class v8_webgpu_buffers {
         release_ticket ticket;
         bool published{};
         std::string label;
+        std::unique_ptr<v8_webgpu_mapped_ranges> mapping;
+        v8::Global<v8::Function> dom_exception;
     };
     alignas(void*) static inline const char brand_{};
     v8::Isolate* isolate_;
@@ -23,6 +27,7 @@ class v8_webgpu_buffers {
     v8::Global<v8::Context> realm_;
     v8::Global<v8::ObjectTemplate> instance_;
     v8::Global<v8::Object> prototype_;
+    v8::Global<v8::Function> dom_exception_;
     std::vector<std::unique_ptr<entry>> entries_;
     static void error(v8::Isolate* isolate,const char* message) {
         isolate->ThrowException(v8::Exception::TypeError(v8::String::NewFromUtf8(isolate,message).ToLocalChecked()));
@@ -94,8 +99,61 @@ class v8_webgpu_buffers {
             info.GetReturnValue().Set(v8::String::NewFromUtf8(info.GetIsolate(),state).ToLocalChecked());
         }); });
     }
+    static void operation_error(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* item=receiver(info);
+        if (!item) return;
+        auto* isolate=info.GetIsolate();
+        v8::Local<v8::Value> args[]{v8::String::NewFromUtf8Literal(isolate,"Invalid mapped buffer range"),
+            v8::String::NewFromUtf8Literal(isolate,"OperationError")};
+        v8::Local<v8::Object> exception;
+        if (item->dom_exception.Get(isolate)->NewInstance(isolate->GetCurrentContext(),2,args).ToLocal(&exception))
+            isolate->ThrowException(exception);
+    }
+    static void get_mapped_range(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if (!receiver(info)) return;
+        auto* isolate=info.GetIsolate(); auto context=isolate->GetCurrentContext();
+        const auto number=[&](v8::Local<v8::Value> value,uint64_t& result) {
+            v8::Local<v8::Number> numeric;
+            if (!value->ToNumber(context).ToLocal(&numeric)) return false;
+            const auto integer=std::trunc(numeric->Value());
+            if (!std::isfinite(integer) || integer<0 || integer>9007199254740991.0) {
+                error(isolate,"Mapped range integer is outside its WebIDL range"); return false;
+            }
+            result=static_cast<uint64_t>(integer); return true;
+        };
+        uint64_t offset=0,length=0;
+        if (!info[0]->IsUndefined() && !number(info[0],offset)) return;
+        const bool has_length=!info[1]->IsUndefined();
+        if (has_length && !number(info[1],length)) return;
+        auto* item=receiver(info); // Conversion can execute JS, including unmap.
+        if (!item) return;
+        try {
+            if (!item->mapping) { operation_error(info); return; }
+            if (!has_length) item->service->with_device(item->device,[&](auto& device) {
+                device.with_buffer(item->buffer,[&](const auto& buffer) {
+                    auto size=buffer.GetSize(); length=offset<size ? size-offset : 0;
+                });
+            });
+            v8::Local<v8::ArrayBuffer> view;
+            if (item->mapping->create(context,offset,length).ToLocal(&view)) info.GetReturnValue().Set(view);
+        } catch (const std::invalid_argument&) { operation_error(info); }
+        catch (const std::exception&) { error(isolate,"Mapped buffer ownership is unavailable"); }
+    }
+    static void unmap(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* item=receiver(info);
+        if (!item) return;
+        access(info,[&](auto& device,auto handle) {
+            if (item->mapping) { item->mapping->detach(); item->mapping.reset(); }
+            device.with_buffer(handle,[](const auto& buffer) { buffer.Unmap(); });
+        });
+    }
     static void destroy(const v8::FunctionCallbackInfo<v8::Value>& info) {
-        access(info,[&](auto& device,auto handle) { device.destroy_buffer(handle); });
+        auto* item=receiver(info);
+        if (!item) return;
+        access(info,[&](auto& device,auto handle) {
+            if (item->mapping) { item->mapping->detach(); item->mapping.reset(); }
+            device.destroy_buffer(handle);
+        });
     }
     static void first_pass(const v8::WeakCallbackInfo<entry>& info) {
         info.GetParameter()->wrapper.Reset(); info.SetSecondPassCallback(second_pass);
@@ -109,9 +167,11 @@ class v8_webgpu_buffers {
             throw std::logic_error("GPUBuffer wrappers require their owning isolate scope");
     }
 public:
-    v8_webgpu_buffers(v8::Isolate* isolate,v8::Local<v8::Context> context,size_t capacity=1024)
+    v8_webgpu_buffers(v8::Isolate* isolate,v8::Local<v8::Context> context,size_t capacity,v8::Local<v8::Function> dom_exception)
         :isolate_(isolate),entries_(capacity) {
         check_scope();
+        if (dom_exception.IsEmpty()) throw std::invalid_argument("Trusted DOMException constructor is required");
+        dom_exception_.Reset(isolate,dom_exception);
         realm_.Reset(isolate,context);
         auto instance=v8::ObjectTemplate::New(isolate); instance->SetInternalFieldCount(2);
         instance_.Reset(isolate,instance);
@@ -120,6 +180,8 @@ public:
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"usage"),v8::FunctionTemplate::New(isolate,usage));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"mapState"),v8::FunctionTemplate::New(isolate,map_state));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"label"),v8::FunctionTemplate::New(isolate,label),v8::FunctionTemplate::New(isolate,set_label));
+        prototype->Set(isolate,"getMappedRange",v8::FunctionTemplate::New(isolate,get_mapped_range));
+        prototype->Set(isolate,"unmap",v8::FunctionTemplate::New(isolate,unmap));
         prototype->Set(isolate,"destroy",v8::FunctionTemplate::New(isolate,destroy));
         prototype_.Reset(isolate,prototype->NewInstance(context).ToLocalChecked());
     }
@@ -128,6 +190,7 @@ public:
     ~v8_webgpu_buffers() {
         check_scope();
         for (auto& item:entries_) if (item) {
+            item->mapping.reset(); // Detach before native release or wrapper invalidation.
             if (!item->wrapper.IsEmpty()) item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
             item->wrapper.Reset();
             if (!item->published) item->releases->publish(item->ticket);
@@ -154,6 +217,16 @@ public:
         auto item=std::make_unique<entry>();
         item->label=std::move(initial_label);
         item->service=&service; item->device=device; item->buffer=buffer; item->releases=service.release_endpoint();
+        item->dom_exception.Reset(isolate_,dom_exception_.Get(isolate_));
+        // This factory currently accepts only unmapped buffers or a complete
+        // mapped-at-creation region. mapAsync will attach its selected subrange.
+        service.with_device(device,[&](auto& owner) { owner.with_buffer(buffer,[&](const auto& native) {
+            if (native.GetMapState()==wgpu::BufferMapState::Mapped) {
+                auto size=native.GetSize();
+                auto* data=native.GetMappedRange(0,size);
+                item->mapping=std::make_unique<v8_webgpu_mapped_ranges>(isolate_,context,object,data,0,size);
+            }
+        }); });
         auto ticket=item->releases->reserve(graphics_service::deferred_buffer_release(device,buffer));
         if (!ticket) return {};
         item->ticket=*ticket;

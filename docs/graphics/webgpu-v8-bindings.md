@@ -276,3 +276,25 @@ addresses, JavaScript writes reach native mapped bytes, invalid ranges fail,
 foreign detachment is rejected, and authorized detachment empties typed-array
 views. This proves the tested mapped-memory path without a staging copy; it does
 not qualify mapAsync, device-loss detachment or full public error semantics.
+
+### JavaScript mapped-at-creation buffer operations
+
+The internal buffer prototype now implements getMappedRange and unmap. Wrapping
+a mapped-at-creation buffer attaches a full-range tracker to the wrapper entry.
+getMappedRange applies GPUSize64 conversion and defaults, rechecks mapping state
+after user coercion, and returns a direct mapped ArrayBuffer. Alignment, bounds,
+overlap and absent-mapping errors use the caller-supplied trusted DOMException
+constructor with OperationError. Registry setup must receive that constructor
+from trusted runtime initialization, not discover it during an API call.
+
+unmap and destroy detach all tracked views before invoking Dawn. Registry teardown
+also detaches before invalidating wrapper entries or queuing release. The rebuilt
+macOS V8 fixture exercises JavaScript writes to native memory, omitted sizes,
+WebIDL errors, OperationError cases, repeated unmap, and retained ArrayBuffer and
+typed-array detachment on both unmap and destroy. User numeric coercion that calls
+unmap is revalidated before creating a view.
+
+This is working internal mapped-at-creation behavior, not complete mapping support.
+mapAsync and selected subrange attachment, device-loss/device-destroy detachment,
+full navigation integration and public WebGPU discovery/resource exposure remain
+unfinished. The runtime CTest passes; those missing paths remain unqualified.
