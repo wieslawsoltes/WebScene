@@ -44,6 +44,8 @@ public sealed class NativeGpuSceneInteropTests
             NativeLibrary.GetExport(library, "webscene_test_create_dawn_iosurface"));
         var begin = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_begin_cgl"));
         var bound = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_cgl_image_bound"));
+        var copy = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_cgl_copy"));
+        var alive = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_iosurface_alive"));
         var pixels = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_cgl_pixels"));
         var end = Marshal.GetDelegateForFunctionPointer<EndCgl>(NativeLibrary.GetExport(library, "webscene_test_end_cgl"));
         Assert.Equal(1, create(out var image));
@@ -56,13 +58,24 @@ public sealed class NativeGpuSceneInteropTests
             Assert.Equal(1, begin());
             Assert.True(NativeMacOSGpuImageImport.TryBindCurrentRectangleTexture(consumer));
             Assert.Equal(1, bound());
-            Assert.Equal(1, pixels());
+            Assert.Equal(1, copy());
+            Assert.Equal(1, alive());
             var openGl = NativeLibrary.Load("/System/Library/Frameworks/OpenGL.framework/OpenGL");
             var fence = NativeMacOSGpuConsumerFence.Create(name => NativeLibrary.GetExport(openGl, name), consumer);
-            Assert.Throws<InvalidOperationException>(() => Task.Run(fence.TryComplete).GetAwaiter().GetResult());
+            Exception? wrongThreadError = null;
+            var wrongThread = new Thread(() =>
+            {
+                try { fence.TryComplete(); }
+                catch (Exception error) { wrongThreadError = error; }
+            });
+            wrongThread.Start();
+            wrongThread.Join();
+            Assert.IsType<InvalidOperationException>(wrongThreadError);
             var deadline = DateTime.UtcNow.AddSeconds(5);
             while (!(completed = fence.TryComplete()) && DateTime.UtcNow < deadline) Thread.Sleep(1);
             Assert.True(completed);
+            Assert.Equal(0, alive()); // Native source owner retires only after its GPU read.
+            Assert.Equal(1, pixels()); // Read destination only, after fence completion.
             Assert.True(fence.TryComplete()); // Retired polling is idempotent.
             Assert.Throws<InvalidOperationException>(consumer.Complete);
         }

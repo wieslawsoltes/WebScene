@@ -142,7 +142,12 @@ there is no GC-based completion or automatic render scheduling.
 
 The real CGL import test now exercises this path, including wrong-thread polling
 rejection and duplicate consumer completion rejection. All six interop tests
-passed on net8.0 and net10.0. The fixture still performs diagnostic pixel readback
-before fence insertion, so this is not a forced-delayed-GPU stress test.
+passed on net8.0 and net10.0. The fixture now queues a GPU framebuffer blit from
+its imported rectangle into independent 2D texture storage before fence insertion.
+The native provider remains alive before polling and expires after successful
+retirement. Only then does diagnostic readback verify all 68 destination pixels.
+This measures one GPU-local copy, with no CPU pixel transport between APIs; it
+is not a forced-delayed-GPU stress test. Wrong-thread rejection uses a dedicated
+thread because a queued Task can execute inline on a waiting worker thread.
 Fixture-only failure cleanup drains GL before releasing native image ownership.
 Production context-loss cleanup and renderer scheduling remain unfinished.

@@ -45,16 +45,17 @@ extern "C" __attribute__((visibility("default"))) uint8_t webscene_test_iosurfac
 #include <OpenGL/gl3.h>
 namespace {
 thread_local CGLContextObj fixture_context=nullptr, previous_context=nullptr;
-thread_local GLuint fixture_texture=0;
+thread_local GLuint fixture_texture=0, fixture_destination=0;
 }
 extern "C" __attribute__((visibility("default"))) void webscene_test_end_cgl() {
     if (!fixture_context) return;
     CGLSetCurrentContext(fixture_context);
     glFinish(); // Diagnostic failure cleanup only.
     if (fixture_texture) glDeleteTextures(1,&fixture_texture);
+    if (fixture_destination) glDeleteTextures(1,&fixture_destination);
     CGLSetCurrentContext(previous_context);
     CGLReleaseContext(fixture_context);
-    fixture_context=nullptr; previous_context=nullptr; fixture_texture=0;
+    fixture_context=nullptr; previous_context=nullptr; fixture_texture=0; fixture_destination=0;
 }
 extern "C" __attribute__((visibility("default"))) uint8_t webscene_test_begin_cgl() {
     if (fixture_context) return 0;
@@ -81,12 +82,33 @@ extern "C" __attribute__((visibility("default"))) uint8_t webscene_test_cgl_imag
 }
 
 
-// Diagnostic readback verifies Dawn output after the production-source CGL import.
+// Queue an actual GPU read of the imported source before the managed fence.
+// This is one GPU-local copy; there is no CPU transport between APIs.
+extern "C" __attribute__((visibility("default"))) uint8_t webscene_test_cgl_copy() {
+    if (!fixture_context || CGLGetCurrentContext()!=fixture_context || fixture_destination) return 0;
+    glGenTextures(1,&fixture_destination);
+    glBindTexture(GL_TEXTURE_2D,fixture_destination);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,17,4,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+    GLuint framebuffers[2]{}; glGenFramebuffers(2,framebuffers);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER,framebuffers[0]);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_RECTANGLE,fixture_texture,0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER,framebuffers[1]);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,fixture_destination,0);
+    bool valid=glCheckFramebufferStatus(GL_READ_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE &&
+        glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+    if (valid) glBlitFramebuffer(0,0,17,4,0,0,17,4,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+    valid &= glGetError()==GL_NO_ERROR;
+    glBindFramebuffer(GL_FRAMEBUFFER,0); glDeleteFramebuffers(2,framebuffers);
+    return valid ? 1 : 0;
+}
+
+// Diagnostic readback occurs only after source-consumer fence retirement,
+// from independently owned destination storage.
 extern "C" __attribute__((visibility("default"))) uint8_t webscene_test_cgl_pixels() {
-    if (!fixture_context || CGLGetCurrentContext()!=fixture_context) return 0;
+    if (!fixture_context || CGLGetCurrentContext()!=fixture_context || !fixture_destination) return 0;
     GLuint framebuffer=0; glGenFramebuffers(1,&framebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);
-    glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_RECTANGLE,fixture_texture,0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,fixture_destination,0);
     bool valid=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
     std::array<unsigned char,17*4*4> pixels{};
     if (valid) glReadPixels(0,0,17,4,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
