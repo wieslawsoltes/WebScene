@@ -13,7 +13,7 @@ python3 eng/graphics/verify-sdk.py artifacts/graphics-hosted-linux-dawn-34116313
 Reproduce compilation on Linux x64 from this checkout:
 
 ```sh
-python3 eng/graphics/build.py --component dawn --rid linux-x64 --jobs 2
+python3 eng/graphics/build.py dawn --rid linux-x64 --jobs 2
 python3 eng/graphics/verify-sdk.py artifacts/graphics-sdk/linux-x64/dawn --component dawn --rid linux-x64
 ```
 
