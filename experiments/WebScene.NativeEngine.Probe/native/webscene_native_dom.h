@@ -1,6 +1,7 @@
 #pragma once
 
 #include "webscene_native_engine.h"
+#include "graphics/canvas_backing.h"
 
 #include <algorithm>
 #include <array>
@@ -825,6 +826,7 @@ struct text_layout_fragment final {
 };
 
 struct canvas_node_data final {
+    webscene::graphics::canvas_backing backing;
     std::vector<canvas_rect_command> rects;
     std::vector<canvas_line_command> lines;
     uint64_t generation{1};

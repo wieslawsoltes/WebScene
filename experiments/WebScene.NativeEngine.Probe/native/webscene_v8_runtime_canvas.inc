@@ -2667,6 +2667,10 @@
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
             return;
         }
+        if (!node->mutable_canvas().backing.claim_context(webscene::graphics::canvas_context_mode::two_d)) {
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
         self->record_feature(
             "canvas",
             "HTMLCanvasElement.getContext:2d",
