@@ -85,3 +85,18 @@ releases harmless. Service closure releases adapters before closing Dawn's event
 service. Hardware tests exercise foreign/stale handles, slot reuse, scope guards,
 null rejection, capacity exhaustion, deferred release and reference survival.
 This remains internal ownership plumbing; public GPUAdapter bindings are pending.
+
+### Wrapper creation failures
+
+Adapter completion consumes its resolver before invoking the wrapper factory.
+The factory may return a `MaybeLocal<Value>`: a caught JavaScript exception rejects
+the adapter promise with that same value, while an empty result without an
+exception or a native `std::exception` rejects with a generic Error. Native error
+text is not exposed. Terminated execution is not converted to an ordinary error.
+Factories remain responsible for rolling back any partially registered resources.
+
+The macOS V8 hardware fixture verifies a throwing native factory and a JavaScript
+exception sentinel, observes both rejections, and rejects duplicate completion.
+Handlers are installed before returning to the graphics pump because spontaneous
+Dawn discovery can complete within that same dispatch batch. The targeted runtime
+CTest passes; this does not qualify the still-pending public GPUAdapter bindings.

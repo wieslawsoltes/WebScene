@@ -81,10 +81,27 @@ public:
             if (record.status==completion_status::success) adapter=std::move(native_->adapter);
             native_->adapter=nullptr;
         }
-        v8::Local<v8::Value> value=v8::Null(isolate);
-        if (adapter) value=wrap(std::move(adapter));
         auto resolver=resolver_.Get(isolate);
+        // Consume the completion before calling the factory: allocation failure
+        // must not leave a permanently pending request or allow duplicate wrapping.
         resolver_.Reset(); realm_.Reset();
+        v8::Local<v8::Value> value=v8::Null(isolate);
+        v8::Local<v8::Value> failure;
+        {
+            v8::TryCatch caught(isolate);
+            try {
+                if (adapter) {
+                    v8::MaybeLocal<v8::Value> wrapped=wrap(std::move(adapter));
+                    if (!wrapped.ToLocal(&value) && !caught.HasCaught())
+                        failure=v8::Exception::Error(v8::String::NewFromUtf8Literal(isolate,"GPUAdapter wrapper creation failed"));
+                }
+            } catch (const std::exception&) {
+                failure=v8::Exception::Error(v8::String::NewFromUtf8Literal(isolate,"GPUAdapter wrapper creation failed"));
+            }
+            if (caught.HasTerminated()) return false;
+            if (caught.HasCaught()) failure=caught.Exception();
+        }
+        if (!failure.IsEmpty()) return resolver->Reject(context,failure).FromMaybe(false);
         return resolver->Resolve(context,value).FromMaybe(false);
     }
 };

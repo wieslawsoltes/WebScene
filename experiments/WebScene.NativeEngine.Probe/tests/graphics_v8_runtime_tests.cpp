@@ -256,10 +256,30 @@ int main() {
             bool delivered=false, adapter_delivered=false, adapter_cancelled=false;
             graphics_service* adapter_service=nullptr;
             std::unique_ptr<v8_webgpu_adapter_request> adapter_request, cancelled_adapter;
+            std::array<std::unique_ptr<v8_webgpu_adapter_request>,2> failed_wrappers;
+            size_t failed_wrapper_count=0;
             resource_handle<wgpu::Adapter> discovered_adapter;
             std::shared_ptr<release_channel> releases;
             std::unique_ptr<v8_release_registry> wrappers;
             auto& graphics=runtime.initialize_graphics(wake,[&](completion_record record) {
+                if (record.operation==102 || record.operation==103) {
+                    auto* isolate=v8::Isolate::GetCurrent();
+                    auto context=isolate->GetCurrentContext();
+                    auto& request=failed_wrappers[record.operation-102];
+                    require(record.status==completion_status::success,"Wrapper failure test needs a hardware adapter");
+                    require(request->complete(isolate,context,record,[&](wgpu::Adapter) -> v8::MaybeLocal<v8::Value> {
+                        if (record.operation==102) throw std::length_error("resource table full");
+                        auto sentinel=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"wrapperSentinel")).ToLocalChecked();
+                        isolate->ThrowException(sentinel);
+                        return {};
+                    }),"Wrapper failure did not reject its promise");
+                    require(!request->pending(),"Failed wrapper left request pending");
+                    require(!request->complete(isolate,context,record,[](wgpu::Adapter) -> v8::Local<v8::Value> {
+                        throw std::runtime_error("duplicate completion wrapped twice");
+                    }),"Duplicate completion was accepted");
+                    ++failed_wrapper_count;
+                    return;
+                }
                 if (record.operation==101) {
                     auto* isolate=v8::Isolate::GetCurrent();
                     require(record.status==completion_status::cancelled,"Adapter cancellation lost");
@@ -316,6 +336,22 @@ int main() {
                     adapter_service->dawn().completions()->cancel_owner(cancelled_owner);
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"cancelledAdapterPromise"),cancelled_promise).FromMaybe(false),
                         "Cancelled adapter promise publication failed");
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"wrapperSentinel"),v8::Object::New(isolate)).FromMaybe(false),"Sentinel publication failed");
+                    for (size_t i=0;i<failed_wrappers.size();++i) {
+                        v8::Local<v8::Promise> failed_promise;
+                        failed_wrappers[i]=v8_webgpu_adapter_request::start(isolate,context,options,
+                            adapter_service->dawn().instance(),adapter_service->dawn().completions(),
+                            {adapter_service->engine_identity(),new_owner_token(),0},102+i,wgpu::BackendType::Undefined,failed_promise);
+                        require(failed_wrappers[i] && failed_wrappers[i]->pending(),"Failure test request was not admitted");
+                        require(context->Global()->Set(context,v8::String::NewFromUtf8(isolate,i==0 ? "nativeWrapperFailure" : "jsWrapperFailure").ToLocalChecked(),failed_promise).FromMaybe(false),
+                            "Failure test promise publication failed");
+                    }
+                    // Install rejection observers before returning to the event pump;
+                    // spontaneous discovery may finish in this same delivery batch.
+                    auto observers=v8::String::NewFromUtf8Literal(isolate,"globalThis.wrapperFailures=0; nativeWrapperFailure.catch(e=>{if(!(e instanceof Error))throw e;wrapperFailures++}); jsWrapperFailure.catch(e=>{if(e!==wrapperSentinel)throw e;wrapperFailures++}); globalThis.adapterPromiseDone=false; globalThis.cancelledAdapterDone=false; adapterProbePromise.then(a=>{if(!a)throw new Error('adapter absent');adapterPromiseDone=true}); cancelledAdapterPromise.then(a=>{if(a!==null)throw new Error('cancelled adapter present');cancelledAdapterDone=true});");
+                    v8::Local<v8::Script> observer_script;
+                    require(v8::Script::Compile(context,observers).ToLocal(&observer_script)
+                        && !observer_script->Run(context).IsEmpty(),"Adapter observer failed");
                     bool rejected=false;
                     try { runtime.load_url("https://graphics.test/next"); }
                     catch (const std::logic_error&) { rejected=true; }
@@ -363,18 +399,19 @@ int main() {
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
             require(delivered,"hidden completion did not progress");
-            require(runtime.execute("globalThis.adapterPromiseDone=false; globalThis.cancelledAdapterDone=false; adapterProbePromise.then(a=>{if(!a)throw new Error('adapter absent');adapterPromiseDone=true}); cancelledAdapterPromise.then(a=>{if(a!==null)throw new Error('cancelled adapter present');cancelledAdapterDone=true});", "adapter-promise-observe"),"Adapter observer failed");
-            while ((!adapter_delivered || !adapter_cancelled || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
+
+            while ((!adapter_delivered || !adapter_cancelled || failed_wrapper_count!=2 || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
                 if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Adapter task failed");
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
             require(adapter_delivered && discovered_adapter.table && adapter_cancelled,"Actual Dawn adapter discovery/cancellation failed");
-            require(runtime.execute("if(!adapterPromiseDone || !cancelledAdapterDone || rafDone!==0)throw new Error('adapter promise did not progress while hidden');", "adapter-promise-check"),"Adapter promise checkpoint failed");
+            require(runtime.execute("if(!adapterPromiseDone || !cancelledAdapterDone || wrapperFailures!==2 || rafDone!==0)throw new Error('adapter promise did not progress while hidden');", "adapter-promise-check"),"Adapter promise checkpoint failed");
             adapter_service->with_adapter(discovered_adapter,[](const auto& adapter) {
                 require(static_cast<bool>(adapter),"Discovered adapter lost its native reference");
             });
             adapter_service->destroy_adapter(discovered_adapter);
             adapter_request.reset(); cancelled_adapter.reset();
+            for (auto& request:failed_wrappers) request.reset();
             runtime.notify_low_memory();
             require(weak_releases==0,"GC callback executed a native graphics release");
             require(runtime.has_pending_tasks(),"GC did not enqueue release work");
