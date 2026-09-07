@@ -1,13 +1,15 @@
 #include "graphics/angle_context.h"
 #include <GLES2/gl2.h>
 #include <iostream>
+#include <string_view>
 using namespace webscene::graphics;
 void require(bool value) { if (!value) throw std::runtime_error("requirement failed"); }
 struct display_owner {
     EGLDisplay display;
     ~display_owner() { eglTerminate(display); }
 };
-int main() {
+int main(int argc, char** argv) {
+    const EGLint major=argc==2 && std::string_view(argv[1])=="3" ? 3 : 2;
     auto get_display=reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
     if (!get_display) return 1;
 #if defined(__APPLE__)
@@ -22,12 +24,12 @@ int main() {
     auto display=get_display(EGL_PLATFORM_ANGLE_ANGLE,nullptr,attrs);
     if (display==EGL_NO_DISPLAY || !eglInitialize(display,nullptr,nullptr)) return 77;
     auto lease=std::make_shared<display_owner>(); lease->display=display;
-    const EGLint config_attrs[]={EGL_SURFACE_TYPE,EGL_PBUFFER_BIT,EGL_RENDERABLE_TYPE,EGL_OPENGL_ES2_BIT,EGL_NONE};
+    const EGLint config_attrs[]={EGL_SURFACE_TYPE,EGL_PBUFFER_BIT,EGL_RENDERABLE_TYPE,major==2 ? EGL_OPENGL_ES2_BIT : EGL_OPENGL_ES3_BIT,EGL_NONE};
     EGLConfig config{}; EGLint count{};
     require(eglChooseConfig(display,config_attrs,&config,1,&count) && count==1);
-    angle_context first(display,lease,config,2);
+    angle_context first(display,lease,config,major);
     {
-        angle_context second(display,lease,config,2);
+        angle_context second(display,lease,config,major);
         angle_context::scope active(first);
         const auto first_context=eglGetCurrentContext();
         glClearColor(1,0,0,1);
