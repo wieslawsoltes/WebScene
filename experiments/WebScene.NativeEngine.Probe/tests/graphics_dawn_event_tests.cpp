@@ -1,5 +1,6 @@
 #include "graphics/graphics_service.h"
 #include "graphics/webgpu_adapter_options.h"
+#include "graphics/webgpu_feature_names.h"
 #include "graphics/engine_wake.h"
 #include "graphics/dawn_canvas_images.h"
 #include "graphics/dawn_dxgi_image.h"
@@ -283,6 +284,26 @@ int main() {
     wgpu::AdapterInfo info{};
     if (state->adapter.GetInfo(&info)!=wgpu::Status::Success) return 1;
     if (info.adapterType!=wgpu::AdapterType::IntegratedGPU && info.adapterType!=wgpu::AdapterType::DiscreteGPU) return 77;
+    if (webgpu_feature_from_name("SharedTextureMemoryIOSurface")
+        || webgpu_feature_from_name("shared-texture-memory-iosurface")
+        || webgpu_feature_from_name("SHADER-F16")
+        || webgpu_feature_to_name(wgpu::FeatureName::SharedTextureMemoryIOSurface)
+        || webgpu_feature_to_name(wgpu::FeatureName::SharedFenceMTLSharedEvent)
+        || webgpu_feature_to_name(static_cast<wgpu::FeatureName>(0xffffffff))) return 1;
+    bool null_features=false;
+    try { webgpu_supported_feature_names(wgpu::Adapter{}); }
+    catch (const std::invalid_argument&) { null_features=true; }
+    if (!null_features) return 1;
+    const auto adapter_features=webgpu_supported_feature_names(state->adapter);
+    std::set<std::string_view> feature_names;
+    std::set<wgpu::FeatureName> native_features;
+    for (const auto& feature:webgpu_feature_names) {
+        if (!feature_names.insert(feature.name).second || !native_features.insert(feature.native).second
+            || webgpu_feature_from_name(feature.name)!=feature.native
+            || webgpu_feature_to_name(feature.native)!=feature.name
+            || (std::find(adapter_features.begin(),adapter_features.end(),feature.name)!=adapter_features.end())
+                !=state->adapter.HasFeature(feature.native)) return 1;
+    }
     auto adapter_handle=root.adopt_adapter(state->adapter);
     bool foreign_adapter=false,active_destroy=false,active_close=false,stale_adapter=false;
     try { other_root.with_adapter(adapter_handle,[](const auto&) {}); }
@@ -356,6 +377,14 @@ int main() {
         if (!device_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
     }
     if (!device_done || !native_device->device) return 1;
+    const auto device_features=webgpu_supported_feature_names(native_device->device);
+    for (const auto& feature:webgpu_feature_names) {
+        const bool exposed=std::find(device_features.begin(),device_features.end(),feature.name)!=device_features.end();
+        if (exposed!=native_device->device.HasFeature(feature.native)) return 1;
+        // No optional features were requested on this device. Adapter support
+        // must not silently become device enablement.
+        if (exposed && feature.native!=wgpu::FeatureName::CoreFeaturesAndLimits) return 1;
+    }
     imported_dxgi_fences imported;
     imported.values.push_back(99);
     if (import_dxgi_fences({}, {}, {}, imported)!=dxgi_fence_status::invalid_argument

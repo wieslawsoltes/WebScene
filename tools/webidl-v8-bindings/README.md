@@ -18,3 +18,7 @@ normal native build does not require Node, npm, a network connection, `@webref/i
 Generation dependencies are pinned by `package-lock.json`: `@webref/idl` 3.82.1 is MIT
 licensed and `webidl2` 24.5.0 uses the W3C software/document license. They are development
 tools and are not linked, copied, or packaged with the WebScene runtime.
+
+The generate/check scripts also produce and verify the native WebGPU feature-name
+catalog from the SHA256-pinned `webgpu.idl` contract. Its explicit Dawn enum mapping
+excludes native extensions; updating the IDL pin requires reviewing that mapping.

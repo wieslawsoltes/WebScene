@@ -100,3 +100,18 @@ exception sentinel, observes both rejections, and rejects duplicate completion.
 Handlers are installed before returning to the graphics pump because spontaneous
 Dawn discovery can complete within that same dispatch batch. The targeted runtime
 CTest passes; this does not qualify the still-pending public GPUAdapter bindings.
+
+### Standards feature mapping
+
+`generate-webgpu-features.mjs` reads the pinned WebGPU IDL and checks its SHA256
+before generating `webgpu_feature_names.h`. All 23 GPUFeatureName values have
+explicit Dawn spellings. Unknown names and native-only shared-texture/fence
+features have no mapping. `npm run check --prefix tools/webidl-v8-bindings` now
+checks this generated catalog as well as the existing DOM bindings.
+
+The native helper can query either an adapter or a device, using HasFeature on
+that exact object. The macOS hardware test checks the full standards mapping
+against actual adapter support, private-feature exclusion, null rejection, and
+the default device's enabled subset. It passes. This is the feature translation
+layer for discovery and device descriptors; GPUSupportedFeatures setlike objects,
+SameObject identity and public capability exposure still require integration.
