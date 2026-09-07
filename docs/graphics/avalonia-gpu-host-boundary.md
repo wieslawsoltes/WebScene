@@ -151,3 +151,28 @@ is not a forced-delayed-GPU stress test. Wrong-thread rejection uses a dedicated
 thread because a queued Task can execute inline on a waiting worker thread.
 Fixture-only failure cleanup drains GL before releasing native image ownership.
 Production context-loss cleanup and renderer scheduling remain unfinished.
+
+### Direct pinned Ganesh sampling of the IOSurface rectangle
+
+The .NET interop fixture now exercises `NativeMacOSGpuImageImport.TryWrapRectangleTexture`
+with the repository's SkiaSharp 2.88.9 Ganesh GL backend. It imports the Dawn-written
+17×4 IOSurface into a CGL rectangle texture, wraps that borrowed texture as a
+texture-backed SKImage, and draws it into a GPU SKSurface. The image is clipped
+and blended at alpha 128 over opaque blue. All 192 destination pixels are checked
+against the expected clipped extent and channel values after Skia submission and
+native consumer fence retirement. Both net8.0 and net10.0 pass all seven interop
+tests without skips on the macOS arm64 fixture host.
+
+The route uses the existing pinned Ganesh API and no explicit intermediate texture
+blit or CPU upload. The only explicit readback is diagnostic destination validation
+after the source fence. Internal driver/Skia copy counts still require a trace;
+this is not a claim that every underlying operation is copy-free. The native source
+owner is observed released after the fence, independently of the destination.
+The wrapper borrows the caller's GL texture and consumer; SKImage disposal is not
+GPU completion. The caller supplies negotiated origin and alpha interpretation.
+
+This is an actual GPU Skia composition test, not yet an Avalonia-window retained
+scene test. Uniform source color cannot qualify texture orientation or transparent
+source edges. Host context acquisition, import caching, retained replay lifetime,
+ordered DOM/canvas composition, and device-loss handling remain integration work.
+Graphite migration is not required by this demonstrated direct Ganesh route.
