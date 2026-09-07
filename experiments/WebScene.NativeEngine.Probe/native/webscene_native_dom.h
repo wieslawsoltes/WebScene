@@ -2,6 +2,7 @@
 
 #include "webscene_native_engine.h"
 #include "graphics/canvas_backing.h"
+#include "graphics/image_lease_abi.h"
 
 #include <algorithm>
 #include <array>
@@ -827,6 +828,16 @@ struct text_layout_fragment final {
 
 struct canvas_node_data final {
     webscene::graphics::canvas_backing backing;
+    std::shared_ptr<const webscene_gpu_image_lease_v3> gpu_image;
+    void publish_gpu_image(std::shared_ptr<const webscene_gpu_image_lease_v3> image) {
+        if (!image) throw std::invalid_argument("missing GPU canvas image");
+        const auto m=image->value.describe();
+        if (backing.mode()==webscene::graphics::canvas_context_mode::none
+            || m.canvas!=backing.identity() || m.allocation_generation!=backing.allocation_generation()
+            || m.content_serial!=backing.content_serial() || m.width!=backing.width() || m.height!=backing.height())
+            throw std::invalid_argument("GPU image does not match canvas backing");
+        gpu_image=std::move(image);
+    }
     std::vector<canvas_rect_command> rects;
     std::vector<canvas_line_command> lines;
     uint64_t generation{1};
@@ -1544,6 +1555,7 @@ public:
         std::vector<webscene_scene_command>& commands,
         std::vector<webscene_scene_string>& strings,
         std::vector<char>& string_bytes) const;
+    void build_gpu_canvas_images(std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images) const;
     void build_canvas_layouts(std::vector<webscene_canvas_layout>& layouts) const;
     void build_canvas_display_lists(
         std::vector<webscene_canvas_layer>& layers,

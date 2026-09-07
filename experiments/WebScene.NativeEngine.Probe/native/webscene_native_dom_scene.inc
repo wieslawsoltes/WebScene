@@ -42,6 +42,24 @@ void native_document::build_scene(
     }
 }
 
+void native_document::build_gpu_canvas_images(
+    std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images) const
+{
+    images.clear();
+    for (const auto& node : nodes_) {
+        if (node->tag!="canvas" || !is_connected(*node) || !node->visible
+            || !display_tree_allows_render(*this,*node)) continue;
+        const auto& canvas=node->canvas();
+        if (!canvas.gpu_image) continue;
+        const auto m=canvas.gpu_image->value.describe();
+        // A bitmap reset invalidates the presented content. Retained scenes
+        // still own the previous frame until their consumers finish.
+        if (m.allocation_generation!=canvas.backing.allocation_generation()
+            || m.content_serial!=canvas.backing.content_serial()) continue;
+        images.push_back(canvas.gpu_image);
+    }
+}
+
 void native_document::build_canvas_layouts(
     std::vector<webscene_canvas_layout>& layouts) const
 {

@@ -203,11 +203,21 @@
             for (const auto byte : next->canvas_string_bytes) {
                 dom_hash = mix_hash(dom_hash, static_cast<uint8_t>(byte));
             }
+            document_.build_gpu_canvas_images(next->gpu_images);
+            for (const auto& image:next->gpu_images) {
+                const auto m=image->value.describe();
+                dom_hash=mix_hash(dom_hash,m.canvas);
+                dom_hash=mix_hash(dom_hash,m.allocation);
+                dom_hash=mix_hash(dom_hash,m.allocation_generation);
+                dom_hash=mix_hash(dom_hash,m.content_serial);
+            }
             next->dom_hash = dom_hash;
             const auto viewport_changed = width != acknowledged_width || height != acknowledged_height;
             if (base_revision == 0 || viewport_changed || dom_hash != acknowledged_dom_hash) {
                 scene_flags |= scene_flag_dom_replacement;
-                const auto localized = base_revision != 0
+                const auto localized = next->gpu_images.empty()
+                    && (!acknowledged_scene || acknowledged_scene->gpu_images.empty())
+                    && base_revision != 0
                     && !viewport_changed
                     && acknowledged_scene != nullptr
                     && append_localized_dom_damage(

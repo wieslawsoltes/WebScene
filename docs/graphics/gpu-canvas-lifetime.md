@@ -227,3 +227,24 @@ capability rejection, paint placement, provider lookup, real allocation/fence
 integration, managed consumers and Windows/Linux ABI verification remain open.
 The fixture provider owns no texture; these results prove lease ownership through
 the exported operations, not native GPU presentation or its copy budget.
+
+## Canvas-to-scene image capture
+
+Canvas node state can now accept a native image reference only when its canvas
+identity, allocation generation, content serial and bitmap dimensions match the
+current backing. Scene construction captures connected, visible GPU canvases,
+retains their references and incorporates their image versions in change detection.
+GPU changes currently use conservative full-viewport damage. References are shared
+without copying pixels or allocating another image ticket for each scene.
+
+Bitmap property reset clears the canvas's current image reference. Previously
+captured frames remain immutable and retained. The runtime fixture verifies
+capture, remove/reinsert, resize with an older capture alive, stale-generation
+rejection, and final pool reclamation. The focused V8 test passes in 0.62 seconds.
+Native image producers must update the backing version and request scene
+publication on the engine thread; browser GPU bindings are still outstanding.
+
+This connects native canvas state to the scene image collection. It does not yet
+provide paint operations identifying where each GPU image is sampled, clipping,
+transforms or isolation. Actual native GPU texture production and end-to-end
+ordered-scene GPU fixtures remain incomplete, so G03 remains open.

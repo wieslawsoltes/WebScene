@@ -106,6 +106,35 @@ int main() {
             require(runtime.execute("canvasProbe.width=640;","backing-resize"),"canvas bitmap resize failed");
             require(backing.width()==640 && backing.height()==150 && backing.allocation_generation()==allocation+1,"bitmap resize missed backing generation");
             require(backing.mode()==canvas_context_mode::two_d,"bitmap reset released context ownership");
+            struct canvas_provider final : image_provider_lifetime {};
+            owned_image_pool images(std::make_shared<canvas_provider>());
+            auto image_writer=images.acquire();
+            image_writer->set_metadata({backing.identity(),100,backing.allocation_generation(),backing.content_serial(),1,1,backing.width(),backing.height()});
+            image_writer->begin(); auto image_frame=image_writer->publish();
+            auto canvas_image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image_frame)); image_frame.reset();
+            canvas_node->mutable_canvas().publish_gpu_image(canvas_image);
+            document.layout(640,480);
+            std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> captured;
+            document.build_gpu_canvas_images(captured);
+            require(captured.size()==1 && captured[0]==canvas_image,"canvas GPU image capture failed");
+            require(runtime.execute("canvasProbe.remove();","gpu-remove"),"canvas removal failed");
+            std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> detached;
+            document.build_gpu_canvas_images(detached);
+            require(detached.empty() && captured[0]->value.describe().width==640,"detachment lost retained image");
+            require(runtime.execute("document.body.appendChild(canvasProbe);","gpu-reinsert"),"canvas reinsertion failed");
+            document.layout(640,480); document.build_gpu_canvas_images(detached);
+            require(detached.size()==1,"reinserted canvas lost image");
+            require(runtime.execute("canvasProbe.width=800;","gpu-resize"),"GPU canvas reset failed");
+            document.build_gpu_canvas_images(detached);
+            require(detached.empty() && !canvas_node->canvas().gpu_image,"reset kept stale canvas image");
+            require(captured[0]->value.describe().width==640,"resize mutated retained frame");
+            bool rejected=false;
+            try { canvas_node->mutable_canvas().publish_gpu_image(canvas_image); }
+            catch (const std::invalid_argument&) { rejected=true; }
+            require(rejected,"stale image generation accepted");
+            image_writer->complete(); image_writer.reset();
+            captured.clear(); canvas_image.reset();
+            require(images.busy_images()==0,"captured image leaked pool slot");
             runtime.set_visible(false);
             auto wake=std::make_shared<engine_wake>();
             const auto owner_thread=std::this_thread::get_id();

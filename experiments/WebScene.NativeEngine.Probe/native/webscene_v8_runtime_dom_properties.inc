@@ -1511,6 +1511,7 @@
         canvas.rects.clear();
         canvas.lines.clear();
         canvas.backing.reset_bitmap(canvas_bitmap_dimension(node,"width",300),canvas_bitmap_dimension(node,"height",150));
+        canvas.gpu_image.reset();
         advance_canvas_generation(node,false);
         canvas.commands.clear();
         canvas.strings.clear();
