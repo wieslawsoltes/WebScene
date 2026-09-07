@@ -158,7 +158,9 @@ int main(int argc, char** argv) {
     wgpu::BufferDescriptor bufferDescriptor{};
     bufferDescriptor.size = bufferSize;
     bufferDescriptor.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
-    auto buffer = device.CreateBuffer(&bufferDescriptor);
+    const bool verifyPixels=hostDestinationTexture==0;
+    wgpu::Buffer buffer;
+    if (verifyPixels) buffer=device.CreateBuffer(&bufferDescriptor);
     skgpu::graphite::DawnBackendContext backendContext;
     backendContext.fInstance=instance; backendContext.fDevice=device;
     backendContext.fQueue=device.GetQueue();
@@ -232,13 +234,24 @@ int main(int argc, char** argv) {
     destination.layout.bytesPerRow = rowBytes;
     destination.layout.rowsPerImage = height;
     const wgpu::Extent3D extent{width, height, 1};
-    encoder.CopyTextureToBuffer(&source, &destination, &extent);
+    if (verifyPixels) encoder.CopyTextureToBuffer(&source, &destination, &extent);
     auto commands = encoder.Finish();
     device.GetQueue().Submit(1, &commands);
 
     wgpu::SharedTextureMemoryEndAccessState handoff;
     if (sharedOutput && sharedMemory.EndAccess(texture,&handoff)!=wgpu::Status::Success)
         return finish("failed","IOSurface EndAccess failed",1);
+    const uint8_t* pixels=nullptr;
+    bool valid=true;
+    if (!verifyPixels) {
+        auto completed=std::make_shared<bool>(false);
+        auto future=device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::WaitAnyOnly,
+            [completed](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
+                *completed=status==wgpu::QueueWorkDoneStatus::Success;
+            });
+        if (!wait(instance,future) || !*completed || error.load())
+            return finish("failed","Producer completion failed",1);
+    } else {
     auto mapped = std::make_shared<bool>(false);
     auto mapFuture = buffer.MapAsync(wgpu::MapMode::Read, 0, bufferSize,
         wgpu::CallbackMode::WaitAnyOnly,
@@ -247,10 +260,10 @@ int main(int argc, char** argv) {
         });
     if (!wait(instance, mapFuture) || !*mapped || error.load())
         return finish("failed", "GPU clear/copy/map failed or timed out", 1);
-    auto pixels = static_cast<const uint8_t*>(buffer.GetConstMappedRange(0, bufferSize));
+    pixels = static_cast<const uint8_t*>(buffer.GetConstMappedRange(0, bufferSize));
     if (!pixels) return finish("failed", "Mapped range is null", 1);
     constexpr std::array<int, 4> expected{51, 102, 153, 255};
-    bool valid = true;
+
     for (uint32_t y = 0; y < height; ++y)
         for (uint32_t x = 0; x < width; ++x)
             for (uint32_t c = 0; c < 4; ++c) {
@@ -260,10 +273,11 @@ int main(int argc, char** argv) {
                     : (x>=2 && x<8 && y>=1 && y<3) ? blended : expected;
                 valid &= std::abs(int(pixels[y * rowBytes + x * 4 + (sharedOutput && c<3 ? 2-c : c)]) - wanted[c]) <= 1;
             }
+    }
 #if defined(__APPLE__)
     if (sharedOutput) valid &= check_iosurface_gl(static_cast<IOSurfaceRef>(sharedSurface.get()),width,height,pixels,rowBytes,hostDestinationTexture);
 #endif
-    buffer.Unmap();
+    if (verifyPixels) buffer.Unmap();
     // The mapped readback follows Graphite submission on the same queue, proving
     // this consumer's GPU sampling is complete before its lease is retired.
     image.reset(); retainedTexture=nullptr;
@@ -278,8 +292,8 @@ int main(int argc, char** argv) {
               << ",\"driver\":" << json(text(info.description))
               << ",\"vendorId\":" << info.vendorID << ",\"deviceId\":" << info.deviceID
               << ",\"iosurfaceOutput\":" << (sharedOutput ? "true" : "false")
-              << ",\"verifiedPixels\":" << width * height
-              << ",\"backgroundRGBA\":[51,102,153,255],\"compositedRGBA\":[153,51,77,255],\"tolerance\":1,\"diagnosticReadback\":true}\n";
+              << ",\"verifiedPixels\":" << (verifyPixels ? width * height : 0)
+              << ",\"backgroundRGBA\":[51,102,153,255],\"compositedRGBA\":[153,51,77,255],\"tolerance\":1,\"diagnosticReadback\":" << (verifyPixels ? "true" : "false") << "}\n";
     return 0;
 }
 

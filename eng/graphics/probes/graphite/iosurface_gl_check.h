@@ -55,12 +55,17 @@ inline bool check_iosurface_gl(IOSurfaceRef surface,unsigned width,unsigned heig
                 valid=glGetError()==GL_NO_ERROR;
             }
             glBindFramebuffer(GL_READ_FRAMEBUFFER,destinationFramebuffer);
+            if (expected) {
             std::vector<uint8_t> pixels(width*height*4);
             glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
             auto error=glGetError(); valid &= error==GL_NO_ERROR;
             if (!valid) std::fprintf(stderr,"CGL read error %u\n",error);
             for (unsigned y=0;y<height;++y) for (unsigned x=0;x<width*4;++x)
                 valid &= std::abs(int(pixels[y*width*4+x])-int(expected[y*expected_stride+(x/4)*4+(x%4<3 ? 2-x%4 : x%4)]))<=1;
+            } else {
+                // Transitional synchronous completion, with no pixel transfer.
+                glFinish(); valid &= glGetError()==GL_NO_ERROR;
+            }
         }
     }
     glDeleteFramebuffers(1,&destinationFramebuffer); if (!hostTexture) glDeleteTextures(1,&destination);

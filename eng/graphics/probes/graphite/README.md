@@ -201,3 +201,17 @@ copies occur, resources are recreated per call, and there are no JS WebGPU bindi
 Do not use the exported probe entry point as a production API. Async readiness,
 lease retirement through host completion, pooling and actual WebScene scene updates
 remain required. No Kestrel or end-to-end WebScene WebGPU pass is claimed.
+
+## Host transfer without diagnostic pixel traffic
+
+The in-process host entry point now skips readback-buffer allocation, texture-to-
+buffer copy, map and glReadPixels. It awaits Dawn queue completion without a pixel
+transfer, performs the IOSurface-to-host GPU blit, and uses glFinish for GL lifetime
+safety. The host import/update/visual commit succeeds on M4 with diagnosticReadback
+false and verifiedPixels zero. The standalone mode still performs all 68-pixel
+checks and passes, so execution success is not mislabeled as pixel verification.
+
+This supersedes the host's readback-dependent readiness above. It remains a
+synchronous prototype: queue waiting and glFinish must be replaced by asynchronous
+readiness and consumer retirement before performance acceptance. There is still
+one explicit GPU-local blit, plus any host snapshot work; this is not zero-copy.
