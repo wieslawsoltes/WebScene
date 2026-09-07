@@ -1208,3 +1208,19 @@ capacity handling, view creation and repeated destruction of an adopted texture.
 Dawn event and V8 runtime tests pass, including the JavaScript offscreen pixel
 test. GPUCanvasContext must still connect this boundary to its current texture
 and shared-frame publication lifecycle.
+
+
+### V8 adoption of imported canvas textures
+
+The internal device bridge can now adopt an imported native texture directly
+into its V8 texture registry. It validates the device brand, checks descriptor
+metadata against native dimensions/format/usage/mips/samples, adopts the native
+reference and rolls back table ownership if wrapping fails. The wrapper retains
+its device and uses the ordinary texture/view implementation. No second texture
+allocation or pixel transfer occurs during adoption.
+
+The macOS runtime test rejects mismatched metadata, verifies exact native
+identity, and accesses metadata/createView from JavaScript on an adopted texture.
+Runtime CTest passes, including the offscreen triangle pixel assertion. The host
+canvas controller still needs to provide/cache this wrapper from getCurrentTexture
+and connect frame expiration/publication to ordinary scene consumption.

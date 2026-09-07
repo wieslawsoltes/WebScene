@@ -659,6 +659,19 @@ int main() {
                     require(requested_device_promise->State()==v8::Promise::kFulfilled,"Adapter request did not produce a native device wrapper");
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"adapterDeviceProbe"),requested_device_promise->Result()).FromMaybe(false),"Adapter device publication failed");
                     test_v8_webgpu_canvas_configuration(isolate,context);
+                    {
+                        auto device_object=requested_device_promise->Result().As<v8::Object>();auto device=v8_webgpu_devices::native_reference(device_object);
+                        webgpu_texture_descriptor metadata;metadata.size={4,2,1};metadata.format=wgpu::TextureFormat::RGBA8Unorm;metadata.usage=16;metadata.label="imported canvas";
+                        wgpu::Texture native;metadata.with_native([&](const auto& descriptor){native=device.CreateTexture(&descriptor);});
+                        auto mismatch=metadata;mismatch.size.width=8;bool rejected=false;
+                        try{v8_webgpu_devices::adopt_canvas_texture(context,device_object,device,native,mismatch);}catch(const std::invalid_argument&){rejected=true;}
+                        require(rejected,"Canvas adoption accepted mismatched metadata");
+                        auto wrapper=v8_webgpu_devices::adopt_canvas_texture(context,device_object,device,native,metadata).ToLocalChecked();
+                        require(v8_webgpu_textures::native_reference(wrapper).Get()==native.Get(),"Canvas adoption replaced native texture");
+                        require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"importedCanvasTexture"),wrapper).FromMaybe(false),"Imported texture publication failed");
+                        require(run("if(importedCanvasTexture.width!==4||importedCanvasTexture.label!=='imported canvas')throw new Error('imported metadata');const importedView=importedCanvasTexture.createView();if(Object.prototype.toString.call(importedView)!=='[object GPUTextureView]')throw new Error('imported view');delete globalThis.importedCanvasTexture;"),"Imported canvas texture JavaScript access failed");
+                    }
+
                     require(run(R"JS(
                         if(adapterWrapperProbe.requestDevice.length!==0)throw new Error('requestDevice arity');
                         const ai=adapterWrapperProbe.info,di=adapterDeviceProbe.adapterInfo;

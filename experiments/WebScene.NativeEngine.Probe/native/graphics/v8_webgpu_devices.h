@@ -305,13 +305,40 @@ public:
         for (auto& item:entries_) if (item && item->buffers->complete(record)) return true;
         return false;
     }
-    static wgpu::Device native_reference(v8::Local<v8::Value> value) {
+private:
+    static entry* entry_from_value(v8::Local<v8::Value> value) {
         if(!value->IsObject())throw std::invalid_argument("GPUDevice object required");auto object=value.As<v8::Object>();
         if(object->InternalFieldCount()!=2||!object->GetInternalField(0)->IsValue()||!object->GetInternalField(0).As<v8::Value>()->IsExternal()
             ||object->GetInternalField(0).As<v8::External>()->Value(v8::kExternalPointerTypeTagDefault)!=&brand_)throw std::invalid_argument("Incorrect GPUDevice interface");
         auto* item=static_cast<entry*>(object->GetAlignedPointerFromInternalField(1,v8::kEmbedderDataTypeTagDefault));
         if(!item)throw std::invalid_argument("GPUDevice realm has been released");
-        wgpu::Device device;item->service->with_device(item->device,[&](auto& owned){device=owned.native();});return device;
+        return item;
+    }
+public:
+    static wgpu::Device native_reference(v8::Local<v8::Value> value) {
+        auto* item=entry_from_value(value);wgpu::Device device;
+        item->service->with_device(item->device,[&](auto& owned){device=owned.native();});return device;
+    }
+    // Host canvas bridge. Caller supplies an imported texture from source_device;
+    // no GPU allocation or copying is performed. Metadata must describe the
+    // actual facade exposed to JavaScript, not broader host-only capabilities.
+    static v8::MaybeLocal<v8::Object> adopt_canvas_texture(v8::Local<v8::Context> context,
+        v8::Local<v8::Object> device_object,const wgpu::Device& source_device,
+        const wgpu::Texture& texture,const webgpu_texture_descriptor& descriptor) {
+        auto* item=entry_from_value(device_object);
+        if(!texture||!descriptor.valid_extent_shape||texture.GetWidth()!=descriptor.size.width
+            ||texture.GetHeight()!=descriptor.size.height||texture.GetDepthOrArrayLayers()!=descriptor.size.depthOrArrayLayers
+            ||texture.GetMipLevelCount()!=descriptor.mip_levels||texture.GetSampleCount()!=descriptor.samples
+            ||texture.GetDimension()!=descriptor.dimension||texture.GetFormat()!=descriptor.format
+            ||texture.GetUsage()!=static_cast<wgpu::TextureUsage>(descriptor.usage))
+            throw std::invalid_argument("Canvas texture metadata differs from its native facade");
+        resource_handle<wgpu::Texture> handle;
+        item->service->with_device(item->device,[&](auto& owned){handle=owned.adopt_texture(source_device,texture);});
+        try {
+            v8::Local<v8::Object> wrapper;
+            if(item->textures->wrap_texture(context,*item->service,item->device,handle,device_object,descriptor).ToLocal(&wrapper))return wrapper;
+        }catch(...){item->service->with_device(item->device,[&](auto& owned){owned.release_texture(handle);});throw;}
+        item->service->with_device(item->device,[&](auto& owned){owned.release_texture(handle);});return {};
     }
     // Caller retains ownership until a non-empty wrapper is returned.
     v8::MaybeLocal<v8::Object> wrap(v8::Local<v8::Context> context,graphics_service& service,resource_handle<dawn_device> device,std::string initial_label={},std::string queue_label={}) {
