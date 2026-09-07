@@ -665,3 +665,21 @@ remains unchanged, no orphan device is adopted into the graphics service, and
 the completion ticket and adapter handle are reclaimed. Runtime CTest passed.
 This closes the specific successful-completion teardown gap above; it does not
 qualify all browser device-loss or navigation behavior.
+
+### Discovery object connected to adapter/device registries
+
+An internal realm-owned discovery object now exposes requestAdapter and routes
+real Dawn discovery completion into the adapter registry. The host retains the
+controller; service and adapter/device registries outlive it. It rechecks its
+receiver after option conversion, rejects conversion/receiver errors through
+promises, resolves unavailable adapter requests to null, and rolls back native
+adapter adoption if wrapper construction fails. Controller disposal invalidates
+its receiver and cancels pending discovery promises before native callbacks
+retire independently. No navigator property or secure-context claim is installed.
+
+The macOS runtime test exercises discovery through JavaScript, obtains the real
+adapter wrapper, invokes requestDevice, and performs createBuffer/getMappedRange/
+unmap/destroy on the returned native device. It verifies unsupported feature-level
+null results, invalid-option rejection and final native handle reclamation.
+Runtime CTest passes. Public exposure policy, complete GPU prototypes and
+capabilities, canvas configuration and rendering commands remain unfinished.

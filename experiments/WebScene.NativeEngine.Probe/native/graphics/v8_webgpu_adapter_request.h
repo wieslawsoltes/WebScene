@@ -34,6 +34,15 @@ public:
     v8_webgpu_adapter_request(const v8_webgpu_adapter_request&)=delete;
     v8_webgpu_adapter_request& operator=(const v8_webgpu_adapter_request&)=delete;
     bool pending() const { check_thread(); return !resolver_.IsEmpty(); }
+    bool cancel(v8::Local<v8::Context> context) {
+        check_thread();
+        if (resolver_.IsEmpty()) return false;
+        if (v8::Isolate::GetCurrent()!=isolate_ || realm_.Get(isolate_)!=context)
+            throw std::logic_error("Adapter cancellation belongs to another realm");
+        auto resolver=resolver_.Get(isolate_); resolver_.Reset(); realm_.Reset();
+        { std::lock_guard lock(native_->mutex); native_->abandoned=true; native_->adapter=nullptr; }
+        return resolver->Resolve(context,v8::Null(isolate_)).FromMaybe(false);
+    }
     static std::unique_ptr<v8_webgpu_adapter_request> start(v8::Isolate* isolate,
         v8::Local<v8::Context> context,const webgpu_adapter_options& requested,
         const wgpu::Instance& instance,std::shared_ptr<completion_mailbox> mailbox,

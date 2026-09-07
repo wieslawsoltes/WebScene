@@ -9,6 +9,7 @@
 #include "graphics/v8_webgpu_buffers.h"
 #include "graphics/v8_webgpu_devices.h"
 #include "graphics/v8_webgpu_adapters.h"
+#include "graphics/v8_webgpu_discovery.h"
 #include "graphics/v8_webgpu_mapped_ranges.h"
 #include "graphics/v8_webgpu_map_request.h"
 #include "graphics/image_lease_abi.h"
@@ -696,6 +697,39 @@ int main() {
                     require(adapter_fixture.live_adapters()==1,"Adapter disposal bypassed deferred release");
                     adapter_fixture.pump([](completion_record) {});
                     require(adapter_fixture.live_adapters()==0 && adapter_fixture.live_devices()==0,"Adapter/device deferred release leaked native handles");
+                    auto discovery_devices=std::make_unique<v8_webgpu_devices>(isolate,context,exception_constructor,2,4);
+                    auto discovery_adapters=std::make_unique<v8_webgpu_adapters>(isolate,context,*discovery_devices,exception_constructor,2);
+                    auto discovery=std::make_unique<v8_webgpu_discovery>(isolate,context,adapter_fixture,*discovery_adapters);
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"gpuDiscoveryProbe"),discovery->object()).FromMaybe(false),"Discovery object publication failed");
+                    require(run("globalThis.discoveryPromise=gpuDiscoveryProbe.requestAdapter();"),"JavaScript adapter discovery failed");
+                    auto discovery_promise=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"discoveryPromise")).ToLocalChecked().As<v8::Promise>();
+                    auto discovery_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                    while(discovery_promise->State()==v8::Promise::kPending && std::chrono::steady_clock::now()<discovery_deadline) {
+                        adapter_fixture.pump([&](auto completion) { require(discovery->complete(completion),"Discovery completion routing failed"); });
+                        if(discovery_promise->State()==v8::Promise::kPending)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                    require(discovery_promise->State()==v8::Promise::kFulfilled && discovery_promise->Result()->IsObject(),"Discovery did not return a hardware adapter wrapper");
+                    auto discovered_object=discovery_promise->Result().As<v8::Object>();
+                    auto device_method=discovered_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"requestDevice")).ToLocalChecked().As<v8::Function>();
+                    auto chain_device=device_method->Call(context,discovered_object,0,nullptr).ToLocalChecked().As<v8::Promise>();
+                    discovery_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                    while(chain_device->State()==v8::Promise::kPending && std::chrono::steady_clock::now()<discovery_deadline) {
+                        adapter_fixture.pump([&](auto completion) { require(discovery_adapters->complete(completion),"Discovered device completion routing failed"); });
+                        if(chain_device->State()==v8::Promise::kPending)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                    require(chain_device->State()==v8::Promise::kFulfilled,"Discovered adapter could not create device");
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"discoveryDevice"),chain_device->Result()).FromMaybe(false),"Discovered device publication failed");
+                    require(run("{let buffer=discoveryDevice.createBuffer({size:16,usage:8,mappedAtCreation:true});let view=buffer.getMappedRange();new Uint32Array(view)[0]=99;buffer.unmap();if(view.byteLength!==0)throw new Error('discovery mapping');buffer.destroy();}"),"Discovered device could not execute buffer operations");
+                    auto unavailable=run("globalThis.unavailableAdapter=gpuDiscoveryProbe.requestAdapter({featureLevel:'not-supported'});globalThis.invalidDiscovery=gpuDiscoveryProbe.requestAdapter({powerPreference:'invalid'});invalidDiscovery.catch(()=>{});");
+                    require(unavailable,"Discovery failure paths threw synchronously");
+                    auto unavailable_promise=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"unavailableAdapter")).ToLocalChecked().As<v8::Promise>();
+                    require(unavailable_promise->State()==v8::Promise::kFulfilled && unavailable_promise->Result()->IsNull(),"Unavailable adapter did not resolve null");
+                    auto invalid_discovery=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"invalidDiscovery")).ToLocalChecked().As<v8::Promise>();
+                    require(invalid_discovery->State()==v8::Promise::kRejected,"Invalid discovery options did not reject");
+                    discovery.reset(); discovery_adapters.reset(); discovery_devices.reset();
+                    require(run("delete globalThis.gpuDiscoveryProbe;delete globalThis.discoveryPromise;delete globalThis.discoveryDevice;delete globalThis.unavailableAdapter;delete globalThis.invalidDiscovery;"),"Discovery cleanup failed");
+                    adapter_fixture.pump([](completion_record) {});
+                    require(adapter_fixture.live_adapters()==0 && adapter_fixture.live_devices()==0,"Discovery chain leaked native ownership");
                     buffer_wrappers_tested=true;
                     return;
                 }
