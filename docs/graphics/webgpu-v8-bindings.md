@@ -172,3 +172,25 @@ mapped-buffer survival after wrapper release, and metadata after repeated Destro
 The Dawn hardware and V8 runtime CTests pass. Public buffer wrappers, mapping
 ArrayBuffer detachment, device-loss browser semantics and error scopes still need
 integration and qualification.
+
+### Buffer admission and regression checks
+
+Buffer creation now checks table capacity before invoking Dawn, avoiding native
+allocation churn when wrapper capacity is exhausted. The owner-thread admission
+check treats deferred GPU resources as occupied until completion and excludes
+slots whose generations cannot be reused. It is not a cross-thread reservation;
+no reentrant table mutation is allowed between the check and insertion.
+
+The hardware test configures a one-buffer device table, verifies saturation and
+successful reuse after release. Resource-table tests cover zero capacity and a
+slot remaining unavailable until its completion serial retires. After this change,
+resource, Dawn hardware, graphics service and V8 runtime tests pass:
+
+```sh
+ctest --test-dir artifacts/graphics-build/native-v8-enabled -R '^webscene_graphics_(resource|dawn_event|service|v8_runtime)_tests$' --output-on-failure
+```
+
+Before this admission change, rebuilding the enabled graphics targets and running
+`ctest --test-dir artifacts/graphics-build/native-v8-enabled -L graphics --output-on-failure`
+also passed all five tests, including ANGLE ES2 and ES3 on macOS. These are native
+regression results, not evidence of running an unchanged WebGPU application.

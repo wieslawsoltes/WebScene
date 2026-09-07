@@ -17,6 +17,8 @@ int main() {
     resource_owner a{new_owner_token(), new_owner_token(), new_owner_token()};
     auto b = a; b.device = new_owner_token();
     resource_table<tracked> table(2, a), foreign(2, b);
+    resource_table<tracked> zero(0,a);
+    require(!zero.can_insert() && table.can_insert());
     auto retained=std::make_unique<tracked>(live);
     bool insertion_rejected=false;
     std::thread bad_insert([&] {
@@ -43,12 +45,13 @@ int main() {
     rejects([&] { table.insert(b, std::make_unique<tracked>(live)); });
     auto second = table.insert(a, std::make_unique<tracked>(live));
     rejects([&] { table.insert(a, std::make_unique<tracked>(live)); });
+    require(!table.can_insert());
     auto overflow=std::make_unique<tracked>(live);
     rejects([&] { table.insert(a,std::move(overflow)); });
     require(overflow && live==3);
     overflow.reset();
-    table.complete(1); require(live == 2);
-    table.complete(2); require(live == 1 && table.deferred_count() == 0);
+    table.complete(1); require(live == 2 && !table.can_insert());
+    table.complete(2); require(live == 1 && table.deferred_count() == 0 && table.can_insert());
     auto reused = table.insert(a, std::make_unique<tracked>(live));
     require(reused.slot == first.slot && reused.generation != first.generation);
     rejects([&] { table.get(first, a); });

@@ -87,10 +87,10 @@ public:
     size_t live_adapters() const { check_thread(); return adapters_.resident_count(); }
     // Internal request-device completion hook: pass a freshly created device
     // from this service's instance exactly once, with its originating adapter.
-    resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={}) {
+    resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024) {
         check_open();
         return devices_.insert(owner_,std::make_unique<dawn_device>(
-            owner_.engine,dawn().completions(),std::move(adapter),std::move(device),std::move(loss)));
+            owner_.engine,dawn().completions(),std::move(adapter),std::move(device),std::move(loss),buffer_capacity));
     }
     template<class Execute> void with_device(resource_handle<dawn_device> handle,Execute execute) {
         check_open();

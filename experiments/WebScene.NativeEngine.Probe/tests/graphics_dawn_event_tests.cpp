@@ -426,7 +426,7 @@ int main() {
     invalid_handles[0]=reinterpret_cast<void*>(uintptr_t{1});
     if (import_dxgi_fences(native_device->device,invalid_handles,wait_values,imported)
         !=dxgi_fence_status::missing_device_feature || !imported.fences.empty()) return 1;
-    auto owned_device=root.adopt_device(state->adapter,native_device->device);
+    auto owned_device=root.adopt_device(state->adapter,native_device->device,{},1);
     if (root.live_devices()!=1) return 1;
     root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
     auto second_adapter=std::make_shared<result>();
@@ -480,6 +480,10 @@ int main() {
         browser_buffer.usage=0x6;
         auto descriptor=make_dawn_buffer_descriptor(browser_buffer);
         managed_buffer=device.create_buffer(*descriptor);
+        bool capacity_rejected=false;
+        try { device.create_buffer(*descriptor); }
+        catch (const std::length_error&) { capacity_rejected=true; }
+        if (!capacity_rejected || device.live_buffers()!=1) throw std::runtime_error("Buffer capacity was not enforced");
         device.with_buffer(managed_buffer,[&](const auto& buffer) {
             borrowed_buffer_reference=buffer;
             bool destroy_guard=false,release_guard=false,close_guard=false;

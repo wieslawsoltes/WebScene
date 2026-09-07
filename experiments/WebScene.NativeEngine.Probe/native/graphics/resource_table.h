@@ -97,6 +97,15 @@ public:
         for (const auto& item : entries_)
             if (item.value && item.last_submission > completed_) std::terminate();
     }
+    // Owner-thread admission check before expensive native allocation. This is
+    // not a reservation: callers must not reenter/mutate the table before insert.
+    bool can_insert() const {
+        check_thread();
+        if (entries_.size()<capacity_) return true;
+        for (const auto& item:entries_)
+            if (!item.value && item.generation<std::numeric_limits<uint64_t>::max()) return true;
+        return false;
+    }
     // Validate before transferring ownership. In particular a wrong-thread
     // call must leave the caller's pointer intact for release on its owner.
     resource_handle<T> insert(resource_owner owner, std::unique_ptr<T>&& value)

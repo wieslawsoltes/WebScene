@@ -57,7 +57,9 @@ public:
     // Internal native descriptor entry point. Browser descriptor validation and
     // error-object handling must precede this call in the JavaScript binding.
     resource_handle<wgpu::Buffer> create_buffer(const wgpu::BufferDescriptor& descriptor) {
-        auto buffer=native().CreateBuffer(&descriptor);
+        const auto& device=native();
+        if (!buffers_.can_insert()) throw std::length_error("graphics buffer limit reached");
+        auto buffer=device.CreateBuffer(&descriptor);
         if (!buffer) throw std::runtime_error("Dawn did not return a buffer");
         return buffers_.insert(owner_,std::make_unique<wgpu::Buffer>(std::move(buffer)));
     }
