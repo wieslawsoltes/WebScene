@@ -93,6 +93,9 @@
         retire_document_graphics();
 #endif
         set_context_location(local_context, local_context->Global(), resolved_url);
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        if(webgpu_document_policy)webgpu_document_policy(resolved_url);
+#endif
         auto outer_document = document_object.Get(isolate);
         outer_document->Set(
             local_context,

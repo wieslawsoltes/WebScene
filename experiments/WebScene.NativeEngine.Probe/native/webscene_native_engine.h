@@ -758,6 +758,15 @@ typedef void (*webscene_stylesheet_consumed_callback)(
     void* user_data, const char* address, size_t address_length,
     const char* css, size_t css_length);
 
+/* Optional host admission for the main document, evaluated on the runtime
+ * worker before scripts with the final resolved URL (initially about:blank).
+ * IOSURFACE certifies both a secure context and a GPU-capable scene consumer.
+ * Return DISABLED for untrusted/non-secure documents. No ABI reentry or throws.
+ * Current implementation supports IOSURFACE only on graphics-enabled macOS. */
+enum { WEBSCENE_WEBGPU_DISABLED = 0, WEBSCENE_WEBGPU_IOSURFACE = 1 };
+typedef uint32_t (*webscene_webgpu_policy_callback)(void* user_data,
+    const char* document_url, size_t document_url_length);
+
 typedef struct webscene_engine_options {
     uint32_t struct_size;
     uint32_t simulated_chart_command_count;
@@ -781,6 +790,8 @@ typedef struct webscene_engine_options {
     void* resource_load_v3_user_data;
     webscene_stylesheet_consumed_callback stylesheet_consumed_callback;
     void* stylesheet_consumed_user_data;
+    webscene_webgpu_policy_callback webgpu_policy_callback;
+    void* webgpu_policy_user_data;
 } webscene_engine_options;
 
 enum {

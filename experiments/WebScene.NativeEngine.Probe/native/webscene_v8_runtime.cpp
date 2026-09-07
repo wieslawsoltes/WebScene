@@ -225,6 +225,7 @@ struct v8_dom_runtime::implementation final {
     std::unique_ptr<webscene::graphics::v8_webgpu_realm> webgpu;
     v8::Global<v8::Object> webgpu_navigator;
     v8::Global<v8::Function> webgpu_dom_exception;
+    std::function<void(const std::string&)> webgpu_document_policy;
     webscene::graphics::webgpu_canvas_interop webgpu_interop=webscene::graphics::webgpu_canvas_interop::none;
     std::shared_ptr<webscene::graphics::completion_wake> webgpu_wake;
 #if defined(__APPLE__)
@@ -4251,7 +4252,11 @@ v8_dom_runtime::~v8_dom_runtime() = default;
 
 bool v8_dom_runtime::initialize()
 {
-    return impl_->initialize();
+    if(!impl_->initialize())return false;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    if(impl_->webgpu_document_policy)impl_->webgpu_document_policy("about:blank");
+#endif
+    return true;
 }
 
 bool v8_dom_runtime::execute(const std::string& source, const std::string& document_name)
@@ -4600,6 +4605,18 @@ void v8_dom_runtime::shutdown_graphics()
     auto context=impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(context);
     impl_->retire_document_graphics();
+}
+
+void v8_dom_runtime::set_webgpu_policy(std::shared_ptr<webscene::graphics::completion_wake> wake,
+    std::function<webscene::graphics::webgpu_canvas_interop(const std::string&)> policy)
+{
+    if(std::this_thread::get_id()!=impl_->graphics_thread||impl_->isolate)
+        throw std::logic_error("WebGPU policy must be installed on the owner thread before initialization");
+    if(!wake||!policy)throw std::invalid_argument("WebGPU policy requires a wake and host decision callback");
+    impl_->webgpu_document_policy=[this,wake=std::move(wake),policy=std::move(policy)](const std::string& url) {
+        const auto interop=policy(url);
+        if(interop==webscene::graphics::webgpu_canvas_interop::iosurface)install_webgpu(wake,true,interop);
+    };
 }
 
 bool v8_dom_runtime::install_webgpu(std::shared_ptr<webscene::graphics::completion_wake> wake,

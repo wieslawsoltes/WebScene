@@ -209,6 +209,12 @@
                     address.data(), address.size(), css.data(), css.size());
             });
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+        if(webgpu_policy_callback_)runtime_->set_webgpu_policy(graphics_wake_,[this](const std::string& url) {
+            return webgpu_policy_callback_(webgpu_policy_user_data_,url.data(),url.size())==WEBSCENE_WEBGPU_IOSURFACE
+                ? webscene::graphics::webgpu_canvas_interop::iosurface : webscene::graphics::webgpu_canvas_interop::none;
+        });
+#endif
         if (!runtime_->initialize()) {
             set_last_error(runtime_->last_error());
             webscene_native::runtime_diagnostic failure;

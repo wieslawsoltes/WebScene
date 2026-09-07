@@ -1563,3 +1563,22 @@ tests and 21 damage/mailbox policy tests pass with zero skips on macOS/net10.0;
 probe build has zero warnings. These tests do not yet drive the admitted handler
 with a normal GPU-producing engine. Desktop negotiation/engine enablement,
 ordinary full-path rendering, captures/frozen scenes and Uno remain outstanding.
+
+### Per-document native host admission (2026-09-08)
+
+The optional tail of `webscene_engine_options` now accepts a WebGPU policy
+callback. On graphics-enabled macOS the runtime evaluates it for the initial
+about:blank document and each successfully resolved main-document navigation,
+before application scripts. IOSurface admission is an explicit host assertion
+that the document is trusted/secure and the scene consumer supports GPU images.
+Unknown values deny admission. Older options sizes retain their previous
+stylesheet callback boundary and do not read the new fields.
+
+The runtime regression verifies denial on the initial document, admission
+visible to inline scripts, preservation after a failed resource load, and
+removal before scripts in a subsequently denied document. The graphics-enabled
+runtime test passed; the graphics-disabled native engine also built. This does
+not yet validate the C callback through a GPU-producing engine, managed callback
+lifetime, ordinary desktop host negotiation, redirects, or full origin isolation.
+The existing navigation implementation reuses the global realm; this hook is
+not a substitute for browser security-context conformance.

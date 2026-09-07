@@ -289,6 +289,8 @@ public:
     // Host-only opt-in, before application scripts. The host must establish the
     // document's secure-context status and negotiate the presenter policy.
     // Denied exposure does not initialize graphics. Reinstall after navigation.
+    void set_webgpu_policy(std::shared_ptr<webscene::graphics::completion_wake> wake,
+        std::function<webscene::graphics::webgpu_canvas_interop(const std::string&)> policy);
     bool install_webgpu(std::shared_ptr<webscene::graphics::completion_wake> wake,
         bool secure_context,webscene::graphics::webgpu_canvas_interop interop);
     webscene::graphics::graphics_service& initialize_graphics(

@@ -3,6 +3,7 @@
 #include "webscene_v8_runtime.h"
 #include "webscene_runtime_diagnostics.h"
 #include "graphics/engine_wake.h"
+#include "graphics/webgpu_canvas_interop.h"
 #include "graphics/image_lease_abi.h"
 #if defined(__APPLE__) && defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
 #include "graphics/iosurface_canvas_images.h"
@@ -315,6 +316,8 @@ private:
     void* resource_load_v3_user_data_{nullptr};
     webscene_stylesheet_consumed_callback stylesheet_consumed_callback_{nullptr};
     void* stylesheet_consumed_user_data_{nullptr};
+    webscene_webgpu_policy_callback webgpu_policy_callback_{nullptr};
+    void* webgpu_policy_user_data_{nullptr};
     webscene_scene_published_callback scene_published_callback_{nullptr};
     void* scene_published_user_data_{nullptr};
     webscene_host_request_available_callback
@@ -791,7 +794,8 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
         const auto has_resource_callback_v3 =
             options->struct_size >= offsetof(webscene_engine_options, stylesheet_consumed_callback);
         const auto has_stylesheet_consumed_callback =
-            options->struct_size >= sizeof(webscene_engine_options);
+            options->struct_size >= offsetof(webscene_engine_options, webgpu_policy_callback);
+        const auto has_webgpu_policy = options->struct_size >= sizeof(webscene_engine_options);
         return new webscene_engine(
             options->simulated_chart_command_count,
             std::move(cache_directory),
@@ -824,7 +828,9 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
                 ? options->animation_frame_requested_user_data
                 : nullptr,
             has_stylesheet_consumed_callback ? options->stylesheet_consumed_callback : nullptr,
-            has_stylesheet_consumed_callback ? options->stylesheet_consumed_user_data : nullptr);
+            has_stylesheet_consumed_callback ? options->stylesheet_consumed_user_data : nullptr,
+            has_webgpu_policy ? options->webgpu_policy_callback : nullptr,
+            has_webgpu_policy ? options->webgpu_policy_user_data : nullptr);
     } catch (...) {
         return nullptr;
     }

@@ -1,11 +1,10 @@
 #pragma once
 #include "webgpu_device_descriptor.h"
+#include "webgpu_canvas_interop.h"
 #include "webgpu_required_limits.h"
 #include <algorithm>
 #include <memory>
 namespace webscene::graphics {
-// Selected by the host, never by a JavaScript descriptor.
-enum class webgpu_canvas_interop { none,iosurface };
 enum class webgpu_device_request_error { none,unsupported_feature,operation_error };
 // Owns all storage borrowed by the Dawn descriptor. Non-movable because the
 // optional compatibility chain points into this allocation. Keep alive through

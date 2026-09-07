@@ -101,6 +101,34 @@ void test_scene_acquisition_v3() {
     require(view->cpu_view->header.revision==revision,"retained scene did not survive engine disposal");
     webscene_scene_release_v3(view);
 }
+void test_runtime_webgpu_document_policy() {
+#if defined(__APPLE__)
+    webscene_native::native_document document;
+    std::vector<std::string> decisions;
+    webscene_native::v8_dom_runtime runtime(document,
+        []{return webscene_native::v8_dom_runtime::viewport_metrics{64,64,1,0};},
+        {},[](uint32_t,const std::string& url,const auto&,const std::string&,int64_t,auto& response){
+            if(url=="https://graphics.test/missing")return false;
+            response.content="<!doctype html><html><body><script>globalThis.policySeenByScript=('gpu' in navigator);</script></body></html>";
+            return true;
+        });
+    runtime.set_webgpu_policy(std::make_shared<engine_wake>(),[&](const std::string& url){
+        decisions.push_back(url);
+        return url=="https://graphics.test/allowed" ? webgpu_canvas_interop::iosurface : webgpu_canvas_interop::none;
+    });
+    require(runtime.initialize(),"Policy runtime initialization failed");
+    require(decisions==std::vector<std::string>{"about:blank"},"Initial document policy missing");
+    require(runtime.execute("if('gpu' in navigator)throw new Error('blank admission');","blank-policy"),"Blank policy denied incorrectly");
+    require(runtime.load_url("https://graphics.test/allowed"),"Allowed policy navigation failed");
+    require(runtime.execute("if(!policySeenByScript||!navigator.gpu)throw new Error('late admission');","allowed-policy"),"Policy ran after application script");
+    require(!runtime.load_url("https://graphics.test/missing"),"Missing policy resource loaded");
+    require(decisions.size()==2,"Failed navigation changed admission");
+    require(runtime.execute("if(!navigator.gpu)throw new Error('failed navigation retired GPU');","failed-policy"),"Failed navigation changed GPU exposure");
+    require(runtime.load_url("https://graphics.test/denied"),"Denied policy navigation failed");
+    require(runtime.execute("if(policySeenByScript||('gpu' in navigator))throw new Error('stale admission');","denied-policy"),"Denied navigation retained GPU exposure");
+    require(decisions==std::vector<std::string>{"about:blank","https://graphics.test/allowed","https://graphics.test/denied"},"Document policy URL sequence incorrect");
+#endif
+}
 void test_runtime_webgpu_installation() {
     webscene_native::native_document document;
     webscene_native::v8_dom_runtime runtime(document,[]{return webscene_native::v8_dom_runtime::viewport_metrics{64,64,1,0};},
@@ -199,6 +227,7 @@ int main() {
     std::exception_ptr failure;
     std::thread worker([&] {
         try {
+            test_runtime_webgpu_document_policy();
             test_runtime_webgpu_installation();
             webscene_native::native_document document;
             webscene_native::v8_dom_runtime runtime(document,[] {
