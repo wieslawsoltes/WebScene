@@ -1,3 +1,4 @@
+#include "../../../../experiments/WebScene.NativeEngine.Probe/native/graphics/dawn_canvas_images.h"
 #include "include/gpu/graphite/dawn/DawnBackendContext.h"
 #include "include/gpu/graphite/dawn/DawnGraphiteTypes.h"
 #include "include/gpu/graphite/BackendTexture.h"
@@ -122,7 +123,11 @@ int main(int argc, char** argv) {
     if (!graphite) return finish("failed","Graphite context creation failed",1);
     // Native WebGPU producer writes a separate image, then Graphite samples it
     // on the same queue. No CPU wait or pixel upload sits between the submissions.
-    auto produced=device.CreateTexture(&textureDescriptor);
+    using namespace webscene::graphics;
+    auto canvasOwner=std::make_unique<dawn_canvas_images>(device,3*width*height*4);
+    auto frame=canvasOwner->acquire(image_metadata{700,0,1,1,701,1,width,height});
+    if (!frame) return finish("failed","Canvas allocation failed",1);
+    auto produced=frame->texture;
     auto producerEncoder=device.CreateCommandEncoder();
     wgpu::RenderPassColorAttachment attachment{};
     attachment.view=produced.CreateView(); attachment.loadOp=wgpu::LoadOp::Clear;
@@ -130,14 +135,27 @@ int main(int argc, char** argv) {
     wgpu::RenderPassDescriptor producerPass{};
     producerPass.colorAttachmentCount=1; producerPass.colorAttachments=&attachment;
     auto render=producerEncoder.BeginRenderPass(&producerPass); render.End();
-    auto producerCommands=producerEncoder.Finish(); device.GetQueue().Submit(1,&producerCommands);
+    auto producerCommands=producerEncoder.Finish();
+    auto submitted=canvasOwner->submit(std::move(*frame),producerCommands); frame.reset();
+    if (!submitted) return finish("failed","Canvas submission backpressure",1);
+    auto consumer=submitted->image.begin_consumer();
+    if (!consumer) return finish("failed","Canvas consumer backpressure",1);
+    auto resized=canvasOwner->acquire(image_metadata{700,0,2,2,701,2,9,height});
+    if (!resized || resized->metadata.allocation==consumer->describe().allocation
+        || consumer->describe().width!=width)
+        return finish("failed","Resize changed the retained allocation",1);
+    resized.reset(); // Unsubmitted replacement cancels without affecting old content.
+    submitted.reset(); canvasOwner.reset();
+    produced=nullptr; attachment.view=nullptr;
+    // Resolve through the real lease after canvas and scene ownership ends.
+    auto retainedTexture=dawn_canvas_images::resolve(*consumer,device);
     auto recorder=graphite->makeRecorder();
     auto backendTexture=skgpu::graphite::BackendTextures::MakeDawn(texture.Get());
     auto surface=SkSurfaces::WrapBackendTexture(recorder.get(),backendTexture,nullptr,nullptr);
     if (!surface) return finish("failed","Graphite texture wrapping failed",1);
     surface->getCanvas()->clear(SkColorSetARGB(255,51,102,153));
     auto image=SkImages::WrapTexture(recorder.get(),
-        skgpu::graphite::BackendTextures::MakeDawn(produced.Get()),kPremul_SkAlphaType,nullptr,
+        skgpu::graphite::BackendTextures::MakeDawn(retainedTexture.Get()),kPremul_SkAlphaType,nullptr,
         skgpu::Origin::kTopLeft,SkImages::GenerateMipmapsFromBase::kNo);
     if (!image) return finish("failed","Graphite source image wrapping failed",1);
     auto canvas=surface->getCanvas();
@@ -180,6 +198,10 @@ int main(int argc, char** argv) {
                 valid &= std::abs(int(pixels[y * rowBytes + x * 4 + c]) - wanted[c]) <= 1;
             }
     buffer.Unmap();
+    // The mapped readback follows Graphite submission on the same queue, proving
+    // this consumer's GPU sampling is complete before its lease is retired.
+    image.reset(); retainedTexture=nullptr;
+    consumer->complete(); consumer.reset();
     if (!valid) return finish("failed", "Readback pixels differ from clipped image composition", 1);
     std::cout << "{\"schemaVersion\":1,\"probe\":\"graphite-shared-device\",\"status\":\"passed\","
               << "\"hardwareAccelerated\":true,\"backend\":" << json(backend)

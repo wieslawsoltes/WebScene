@@ -105,3 +105,18 @@ uniform source cannot independently establish transform positioning correctness.
 The probe still retains objects directly, not through WebScene's versioned image
 lease pool. Patterned transforms, retained-image resize/disposal and actual host
 presentation remain outstanding before claiming integrated canvas composition.
+
+## WebScene lease lifetime integration
+
+The source image now comes from `dawn_canvas_images::acquire/submit`, and Graphite
+resolves it through an `owned_image_pool::consumer`. Before resolution, the probe
+allocates a differently sized generation, verifies that it cannot alias the retained
+image, cancels that unsubmitted replacement, then disposes the canvas owner and
+retained scene reference. The consumer still renders the old pixels correctly.
+It completes only after the diagnostic map (ordered after Graphite on the same
+queue) establishes completion of GPU sampling. The full 68-pixel test passes on M4.
+
+This replaces the direct-owner lifetime in the earlier probe. It tests preservation
+across an allocated/cancelled resize, not presentation of a submitted replacement.
+Actual scene-v3 acquisition, framework presentation and JS canvas bindings remain
+outside this standalone native test.
