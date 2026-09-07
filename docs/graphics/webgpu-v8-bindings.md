@@ -1192,3 +1192,19 @@ Evidence is in `evidence/ganesh-host/submitted-frame-handoff.json`; physical
 scanout is not verified. This supplies a native canvas frame-boundary primitive.
 JavaScript GPUCanvasContext, host device-feature provisioning and ordinary scene
 consumption remain integration work, not completed by this native fixture.
+
+
+### Imported canvas texture adoption
+
+The native device texture table now accepts an already-created/imported texture
+through a host-only adoption method. It verifies the supplied source device,
+rejects null textures and checks capacity before retaining the object. The host
+importer is responsible for supplying the texture's true source device; this is
+not a JavaScript API. Adoption preserves exact native identity and performs no
+texture allocation or pixel transfer.
+
+The macOS Dawn test verifies missing-source rejection, identity preservation,
+capacity handling, view creation and repeated destruction of an adopted texture.
+Dawn event and V8 runtime tests pass, including the JavaScript offscreen pixel
+test. GPUCanvasContext must still connect this boundary to its current texture
+and shared-frame publication lifecycle.

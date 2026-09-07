@@ -546,7 +546,14 @@ int main() {
     if(!render_checked)throw std::runtime_error("Render pipeline validation did not complete");
     root.with_device(owned_device,[&](auto& device) {
         wgpu::TextureDescriptor descriptor{};descriptor.size={1,1,1};descriptor.format=wgpu::TextureFormat::RGBA8Unorm;descriptor.usage=wgpu::TextureUsage::RenderAttachment;
-        auto texture=device.create_texture(descriptor);auto view=device.create_texture_view(texture,{});
+        auto imported=device.native().CreateTexture(&descriptor);
+        bool missing_source=false;try{device.adopt_texture({},imported);}catch(const std::invalid_argument&){missing_source=true;}
+        if(!missing_source)throw std::runtime_error("Imported texture accepted without its source device");
+        auto texture=device.adopt_texture(device.native(),imported);
+        device.with_texture(texture,[&](const auto& native){if(native.Get()!=imported.Get())throw std::runtime_error("Texture adoption changed native identity");});
+        bool full=false;try{device.adopt_texture(device.native(),imported);}catch(const std::length_error&){full=true;}
+        if(!full||device.live_textures()!=1)throw std::runtime_error("Imported texture capacity admission failed");
+        auto view=device.create_texture_view(texture,{});
         device.destroy_texture(texture);device.destroy_texture(texture);
         if(device.live_textures()!=1 || device.live_texture_views()!=1)throw std::runtime_error("Texture destroy removed API handles");
         device.release_texture_view(view);device.release_texture(texture);

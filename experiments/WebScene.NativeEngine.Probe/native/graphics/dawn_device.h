@@ -145,6 +145,15 @@ public:
         if(!texture)throw std::runtime_error("Dawn did not return a texture");
         return textures_.insert(owner_,std::make_unique<wgpu::Texture>(std::move(texture)));
     }
+    // Host-only adoption of a texture imported/created on source_device. The
+    // importer must supply the true source device; JavaScript cannot call this.
+    // No texture allocation or pixel transfer occurs at this boundary.
+    resource_handle<wgpu::Texture> adopt_texture(const wgpu::Device& source_device,wgpu::Texture texture) {
+        const auto& device=native();
+        if(!texture || source_device.Get()!=device.Get())throw std::invalid_argument("Imported texture requires its owning device");
+        if(!textures_.can_insert())throw std::length_error("Graphics texture capacity exhausted");
+        return textures_.insert(owner_,std::make_unique<wgpu::Texture>(std::move(texture)));
+    }
     template<class Execute> void with_texture(resource_handle<wgpu::Texture> handle,Execute execute) {
         check_thread();
         const auto& texture=textures_.get(handle,owner_);
