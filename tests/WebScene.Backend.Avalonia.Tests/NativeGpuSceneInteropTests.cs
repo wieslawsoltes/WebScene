@@ -41,9 +41,10 @@ public sealed class NativeGpuSceneInteropTests
         NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
         var library = NativeLibrary.Load(Environment.GetEnvironmentVariable("WEBSCENE_TEST_GPU_FIXTURE_LIBRARY")!);
         var create = Marshal.GetDelegateForFunctionPointer<CreateIOSurface>(
-            NativeLibrary.GetExport(library, "webscene_test_create_iosurface"));
+            NativeLibrary.GetExport(library, "webscene_test_create_dawn_iosurface"));
         var begin = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_begin_cgl"));
         var bound = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_cgl_image_bound"));
+        var pixels = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_cgl_pixels"));
         var end = Marshal.GetDelegateForFunctionPointer<EndCgl>(NativeLibrary.GetExport(library, "webscene_test_end_cgl"));
         Assert.Equal(1, create(out var image));
         Assert.Equal(NativeSceneAcquireStatus.Success, NativeGpuImageConsumerV3.Acquire(image, out var consumer));
@@ -54,11 +55,12 @@ public sealed class NativeGpuSceneInteropTests
             Assert.Equal(1, begin());
             Assert.True(NativeMacOSGpuImageImport.TryBindCurrentRectangleTexture(consumer));
             Assert.Equal(1, bound());
+            Assert.Equal(1, pixels());
         }
         finally
         {
             end(); // Delete GL references before completing the native image consumer.
-            consumer.Complete(); // This test binds storage; it submits no GPU draws.
+            consumer.Complete(); // Diagnostic readback has completed the GL read.
         }
     }
 

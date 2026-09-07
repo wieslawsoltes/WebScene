@@ -111,3 +111,21 @@ This verifies the managed-to-native storage import operation. It submits no
 draws and proves no rendered pixels, adapter pairing, producer synchronization
 or final Avalonia presentation. The retained renderer still needs the complete
 import/cache/completion path before it can advertise GPU scene capability.
+
+### Dawn-produced pixels through the managed import
+
+The CGL import fixture now optionally initializes its versioned IOSurface using
+the pinned Dawn Metal backend. It requires an integrated/discrete adapter and
+IOSurface/shared-event features, imports via dawn_shared_image, clears on the
+GPU, ends shared access and waits for diagnostic queue completion before
+publishing the ready lease. Callback state remains owned with the device.
+
+The managed test obtains that lease through the real native ABI, imports it
+using NativeMacOSGpuImageImport, and reads all 68 pixels from the CGL framebuffer.
+RGBA [51,102,153,255] matched within one channel unit, including BGRA storage
+conversion. The six-test interop suite passed on net8.0 and net10.0 without skips.
+
+The fixture's waits and GL readback are explicit diagnostics, not an ordinary
+presentation implementation. Constant-color output does not verify orientation,
+transparent edges or compositing. Asynchronous production readiness, GL fences,
+host texture conversion and retained scene rendering still need integration.
