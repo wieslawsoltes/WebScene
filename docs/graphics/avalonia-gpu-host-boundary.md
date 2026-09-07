@@ -44,3 +44,16 @@ image boundary still exists when Avalonia owns a different GPU device/context.
 Preserve HTML stacking, clips, opacity and hit testing when placing the composition
 surface. A separate uncomposited native window does not satisfy the scene contract.
 Repeat the boundary analysis for Uno; Avalonia's API cannot be assumed to apply to it.
+
+## Runtime capability evidence
+
+The new `experiments/WebScene.GpuHost.Probe` ran successfully on the current M4
+macOS desktop with Avalonia 11.3.4. Default platform selection returned a non-lost
+interop object but empty SupportedImageHandleTypes and SupportedSemaphoreTypes.
+The probe exits cleanly after posting shutdown to the dispatcher (synchronous
+shutdown during startup initially triggered a lifetime initialization error).
+
+This rules out selecting an external-handle import route from this host's reported
+capabilities. It does not prove that all Avalonia macOS configurations lack interop.
+Next inspect the shared-context import contract and available host backend options;
+do not implement an IOSurface handle adapter assuming this host will accept it.
