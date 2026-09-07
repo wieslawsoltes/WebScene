@@ -327,3 +327,26 @@ subsequently reused by the existing teardown test. The rebuilt runtime CTest pas
 This verifies the mapped view's private owner edge as well as deferred native
 release. Asynchronous mapping, device loss and application-level WebGPU exposure
 remain outside this test's coverage.
+
+### Asynchronous map promise bridge
+
+`v8_webgpu_map_request.h` reserves a completion slot before issuing Dawn MapAsync.
+Driver callbacks retain only native buffer/mailbox state. The engine owns V8
+resolver and wrapper references; successful delivery attaches the selected mapping
+before resolving undefined. Cancellation unmaps and rejects AbortError immediately,
+then consumes the eventual native completion without attaching memory or resolving
+again. Validation failure status maps to OperationError. Requests are one-shot and
+completion identity/realm are checked; disposal of a still-pending request aborts
+native mapping, while hosts must explicitly cancel before disposal if its promise
+remains observable in a live realm.
+
+The rebuilt macOS V8 fixture maps a real 16-byte subrange at offset 8 and observes
+its promise continuation while RAF is paused. A separate request is cancelled;
+its promise rejects with AbortError and late callback retirement is consumed.
+Duplicate completions are rejected. The runtime CTest passes.
+
+This bridge is not yet installed as GPUBuffer.mapAsync. That binding still needs
+argument conversion, early rejection/validation semantics, pending mapState,
+selected-range attachment, and unmap/destroy/device-loss cancellation wiring.
+Admission saturation and mapping attachment failure policies also remain internal
+behavior requiring qualification against the complete browser binding.
