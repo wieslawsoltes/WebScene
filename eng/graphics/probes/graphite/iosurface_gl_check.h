@@ -27,7 +27,7 @@ inline int poll_host_blit(bool drain=false) {
     glDeleteFramebuffers(1,&host_blit.framebuffer);
     glDeleteFramebuffers(1,&host_blit.destinationFramebuffer);
     glDeleteTextures(1,&host_blit.texture);
-    CFRelease(host_blit.surface); host_blit={};
+    CFRelease(host_blit.surface); CGLReleaseContext(host_blit.context); host_blit={};
     return 1;
 }
 // Diagnostic-only CPU readback. Caller must establish producer GPU completion.
@@ -89,7 +89,7 @@ inline bool check_iosurface_gl(IOSurfaceRef surface,unsigned width,unsigned heig
                     auto fence=glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
                     if (!fence) { glFinish(); valid=false; }
                     else {
-                        CFRetain(surface);
+                        CFRetain(surface); CGLRetainContext(context);
                         host_blit={context,surface,fence,texture,framebuffer,destinationFramebuffer};
                         texture=framebuffer=destinationFramebuffer=0;
                         glFlush();

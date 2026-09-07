@@ -58,15 +58,25 @@ internal sealed class ProbeApp : Application
                                 gl.Clear(GlConsts.GL_COLOR_BUFFER_BIT); gl.Flush();
                             }
                             finally { gl.BindFramebuffer(GlConsts.GL_FRAMEBUFFER,0); gl.DeleteFramebuffer(framebuffer); }
-                            if (graphiteSource && Program.RenderGraphite((uint)texture.TextureId) != 0)
-                                throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
+                            if (graphiteSource) {
+                                if (Program.RenderGraphite((uint)texture.TextureId) != 0)
+                                    throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
+                                if (Program.RenderGraphite((uint)texture.TextureId) == 0)
+                                    throw new InvalidOperationException("Overlapping host submission was accepted");
+                            }
                         }
                         if (graphiteSource) {
                             var deadline = DateTime.UtcNow.AddSeconds(30);
                             while (true) {
                                 int completion;
                                 using (glContext.EnsureCurrent()) completion = Program.PollGraphite(0);
-                                if (completion == 1) break;
+                                if (completion == 1) {
+                                    using (glContext.EnsureCurrent()) {
+                                        if (Program.PollGraphite(0) != -1)
+                                            throw new InvalidOperationException("Duplicate completion was accepted");
+                                    }
+                                    break;
+                                }
                                 if (completion < 0 || DateTime.UtcNow >= deadline) {
                                     using (glContext.EnsureCurrent()) Program.PollGraphite(1);
                                     throw new InvalidOperationException("GL completion failed or timed out");

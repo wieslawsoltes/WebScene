@@ -229,3 +229,11 @@ cleanup. Failure/device-loss cleanup still needs dedicated qualification.
 Dawn producer readiness still blocks, and this is a single-transfer diagnostic
 bridge, not the persistent production scheduler. The later engine implementation
 must use its wake/completion mechanisms instead of a polling UI prototype.
+
+Pending host transfers now retain their CGL context as well as IOSurface/GL
+resources. The native entry point rejects overlapping work before constructing a
+new Dawn/Graphite frame and rejects a missing current context. The managed probe
+attempts a second submission while the first fence is pending, verifies rejection,
+then checks that polling after retirement rejects duplicate completion. The full
+host update/commit test passes on M4. These checks do not qualify context-loss
+recovery or replace the remaining synchronous Dawn producer wait.

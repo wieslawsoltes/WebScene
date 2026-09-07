@@ -304,7 +304,7 @@ extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_pol
     return poll_host_blit(drain!=0);
 }
 extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_probe(unsigned texture) {
-    if (!texture || hostDestinationTexture) return 1;
+    if (!texture || hostDestinationTexture || host_blit.fence || !CGLGetCurrentContext()) return 1;
     hostDestinationTexture=texture;
     char name[]="graphite-probe",backend[]="metal",mode[]="iosurface";
     char* args[]={name,backend,mode};
