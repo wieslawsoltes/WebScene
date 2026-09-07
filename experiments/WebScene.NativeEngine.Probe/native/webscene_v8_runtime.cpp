@@ -1,4 +1,7 @@
 #include "webscene_v8_runtime.h"
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+#include "graphics/graphics_service.h"
+#endif
 #include "webscene_runtime_diagnostics.h"
 #include "webscene_embed_fallback.h"
 
@@ -209,6 +212,11 @@ void prewarm_v8_process()
 }
 
 struct v8_dom_runtime::implementation final {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    const std::thread::id graphics_thread = std::this_thread::get_id();
+    std::unique_ptr<webscene::graphics::graphics_service> graphics;
+    std::function<void(webscene::graphics::completion_record)> graphics_deliver;
+#endif
 #include "webscene_v8_runtime_state_types.inc"
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
 #include "webscene_v8_runtime_inspector.inc"
@@ -4533,6 +4541,22 @@ uint8_t v8_dom_runtime::host_animation_frame_demand() const noexcept
     return demand;
 }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+webscene::graphics::graphics_service& v8_dom_runtime::initialize_graphics(
+    std::shared_ptr<webscene::graphics::completion_wake> wake,
+    std::function<void(webscene::graphics::completion_record)> deliver)
+{
+    if (std::this_thread::get_id() != impl_->graphics_thread)
+        throw std::logic_error("Graphics initialization requires the runtime owner thread");
+    if (impl_->graphics) throw std::logic_error("Graphics dispatcher already initialized");
+    if (!deliver || !wake) throw std::invalid_argument("Graphics requires completion delivery and a safe wake signal");
+    auto service = std::make_unique<webscene::graphics::graphics_service>(std::move(wake));
+    impl_->graphics_deliver = std::move(deliver);
+    impl_->graphics = std::move(service);
+    return *impl_->graphics;
+}
+#endif
+
 bool v8_dom_runtime::pump_task()
 {
     auto isolate_locker = impl_->lock_shared_isolate();
@@ -4546,6 +4570,9 @@ bool v8_dom_runtime::pump_task()
 
 bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    if (impl_->graphics && impl_->graphics->has_ready_work()) return true;
+#endif
     return impl_->has_pending_detached_dom_collection()
         || impl_->websocket_transport.has_pending_events()
         || !impl_->pending_window_messages.empty()
@@ -4562,6 +4589,9 @@ std::chrono::milliseconds v8_dom_runtime::recommended_idle_wait(
 {
     const auto now = std::chrono::steady_clock::now();
     auto wait = maximum;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    if (impl_->graphics) wait = impl_->graphics->recommended_idle_wait(wait);
+#endif
     for (const auto& timer : impl_->timers) {
         // An unreleased requestAnimationFrame is woken by the host frame input,
         // not by wall-clock polling.

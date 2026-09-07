@@ -10,6 +10,14 @@
 #include <utility>
 #include <vector>
 
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+namespace webscene::graphics {
+class graphics_service;
+struct completion_wake;
+struct completion_record;
+}
+#endif
+
 namespace webscene_native {
 
 class native_document;
@@ -271,6 +279,14 @@ public:
     bool pump_animation_frame_task();
     bool has_pending_animation_frame_task() const noexcept;
     uint8_t host_animation_frame_demand() const noexcept;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    // Native binding initialization, on the owning runtime thread. Install the
+    // completion dispatcher before issuing backend operations. No JS API is
+    // exposed merely by creating this service.
+    webscene::graphics::graphics_service& initialize_graphics(
+        std::shared_ptr<webscene::graphics::completion_wake> wake,
+        std::function<void(webscene::graphics::completion_record)> deliver);
+#endif
     bool pump_task();
     bool has_pending_tasks() const noexcept;
     std::chrono::milliseconds recommended_idle_wait(

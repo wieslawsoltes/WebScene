@@ -49,6 +49,12 @@
 
     ~implementation()
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        // Stop native publication before releasing the dispatcher and isolate.
+        // Context disposal discards its JS promises; no late callback may enter it.
+        graphics.reset();
+        graphics_deliver = {};
+#endif
         // Preparation workers may still be waiting on a document or adding
         // newly discovered CSS/script prefetches. Join them before taking the
         // final snapshot of the resource prefetch table.

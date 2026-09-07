@@ -527,6 +527,17 @@
         // compilation and optimization work. An embedder must service that
         // queue; otherwise hot application code remains on its initial tier.
         pump_v8_platform_tasks();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        if (graphics && graphics->has_ready_work()) {
+            // execute() also reaches this path after its script context scope
+            // has unwound. Enter the owning context explicitly for delivery.
+            auto graphics_context = context.Get(isolate);
+            v8::Context::Scope graphics_context_scope(graphics_context);
+            // Bound each batch and continue task arbitration to avoid starving DOM.
+            if (graphics->pump(graphics_deliver, 64))
+                perform_microtask_checkpoint();
+        }
+#endif
         if (websocket_transport.has_pending_events()) {
             return drain_websocket_event();
         }
