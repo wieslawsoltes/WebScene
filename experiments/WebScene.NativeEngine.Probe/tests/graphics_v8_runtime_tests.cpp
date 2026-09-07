@@ -148,6 +148,31 @@ int main() {
             const auto after_paint=std::find_if(paint.begin(),paint.end(),[&](const auto& c) { return (c.kind==1 || c.kind==9) && c.node_id==after_id; });
             require(before_paint<gpu_paint && after_paint!=paint.end() && gpu_paint<after_paint,
                 "GPU canvas did not interleave with sibling backgrounds");
+            require(runtime.execute("globalThis.mixedCanvas=document.createElement('canvas'); mixedCanvas.id='mixed-2d'; mixedCanvas.width=10; mixedCanvas.height=10; mixedCanvas.getContext('2d').fillRect(0,0,10,10); document.body.insertBefore(mixedCanvas,paintAfter);", "mixed-canvas-setup"), "mixed Canvas2D setup failed");
+            document.layout(640,480);
+            document.build_scene(paint,paint_strings,paint_bytes,true);
+            const auto mixed_id=document.find_by_id("mixed-2d")->id;
+            const auto mixed_marker=std::find_if(paint.begin(),paint.end(),[&](const auto& c) {
+                return c.kind==WEBSCENE_SCENE_COMMAND_CANVAS_LAYER && c.node_id==mixed_id;
+            });
+            const auto mixed_gpu=std::find_if(paint.begin(),paint.end(),[](const auto& c) {
+                return c.kind==WEBSCENE_SCENE_COMMAND_GPU_IMAGE;
+            });
+            const auto mixed_after=std::find_if(paint.begin(),paint.end(),[&](const auto& c) {
+                return (c.kind==1 || c.kind==9) && c.node_id==after_id;
+            });
+            require(mixed_marker!=paint.end() && mixed_after!=paint.end() && mixed_gpu<mixed_marker && mixed_marker<mixed_after,
+                "Native mixed canvas placement order failed");
+            document.build_scene(paint,paint_strings,paint_bytes);
+            require(std::none_of(paint.begin(),paint.end(),[](const auto& c) {
+                return c.kind==WEBSCENE_SCENE_COMMAND_CANVAS_LAYER;
+            }), "Legacy DOM path unexpectedly emitted ordered canvas markers");
+            require(runtime.execute("mixedCanvas.style.position='fixed';", "mixed-fixed-canvas"), "fixed canvas setup failed");
+            document.layout(640,480); document.build_scene(paint,paint_strings,paint_bytes,true);
+            require(std::count_if(paint.begin(),paint.end(),[&](const auto& c) {
+                return c.kind==WEBSCENE_SCENE_COMMAND_CANVAS_LAYER && c.node_id==mixed_id;
+            })==1, "Fixed canvas lost or duplicated its ordered marker");
+            require(runtime.execute("mixedCanvas.remove();", "mixed-canvas-cleanup"), "mixed canvas cleanup failed");
             const auto before_effects=backing.content_serial();
             require(runtime.execute("canvasProbe.style.transform='scale(0.75) rotate(15deg)'; canvasProbe.style.opacity='0.5'; canvasProbe.style.overflow='hidden'; canvasProbe.style.borderRadius='8px';","gpu-paint-effects"),"GPU paint effects setup failed");
             document.layout(640,480); document.build_scene(paint,paint_strings,paint_bytes);

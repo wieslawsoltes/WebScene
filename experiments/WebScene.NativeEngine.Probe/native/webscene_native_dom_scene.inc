@@ -1,13 +1,13 @@
 void native_document::build_scene(
     std::vector<webscene_scene_command>& commands,
     std::vector<webscene_scene_string>& strings,
-    std::vector<char>& string_bytes) const
+    std::vector<char>& string_bytes, bool ordered_canvas) const
 {
     commands.clear();
     commands.reserve(nodes_.size());
     strings.clear();
     string_bytes.clear();
-    append_scene(*body_, commands, strings, string_bytes, false, true);
+    append_scene(*body_, commands, strings, string_bytes, false, true, false, nullptr, nullptr, ordered_canvas);
     std::vector<dom_node*> fixed;
     for (auto* child : composed_children(*body_)) {
         collect_outermost_fixed_positioned_nodes(*this, *child, fixed);
@@ -38,7 +38,7 @@ void native_document::build_scene(
             strings,
             string_bytes,
             inherited_visibility_hidden,
-            false);
+            false, false, nullptr, nullptr, ordered_canvas);
     }
 }
 
@@ -217,7 +217,8 @@ void native_document::append_scene(
     bool defer_fixed_descendants,
     bool defer_positive_descendants,
     const dom_node* paint_target,
-    const node_style::pseudo_element* paint_pseudo_target) const
+    const node_style::pseudo_element* paint_pseudo_target,
+    bool ordered_canvas) const
 {
     const auto elevated_target = paint_target == &node;
     const auto pseudo_only = elevated_target && paint_pseudo_target != nullptr;
@@ -1234,6 +1235,10 @@ void native_document::append_scene(
             WEBSCENE_SCENE_COMMAND_GPU_IMAGE,0U,node.layout.x,node.layout.y,
             node.layout.width,node.layout.height,0U,node.id,0,0,0,0,0});
     }
+    if (ordered_canvas && paint_self && !paints_gpu && node.tag=="canvas" && !canvas.commands.empty()) {
+        commands.push_back(webscene_scene_command{
+            WEBSCENE_SCENE_COMMAND_CANVAS_LAYER,0U,0,0,0,0,0U,node.id,0,0,0,0,0});
+    }
     if (paint_self && !paints_gpu
         && node.tag == "canvas"
         && canvas.commands.empty()
@@ -1682,7 +1687,7 @@ void native_document::append_scene(
                 defer_fixed_descendants,
                 true,
                 paint_target,
-                paint_pseudo_target);
+                paint_pseudo_target, ordered_canvas);
         } else if (entry.pseudo != nullptr) {
             if (!pseudo_only && entry.z_index > 0) continue;
             append_pseudo(*entry.pseudo);
@@ -1721,7 +1726,7 @@ void native_document::append_scene(
             // Walk only this branch. Ancestors retain overflow clips and
             // visibility inheritance but do not duplicate backgrounds or SVGs.
             append_scene(*branch, commands, strings, string_bytes,
-                visibility_hidden, defer_fixed_descendants, true, target, entry.pseudo);
+                visibility_hidden, defer_fixed_descendants, true, target, entry.pseudo, ordered_canvas);
         }
     }
     if (clip_contents) {

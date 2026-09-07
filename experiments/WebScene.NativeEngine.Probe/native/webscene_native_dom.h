@@ -1554,7 +1554,7 @@ public:
     void build_scene(
         std::vector<webscene_scene_command>& commands,
         std::vector<webscene_scene_string>& strings,
-        std::vector<char>& string_bytes) const;
+        std::vector<char>& string_bytes, bool ordered_canvas = false) const;
     // Engine-thread publication: validates document ownership and backing version,
     // then requests a scene without forcing style/layout work.
     void publish_gpu_canvas_image(dom_node& node,std::shared_ptr<const webscene_gpu_image_lease_v3> image);
@@ -1920,7 +1920,8 @@ private:
         bool defer_fixed_descendants,
         bool defer_positive_descendants = false,
         const dom_node* paint_target = nullptr,
-        const node_style::pseudo_element* paint_pseudo_target = nullptr) const;
+        const node_style::pseudo_element* paint_pseudo_target = nullptr,
+        bool ordered_canvas = false) const;
     static bool matches_selector(const dom_node& node, const std::string& selector);
     static void collect_matches(
         dom_node& node,

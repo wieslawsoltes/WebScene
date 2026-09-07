@@ -92,11 +92,12 @@
         }
         if (native_scene_active_) {
             const auto scene_build_started = std::chrono::steady_clock::now();
+            document_.build_gpu_canvas_images(next->gpu_images);
             document_.build_scene(
                 next->commands,
                 next->canvas_strings,
-                next->canvas_string_bytes);
-            document_.build_gpu_canvas_images(next->gpu_images);
+                next->canvas_string_bytes,
+                !next->gpu_images.empty());
             std::unordered_map<uint64_t,uint32_t> gpu_indices;
             for (uint32_t index=0;index<next->gpu_images.size();++index)
                 gpu_indices.emplace(next->gpu_images[index]->value.describe().canvas,index);

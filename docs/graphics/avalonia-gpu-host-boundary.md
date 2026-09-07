@@ -296,3 +296,24 @@ Native DOM generation does not yet emit these placements or acquire GPU images
 through the ordinary scene path. The window continues to construct its diagnostic
 scene. Full SVG/text/destructive Canvas2D fixtures, transform bounds, native slot
 binding and production lifecycle handling remain required for epic completion.
+
+### Native document generation of mixed paint order
+
+The engine now collects published GPU images before building the DOM paint stream
+and requests ordered Canvas2D markers when that image set is nonempty. The native
+DOM traversal emits command 257 at the Canvas2D element's content position,
+including recursive, elevated and fixed-position traversal. GPU command 256 and
+scene-local image-slot resolution already existed in the source; earlier progress
+notes saying all native GPU command generation was absent were inaccurate. The
+new work supplies the previously missing native Canvas2D placements in GPU scenes.
+
+The default native_document::build_scene call remains CPU-compatible without
+ordered Canvas2D markers. The V8 runtime test creates a real 2D canvas sibling,
+checks GPU→Canvas2D→DOM order from native traversal, verifies default output has no
+257 commands, and checks a fixed-position canvas emits exactly one marker.
+`webscene_graphics_v8_runtime_tests` passes in the macOS enabled native build.
+
+This does not implement navigator.gpu or canvas.getContext('webgpu'). The existing
+internal publication fixture supplies the GPU image. Ordinary managed v3 scene
+acquisition/slot binding, live producer scheduling and browser API coverage remain
+unfinished; Kestrel has not yet been qualified on this rendering path.
