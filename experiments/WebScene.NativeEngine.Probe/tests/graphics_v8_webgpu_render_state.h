@@ -27,6 +27,27 @@ inline void test_v8_webgpu_render_state(v8::Isolate* isolate,v8::Local<v8::Conte
     require(read_webgpu_stencil_face(isolate,context,evaluate("({compare:'less-equal',depthFailOp:'increment-wrap',failOp:'replace',passOp:'invert'})"),stencil)
         && stencil.compare==wgpu::CompareFunction::LessEqual && stencil.depthFailOp==wgpu::StencilOperation::IncrementWrap
         && stencil.failOp==wgpu::StencilOperation::Replace && stencil.passOp==wgpu::StencilOperation::Invert,"Stencil conversion failed");
+    wgpu::DepthStencilState depth{};
+    require(read_webgpu_depth_stencil(isolate,context,evaluate("({format:'depth24plus'})"),depth)
+        && depth.depthWriteEnabled==wgpu::OptionalBool::Undefined && depth.depthCompare==wgpu::CompareFunction::Undefined
+        && depth.stencilFront.compare==wgpu::CompareFunction::Always && depth.stencilReadMask==0xffffffff,"Depth optional defaults lost");
+    require(read_webgpu_depth_stencil(isolate,context,evaluate("({format:'depth32float',depthWriteEnabled:null,depthCompare:'less',depthBias:-2.9,depthBiasClamp:1.5,stencilBack:{passOp:'replace'}})"),depth)
+        && depth.depthWriteEnabled==wgpu::OptionalBool::False && depth.depthBias==-2 && depth.depthBiasClamp==1.5f
+        && depth.stencilBack.passOp==wgpu::StencilOperation::Replace,"Depth state conversion failed");
+    for(const char* source:{"{}","({format:'depth24plus',depthBias:2147483648})","({format:'depth24plus',depthBias:-2147483649})",
+        "({format:'depth24plus',depthBiasClamp:Infinity})","({format:'depth24plus',depthBiasSlopeScale:1e100})"}) {
+        v8::TryCatch caught(isolate);depth.depthBias=123;
+        require(!read_webgpu_depth_stencil(isolate,context,evaluate(source),depth)&&caught.HasCaught()&&depth.depthBias==123,"Invalid depth state accepted or committed");
+    }
+    webgpu_color_target target;
+    require(read_webgpu_color_target(isolate,context,evaluate("({format:'bgra8unorm'})"),target)
+        && target.format==wgpu::TextureFormat::BGRA8Unorm && !target.blend && target.write_mask==15,"Color target defaults failed");
+    require(read_webgpu_color_target(isolate,context,evaluate("({format:'rgba8unorm',blend:{alpha:{},color:{srcFactor:'src-alpha'}},writeMask:16})"),target)
+        && target.blend && target.native().blend==&*target.blend && target.write_mask==16,"Color target storage or invalid-mask preservation failed");
+    for(const char* source:{"{}","({format:'invalid'})","({format:'rgba8unorm',blend:null})","({format:'rgba8unorm',writeMask:-1})"}) {
+        v8::TryCatch caught(isolate);target.write_mask=123;
+        require(!read_webgpu_color_target(isolate,context,evaluate(source),target)&&caught.HasCaught()&&target.write_mask==123,"Invalid color target accepted or committed");
+    }
     auto throwing=evaluate("(()=>{globalThis.renderError={};return {get cullMode(){throw renderError},get topology(){throw 'wrong getter'}}})()");
     v8::TryCatch caught(isolate);
     require(!read_webgpu_primitive_state(isolate,context,throwing,primitive) && caught.HasCaught()

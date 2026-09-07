@@ -911,3 +911,19 @@ are excluded. macOS V8 runtime tests cover defaults, conversion order, blend and
 stencil values, numeric truncation/bounds, exception identity and atomic failure.
 Both the runtime test and generator check pass. Vertex layouts, depth/color
 state and complete pipeline dispatch remain pending.
+
+
+### Depth/stencil and color-target conversion
+
+Depth/stencil conversion now preserves omitted depthWriteEnabled/depthCompare,
+converts signed depth bias with EnforceRange, rejects non-finite float values,
+and applies stencil defaults/masks in WebIDL order. Color-target conversion
+requires a standard texture format, owns optional blend state and preserves
+invalid write-mask bits for native validation. Its native view borrows blend
+storage and cannot be obtained from a temporary descriptor.
+
+The macOS V8 runtime test verifies omitted versus explicit depth settings,
+fractional bias truncation, signed bounds, float overflow/infinity rejection,
+stencil updates, target defaults, blend storage identity and atomic failures.
+The runtime test passes. Vertex layouts and final pipeline descriptor assembly/
+dispatch still remain before JavaScript can create a render pipeline.
