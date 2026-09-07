@@ -1582,3 +1582,13 @@ not yet validate the C callback through a GPU-producing engine, managed callback
 lifetime, ordinary desktop host negotiation, redirects, or full origin isolation.
 The existing navigation implementation reuses the global realm; this hook is
 not a substitute for browser security-context conformance.
+
+The managed `NativeWebSceneApi.EngineCreate` now accepts an optional document
+admission delegate and marshals the native policy tail. Its existing resource
+bridge roots the delegate until native engine destruction; the static reverse
+P/Invoke delegate is also rooted. Exceptions deny admission, and non-macOS
+bridges cannot approve this IOSurface route. A native integration test passed
+with no skips, verifying the initial URL, runtime-worker invocation, successful
+admission, and safe teardown when the policy throws. The GPU host probe builds.
+The normal surface still needs producer/consumer negotiation before enabling
+this option; the callback test does not establish end-to-end window rendering.

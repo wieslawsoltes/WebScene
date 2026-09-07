@@ -647,6 +647,8 @@ internal struct EngineOptions
     public IntPtr ResourceLoadV3UserData;
     public IntPtr StylesheetConsumedCallback;
     public IntPtr StylesheetConsumedUserData;
+    public IntPtr WebGpuPolicyCallback;
+    public IntPtr WebGpuPolicyUserData;
 }
 
 [StructLayout(LayoutKind.Sequential)]

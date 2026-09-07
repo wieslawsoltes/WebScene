@@ -258,6 +258,39 @@ public sealed class NativeGpuSceneInteropTests
         Assert.Equal(0, alive());
     }
 
+    [IOSurfaceFixtureFact]
+    public void DocumentAdmissionCallbackCrossesManagedNativeBoundary()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        foreach (var throwFromPolicy in new[] { false, true })
+        {
+            using var called = new ManualResetEventSlim();
+            string? observedUrl = null;
+            var callbackThread = 0;
+            var callerThread = Environment.CurrentManagedThreadId;
+            var engine = NativeWebSceneApi.EngineCreate(0, null, new AvaloniaResourceLoader(), _ => { },
+                admitWebGpuDocument: url =>
+                {
+                    observedUrl = url;
+                    callbackThread = Environment.CurrentManagedThreadId;
+                    called.Set();
+                    if (throwFromPolicy) throw new InvalidOperationException("Test policy failure");
+                    return true;
+                });
+            try
+            {
+                Assert.NotEqual(IntPtr.Zero, engine);
+                Assert.True(called.Wait(TimeSpan.FromSeconds(5)), "Native runtime did not evaluate managed admission");
+                Assert.Equal("about:blank", observedUrl);
+                Assert.NotEqual(callerThread, callbackThread);
+            }
+            finally
+            {
+                NativeWebSceneApi.EngineDestroy(engine);
+            }
+        }
+    }
+
     [NativeRuntimeFact]
     public void VersionedAcquisitionCrossesManagedNativeBoundary()
     {

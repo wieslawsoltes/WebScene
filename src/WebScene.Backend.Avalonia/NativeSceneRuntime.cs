@@ -238,6 +238,8 @@ public static unsafe partial class NativeWebSceneApi
     private static readonly IntPtr ResourceLoadV2Address =
         Marshal.GetFunctionPointerForDelegate(ResourceLoadV2);
     private static readonly ResourceLoadCallbackV3 ResourceLoadV3 = LoadResourceV3;
+    private static readonly WebGpuPolicyCallback WebGpuPolicy = EvaluateWebGpuPolicy;
+    private static readonly IntPtr WebGpuPolicyAddress = Marshal.GetFunctionPointerForDelegate(WebGpuPolicy);
     private static readonly StylesheetConsumedCallback StylesheetConsumed = NotifyStylesheetConsumed;
     private static readonly IntPtr StylesheetConsumedAddress =
         Marshal.GetFunctionPointerForDelegate(StylesheetConsumed);
@@ -313,7 +315,8 @@ public static unsafe partial class NativeWebSceneApi
         Action<NativeScenePublished> scenePublished,
         Action? hostRequestAvailable = null,
         Action? interopCallbackAvailable = null,
-        Action? animationFrameRequested = null)
+        Action? animationFrameRequested = null,
+        Func<string, bool>? admitWebGpuDocument = null)
     {
         ArgumentNullException.ThrowIfNull(resourceLoader);
         ArgumentNullException.ThrowIfNull(scenePublished);
@@ -326,7 +329,8 @@ public static unsafe partial class NativeWebSceneApi
                 scenePublished,
                 hostRequestAvailable,
                 interopCallbackAvailable,
-                animationFrameRequested));
+                animationFrameRequested,
+                admitWebGpuDocument));
         try
         {
             fixed (byte* directory = directoryBytes)
@@ -366,7 +370,9 @@ public static unsafe partial class NativeWebSceneApi
                     ResourceLoadCallbackV3 = ResourceLoadV3Address,
                     ResourceLoadV3UserData = GCHandle.ToIntPtr(bridgeHandle),
                     StylesheetConsumedCallback = StylesheetConsumedAddress,
-                    StylesheetConsumedUserData = GCHandle.ToIntPtr(bridgeHandle)
+                    StylesheetConsumedUserData = GCHandle.ToIntPtr(bridgeHandle),
+                    WebGpuPolicyCallback = admitWebGpuDocument is null ? IntPtr.Zero : WebGpuPolicyAddress,
+                    WebGpuPolicyUserData = admitWebGpuDocument is null ? IntPtr.Zero : GCHandle.ToIntPtr(bridgeHandle)
                 };
                 var engine = EngineCreateWithOptions(in options);
                 if (engine == IntPtr.Zero) return IntPtr.Zero;
@@ -587,6 +593,26 @@ public static unsafe partial class NativeWebSceneApi
         in NativeResourceRequestContextV3 requestContext,
         IntPtr destination,
         nuint destinationCapacity);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate uint WebGpuPolicyCallback(IntPtr userData, IntPtr url, nuint urlLength);
+
+    // Admission certifies a secure document AND an IOSurface-capable consumer.
+    // The bridge and static delegate stay rooted until native engine destruction.
+    private static uint EvaluateWebGpuPolicy(IntPtr userData, IntPtr url, nuint urlLength)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            return bridge?.AdmitWebGpuDocument(
+                Marshal.PtrToStringUTF8(url, checked((int)urlLength)) ?? string.Empty) == true ? 1u : 0u;
+        }
+        catch
+        {
+            // Deny on policy failure; exceptions cannot cross reverse P/Invoke.
+            return 0;
+        }
+    }
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void StylesheetConsumedCallback(
@@ -939,8 +965,12 @@ public static unsafe partial class NativeWebSceneApi
         Action<NativeScenePublished> scenePublished,
         Action? hostRequestAvailable,
         Action? interopCallbackAvailable,
-        Action? animationFrameRequested) : IDisposable
+        Action? animationFrameRequested,
+        Func<string, bool>? admitWebGpuDocument = null) : IDisposable
     {
+        public bool AdmitWebGpuDocument(string url)
+            => OperatingSystem.IsMacOS() && admitWebGpuDocument?.Invoke(url) == true;
+
         private const int EnvelopeHeaderSize = 2 + sizeof(uint) + sizeof(long) + sizeof(long);
         [ThreadStatic]
         private static PendingResourceCopy? _pendingCopy;
