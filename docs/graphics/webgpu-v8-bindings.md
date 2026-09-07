@@ -1342,3 +1342,21 @@ requestDevice still needs host capability provisioning, and HTMLCanvasElement
 getContext, automatic frame expiration and normal scene publication remain
 unconnected. This evidence is a JavaScript-to-shared-image milestone, not a
 normal WebScene application or Kestrel pass.
+
+### Host sharing capabilities on JavaScript device requests
+
+The adapter registry accepts an internal canvas-interop policy, defaulting to
+none. With IOSurface selected, native device preparation appends the two required
+sharing capabilities only after browser feature/limit/consumed validation. Missing
+host capabilities reject preparation; JavaScript cannot select this policy or
+request the native features through requiredFeatures. The existing browser
+feature snapshots continue filtering native-only capabilities.
+
+The shared-canvas runtime test now obtains its device through JavaScript
+adapter.requestDevice() with this host policy, instead of making a raw native
+device request. It verifies both native features are enabled, their names remain
+hidden in JavaScript, and an explicit private-feature request rejects TypeError
+without consuming the adapter. The subsequent normal request renders the shared
+canvas and all eight diagnostic pixels pass. Runtime CTest passes after rebuild.
+The ordinary runtime still needs to install the registry with the negotiated host
+policy together with navigator.gpu, getContext and scene/frame scheduling.

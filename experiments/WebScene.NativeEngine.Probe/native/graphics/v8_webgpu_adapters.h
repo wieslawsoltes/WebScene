@@ -12,6 +12,7 @@ namespace webscene::graphics {
 // Realm-owned adapters and asynchronous device requests. No global is installed
 // here; secure discovery, expired adapters and loss integration remain separate.
 class v8_webgpu_adapters {
+    webgpu_canvas_interop interop_;
     struct entry {
         v8::Global<v8::Object> wrapper;
         v8::Global<v8::Private> features_key;
@@ -77,7 +78,7 @@ class v8_webgpu_adapters {
                             refreshed->service->with_adapter(refreshed->adapter,[&](const auto& native) { adapter=native; });
                             return std::pair{std::move(adapter),refreshed->consumed};
                         },item->service->dawn().completions(),{item->service->engine_identity(),new_owner_token(),0},new_owner_token(),
-                            registry->dom_exception_.Get(isolate),promise);
+                            registry->dom_exception_.Get(isolate),promise,registry->interop_);
                         if (current->bridge && current->bridge->pending()) item->consumed=true;
                     } catch (...) {
                         registry->requests_.remove_if([&](const auto& value) { return value.get()==current; });
@@ -130,8 +131,8 @@ class v8_webgpu_adapters {
     }
 public:
     v8_webgpu_adapters(v8::Isolate* isolate,v8::Local<v8::Context> context,
-        v8_webgpu_devices& devices,v8::Local<v8::Function> dom_exception,size_t capacity=64)
-        :devices_(devices),isolate_(isolate),features_factory_(isolate,context),limits_factory_(isolate,context),info_factory_(isolate,context),entries_(capacity) {
+        v8_webgpu_devices& devices,v8::Local<v8::Function> dom_exception,size_t capacity=64,webgpu_canvas_interop interop=webgpu_canvas_interop::none)
+        :interop_(interop),devices_(devices),isolate_(isolate),features_factory_(isolate,context),limits_factory_(isolate,context),info_factory_(isolate,context),entries_(capacity) {
         check_scope();
         if (dom_exception.IsEmpty()) throw std::invalid_argument("Trusted DOMException is required");
         dom_exception_.Reset(isolate,dom_exception);

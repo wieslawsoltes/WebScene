@@ -1,5 +1,6 @@
 #pragma once
 #include "graphics/v8_webgpu_iosurface_canvas_host.h"
+#include "graphics/v8_webgpu_adapters.h"
 #if defined(__APPLE__)
 template<class Run>
 void test_v8_iosurface_canvas_host(v8::Isolate* isolate,v8::Local<v8::Context> context,
@@ -18,26 +19,31 @@ void test_v8_iosurface_canvas_host(v8::Isolate* isolate,v8::Local<v8::Context> c
     auto adapter=discovered->adapter;
     const wgpu::FeatureName private_features[]={wgpu::FeatureName::SharedTextureMemoryIOSurface,wgpu::FeatureName::SharedFenceMTLSharedEvent};
     for(auto feature:private_features)require(adapter.HasFeature(feature),"Metal shared canvas capability unavailable");
-    struct request_state {wgpu::Device device;std::atomic<bool> ready=false;};
-    auto requested=std::make_shared<request_state>();
-    wgpu::DeviceDescriptor descriptor{};descriptor.requiredFeatureCount=2;descriptor.requiredFeatures=private_features;
-    adapter.RequestDevice(&descriptor,wgpu::CallbackMode::AllowSpontaneous,
-        [requested](wgpu::RequestDeviceStatus status,wgpu::Device device,wgpu::StringView){
-            if(status==wgpu::RequestDeviceStatus::Success)requested->device=std::move(device);
-            requested->ready.store(true);
-        });
-    auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
-    while(!requested->ready.load()&&std::chrono::steady_clock::now()<deadline){service.dawn().instance().ProcessEvents();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    require(requested->ready.load()&&requested->device,"Shared canvas device request failed");
-    auto native=requested->device;
-    auto handle=service.adopt_device(adapter,native);
     auto exception=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>();
     v8_webgpu_devices devices(isolate,context,exception,1,2);
-    auto device=devices.wrap(context,service,handle).ToLocalChecked();
+    v8_webgpu_adapters adapters(isolate,context,devices,exception,1,webgpu_canvas_interop::iosurface);
+    auto adapter_handle=service.adopt_adapter(adapter);
+    auto adapter_object=adapters.wrap(context,service,adapter_handle).ToLocalChecked();
+    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvasAdapter"),adapter_object).FromMaybe(false),"Shared adapter publication failed");
+    require(run("globalThis.privateCanvasFeaturePromise=sharedCanvasAdapter.requestDevice({requiredFeatures:['shared-texture-memory-iosurface']});"),"Private feature rejection dispatch failed");
+    auto rejected=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"privateCanvasFeaturePromise")).ToLocalChecked().As<v8::Promise>();
+    rejected->MarkAsHandled();
+    require(rejected->State()==v8::Promise::kRejected&&rejected->Result().As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"name")).ToLocalChecked()->StrictEquals(v8::String::NewFromUtf8Literal(isolate,"TypeError")),"Host policy allowed JavaScript to request a native feature");
+    require(run("globalThis.sharedCanvasDevicePromise=sharedCanvasAdapter.requestDevice();"),"Shared canvas requestDevice failed");
+    auto promise=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvasDevicePromise")).ToLocalChecked().As<v8::Promise>();
+    auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(promise->State()==v8::Promise::kPending&&std::chrono::steady_clock::now()<deadline){
+        service.pump([&](auto completion){require(adapters.complete(completion),"Shared device completion not routed");});
+        if(promise->State()==v8::Promise::kPending)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(promise->State()==v8::Promise::kFulfilled,"Shared canvas device promise failed");
+    auto device=promise->Result().As<v8::Object>();
+    auto native=v8_webgpu_devices::native_reference(device);
+    for(auto feature:private_features)require(native.HasFeature(feature),"Host sharing feature was not provisioned");
     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvasDevice"),device).FromMaybe(false),"Shared device publication failed");
     auto provider=std::make_shared<dawn_iosurface_canvas_host>(1024*1024);
     uint64_t serial=0;
-    auto host=make_iosurface_webgpu_canvas_host(provider,[&]{image_metadata metadata;metadata.canvas=123;metadata.allocation_generation=7;metadata.content_serial=++serial;metadata.producer_timeline=456;metadata.producer_value=serial;return metadata;},requested);
+    auto host=make_iosurface_webgpu_canvas_host(provider,[&]{image_metadata metadata;metadata.canvas=123;metadata.allocation_generation=7;metadata.content_serial=++serial;metadata.producer_timeline=456;metadata.producer_value=serial;return metadata;});
     auto canvas=std::make_unique<v8_webgpu_canvas_context>(isolate,context,v8::Object::New(isolate),exception,4,2,std::move(host));
     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvas"),canvas->object()).FromMaybe(false),"Shared canvas publication failed");
     require(run(R"JS(
@@ -69,7 +75,7 @@ void test_v8_iosurface_canvas_host(v8::Isolate* isolate,v8::Local<v8::Context> c
     if(pixels)for(size_t y=0;y<2;++y)for(size_t x=0;x<4;++x){auto pixel=pixels+y*stride+x*4;correct&=pixel[0]==0&&pixel[1]==0&&pixel[2]==255&&pixel[3]==255;}
     auto unlocked=IOSurfaceUnlock(surface,kIOSurfaceLockReadOnly,nullptr);consumer->complete();image.reset();
     require(correct&&unlocked==kIOReturnSuccess,"JavaScript IOSurface canvas pixel mismatch");
-    require(run("sharedCanvas.unconfigure();delete globalThis.sharedCanvas;delete globalThis.sharedCanvasDevice;"),"Shared canvas cleanup failed");
+    require(run("sharedCanvas.unconfigure();delete globalThis.sharedCanvas;delete globalThis.sharedCanvasDevice;delete globalThis.sharedCanvasAdapter;delete globalThis.sharedCanvasDevicePromise;delete globalThis.privateCanvasFeaturePromise;"),"Shared canvas cleanup failed");
     canvas.reset();require(provider->idle()&&provider->busy_images()==0,"Shared canvas provider retained completed frame");
 }
 #endif

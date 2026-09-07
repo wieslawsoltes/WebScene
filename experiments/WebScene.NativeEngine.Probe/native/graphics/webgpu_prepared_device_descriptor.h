@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <memory>
 namespace webscene::graphics {
+// Selected by the host, never by a JavaScript descriptor.
+enum class webgpu_canvas_interop { none,iosurface };
 enum class webgpu_device_request_error { none,unsupported_feature,operation_error };
 // Owns all storage borrowed by the Dawn descriptor. Non-movable because the
 // optional compatibility chain points into this allocation. Keep alive through
@@ -27,7 +29,7 @@ public:
     }
     wgpu::DeviceDescriptor native() const &&=delete;
     static std::unique_ptr<webgpu_prepared_device_descriptor> prepare(const webgpu_device_descriptor& requested,
-        const wgpu::Adapter& adapter,bool consumed,webgpu_device_request_error& error) {
+        const wgpu::Adapter& adapter,bool consumed,webgpu_device_request_error& error,webgpu_canvas_interop interop=webgpu_canvas_interop::none) {
         error=webgpu_device_request_error::operation_error;
         if (!adapter) return {};
         // Feature failures have TypeError precedence over consumed/limit errors.
@@ -54,6 +56,14 @@ public:
         auto& features=result->requested_.required_features;
         for (size_t i=0;i<features.size();++i)
             features.erase(std::remove(features.begin()+i+1,features.end(),features[i]),features.end());
+        if(interop==webgpu_canvas_interop::iosurface) {
+            // Browser feature validation above remains separate. These native
+            // capabilities are filtered out of JS adapter/device feature sets.
+            for(auto feature:{wgpu::FeatureName::SharedTextureMemoryIOSurface,wgpu::FeatureName::SharedFenceMTLSharedEvent}) {
+                if(!adapter.HasFeature(feature))return {};
+                features.push_back(feature);
+            }
+        }
         if (need_compatibility) result->limits_.nextInChain=&result->compatibility_;
         error=webgpu_device_request_error::none; return result;
     }

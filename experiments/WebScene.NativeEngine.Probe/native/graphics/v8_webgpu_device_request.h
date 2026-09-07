@@ -78,7 +78,7 @@ public:
     static std::unique_ptr<v8_webgpu_device_request> start_checked(v8::Isolate* isolate,
         v8::Local<v8::Context> context,v8::Local<v8::Value> input,ResolveAdapter resolve_adapter,
         std::shared_ptr<completion_mailbox> mailbox,resource_owner owner,uint64_t operation,
-        v8::Local<v8::Function> dom_exception,v8::Local<v8::Promise>& promise) {
+        v8::Local<v8::Function> dom_exception,v8::Local<v8::Promise>& promise,webgpu_canvas_interop interop=webgpu_canvas_interop::none) {
         if (v8::Isolate::GetCurrent()!=isolate || isolate->GetCurrentContext()!=context)
             throw std::logic_error("Device request requires its owning isolate scope");
         if (!mailbox || !operation || dom_exception.IsEmpty())
@@ -95,7 +95,7 @@ public:
                     label=converted.label;queue_label=converted.queue_label;
                     auto state=resolve_adapter(); adapter=std::move(state.first);
                     webgpu_device_request_error error;
-                    prepared=webgpu_prepared_device_descriptor::prepare(converted,adapter,state.second,error);
+                    prepared=webgpu_prepared_device_descriptor::prepare(converted,adapter,state.second,error,interop);
                     if (error==webgpu_device_request_error::unsupported_feature)
                         failure=v8::Exception::TypeError(v8::String::NewFromUtf8Literal(isolate,"Required WebGPU feature is unavailable"));
                 }
