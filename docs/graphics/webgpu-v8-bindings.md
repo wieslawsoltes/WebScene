@@ -1510,3 +1510,30 @@ window probe and native image tests. The normal composition handler is not opted
 in yet: its current Stop path removes the visual without guaranteeing later GPU
 retirement callbacks. That lifecycle must be connected before enabling GPU scene
 admission there.
+
+### Retirement after visual detach
+
+The pinned Avalonia 11.3.4 implementation establishes the locking contract needed
+for detached cleanup: [native CGL MakeCurrent](https://github.com/AvaloniaUI/Avalonia/blob/11.3.4/native/Avalonia.Native/src/OSX/cgl.mm)
+locks/restores the native context, and [Skia DrawingContextImpl](https://github.com/AvaloniaUI/Avalonia/blob/11.3.4/src/Skia/Avalonia.Skia/DrawingContextImpl.cs)
+holds the GRContext monitor while drawing. Its platform API lease flushes Skia
+before raw GL access and resets the state cache afterward. The public host
+IGlContext.EnsureCurrent operation reaches that native context lock.
+
+Retained images and image groups now support retirement without a visual drawing
+lease. After exclusive ownership transfers away from the rendering path, cleanup
+acquires EnsureCurrent, then the GRContext monitor in Avalonia's order, releases
+SKImage references, flushes pending reads, inserts/polls the GL fence with zero
+GPU-wait timeout, and resets Skia's state cache. Context mismatch/loss fails while
+retaining consumer ownership; it never fabricates GPU completion. The host must
+keep its graphics context alive until cleanup completes. Concurrent framework
+context destruction and device-loss recovery remain qualification work.
+
+The window probe's --detach-before-retirement mode removes its control from the
+window after 32 frames, suppresses subsequent draw callbacks, and retires on a
+worker that is asserted different from the rendering thread. It passes with two
+imports, eight diagnostic destination-pixel checks, zero explicit transport
+copies and completed GPU retirement. Evidence is
+`evidence/ganesh-host/detached-retirement.json`; probe build has zero warnings.
+Production stop must still transfer ownership to this path before normal GPU
+scene admission is enabled.

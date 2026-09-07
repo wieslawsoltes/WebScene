@@ -99,4 +99,30 @@ internal sealed class NativeMacOSRetainedGpuImage
         _host.GlInterface.DeleteTexture(_texture); _texture = 0;
         return true;
     }
+    // Avalonia 11.3.4 takes the CGL lock via EnsureCurrent before the GRContext
+    // monitor during drawing. Use the same order after a visual is detached;
+    // never touch a live drawing lease or wait for GPU completion on the CPU.
+    internal bool TryRetireWithoutVisual()
+    {
+        using var current = _host.EnsureCurrent();
+        lock (_skia)
+        {
+            if (NativeMacOSGpuImageImport.CurrentContext != _nativeContext || _skia.IsAbandoned)
+                throw new InvalidOperationException("Detached retirement lost its host context.");
+            IsRetiring = true;
+            try
+            {
+                _image?.Dispose(); _image = null;
+                if (_consumer is null) return true;
+                _skia.Flush();
+                _fence ??= NativeMacOSGpuConsumerFence.Create(_host.GlInterface.GetProcAddress, _consumer);
+                if (!_fence.TryCompleteInSerializedHostContext(_host)) return false;
+                _consumer = null;
+                _host.GlInterface.DeleteTexture(_texture); _texture = 0;
+                return true;
+            }
+            finally { _skia.ResetContext(); }
+        }
+    }
+
 }

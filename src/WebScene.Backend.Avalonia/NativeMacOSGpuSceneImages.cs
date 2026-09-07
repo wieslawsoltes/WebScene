@@ -128,4 +128,18 @@ internal sealed class NativeMacOSGpuSceneImages
         }
         return complete;
     }
+    internal bool TryRetireWithoutVisual()
+    {
+        IsRetiring = true;
+        ReleaseSources();
+        var complete = true;
+        for (var index = 0; index < _images.Length; ++index)
+        {
+            if (_images[index] is not { } image) continue;
+            if (image.TryRetireWithoutVisual()) _images[index] = null;
+            else complete = false;
+        }
+        return complete;
+    }
+
 }

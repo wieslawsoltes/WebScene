@@ -126,4 +126,15 @@ internal sealed class NativeMacOSGpuScenePresenter
         }
         return !HasPendingRetirements;
     }
+    // Transfer this presenter exclusively to the retirement worker after stop.
+    // No replacement, preparation or drawing may run concurrently with it.
+    internal bool TryCompleteWithoutVisual()
+    {
+        if (!IsStopping) throw new InvalidOperationException("Scene presenter has not begun shutdown.");
+        for (var index = 0; index < _retiring.Length; ++index)
+            if (_retiring[index] is { } image && image.TryRetireWithoutVisual()) _retiring[index] = null;
+        if (_current is not null && _current.TryRetireWithoutVisual()) _current = null;
+        return !HasPendingRetirements;
+    }
+
 }

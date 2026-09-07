@@ -69,6 +69,15 @@ internal sealed class NativeMacOSGpuConsumerFence
         return Poll(requireOriginalThread: false);
     }
 
+    // Caller holds this host context's EnsureCurrent scope. Retirement code
+    // also holds Avalonia's GRContext monitor before touching Skia resources.
+    internal bool TryCompleteInSerializedHostContext(IGlContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (context.IsLost) throw new InvalidOperationException("Host graphics context is lost.");
+        return Poll(requireOriginalThread: false);
+    }
+
     private bool Poll(bool requireOriginalThread)
     {
         if ((requireOriginalThread && _thread != Environment.CurrentManagedThreadId) ||

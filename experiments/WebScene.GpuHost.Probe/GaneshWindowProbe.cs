@@ -35,7 +35,7 @@ internal sealed class GaneshWindowProbeApp : Application
                     renderedFrames = control.Frames, imports = control.Imports,
                     gpuRetirementCompleted = control.Completed.Task.IsCompletedSuccessfully,
                     explicitTransportCopies = 0, diagnosticReadbacks = control.VerifiedPixels,
-                    physicalPresentationVerified = false }));
+                    physicalPresentationVerified = false, detachedBeforeRetirement = control.DetachedBeforeRetirement }));
                 desktop.Shutdown(exit);
             };
         }
@@ -52,6 +52,9 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
     private NativeMacOSGpuScenePresenter? _retained;
     private NativeMacOSGpuSceneImages? _replacement;
     internal int Frames, Imports, VerifiedPixels;
+    internal bool DetachedBeforeRetirement;
+    private int _retirementStarted;
+    private readonly bool _detachBeforeRetirement = Environment.GetCommandLineArgs().Contains("--detach-before-retirement");
     private readonly bool _verifyPixels = Environment.GetCommandLineArgs().Contains("--verify-window-pixels");
     public unsafe GaneshImageControl()
     {
@@ -88,7 +91,7 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
     public void Dispose() { } // Retained owner spans draw-operation replacement; GPU fence retires it.
     public void Render(ImmediateDrawingContext context)
     {
-        if (Completed.Task.IsCompleted) return;
+        if (Completed.Task.IsCompleted || Volatile.Read(ref _retirementStarted) != 0) return;
         try
         {
             var feature = context.TryGetFeature(typeof(ISkiaSharpApiLeaseFeature)) as ISkiaSharpApiLeaseFeature
@@ -144,7 +147,38 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
                     ++VerifiedPixels;
                 }
             }
-            if (++Frames == 32) _retained.BeginShutdown();
+            if (++Frames == 32)
+            {
+                _retained.BeginShutdown();
+                if (_detachBeforeRetirement)
+                {
+                    Interlocked.Exchange(ref _retirementStarted, 1);
+                    var retiring = _retained;
+                    var renderingThread = Environment.CurrentManagedThreadId;
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (TopLevel.GetTopLevel(this) is not Window window)
+                        { Completed.TrySetException(new InvalidOperationException("Probe window unavailable for detach")); return; }
+                        window.Content = null;
+                        DetachedBeforeRetirement = true;
+                        _ = Task.Run(() =>
+                        {
+                            try
+                            {
+                                if (Environment.CurrentManagedThreadId == renderingThread) throw new InvalidOperationException("Detached probe must retire on a different thread");
+                                var deadline = DateTime.UtcNow.AddSeconds(5);
+                                while (!retiring.TryCompleteWithoutVisual())
+                                {
+                                    if (DateTime.UtcNow >= deadline) throw new TimeoutException("Detached GPU retirement did not complete");
+                                    Thread.Sleep(1);
+                                }
+                                _renderer.Reset();Completed.TrySetResult();
+                            }
+                            catch (Exception error) { Completed.TrySetException(error); }
+                        });
+                    });
+                }
+            }
         }
         catch (Exception error) { Completed.TrySetException(error); }
     }
