@@ -451,3 +451,23 @@ allocation. The requested 17x4 surface reported 16,384 bytes on Apple M4.
 The rebuilt host probe also passed 64 changing markers and two shutdown cycles.
 This bounds one allocation; a complete per-engine aggregate residency policy
 and pressure handling remain integration work.
+
+### Shared Dawn import/access component
+
+The probe now uses native graphics/dawn_shared_image.h for shared-memory texture
+creation and BeginAccess/EndAccess state. This component is platform-neutral:
+platform code supplies the Dawn import descriptor and native allocation owner.
+It requires an explicit single-sample, single-layer 2D descriptor and verifies
+the imported format, dimensions and usage before creating the texture. Real Dawn
+access failures make the object unusable for further access; duplicate access
+transitions are rejected before calling Dawn.
+
+The first run rejected the probe's unspecified dimension, which Dawn previously
+defaulted to 2D. The probe now supplies that dimension explicitly. The subsequent
+standalone test passed 68 pixels, and the host passed 64 changing-marker updates
+and two runtime shutdown cycles. Every submission additionally rejects overlapping
+BeginAccess and duplicate EndAccess. Owner lifetime remains separate from GPU
+completion; the async producer closure retains the shared-image component.
+
+Only macOS IOSurface use is hardware-tested here. This is a native reusable
+component, not yet a scene-import ABI or a claim that Windows/Linux interop passes.

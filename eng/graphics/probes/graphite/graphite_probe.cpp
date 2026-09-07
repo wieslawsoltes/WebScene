@@ -19,6 +19,7 @@
 #include "include/gpu/graphite/Image.h"
 // Diagnostic readback only. This executable is not a canvas presentation path.
 #include <webgpu/webgpu_cpp.h>
+#include "../../../../experiments/WebScene.NativeEngine.Probe/native/graphics/dawn_shared_image.h"
 
 #include <array>
 #include <functional>
@@ -66,8 +67,7 @@ struct DawnRuntime {
     wgpu::Device device;
     std::shared_ptr<skgpu::graphite::Context> graphite;
     std::shared_ptr<void> outputSurface;
-    wgpu::SharedTextureMemory outputMemory;
-    wgpu::Texture outputTexture;
+    std::shared_ptr<webscene::graphics::dawn_shared_image> outputImage;
     std::shared_ptr<webscene::graphics::dawn_canvas_images> canvasPool;
     unsigned outputAllocations=0;
     unsigned initializations=0;
@@ -154,18 +154,19 @@ int main(int argc, char** argv) {
     constexpr uint32_t width = 17, height = 4, rowBytes = 256;
     constexpr size_t bufferSize = rowBytes * height;
     wgpu::TextureDescriptor textureDescriptor{};
+    textureDescriptor.dimension=wgpu::TextureDimension::e2D;
     textureDescriptor.size = {width, height, 1};
     textureDescriptor.format = sharedOutput ? wgpu::TextureFormat::BGRA8Unorm : wgpu::TextureFormat::RGBA8Unorm;
     textureDescriptor.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::TextureBinding;
     std::shared_ptr<void> sharedSurface;
-    wgpu::SharedTextureMemory sharedMemory;
+    std::shared_ptr<webscene::graphics::dawn_shared_image> sharedImage;
     wgpu::Texture texture;
     if (sharedOutput) {
 #if defined(__APPLE__)
-        if (runtime.outputTexture) {
+        if (runtime.outputImage) {
             sharedSurface=runtime.outputSurface;
-            sharedMemory=runtime.outputMemory;
-            texture=runtime.outputTexture;
+            sharedImage=runtime.outputImage;
+            texture=sharedImage->texture();
         } else {
             auto owner=webscene::graphics::iosurface_color::create_bgra8(width,height,1024*1024);
             if (!owner) return finish("failed","IOSurface allocation failed",1);
@@ -173,21 +174,19 @@ int main(int argc, char** argv) {
             wgpu::SharedTextureMemoryIOSurfaceDescriptor io{}; io.ioSurface=ioSurface;
             wgpu::SharedTextureMemoryDescriptor descriptor{}; descriptor.nextInChain=&io;
             sharedSurface=std::shared_ptr<void>(owner,ioSurface);
-            sharedMemory=device.ImportSharedTextureMemory(&descriptor);
-            wgpu::SharedTextureMemoryProperties properties{};
-            if (!sharedMemory || sharedMemory.GetProperties(&properties)!=wgpu::Status::Success)
-                return finish("failed","IOSurface import failed",1);
-            texture=sharedMemory.CreateTexture(&textureDescriptor);
+            sharedImage=webscene::graphics::dawn_shared_image::import(device,descriptor,textureDescriptor,sharedSurface);
+            if (!sharedImage) return finish("failed","IOSurface import/properties unsupported",1);
+            texture=sharedImage->texture();
             runtime.outputSurface=sharedSurface;
-            runtime.outputMemory=sharedMemory;
-            runtime.outputTexture=texture;
+            runtime.outputImage=sharedImage;
             ++runtime.outputAllocations;
         }
         // The host entry point rejects reuse until producer and CGL work retire.
         // Every submission fully clears the output, so prior contents are discarded.
         wgpu::SharedTextureMemoryBeginAccessDescriptor access{}; access.initialized=false;
-        if (sharedMemory.BeginAccess(texture,&access)!=wgpu::Status::Success)
+        if (!sharedImage->begin(access))
             return finish("failed","IOSurface BeginAccess failed",1);
+        if (sharedImage->begin(access)) return finish("failed","Overlapping access accepted",1);
 #else
         return finish("unavailable","IOSurface requires macOS",77);
 #endif
@@ -290,8 +289,10 @@ int main(int argc, char** argv) {
     device.GetQueue().Submit(1, &commands);
 
     wgpu::SharedTextureMemoryEndAccessState handoff;
-    if (sharedOutput && sharedMemory.EndAccess(texture,&handoff)!=wgpu::Status::Success)
+    if (sharedOutput && !sharedImage->end(handoff))
         return finish("failed","IOSurface EndAccess failed",1);
+    if (sharedOutput && sharedImage->end(handoff))
+        return finish("failed","Duplicate EndAccess accepted",1);
     const uint8_t* pixels=nullptr;
     bool valid=true;
     if (!verifyPixels) {
@@ -303,7 +304,7 @@ int main(int argc, char** argv) {
             });
         // Keep every source lease and Graphite object alive while native GPU
         // work is outstanding. Delivery runs later on the host's CGL thread.
-        auto deliver=[completed,future,instance,device,error,sharedSurface,sharedMemory,producerStatus,replacementStatus,
+        auto deliver=[completed,future,instance,device,error,sharedSurface,sharedImage,producerStatus,replacementStatus,
             target=hostDestinationTexture,context=CGLGetCurrentContext(),
             graphite=std::move(graphite),recorder=std::move(recorder),recording=std::move(recording),
             surface=std::move(surface),texture=std::move(texture),image=std::move(image),
