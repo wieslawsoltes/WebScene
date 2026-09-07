@@ -1721,3 +1721,18 @@ The supplied original document starts but selects Canvas 2D compatibility:
 "d.pushErrorScope is not a function". The real startup check returned exit 1.
 The failure baseline and original hash are in evidence/kestrel/startup.json.
 GPUDevice error scopes are the first observed WebGPU initialization blocker.
+
+### GPUDevice.pushErrorScope (2026-09-08)
+
+The device binding now implements pushErrorScope with required-argument checks,
+WebIDL string conversion, exact validation/out-of-memory/internal filters,
+receiver revalidation after conversion, and Dawn PushErrorScope forwarding.
+Tests cover method arity, invalid filters and receivers, one conversion call,
+exception propagation, and a JavaScript-pushed scope capturing a Dawn-injected
+validation error retrieved through native PopErrorScope. The runtime suite passes.
+The asynchronous JavaScript popErrorScope API and WebGPU error object types
+remain unimplemented; this is not complete error-scope support.
+
+Unchanged Kestrel startup was rerun and still returned exit 1, now reporting
+"shader.getCompilationInfo is not a function" as its Canvas 2D fallback reason.
+The original document hash is unchanged. This is the next observed startup gap.

@@ -62,6 +62,26 @@ class v8_webgpu_devices {
         if (!item) fail(info.GetIsolate(),"GPUDevice realm has been released");
         return item;
     }
+    static void push_error_scope(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if(!receiver(info))return;
+        auto* isolate=info.GetIsolate();
+        if(info.Length()<1){fail(isolate,"pushErrorScope requires a filter");return;}
+        v8::Local<v8::String> converted;
+        if(!info[0]->ToString(isolate->GetCurrentContext()).ToLocal(&converted))return;
+        v8::String::Utf8Value text(isolate,converted);
+        if(!*text)return;
+        const std::string_view value(*text,text.length());
+        wgpu::ErrorFilter filter;
+        if(value=="validation")filter=wgpu::ErrorFilter::Validation;
+        else if(value=="out-of-memory")filter=wgpu::ErrorFilter::OutOfMemory;
+        else if(value=="internal")filter=wgpu::ErrorFilter::Internal;
+        else {fail(isolate,"Invalid GPUErrorFilter");return;}
+        // Conversion may run user code and retire this realm.
+        auto* item=receiver(info);if(!item)return;
+        try {
+            item->service->with_device(item->device,[&](auto& owned){owned.native().PushErrorScope(filter);});
+        }catch(const std::exception&){fail(isolate,"GPU error scope push failed");}
+    }
     static void create_buffer(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info); if (!item) return;
         auto* isolate=info.GetIsolate(); auto context=isolate->GetCurrentContext();
@@ -268,6 +288,8 @@ public:
         auto prototype=v8::ObjectTemplate::New(isolate);
         auto create=v8::FunctionTemplate::New(isolate,create_buffer); create->SetLength(1);
         prototype->Set(isolate,"createBuffer",create);
+        auto push_scope=v8::FunctionTemplate::New(isolate,push_error_scope);push_scope->SetLength(1);
+        prototype->Set(isolate,"pushErrorScope",push_scope);
         auto shader_create=v8::FunctionTemplate::New(isolate,create_shader); shader_create->SetLength(1);
         prototype->Set(isolate,"createShaderModule",shader_create);
         auto pipeline_create=v8::FunctionTemplate::New(isolate,create_pipeline);pipeline_create->SetLength(1);

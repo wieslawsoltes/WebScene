@@ -173,6 +173,22 @@ void test_runtime_webgpu_installation() {
         require(runtime.pump_task(),"Installed GPU completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     require(document.find_by_id("gpu-installed-ready")!=nullptr,"Installed GPU did not create a device");
+    require(runtime.execute(R"JS(
+        if(installedDevice.pushErrorScope.length!==1)throw new Error('push scope arity');
+        for(const filter of ['validation','out-of-memory','internal'])installedDevice.pushErrorScope(filter);
+        for(const call of [
+            ()=>installedDevice.pushErrorScope(),()=>installedDevice.pushErrorScope(undefined),
+            ()=>installedDevice.pushErrorScope('Validation'),()=>installedDevice.pushErrorScope(null),
+            ()=>installedDevice.pushErrorScope(Symbol()),()=>installedDevice.pushErrorScope.call({},'validation')
+        ]){let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('scope filter accepted');}
+        let conversions=0;
+        installedDevice.pushErrorScope({toString(){++conversions;return 'validation';}});
+        if(conversions!==1)throw new Error('scope conversion count');
+        const sentinel={};let propagated=false;
+        try{installedDevice.pushErrorScope({toString(){throw sentinel;}})}catch(e){propagated=e===sentinel}
+        if(!propagated)throw new Error('scope conversion exception lost');
+    )JS","push-error-scope"),"GPU pushErrorScope binding failed");
+
     require(runtime.execute("globalThis.pressureTexture=installedDevice.createTexture({size:[1,1],format:'rgba8unorm',usage:16});globalThis.livePressureView=pressureTexture.createView();","view-pressure-setup"),"View pressure setup failed");
     for(unsigned i=0;i<300;++i)
         require(runtime.execute("pressureTexture.createView();","view-pressure"),"Unreachable texture views exhausted release tickets");
@@ -1358,6 +1374,25 @@ int main() {
                     {v8::TryCatch caught(isolate);require(shader_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"label")).IsEmpty()&&caught.HasCaught(),"Disposed shader retained native access");}
                     adapter_service->with_device(gc_buffer_device,[&](auto& owned) {require(owned.live_shader_modules()==1,"Shader registry released native module inline");});
                     require(context->Global()->Delete(context,v8::String::NewFromUtf8Literal(isolate,"shaderProbe")).FromMaybe(false),"Shader probe cleanup failed");
+                    {
+                        auto push=v8::String::NewFromUtf8Literal(isolate,"deviceProbe.pushErrorScope('validation');");
+                        require(!v8::Script::Compile(context,push).ToLocalChecked()->Run(context).IsEmpty(),"Native scope push script failed");
+                        auto native=v8_webgpu_devices::native_reference(device_object);
+                        native.InjectError(wgpu::ErrorType::Validation,"scope capture sentinel");
+                        auto captured=std::make_shared<std::atomic<int>>(0);
+                        native.PopErrorScope(wgpu::CallbackMode::AllowSpontaneous,
+                            [captured](wgpu::PopErrorScopeStatus status,wgpu::ErrorType type,wgpu::StringView message){
+                                const bool correct=status==wgpu::PopErrorScopeStatus::Success&&type==wgpu::ErrorType::Validation
+                                    && std::string_view(message.data,message.length).find("scope capture sentinel")!=std::string_view::npos;
+                                captured->store(correct?1:-1);
+                            });
+                        auto until=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                        while(captured->load()==0&&std::chrono::steady_clock::now()<until){
+                            adapter_service->pump([](auto){});
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        }
+                        require(captured->load()==1,"JavaScript scope did not capture Dawn validation error");
+                    }
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {
                             if(deviceProbe.createShaderModule.length!==1)throw new Error('shader arity');
