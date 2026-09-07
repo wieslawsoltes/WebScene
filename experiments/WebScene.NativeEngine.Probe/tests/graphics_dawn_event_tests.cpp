@@ -3,7 +3,43 @@
 #include "graphics/dawn_canvas_images.h"
 #include "graphics/dawn_dxgi_image.h"
 #include <iostream>
+#include <set>
 using namespace webscene::graphics;
+// Synthetic exports exercise atomic handle ownership, not native fence signaling.
+struct fence_test_ops {
+    using handle_type=int;
+    static inline std::set<int> live;
+    static inline int next=100,duplicate_calls=0,fail_at=0;
+    static int empty() { return 0; }
+    static bool valid(int value) { return value>0; }
+    static int duplicate(int) {
+        if (++duplicate_calls==fail_at) throw std::system_error(std::make_error_code(std::errc::too_many_files_open));
+        live.insert(next); return next++;
+    }
+    static void close(int value) noexcept { if (live.erase(value)!=1) std::terminate(); }
+};
+void test_dxgi_fence_ownership() {
+    auto require=[](bool value) { if (!value) throw std::runtime_error("DXGI fence handoff ownership failed"); };
+    std::array<wgpu::SharedFence,2> fences{};
+    std::array<uint64_t,2> values{7,UINT64_MAX};
+    std::vector<dxgi_fence_wait<fence_test_ops>> output;
+    auto exported=[](const wgpu::SharedFence&,int& handle) { handle=42; return true; };
+    require(duplicate_dxgi_fences<fence_test_ops>(fences,values,output,exported)==dxgi_fence_status::success);
+    require(output.size()==2 && output[0].value==7 && output[1].value==UINT64_MAX
+        && output[0].handle.get()!=output[1].handle.get() && fence_test_ops::live.size()==2);
+    // A replacement failure must discard old output and roll back earlier duplicates.
+    fence_test_ops::duplicate_calls=0; fence_test_ops::fail_at=2;
+    require(duplicate_dxgi_fences<fence_test_ops>(fences,values,output,exported)==dxgi_fence_status::handle_failure);
+    require(output.empty() && fence_test_ops::live.empty());
+    fence_test_ops::fail_at=0;
+    int calls=0;
+    auto unsupported=[&](const wgpu::SharedFence&,int& handle) { handle=42; return ++calls!=2; };
+    require(duplicate_dxgi_fences<fence_test_ops>(fences,values,output,unsupported)==dxgi_fence_status::unsupported_fence);
+    require(output.empty() && fence_test_ops::live.empty());
+    require(duplicate_dxgi_fences<fence_test_ops>(fences,{},output,exported)==dxgi_fence_status::invalid_argument);
+    require(duplicate_dxgi_fences<fence_test_ops>({}, {},output,exported)==dxgi_fence_status::success);
+    require(output.empty() && fence_test_ops::live.empty());
+}
 void test_canvas_consumer_pixels(dawn_event_service& service,const wgpu::Device& device) {
     auto pool=std::make_unique<dawn_canvas_images>(device,2*64*64*4);
     auto frame=pool->acquire(image_metadata{300,0,1,1,400,1,64,64});
@@ -194,6 +230,7 @@ void test_canvas_storage(dawn_event_service& service,const wgpu::Device& device,
     presenter.join(); consumer.reset(); require(anchor.expired());
 }
 int main() {
+    test_dxgi_fence_ownership();
     auto wake=std::make_shared<engine_wake>();
     graphics_service root(wake),other_root(wake);
     auto& service=root.dawn();

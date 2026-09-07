@@ -102,3 +102,26 @@ for access on an unopened importer, and the standalone Dawn probe builds. These
 checks compile the common access API but do not exercise a successful DXGI access
 interval. Windows GPU execution, synchronization, device-removal and handle-leak
 qualification are still required before this bridge can be considered working.
+
+## Owned fence export
+
+`dawn_dxgi_fences.h` converts an EndAccess fence set into owned NT handles and
+64-bit signal values. The pinned Dawn D3D `SharedFence::ExportInfoImpl` returns
+`mHandle.Get()`, a borrowed handle; the bridge duplicates it and never closes that
+borrowed value. Export checks the native fence type before requesting DXGI data.
+All handles are staged privately and published together. Type/duplication failure
+closes earlier duplicates and clears output, so a caller cannot use a partial wait
+set. Zero fences is valid and does not synthesize a CPU completion signal.
+
+The Windows `end_owned` entry point preserves initialized state and returns these
+owned waits. Export failure makes the image owner terminal, because handing off
+an image without its producer waits would permit a race. Consumers must still
+open the native fences and enqueue GPU waits at the recorded values; this change
+does not implement that consumer or the incoming fence import path.
+
+Injected ownership tests verify distinct duplicates, exact 64-bit values, rollback
+on the second duplication/export failure, cleared replacement output and invalid
+array sizes. They run inside the Dawn test (0.30 seconds, passed); the standalone
+Dawn probe builds too. These synthetic exports do not establish Windows handle or
+GPU synchronization behavior. Windows compilation and hardware execution remain
+mandatory outstanding evidence.

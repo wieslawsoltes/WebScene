@@ -1,6 +1,7 @@
 #pragma once
 #include "dxgi_bridge_contract.h"
 #include "nt_handle.h"
+#include "dawn_dxgi_fences.h"
 #include <memory>
 #include <span>
 #include <thread>
@@ -11,7 +12,7 @@ enum class dxgi_import_status {
     success,unsupported_platform,invalid_argument,unsupported_pairing,
     missing_device_feature,handle_failure,import_failure,property_mismatch,out_of_memory
 };
-enum class dxgi_access_status { success,invalid_state,invalid_fences,native_failure,device_lost };
+enum class dxgi_access_status { success,invalid_state,invalid_fences,native_failure,device_lost,fence_export_failure };
 // Thread-confined import/access owner. EndAccess is a fence handoff, not CPU/GPU
 // completion; the external consumer must wait on every returned fence/value.
 class dawn_dxgi_image {
@@ -98,6 +99,23 @@ public:
         }
         handoff=std::move(result); return dxgi_access_status::success;
     }
+#if defined(_WIN32)
+    // Own all outgoing handles before Dawn's temporary end state is freed. A
+    // failed export invalidates this allocation: presenting without its waits
+    // would race producer work. The caller must discard the external image.
+    dxgi_access_status end_owned(std::vector<owned_dxgi_fence_wait>& waits,bool& initialized) {
+        check_thread();
+        waits.clear(); initialized=false;
+        wgpu::SharedTextureMemoryEndAccessState state;
+        const auto status=end(state);
+        if (status!=dxgi_access_status::success) return status;
+        if (export_dxgi_fences(state,waits)!=dxgi_fence_status::success) {
+            failed_=true; return dxgi_access_status::fence_export_failure;
+        }
+        initialized=state.initialized;
+        return dxgi_access_status::success;
+    }
+#endif
     // Device removal cannot yield a valid fence handoff. Permit cleanup only
     // after Dawn confirms loss; callers must invalidate the external image.
     bool abandon_lost_device() {
