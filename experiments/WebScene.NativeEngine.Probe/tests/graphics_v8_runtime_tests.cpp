@@ -13,6 +13,7 @@
 #include "graphics/v8_webgpu_texture_views.h"
 #include "graphics/v8_webgpu_adapters.h"
 #include "graphics/v8_webgpu_discovery.h"
+#include "graphics/v8_webgpu_canvas_context.h"
 #include "graphics/webgpu_adapter_info.h"
 #include "graphics/v8_webgpu_mapped_ranges.h"
 #include "graphics/v8_webgpu_map_request.h"
@@ -659,6 +660,22 @@ int main() {
                     require(requested_device_promise->State()==v8::Promise::kFulfilled,"Adapter request did not produce a native device wrapper");
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"adapterDeviceProbe"),requested_device_promise->Result()).FromMaybe(false),"Adapter device publication failed");
                     test_v8_webgpu_canvas_configuration(isolate,context);
+                    size_t canvas_acquisitions=0,canvas_retirements=0;
+                    webgpu_canvas_host canvas_host;
+                    canvas_host.validate=[](const auto& config){if(config.color_space!="srgb")throw std::invalid_argument("Diagnostic canvas supports sRGB");};
+                    canvas_host.acquire=[&](const auto& config,const auto& descriptor){++canvas_acquisitions;wgpu::Texture texture;descriptor.with_native([&](const auto& native){texture=config.device.CreateTexture(&native);});return texture;};
+                    canvas_host.retire=[&](const auto& texture,bool){++canvas_retirements;texture.Destroy();};
+                    auto canvas_context=std::make_unique<v8_webgpu_canvas_context>(isolate,context,v8::Object::New(isolate),context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),4,2,std::move(canvas_host));
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"canvasContextProbe"),canvas_context->object()).FromMaybe(false),"Canvas context publication failed");
+                    require(run(R"JS(
+                        if(canvasContextProbe.getConfiguration()!==null)throw new Error('initial canvas config');
+                        let unconfigured=false;try{canvasContextProbe.getCurrentTexture()}catch(e){unconfigured=e instanceof DOMException&&e.name==='InvalidStateError'}if(!unconfigured)throw new Error('unconfigured canvas texture');
+                        canvasContextProbe.configure({device:adapterDeviceProbe,format:'rgba8unorm',usage:17});
+                        const snapshot=canvasContextProbe.getConfiguration();snapshot.viewFormats.push('invalid');snapshot.toneMapping.mode='invalid';
+                        if(canvasContextProbe.getConfiguration().viewFormats.length!==0||canvasContextProbe.getConfiguration().toneMapping.mode!=='standard')throw new Error('canvas snapshot mutation');
+                        if(canvasContextProbe.canvas!==canvasContextProbe.canvas)throw new Error('canvas identity');
+                    )JS"),"Canvas configuration lifecycle failed");
+
                     {
                         auto device_object=requested_device_promise->Result().As<v8::Object>();auto device=v8_webgpu_devices::native_reference(device_object);
                         webgpu_texture_descriptor metadata;metadata.size={4,2,1};metadata.format=wgpu::TextureFormat::RGBA8Unorm;metadata.usage=16;metadata.label="imported canvas";
@@ -695,7 +712,8 @@ int main() {
                          }
                          const empty=adapterDeviceProbe.createCommandEncoder().finish();if(empty.label!=='')throw new Error('encoder defaults');}
 
-                        {const texture=adapterDeviceProbe.createTexture({label:'JS texture',size:[4,2],format:'rgba8unorm',usage:17});
+                        {const texture=canvasContextProbe.getCurrentTexture();texture.label='JS texture';
+                         if(texture!==canvasContextProbe.getCurrentTexture())throw new Error('current texture identity');
                          if(texture.width!==4||texture.height!==2||texture.depthOrArrayLayers!==1||texture.mipLevelCount!==1||texture.sampleCount!==1||texture.dimension!=='2d'||texture.format!=='rgba8unorm'||texture.usage!==17)throw new Error('texture metadata');
                          if(Object.prototype.toString.call(texture)!=='[object GPUTexture]'||texture.label!=='JS texture')throw new Error('texture wrapper');
                          const view=texture.createView({label:'JS view'});
@@ -756,6 +774,14 @@ int main() {
                         readback.Unmap();readback.Destroy();
                         require(run("triangleTextureProbe.destroy();triangleTextureProbe.destroy();if(triangleTextureProbe.width!==4)throw new Error('destroyed texture metadata');delete globalThis.triangleTextureProbe;"),"Triangle texture cleanup failed");
                     }
+                    require(canvas_acquisitions==1&&canvas_retirements==0,"Canvas acquired more than once per frame");
+                    canvas_context->end_frame(true);
+                    require(canvas_retirements==1,"Canvas frame did not retire");
+                    canvas_context->resize(8,3);
+                    require(run("const resized=canvasContextProbe.getCurrentTexture();if(resized.width!==8||resized.height!==3)throw new Error('canvas resize');canvasContextProbe.unconfigure();if(canvasContextProbe.getConfiguration()!==null)throw new Error('canvas unconfigure');"),"Canvas resize/unconfigure failed");
+                    require(canvas_acquisitions==2&&canvas_retirements==2,"Canvas texture replacement lifetime failed");
+                    canvas_context.reset();
+                    require(run("let releasedCanvas=false;try{canvasContextProbe.getCurrentTexture()}catch(e){releasedCanvas=e instanceof TypeError}if(!releasedCanvas)throw new Error('released canvas receiver');delete globalThis.canvasContextProbe;"),"Released canvas wrapper remained callable");
                     for(const char* name:{"consumedAdapterPromise","badAdapterReceiverPromise"}) {
                         auto rejected=context->Global()->Get(context,v8::String::NewFromUtf8(isolate,name).ToLocalChecked()).ToLocalChecked().As<v8::Promise>();
                         require(rejected->State()==v8::Promise::kRejected,"Invalid adapter request did not reject");

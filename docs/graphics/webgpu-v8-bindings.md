@@ -1240,3 +1240,26 @@ CTest passes. Required-format feature checks must precede this validation;
 native texture validation and presenter capability negotiation still follow.
 These helpers do not expose GPUCanvasContext or establish presenter support for
 all required canvas color/HDR modes.
+
+### Internal GPUCanvasContext and rendered current texture
+
+The host-owned V8 canvas context now implements configure, unconfigure,
+getConfiguration, getCurrentTexture and the canvas getter. It retains the
+configured device, returns fresh configuration snapshots and caches one texture
+wrapper until the host expires the frame, resizes the bitmap or unconfigures.
+Host acquisition feeds the existing native-texture adoption bridge, with no pixel
+transfer in the context. The controller cannot be copied or moved because V8
+receivers carry its address; released receivers are invalidated.
+
+The macOS runtime fixture supplies a diagnostic native-texture allocator. Its
+JavaScript triangle now targets getCurrentTexture, submits through GPUQueue and
+verifies all eight RGBA pixels using explicit diagnostic readback. Coverage also
+checks unconfigured InvalidStateError, snapshot isolation, current-texture
+identity, one acquisition per frame, retirement, resized dimensions and released
+receiver rejection.
+
+This is an internal context milestone, not public canvas integration. Ordinary
+HTMLCanvasElement.getContext, shared IOSurface acquisition/publication and normal
+scene consumption remain unconnected. Presenter feature/color validation,
+invalid-texture and allocation-failure semantics, and host retirement failure
+handling still need qualification before exposing this as a complete API.
