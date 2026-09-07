@@ -1023,3 +1023,26 @@ engine release draining, and cross-interface conversion is rejected. Runtime and
 generator checks pass. Public createTexture/createView dispatch remains pending;
 full native error-scope qualification of translated invalid view descriptors is
 also still required before conformance claims.
+
+
+### Internal JavaScript texture creation and views
+
+GPUDevice.createTexture now converts descriptors, validates extent shape after
+conversion, creates an owned Dawn texture and wraps it with a retained parent
+device. GPUTexture exposes readonly descriptor metadata, mutable label,
+createView and destroy. Metadata remains available after destruction. View
+creation rechecks the receiver after descriptor conversion, creates an owned
+native view, and retains the texture wrapper through the view's private parent
+edge. Wrapper adoption failures release the newly created native reference.
+
+Texture wrappers extend the shared typed resource registry; their views reuse
+its existing deferred release implementation. The registry now records its
+owning factory for specialized callbacks. Native resource destruction remains
+on the engine thread, and collection still publishes only release commands.
+
+The macOS V8 runtime test obtains a device through adapter.requestDevice,
+creates a texture/view in JavaScript, verifies dimensions/format/usage/defaults,
+labels and readonly metadata, rejects wrong receivers and invalid extent shapes,
+and checks metadata after repeated destroy. Runtime CTest passes. Command
+encoding, queue submission and ordinary GPU canvas presentation remain pending;
+this test does not draw from JavaScript or prove pixel output.

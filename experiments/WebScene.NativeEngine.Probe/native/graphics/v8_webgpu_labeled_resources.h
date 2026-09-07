@@ -5,8 +5,10 @@ namespace webscene::graphics {
 // Shared lifetime machinery for immutable GPU objects with mutable labels.
 // Each Traits specialization has a distinct receiver brand and prototype.
 template<class Traits> class v8_webgpu_labeled_resources {
+protected:
     using Native=typename Traits::native_type;
     struct entry {
+        v8_webgpu_labeled_resources* registry{};
         v8::Global<v8::Object> wrapper;
         v8::Global<v8::Private> device_owner_key;
         graphics_service* service{};
@@ -126,6 +128,7 @@ public:
         if (!instance_.Get(isolate_)->NewInstance(context).ToLocal(&wrapper)
             || !wrapper->SetPrototype(context,prototype_.Get(isolate_)).FromMaybe(false)) return {};
         auto item=std::make_unique<entry>();
+        item->registry=this;
         item->label=std::move(initial_label);
         item->service=&service; item->device=device;item->resource=resource; item->releases=service.release_endpoint();
         item->device_owner_key.Reset(isolate_,v8::Private::New(isolate_));

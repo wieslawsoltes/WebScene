@@ -666,6 +666,19 @@ int main() {
                         let infoBrand=false;try{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ai),'vendor').get.call({})}catch(e){infoBrand=e instanceof TypeError}if(!infoBrand)throw new Error('adapter info receiver');
                         globalThis.retainedAdapterInfo=ai;
                         if(adapterDeviceProbe.label!=='via adapter')throw new Error('requested device label');
+                        {const texture=adapterDeviceProbe.createTexture({label:'JS texture',size:[4,2],format:'rgba8unorm',usage:16});
+                         if(texture.width!==4||texture.height!==2||texture.depthOrArrayLayers!==1||texture.mipLevelCount!==1||texture.sampleCount!==1||texture.dimension!=='2d'||texture.format!=='rgba8unorm'||texture.usage!==16)throw new Error('texture metadata');
+                         if(Object.prototype.toString.call(texture)!=='[object GPUTexture]'||texture.label!=='JS texture')throw new Error('texture wrapper');
+                         const view=texture.createView({label:'JS view'});
+                         if(Object.prototype.toString.call(view)!=='[object GPUTextureView]'||view.label!=='JS view')throw new Error('view wrapper');
+                         view.label='updated view';texture.label='updated texture';
+                         let readonly=false;try{(()=>{'use strict';texture.width=8})()}catch(e){readonly=e instanceof TypeError}if(!readonly||texture.width!==4)throw new Error('texture readonly metadata');
+                         for(const call of [()=>adapterDeviceProbe.createTexture(),()=>adapterDeviceProbe.createTexture({size:[],format:'rgba8unorm',usage:16}),()=>texture.createView.call({}),()=>texture.destroy.call({})]) {
+                             let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid texture call');
+                         }
+                         texture.destroy();texture.destroy();
+                         if(texture.width!==4||texture.label!=='updated texture'||view.label!=='updated view')throw new Error('destroyed texture metadata');}
+
                         {let b=adapterDeviceProbe.createBuffer({size:16,usage:8,mappedAtCreation:true});
                          let range=b.getMappedRange();new Uint32Array(range)[0]=123;b.unmap();
                          if(range.byteLength!==0 || b.size!==16)throw new Error('adapter device buffer');b.destroy();}
