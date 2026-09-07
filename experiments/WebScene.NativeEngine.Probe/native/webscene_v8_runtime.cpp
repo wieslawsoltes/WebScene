@@ -213,6 +213,7 @@ void prewarm_v8_process()
 
 struct v8_dom_runtime::implementation final {
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    bool graphics_transitioning{};
     const std::thread::id graphics_thread = std::this_thread::get_id();
     std::unique_ptr<webscene::graphics::graphics_service> graphics;
     std::function<void(webscene::graphics::completion_record)> graphics_deliver;
@@ -4548,6 +4549,7 @@ webscene::graphics::graphics_service& v8_dom_runtime::initialize_graphics(
 {
     if (std::this_thread::get_id() != impl_->graphics_thread)
         throw std::logic_error("Graphics initialization requires the runtime owner thread");
+    if (impl_->graphics_transitioning) throw std::logic_error("Graphics document transition is in progress");
     if (impl_->graphics) throw std::logic_error("Graphics dispatcher already initialized");
     if (!deliver || !wake) throw std::invalid_argument("Graphics requires completion delivery and a safe wake signal");
     auto service = std::make_unique<webscene::graphics::graphics_service>(std::move(wake));

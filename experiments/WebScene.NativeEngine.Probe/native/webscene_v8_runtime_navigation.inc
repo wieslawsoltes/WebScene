@@ -1,3 +1,24 @@
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    void retire_document_graphics()
+    {
+        if (graphics_transitioning) throw std::logic_error("Reentrant graphics document transition");
+        if (!graphics) return;
+        struct transition_guard {
+            bool& active;
+            explicit transition_guard(bool& value) : active(value) { active=true; }
+            ~transition_guard() { active=false; }
+        } guard(graphics_transitioning);
+        // Detach admission before cancellation delivery can run JS. The local
+        // service survives dispatch and closes native publication before reset.
+        auto previous=std::move(graphics);
+        auto deliver=std::move(graphics_deliver);
+        graphics_deliver={};
+        previous->close();
+        previous->pump(deliver,std::numeric_limits<size_t>::max());
+        perform_microtask_checkpoint();
+    }
+#endif
+
     bool execute(const std::string& source, const std::string& document_name)
     {
         auto isolate_locker = lock_shared_isolate();
@@ -20,6 +41,9 @@
         const std::string& url,
         std::vector<document_start_script> document_start_scripts)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        if (graphics_transitioning) throw std::logic_error("Navigation during graphics cancellation delivery");
+#endif
         current_document_start_scripts = std::move(document_start_scripts);
         std::string html;
         std::string resolved_url;
@@ -55,6 +79,9 @@
         v8::HandleScope handle_scope(isolate);
         auto local_context = context.Get(isolate);
         v8::Context::Scope context_scope(local_context);
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        retire_document_graphics();
+#endif
         set_context_location(local_context, local_context->Global(), resolved_url);
         auto outer_document = document_object.Get(isolate);
         outer_document->Set(

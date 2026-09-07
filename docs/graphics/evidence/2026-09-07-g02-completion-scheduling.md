@@ -178,3 +178,27 @@ test, which uses a native completion record and a real V8 promise.
 ```sh
 ctest --test-dir artifacts/graphics-build/native-v8-enabled -R graphics_v8_runtime --output-on-failure
 ```
+
+## Top-level document navigation retirement
+
+After a replacement document loads successfully, but before its location/content
+is installed, the runtime retires the old graphics service inside the existing
+V8 context scope. It detaches the service/dispatcher from the runtime, closes
+native admission, drains cancellation records and performs a microtask checkpoint.
+A transition guard rejects reentrant graphics initialization or navigation during
+this delivery. The retired service stays alive until dispatch has finished; old
+command endpoints and native publication remain closed after it is destroyed.
+A failed document load leaves the existing graphics service intact.
+
+The runtime fixture verifies a pending promise receives the cancellation outcome
+before the new document takes effect, late publication is rejected, the old
+command endpoint is closed, and new initialization creates a distinct graphics
+identity. It also verifies reentrant initialization/navigation rejection. The
+full 13-test local suite passed in 12.85 seconds before the final reentrancy
+assertion; the focused runtime test is rerun after that assertion.
+
+This covers top-level load_url navigation with the native completion dispatcher.
+Iframe-specific ownership, JavaScript WebGPU promise/error types and explicit
+engine-disposal promise sequencing remain separate outstanding work. The runtime
+still reuses its existing top-level V8 context as before; this change retires its
+graphics lifetime and does not claim a general navigation-context redesign.
