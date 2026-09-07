@@ -927,3 +927,19 @@ fractional bias truncation, signed bounds, float overflow/infinity rejection,
 stencil updates, target defaults, blend storage identity and atomic failures.
 The runtime test passes. Vertex layouts and final pipeline descriptor assembly/
 dispatch still remain before JavaScript can create a render pipeline.
+
+
+### Vertex-stage and buffer-layout conversion
+
+Vertex-state conversion now extends the shared programmable stage with iterable,
+nullable buffer slots. Buffer layouts own their attribute vectors, preserve
+stride/step mode and expose borrowed native views. Attribute conversion requires
+format, offset and shaderLocation in WebIDL order. GPUSize64 and required
+GPUIndex32 values use EnforceRange before native validation. The sequence helper
+captures iterator/next once, checks iterator results and reads done before value.
+
+The macOS V8 runtime test covers default empty buffers, Set iteration, null and
+undefined slots, instance layouts, native attribute views, required fields,
+integer bounds, exact property access order and atomic conversion failure. It
+passes. Complete render-pipeline descriptor assembly and device dispatch remain
+pending; no JavaScript draw or presentation is claimed by these tests.

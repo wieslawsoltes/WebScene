@@ -46,8 +46,16 @@ public:
         if(!value->IsUndefined())output=value->BooleanValue(isolate_)?wgpu::OptionalBool::True:wgpu::OptionalBool::False;
         return true;
     }
-    bool uint32(const char* name,uint32_t& output) {
-        v8::Local<v8::Value> value;if(!get(name,value))return false;if(value->IsUndefined())return true;
+    bool uint64(const char* name,uint64_t& output,bool required=false) {
+        v8::Local<v8::Value> value;if(!get(name,value))return false;
+        if(value->IsUndefined())return required?fail("Required integer is missing"):true;
+        v8::Local<v8::Number> number;if(!value->ToNumber(context_).ToLocal(&number))return false;
+        const double truncated=std::trunc(number->Value());
+        if(!std::isfinite(truncated)||truncated<0||truncated>9007199254740991.0)return fail("GPUSize64 is outside the safe integer range");
+        output=static_cast<uint64_t>(truncated);return true;
+    }
+    bool uint32(const char* name,uint32_t& output,bool required=false) {
+        v8::Local<v8::Value> value;if(!get(name,value))return false;if(value->IsUndefined())return required?fail("Required integer is missing"):true;
         v8::Local<v8::Number> number;if(!value->ToNumber(context_).ToLocal(&number))return false;
         const double truncated=std::trunc(number->Value());
         if(!std::isfinite(truncated)||truncated<0||truncated>4294967295.0)return fail("Render-state integer is outside unsigned long range");

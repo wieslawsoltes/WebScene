@@ -1,5 +1,6 @@
 #pragma once
 #include "graphics/v8_webgpu_programmable_stage.h"
+#include "graphics/v8_webgpu_vertex_state.h"
 inline void test_v8_webgpu_programmable_stage(v8::Isolate* isolate,v8::Local<v8::Context> context) {
     const auto evaluate=[&](const char* source){return v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocalChecked()->Run(context).ToLocalChecked();};
     webgpu_programmable_stage stage;
@@ -26,6 +27,22 @@ inline void test_v8_webgpu_programmable_stage(v8::Isolate* isolate,v8::Local<v8:
         require(!read_webgpu_programmable_stage(isolate,context,evaluate(source),stage) && caught.HasCaught()
             && stage.entry_point=="unchanged","Invalid programmable stage accepted or partially committed");
     }
+    webgpu_vertex_state vertex;
+    require(read_webgpu_vertex_state(isolate,context,evaluate("({module:shaderProbe})"),vertex)&&vertex.buffers.empty(),"Vertex buffer defaults failed");
+    require(read_webgpu_vertex_state(isolate,context,evaluate("({module:shaderProbe,buffers:new Set([null,undefined,{arrayStride:16,stepMode:'instance',attributes:[{format:'float32x3',offset:0,shaderLocation:2}]}])})"),vertex)
+        && vertex.buffers.size()==3 && !vertex.buffers[0] && !vertex.buffers[1] && vertex.buffers[2]
+        && vertex.buffers[2]->step_mode==wgpu::VertexStepMode::Instance && vertex.buffers[2]->native().attributeCount==1
+        && vertex.buffers[2]->native().attributes[0].shaderLocation==2,"Vertex nullable iterable layout failed");
+    for(const char* source:{"({module:shaderProbe,buffers:null})","({module:shaderProbe,buffers:[{}]})",
+        "({module:shaderProbe,buffers:[{arrayStride:9007199254740992,attributes:[]}]})",
+        "({module:shaderProbe,buffers:[{arrayStride:16,attributes:[{format:'float32',offset:0}]}]})",
+        "({module:shaderProbe,buffers:[{arrayStride:16,attributes:[{format:'float32',offset:-1,shaderLocation:0}]}]})"}) {
+        v8::TryCatch caught(isolate);
+        require(!read_webgpu_vertex_state(isolate,context,evaluate(source),vertex) && caught.HasCaught() && vertex.buffers.size()==3,"Invalid vertex layout accepted or committed");
+    }
+    webgpu_vertex_buffer_layout layout;
+    require(read_webgpu_vertex_buffer_layout(isolate,context,evaluate("(()=>{globalThis.vertexOrder=[];const attr=new Proxy({format:'float32',offset:0,shaderLocation:0},{get(o,k){vertexOrder.push(k);return o[k]}});return new Proxy({arrayStride:4,attributes:[attr]},{get(o,k){vertexOrder.push(k);return o[k]}})})()"),layout)
+        && evaluate("vertexOrder.join(',')==='arrayStride,attributes,format,offset,shaderLocation,stepMode'")->IsTrue(),"Vertex layout property order failed");
     auto throwing=evaluate("(()=>{globalThis.stageError={};return {constants:{get x(){throw stageError}},get module(){throw 'wrong getter'}}})()");
     v8::TryCatch caught(isolate);
     require(!read_webgpu_programmable_stage(isolate,context,throwing,stage) && caught.HasCaught()
