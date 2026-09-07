@@ -67,3 +67,15 @@ inline void test_v8_webgpu_device_descriptor(v8::Isolate* isolate,v8::Local<v8::
     require(!read_webgpu_device_descriptor(isolate,context,input,descriptor) && caught.HasCaught()
         && caught.Exception()->StrictEquals(context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"deviceDescriptorFailure")).ToLocalChecked()),"Feature iterator exception replaced");
 }
+
+template<class Source> void verify_v8_limits(v8::Isolate* isolate,v8::Local<v8::Context> context,v8::Local<v8::Object> wrapper,const Source& source) {
+    auto key=v8::String::NewFromUtf8Literal(isolate,"limits");
+    auto snapshot=wrapper->Get(context,key).ToLocalChecked().As<v8::Object>();
+    require(snapshot->StrictEquals(wrapper->Get(context,key).ToLocalChecked()),"Limit snapshot identity changed");
+    wgpu::Limits native{};wgpu::CompatibilityModeLimits compatibility{};native.nextInChain=&compatibility;
+    require(source.GetLimits(&native)==wgpu::Status::Success,"Test native limit query failed");
+    for(const auto& limit:webgpu_limit_names) {
+        auto property=v8::String::NewFromTwoByte(isolate,reinterpret_cast<const uint16_t*>(limit.name.data()),v8::NewStringType::kNormal,static_cast<int>(limit.name.size())).ToLocalChecked();
+        require(snapshot->Get(context,property).ToLocalChecked()->NumberValue(context).FromJust()==static_cast<double>(limit.read(native,compatibility)),"JavaScript limit differs from native source");
+    }
+}

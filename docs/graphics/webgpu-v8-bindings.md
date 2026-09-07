@@ -713,3 +713,19 @@ Dawn, checks count, iteration, identity, prototype tag and private-name exclusio
 and rejects borrowing GPU feature-set methods onto a WGSL feature object.
 Runtime CTest passed. Shader compilation and public navigator exposure remain
 unfinished; reporting capabilities does not establish shader execution coverage.
+
+### Adapter and device limits snapshots
+
+Internal adapter/device wrappers now expose SameObject limits. The GPUSupportedLimits
+factory builds read-only prototype getters for every pinned catalog entry and
+stores values in traced JavaScript storage, independent of native lifetimes.
+Adapter values come from that adapter; device values come from that device's
+GetLimits result, including compatibility-chain values. An unavailable native
+sentinel aborts snapshot construction instead of being advertised as a capacity.
+
+The macOS runtime test compares every exposed adapter/device value with the
+corresponding native source, verifies stable identity, strict-mode mutation
+rejection, receiver branding and the prototype tag, and reads retained limits
+after device-registry disposal. Runtime CTest passes. This provides capability
+inspection in the internal bindings; public exposure, rendering commands and
+full browser conformance remain unfinished.

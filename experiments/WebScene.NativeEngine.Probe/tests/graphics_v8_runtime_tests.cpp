@@ -615,6 +615,7 @@ int main() {
                     require(adapter_features->StrictEquals(adapter_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"features")).ToLocalChecked()),"Adapter feature identity changed");
                     auto feature_has=adapter_features.As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"has")).ToLocalChecked().As<v8::Function>();
                     adapter_fixture.with_adapter(adapter_handle,[&](const auto& native) {
+                        verify_v8_limits(isolate,context,adapter_object,native);
                         for (const auto& feature:webgpu_feature_names) {
                             v8::Local<v8::Value> name=v8::String::NewFromUtf8(isolate,feature.name.data(),v8::NewStringType::kNormal,static_cast<int>(feature.name.size())).ToLocalChecked();
                             require(feature_has->Call(context,adapter_features,1,&name).ToLocalChecked()->BooleanValue(isolate)==native.HasFeature(feature.native),"Adapter capability snapshot differs from Dawn");
@@ -961,6 +962,7 @@ int main() {
                     });
                     device_registry=std::make_unique<v8_webgpu_devices>(isolate,context,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),1,2);
                     auto device_object=device_registry->wrap(context,*adapter_service,gc_buffer_device).ToLocalChecked();
+                    adapter_service->with_device(gc_buffer_device,[&](auto& owned) { verify_v8_limits(isolate,context,device_object,owned.native()); });
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"deviceProbe"),device_object).FromMaybe(false),"Device wrapper publication failed");
                     auto feature_object=device_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"features")).ToLocalChecked().As<v8::Object>();
                     auto feature_has=feature_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"has")).ToLocalChecked().As<v8::Function>();
@@ -976,6 +978,13 @@ int main() {
                     });
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {
+                            const limits=deviceProbe.limits;globalThis.retainedLimits=limits;
+                            const originalLimit=limits.maxBufferSize;
+                            if(Object.prototype.toString.call(limits)!=='[object GPUSupportedLimits]')throw new Error('limits tag');
+                            let readOnly=false;try{(()=>{'use strict';limits.maxBufferSize=1})()}catch(e){readOnly=e instanceof TypeError}
+                            if(!readOnly||limits.maxBufferSize!==originalLimit)throw new Error('limits mutable');
+                            const getter=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(limits),'maxBufferSize').get;
+                            let wrongLimits=false;try{getter.call({})}catch(e){wrongLimits=e instanceof TypeError}if(!wrongLimits)throw new Error('limits receiver');
                             const features=deviceProbe.features;
                             globalThis.retainedFeatures=features;
                             if(features!==deviceProbe.features)throw new Error('features identity');
@@ -1118,7 +1127,7 @@ int main() {
             require(cancelled_device_retired,"Cancelled native device callback did not retire");
             require(device_failure_seen,"Device failure completion was not observed");
             require(device_map_retired,"Device map native completion did not retire");
-            require(runtime.execute("if([...retainedFeatures].length!==retainedFeatures.size)throw new Error('retained features');delete globalThis.retainedFeatures;", "retained-features"),"Feature snapshot did not survive registry disposal");
+            require(runtime.execute("if(!(retainedLimits.maxBufferSize>0))throw new Error('retained limits');delete globalThis.retainedLimits;if([...retainedFeatures].length!==retainedFeatures.size)throw new Error('retained features');delete globalThis.retainedFeatures;", "retained-features"),"Feature snapshot did not survive registry disposal");
             require(runtime.execute("if(!deviceMapCancelled)throw new Error('device cancellation promise not delivered');", "device-map-cancel-check"),"Device map rejection failed");
             require(weak_releases==2 && releases->occupied()==0,"registry disposal release did not drain");
             require(mailbox->metrics().occupied==0,"completion storage not reclaimed");

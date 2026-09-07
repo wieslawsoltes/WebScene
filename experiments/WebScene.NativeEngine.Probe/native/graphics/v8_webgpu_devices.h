@@ -2,6 +2,7 @@
 #include "v8_webgpu_buffers.h"
 #include "v8_webgpu_supported_features.h"
 #include "webgpu_feature_names.h"
+#include "v8_webgpu_limits.h"
 
 namespace webscene::graphics {
 // Internal realm-owned device factory. Public discovery, capabilities, queues and
@@ -11,6 +12,7 @@ class v8_webgpu_devices {
         v8::Global<v8::Object> wrapper;
         v8::Global<v8::Private> buffer_owner_key;
         v8::Global<v8::Private> features_key;
+        v8::Global<v8::Private> limits_key;
         graphics_service* service{};
         resource_handle<dawn_device> device;
         std::unique_ptr<v8_webgpu_buffers> buffers;
@@ -27,6 +29,7 @@ class v8_webgpu_devices {
     v8::Global<v8::ObjectTemplate> instance_;
     v8::Global<v8::Object> prototype_;
     v8_webgpu_supported_features features_factory_;
+    v8_webgpu_limits limits_factory_;
     size_t buffer_capacity_;
     std::vector<std::unique_ptr<entry>> entries_;
     static void fail(v8::Isolate* isolate,const char* message) {
@@ -59,6 +62,12 @@ class v8_webgpu_devices {
         } catch (const std::length_error&) {
             isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Buffer capacity exhausted")));
         } catch (const std::exception&) { fail(isolate,"GPUDevice native ownership is unavailable"); }
+    }
+    static void limits(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* item=receiver(info); if (!item) return;
+        v8::Local<v8::Value> value;
+        if (info.This()->GetPrivate(info.GetIsolate()->GetCurrentContext(),item->limits_key.Get(info.GetIsolate())).ToLocal(&value))
+            info.GetReturnValue().Set(value);
     }
     static void features(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info); if (!item) return;
@@ -109,7 +118,7 @@ class v8_webgpu_devices {
 public:
     v8_webgpu_devices(v8::Isolate* isolate,v8::Local<v8::Context> context,
         v8::Local<v8::Function> dom_exception,size_t capacity=64,size_t buffer_capacity=1024)
-        :isolate_(isolate),features_factory_(isolate,context),buffer_capacity_(buffer_capacity),entries_(capacity) {
+        :isolate_(isolate),features_factory_(isolate,context),limits_factory_(isolate,context),buffer_capacity_(buffer_capacity),entries_(capacity) {
         check_scope();
         if (dom_exception.IsEmpty()) throw std::invalid_argument("Trusted DOMException constructor is required");
         realm_.Reset(isolate,context); dom_exception_.Reset(isolate,dom_exception);
@@ -118,6 +127,7 @@ public:
         auto create=v8::FunctionTemplate::New(isolate,create_buffer); create->SetLength(1);
         prototype->Set(isolate,"createBuffer",create);
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"label"),v8::FunctionTemplate::New(isolate,label),v8::FunctionTemplate::New(isolate,set_label));
+        prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"limits"),v8::FunctionTemplate::New(isolate,limits));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"features"),v8::FunctionTemplate::New(isolate,features));
         prototype->Set(isolate,"destroy",v8::FunctionTemplate::New(isolate,destroy));
         prototype_.Reset(isolate,prototype->NewInstance(context).ToLocalChecked());
@@ -162,6 +172,11 @@ public:
         v8::Local<v8::Object> snapshot;
         if (!features_factory_.create(context,names).ToLocal(&snapshot)
             || !wrapper->SetPrivate(context,item->features_key.Get(isolate_),snapshot).FromMaybe(false)) return {};
+        item->limits_key.Reset(isolate_,v8::Private::New(isolate_));
+        v8::MaybeLocal<v8::Object> limit_snapshot;
+        service.with_device(device,[&](auto& owned) { limit_snapshot=limits_factory_.create(context,owned.native()); });
+        v8::Local<v8::Object> limit_object;
+        if(!limit_snapshot.ToLocal(&limit_object) || !wrapper->SetPrivate(context,item->limits_key.Get(isolate_),limit_object).FromMaybe(false))return {};
         auto ticket=item->releases->reserve(graphics_service::deferred_device_release(device));
         if (!ticket) return {};
         item->ticket=*ticket;

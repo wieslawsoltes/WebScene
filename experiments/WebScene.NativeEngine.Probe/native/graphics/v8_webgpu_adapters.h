@@ -5,6 +5,7 @@
 #include <list>
 #include "v8_webgpu_supported_features.h"
 #include "webgpu_feature_names.h"
+#include "v8_webgpu_limits.h"
 
 namespace webscene::graphics {
 // Realm-owned adapters and asynchronous device requests. No global is installed
@@ -13,6 +14,7 @@ class v8_webgpu_adapters {
     struct entry {
         v8::Global<v8::Object> wrapper;
         v8::Global<v8::Private> features_key;
+        v8::Global<v8::Private> limits_key;
         graphics_service* service{};
         resource_handle<wgpu::Adapter> adapter;
         std::shared_ptr<release_channel> releases;
@@ -35,6 +37,7 @@ class v8_webgpu_adapters {
     v8::Global<v8::ObjectTemplate> instance_;
     v8::Global<v8::Object> prototype_;
     v8_webgpu_supported_features features_factory_;
+    v8_webgpu_limits limits_factory_;
     std::vector<std::unique_ptr<entry>> entries_;
     static void fail(v8::Isolate* isolate,const char* message) {
         isolate->ThrowException(v8::Exception::TypeError(v8::String::NewFromUtf8(isolate,message).ToLocalChecked()));
@@ -94,6 +97,12 @@ class v8_webgpu_adapters {
         }
         if (!promise.IsEmpty()) info.GetReturnValue().Set(promise);
     }
+    static void limits(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* item=receiver(info); if (!item) return;
+        v8::Local<v8::Value> value;
+        if (info.This()->GetPrivate(info.GetIsolate()->GetCurrentContext(),item->limits_key.Get(info.GetIsolate())).ToLocal(&value))
+            info.GetReturnValue().Set(value);
+    }
     static void features(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info); if (!item) return;
         v8::Local<v8::Value> value;
@@ -113,7 +122,7 @@ class v8_webgpu_adapters {
 public:
     v8_webgpu_adapters(v8::Isolate* isolate,v8::Local<v8::Context> context,
         v8_webgpu_devices& devices,v8::Local<v8::Function> dom_exception,size_t capacity=64)
-        :devices_(devices),isolate_(isolate),features_factory_(isolate,context),entries_(capacity) {
+        :devices_(devices),isolate_(isolate),features_factory_(isolate,context),limits_factory_(isolate,context),entries_(capacity) {
         check_scope();
         if (dom_exception.IsEmpty()) throw std::invalid_argument("Trusted DOMException is required");
         dom_exception_.Reset(isolate,dom_exception);
@@ -121,6 +130,7 @@ public:
         auto instance=v8::ObjectTemplate::New(isolate); instance->SetInternalFieldCount(2); instance_.Reset(isolate,instance);
         auto prototype=v8::ObjectTemplate::New(isolate);
         prototype->Set(isolate,"requestDevice",v8::FunctionTemplate::New(isolate,request_device));
+        prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"limits"),v8::FunctionTemplate::New(isolate,limits));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"features"),v8::FunctionTemplate::New(isolate,features));
         prototype_.Reset(isolate,prototype->NewInstance(context).ToLocalChecked());
     }
@@ -184,6 +194,11 @@ public:
         v8::Local<v8::Object> snapshot;
         if (!features_factory_.create(context,names).ToLocal(&snapshot)
             || !wrapper->SetPrivate(context,item->features_key.Get(isolate_),snapshot).FromMaybe(false)) return {};
+        item->limits_key.Reset(isolate_,v8::Private::New(isolate_));
+        v8::MaybeLocal<v8::Object> limit_snapshot;
+        service.with_adapter(adapter,[&](const auto& native) { limit_snapshot=limits_factory_.create(context,native); });
+        v8::Local<v8::Object> limit_object;
+        if(!limit_snapshot.ToLocal(&limit_object) || !wrapper->SetPrivate(context,item->limits_key.Get(isolate_),limit_object).FromMaybe(false))return {};
         auto ticket=item->releases->reserve(graphics_service::deferred_adapter_release(adapter));
         if (!ticket) return {};
         item->ticket=*ticket;
