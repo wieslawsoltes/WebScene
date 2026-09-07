@@ -2,9 +2,20 @@
 #include "graphics/engine_wake.h"
 #include <GLES2/gl2.h>
 #include <iostream>
+#include <cstring>
 using namespace webscene::graphics;
 void require(bool value) { if (!value) throw std::runtime_error("requirement failed"); }
 template<class F> void rejects(F action) { bool rejected=false; try { action(); } catch(const std::exception&) { rejected=true; } require(rejected); }
+int executed_commands=0;
+void set_color(graphics_service& service,std::span<const std::byte> upload,
+               const graphics_command::arguments& values) noexcept {
+    resource_handle<angle_context> handle{values[0],values[1],static_cast<uint32_t>(values[2])};
+    float color[4]{};
+    if (upload.size()!=sizeof(color)) std::terminate();
+    std::memcpy(color,upload.data(),sizeof(color));
+    service.with_angle_context(handle,[&] { glClearColor(color[0],color[1],color[2],color[3]); });
+    ++executed_commands;
+}
 int main() {
     auto wake=std::make_shared<engine_wake>();
     graphics_service a(wake),b(wake);
@@ -35,6 +46,25 @@ int main() {
     b.with_angle_context(second,[] { GLfloat color[4]{}; glGetFloatv(GL_COLOR_CLEAR_VALUE,color); require(color[1]==1); });
     require(a.live_contexts()==0 && b.live_contexts()==1);
     rejects([&] { a.dawn(); });
+    auto endpoint=b.command_endpoint(2,sizeof(float)*4);
+    graphics_command command{set_color,{second.table,second.generation,second.slot}};
+    std::array<float,4> upload{1,0,0,1};
+    std::thread producer([&] {
+        require(endpoint->enqueue(command,std::as_bytes(std::span(upload)))==enqueue_result::accepted);
+        upload={0,0,1,1};
+        require(endpoint->enqueue(command,std::as_bytes(std::span(upload)))==enqueue_result::accepted);
+        require(endpoint->enqueue(command,std::as_bytes(std::span(upload)))==enqueue_result::full);
+        upload={0,0,0,0};
+    });
+    producer.join();
+    require(b.has_ready_work() && executed_commands==0);
+    require(b.drain_commands(1)==1);
+    b.with_angle_context(second,[] { GLfloat color[4]{}; glGetFloatv(GL_COLOR_CLEAR_VALUE,color); require(color[0]==1 && color[2]==0); });
+    require(b.drain_commands(1)==1);
+    b.with_angle_context(second,[] { GLfloat color[4]{}; glGetFloatv(GL_COLOR_CLEAR_VALUE,color); require(color[0]==0 && color[2]==1); });
+    auto queue_counters=b.metrics().commands;
+    require(queue_counters.depth==0 && queue_counters.high_water==2 && queue_counters.upload_bytes==32);
+    require(executed_commands==2);
     b.dawn(); require(b.dawn_initialized() && !b.has_ready_work());
     require(b.recommended_idle_wait(std::chrono::milliseconds(100))==std::chrono::milliseconds(100));
     auto mailbox=b.dawn().completions();
@@ -43,12 +73,19 @@ int main() {
     require(b.has_ready_work());
     b.pump([](auto) {});
     require(b.recommended_idle_wait(std::chrono::milliseconds(100))<=std::chrono::milliseconds(1));
+    require(endpoint->enqueue(command,std::as_bytes(std::span(upload)))==enqueue_result::accepted);
     b.close(); require(b.live_contexts()==0);
+    require(executed_commands==3 && endpoint->metrics().depth==0);
+    require(endpoint->enqueue(command)==enqueue_result::closed);
     require(b.has_ready_work());
     require(b.recommended_idle_wait(std::chrono::milliseconds(100))==std::chrono::milliseconds::zero());
     require(!mailbox->publish(ticket,completion_status::success));
     require(b.pump([](auto record) { require(record.status==completion_status::cancelled); })==1);
     require(!b.has_ready_work());
     require(b.recommended_idle_wait(std::chrono::milliseconds(100))==std::chrono::milliseconds(100));
+    auto disposed=std::make_unique<graphics_service>(wake);
+    auto late_endpoint=disposed->command_endpoint(1,0);
+    disposed.reset();
+    require(late_endpoint->enqueue(command)==enqueue_result::closed);
     std::cout << "lazy graphics service and cross-engine ANGLE lifetime isolation passed\n";
 }

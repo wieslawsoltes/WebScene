@@ -84,3 +84,43 @@ and presenter copy/readback counters still require later integration.
 The completion unit test checks counters across saturation, cancellation,
 duplicate publication and slot reuse, with timing disabled and enabled. It also
 passes under Clang ThreadSanitizer using `-fsanitize=thread -pthread`.
+
+## Bounded command channel integration
+
+```mermaid
+flowchart LR
+  P[Native producers / finalizers] --> Q[Shared bounded command channel]
+  Q --> W[Latched engine wake]
+  W --> E[Engine worker / graphics service]
+  E --> D[Dawn device calls]
+  E --> A[ANGLE context scope]
+  D --> M[Native completion mailbox]
+  M --> W
+  E --> V[Owning V8 context delivery]
+```
+
+The channel retains no engine pointer. Native producers enqueue static noexcept
+dispatch functions, fixed-size value/handle arguments and copied upload bytes.
+Only the graphics service can consume or close the channel. It drains bounded
+batches before native completion processing; queued work makes the existing
+runtime readiness and idle-wait paths runnable. Shutdown closes admission and
+drains all accepted commands before destroying devices/contexts. A retained
+endpoint rejects admission after engine teardown. Framework Skia objects remain
+outside this native execution scope and must stay on their presenter thread.
+
+The ANGLE service test fills a two-slot queue from another thread, overwrites
+the source data, verifies saturation without execution, then drains one command
+at a time and checks the original red/blue GL state in FIFO order. It verifies
+queue depth/high-water/copied-upload counters and execution of accepted work
+during close. Another endpoint is retained across service destruction and must
+return closed. The Dawn hardware test enqueues duplicate deferred device release
+records from a finalizer-like thread: the device stays resident until the engine
+pump, then releases once without a stale-handle failure.
+
+These are native dispatch primitives, not completed JS binding integration.
+Dispatchers must validate/report errors without throwing, retain referenced
+resources as required by their backend operation and never capture borrowed V8
+memory. Full queues require caller retention/retry, including finalizer releases;
+actual V8 finalizer registration and that retry policy remain outstanding. The
+command arena is lazy and fixed-capacity once created. GPU completion fences
+still govern submitted resource lifetimes independently of command consumption.

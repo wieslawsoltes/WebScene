@@ -235,7 +235,15 @@ int main() {
     for (size_t i=0;i<1024;++i) if (uploaded[i]!=0x13579bdfu) return 1;
     survivor_buffer.Unmap();
     survivor_buffer.Destroy();
-    root.destroy_device(second_owned);
+    auto releases=root.command_endpoint(2,0);
+    auto release=graphics_service::deferred_device_release(second_owned);
+    std::thread finalizer([&] {
+        if (releases->enqueue(release)!=enqueue_result::accepted
+            || releases->enqueue(release)!=enqueue_result::accepted) std::terminate();
+    });
+    finalizer.join();
+    if (root.live_devices()!=1) return 1;
+    root.pump([](auto) { throw std::runtime_error("unexpected release completion"); });
     if (root.live_devices()!=0 || mailbox->has_pending() || mailbox->has_ready()) return 1;
     service.close();
     bool rejected=false;

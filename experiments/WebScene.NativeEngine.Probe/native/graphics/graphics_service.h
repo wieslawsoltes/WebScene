@@ -2,6 +2,7 @@
 #include "angle_context.h"
 #include "dawn_event_service.h"
 #include "dawn_device.h"
+#include "command_channel.h"
 #include <chrono>
 #include <algorithm>
 
@@ -11,6 +12,7 @@ namespace webscene::graphics {
 struct graphics_metrics {
     size_t live_devices{},live_contexts{};
     completion_metrics completions{};
+    queue_metrics commands{};
 };
 class graphics_service {
     const std::thread::id thread_ = std::this_thread::get_id();
@@ -25,6 +27,8 @@ class graphics_service {
     std::chrono::steady_clock::time_point next_event_poll_{};
     size_t active_context_scopes_{};
     size_t active_device_scopes_{};
+    bool executing_commands_{};
+    std::shared_ptr<command_channel> commands_;
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
             throw std::logic_error("graphics service requires its engine worker");
@@ -98,20 +102,58 @@ public:
         if (active_context_scopes_) throw std::logic_error("Cannot destroy ANGLE contexts during execution");
         contexts_.destroy(handle,owner_);
     }
+    // Finalizers enqueue these value-only records through a retained endpoint.
+    // A full queue requires retry/retention by the caller; it is not a release.
+    static graphics_command deferred_device_release(resource_handle<dawn_device> handle) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try { service.destroy_device({args[0],args[1],static_cast<uint32_t>(args[2])}); }
+            catch (const std::invalid_argument&) { /* Already explicitly destroyed. */ }
+        },{handle.table,handle.generation,handle.slot}};
+    }
+    static graphics_command deferred_context_release(resource_handle<angle_context> handle) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try { service.destroy_angle_context({args[0],args[1],static_cast<uint32_t>(args[2])}); }
+            catch (const std::invalid_argument&) { /* Already explicitly destroyed. */ }
+        },{handle.table,handle.generation,handle.slot}};
+    }
+    // Create lazily on the engine thread; other threads retain only the channel.
+    std::shared_ptr<command_channel> command_endpoint(size_t capacity=256,size_t upload_limit=65536) {
+        check_open();
+        if (!commands_) commands_=std::make_shared<command_channel>(capacity,upload_limit,wake_);
+        return commands_;
+    }
+    size_t drain_commands(size_t budget=64) {
+        check_thread();
+        if (!commands_) return 0;
+        if (executing_commands_) throw std::logic_error("graphics command dispatch is not reentrant");
+        struct guard {
+            bool& active;
+            explicit guard(bool& value) : active(value) { active=true; }
+            ~guard() { active=false; }
+        } scope(executing_commands_);
+        size_t count=0;
+        while (count<budget && commands_->consume_one([&](const auto& command,auto upload,uint64_t) {
+            command.execute(*this,upload,command.values);
+        })) ++count;
+        return count;
+    }
     template<class Deliver> size_t pump(Deliver deliver,size_t budget=64) {
         check_thread();
+        drain_commands(budget);
         if (!dawn_) return 0;
         next_event_poll_=std::chrono::steady_clock::now()+std::chrono::milliseconds(1);
         return dawn_->pump(deliver,budget);
     }
     bool has_ready_work() const {
         check_thread();
+        if (commands_ && commands_->metrics().depth) return true;
         return dawn_ && (dawn_->completions()->has_ready()
             || (!closed_ && dawn_->completions()->has_pending()
                 && std::chrono::steady_clock::now()>=next_event_poll_));
     }
     std::chrono::milliseconds recommended_idle_wait(std::chrono::milliseconds maximum) const {
         check_thread();
+        if (commands_ && commands_->metrics().depth) return std::chrono::milliseconds::zero();
         if (!dawn_) return maximum;
         // Cancellation delivery remains runnable after admission closes.
         if (dawn_->completions()->has_ready()) return std::chrono::milliseconds::zero();
@@ -125,14 +167,19 @@ public:
     graphics_metrics metrics() const {
         check_thread();
         return {devices_.resident_count(),contexts_.resident_count(),
-            dawn_ ? dawn_->completions()->metrics() : completion_metrics{}};
+            dawn_ ? dawn_->completions()->metrics() : completion_metrics{},
+            commands_ ? commands_->metrics() : queue_metrics{}};
     }
     size_t live_contexts() const { check_thread(); return contexts_.resident_count(); }
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_context_scopes_ || active_device_scopes_)
+        if (active_context_scopes_ || active_device_scopes_ || executing_commands_)
             throw std::logic_error("Cannot close graphics service during native execution");
+        if (commands_) {
+            commands_->close();
+            drain_commands(std::numeric_limits<size_t>::max());
+        }
         closed_=true;
         devices_.destroy_owner(owner_);
         if (dawn_) dawn_->close();
