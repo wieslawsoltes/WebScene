@@ -84,3 +84,5 @@ jobs:
           artifacts/graphics-probes/CMakeCache.txt
         retention-days: 14
         if-no-files-found: warn
+        # ANGLE installs .clang-format files covered by the sealed SDK inventory.
+        include-hidden-files: true
