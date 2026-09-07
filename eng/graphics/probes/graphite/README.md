@@ -131,3 +131,19 @@ The old generation remains red with 50% opacity in its 12-pixel clip; the resize
 including the remaining background. Both consumer leases retire only after the
 ordered diagnostic readback completes. This supersedes the cancelled-resize scope
 above; it still does not exercise the application host or JavaScript bindings.
+
+## IOSurface output boundary
+
+On macOS, add `-framework IOSurface -framework CoreVideo` to the link command and
+run `graphite_probe metal iosurface`. This enables Dawn IOSurface/shared-event
+features, creates an RGBA IOSurface, imports it through SharedTextureMemory and
+uses its texture as Graphite's output target. BeginAccess precedes rendering;
+EndAccess follows the queued diagnostic copy. All 68 composition pixels pass on
+M4, including old and resized source generations. The default private-texture
+mode remains available.
+
+This is the first actual shareable output allocation for the host bridge. It does
+not import into CGL/OpenGL or implement host waits on the exported Metal fences.
+No IOSurface CPU mapping or pixel upload is used; final readback remains diagnostic.
+The native implementation follows the pinned Dawn IOSurface white-box test's
+allocation/import pattern. This experimental mode is not a production allocator.

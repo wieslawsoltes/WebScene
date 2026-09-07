@@ -1,3 +1,7 @@
+#if defined(__APPLE__)
+#include <IOSurface/IOSurface.h>
+#include <CoreVideo/CoreVideo.h>
+#endif
 #include "../../../../experiments/WebScene.NativeEngine.Probe/native/graphics/dawn_canvas_images.h"
 #include "include/gpu/graphite/dawn/DawnBackendContext.h"
 #include "include/gpu/graphite/dawn/DawnGraphiteTypes.h"
@@ -53,8 +57,9 @@ bool wait(const wgpu::Instance& instance, wgpu::Future future) {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2) return finish("failed", "Specify d3d12, metal or vulkan", 1);
+    if (argc < 2 || argc > 3) return finish("failed", "Specify d3d12, metal or vulkan", 1);
     const std::string backend = argv[1];
+    const bool sharedOutput=argc==3 && std::string(argv[2])=="iosurface";
     wgpu::RequestAdapterOptions options{};
     if (backend == "d3d12") options.backendType = wgpu::BackendType::D3D12;
     else if (backend == "metal") options.backendType = wgpu::BackendType::Metal;
@@ -91,6 +96,14 @@ int main(int argc, char** argv) {
     struct DeviceResult { wgpu::Device device; std::string message; };
     auto deviceResult = std::make_shared<DeviceResult>();
     wgpu::DeviceDescriptor deviceDescriptor{};
+    const std::array sharedFeatures{wgpu::FeatureName::SharedTextureMemoryIOSurface,
+        wgpu::FeatureName::SharedFenceMTLSharedEvent};
+    if (sharedOutput) {
+        for (auto feature:sharedFeatures) if (!adapter.HasFeature(feature))
+            return finish("unavailable","IOSurface sharing features unavailable",77);
+        deviceDescriptor.requiredFeatureCount=sharedFeatures.size();
+        deviceDescriptor.requiredFeatures=sharedFeatures.data();
+    }
     deviceDescriptor.SetUncapturedErrorCallback(
         [](const wgpu::Device&, wgpu::ErrorType, wgpu::StringView, std::atomic<bool>* state) {
             state->store(true);
@@ -111,7 +124,33 @@ int main(int argc, char** argv) {
     textureDescriptor.size = {width, height, 1};
     textureDescriptor.format = wgpu::TextureFormat::RGBA8Unorm;
     textureDescriptor.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::TextureBinding;
-    auto texture = device.CreateTexture(&textureDescriptor);
+    wgpu::SharedTextureMemory sharedMemory;
+    wgpu::Texture texture;
+    if (sharedOutput) {
+#if defined(__APPLE__)
+        auto dictionary=CFDictionaryCreateMutable(nullptr,0,&kCFTypeDictionaryKeyCallBacks,&kCFTypeDictionaryValueCallBacks);
+        auto add=[&](CFStringRef key,int32_t value) {
+            auto number=CFNumberCreate(nullptr,kCFNumberSInt32Type,&value);
+            CFDictionarySetValue(dictionary,key,number); CFRelease(number);
+        };
+        add(kIOSurfaceWidth,width); add(kIOSurfaceHeight,height);
+        add(kIOSurfaceBytesPerElement,4); add(kIOSurfacePixelFormat,kCVPixelFormatType_32RGBA);
+        auto ioSurface=IOSurfaceCreate(dictionary); CFRelease(dictionary);
+        if (!ioSurface) return finish("failed","IOSurface allocation failed",1);
+        wgpu::SharedTextureMemoryIOSurfaceDescriptor io{}; io.ioSurface=ioSurface;
+        wgpu::SharedTextureMemoryDescriptor descriptor{}; descriptor.nextInChain=&io;
+        sharedMemory=device.ImportSharedTextureMemory(&descriptor); CFRelease(ioSurface);
+        wgpu::SharedTextureMemoryProperties properties{};
+        if (!sharedMemory || sharedMemory.GetProperties(&properties)!=wgpu::Status::Success)
+            return finish("failed","IOSurface import failed",1);
+        texture=sharedMemory.CreateTexture(&textureDescriptor);
+        wgpu::SharedTextureMemoryBeginAccessDescriptor access{}; access.initialized=false;
+        if (sharedMemory.BeginAccess(texture,&access)!=wgpu::Status::Success)
+            return finish("failed","IOSurface BeginAccess failed",1);
+#else
+        return finish("unavailable","IOSurface requires macOS",77);
+#endif
+    } else texture=device.CreateTexture(&textureDescriptor);
     wgpu::BufferDescriptor bufferDescriptor{};
     bufferDescriptor.size = bufferSize;
     bufferDescriptor.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
@@ -193,6 +232,9 @@ int main(int argc, char** argv) {
     auto commands = encoder.Finish();
     device.GetQueue().Submit(1, &commands);
 
+    wgpu::SharedTextureMemoryEndAccessState handoff;
+    if (sharedOutput && sharedMemory.EndAccess(texture,&handoff)!=wgpu::Status::Success)
+        return finish("failed","IOSurface EndAccess failed",1);
     auto mapped = std::make_shared<bool>(false);
     auto mapFuture = buffer.MapAsync(wgpu::MapMode::Read, 0, bufferSize,
         wgpu::CallbackMode::WaitAnyOnly,
@@ -228,6 +270,7 @@ int main(int argc, char** argv) {
               << ",\"vendor\":" << json(text(info.vendor))
               << ",\"driver\":" << json(text(info.description))
               << ",\"vendorId\":" << info.vendorID << ",\"deviceId\":" << info.deviceID
+              << ",\"iosurfaceOutput\":" << (sharedOutput ? "true" : "false")
               << ",\"verifiedPixels\":" << width * height
               << ",\"backgroundRGBA\":[51,102,153,255],\"compositedRGBA\":[153,51,77,255],\"tolerance\":1,\"diagnosticReadback\":true}\n";
     return 0;
