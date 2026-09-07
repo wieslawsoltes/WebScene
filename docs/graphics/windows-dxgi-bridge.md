@@ -238,3 +238,22 @@ other slots, proves neither aliases the protected slot, then verifies reuse only
 after explicit consumer completion. The image-lease suite passes (0.28 seconds).
 This verifies the reservation invariant; Windows native allocation pressure and
 successful resize after cache reclamation remain required hardware tests.
+
+## Native D3D12 consumer waits
+
+`d3d12_fence_waits` opens an entire borrowed NT fence/value set against the consumer
+queue's actual device before submitting any wait. It verifies the expected adapter
+LUID and retains the queue and opened fences. Failed imports unwind without touching
+the queue. Enqueue preserves each signal value and is single-use: a failure can
+leave earlier waits queued, so the caller must not submit sampling or retry the batch.
+The owner must survive through consumer GPU completion.
+
+This uses [ID3D12CommandQueue::Wait](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12commandqueue-wait),
+which enqueues a GPU wait without blocking the calling CPU. It is not a completion
+notification. Consumer command submission, completion-fence signaling and lease
+retirement still need integration; no global device-idle wait is introduced here.
+
+The hosted native test includes the implementation and unopened/null-queue checks.
+Portable tests pass locally (0.35 seconds). Windows compilation, successful fence
+opening, delayed producer ordering and failed-enqueue behavior remain unverified.
+The latest SDK run was pending when checked; that is not a Windows pass.

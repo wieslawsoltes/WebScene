@@ -2,6 +2,7 @@
 #include "graphics/dxgi_device_identity.h"
 #include "graphics/d3d12_shared_color.h"
 #include "graphics/d3d12_canvas_images.h"
+#include "graphics/d3d12_fence_waits.h"
 #include <set>
 using namespace webscene::graphics;
 struct test_ops {
@@ -54,6 +55,10 @@ int main() {
     require(query_dxgi_color_formats(static_cast<ID3D11Device*>(nullptr),formats)==E_INVALIDARG && formats==0);
     formats=31;
     require(query_dxgi_color_formats(static_cast<ID3D12Device*>(nullptr),formats)==E_INVALIDARG && formats==0);
+    d3d12_fence_waits unopened_waits;
+    require(unopened_waits.enqueue()==E_UNEXPECTED);
+    std::unique_ptr<d3d12_fence_waits> waits;
+    require(d3d12_fence_waits::prepare(nullptr,{1,2,true},{},waits)==E_INVALIDARG && !waits);
     bool invalid_pool=false;
     try { d3d12_canvas_images invalid(nullptr,1024); }
     catch (const std::invalid_argument&) { invalid_pool=true; }
