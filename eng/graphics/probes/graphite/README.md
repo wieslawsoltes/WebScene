@@ -25,3 +25,18 @@ runtime, including any internal Dawn/Tint dependencies. Determine whether the
 selected Skia revision supports that arrangement before changing production SDK
 pins. Then run the composition and lifetime tests in
 `docs/graphics/cross-platform-reuse-review.md`.
+
+Implementation compatibility check:
+
+```sh
+python3 eng/graphics/probes/graphite/check-backend.py \
+  --skia artifacts/graphics-src/skia \
+  --dawn-include artifacts/graphics-sdk/osx-arm64/dawn/include
+```
+
+All 15 Dawn backend `.cpp` files passed syntax compilation on macOS arm64 at the
+pins above with SK_GRAPHITE and SK_DAWN enabled. This strengthens the header-only
+result but still does not link Skia, verify its full build configuration, or execute
+GPU composition. The source scan found no direct `dawn::native` or Tint includes
+in that backend directory; Skia's separate developer shader tools do depend on Tint.
+Full dependency synchronization was started for the isolated build.
