@@ -9,6 +9,7 @@
 using namespace webscene::graphics;
 void require(bool value,const char* message) { if (!value) throw std::runtime_error(message); }
 int weak_releases=0;
+void test_native_gpu_scene_leases();
 void test_image_lease_abi() {
     struct provider final : image_provider_lifetime {};
     auto native=std::make_shared<provider>();
@@ -285,6 +286,7 @@ int main() {
         catch (const std::exception& error) { std::cerr << error.what() << '\n'; }
         return 1;
     }
+    test_native_gpu_scene_leases();
     test_image_lease_abi();
     test_scene_acquisition_v3();
     std::cout << "Hidden V8 graphics completion, context affinity and promise checkpoint passed without RAF\n";

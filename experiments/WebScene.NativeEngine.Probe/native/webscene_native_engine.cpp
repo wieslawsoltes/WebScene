@@ -1246,6 +1246,18 @@ struct scene_lease_v3 {
         : cpu(std::move(value),std::move(acknowledgement)),
           view{sizeof(webscene_scene_view_v3),WEBSCENE_SCENE_VIEW_VERSION_3,scene_capabilities(*cpu.value),&cpu.view,this} {}
 };
+webscene_scene_acquire_status acquire_scene_value_v3(std::shared_ptr<const scene> value,
+    std::shared_ptr<acknowledgement_state> acknowledgement,uint64_t capabilities,
+    const webscene_scene_view_v3** result)
+{
+    *result=nullptr;
+    if (!value) return WEBSCENE_SCENE_ACQUIRE_EMPTY;
+    if (scene_capabilities(*value) & ~capabilities)
+        return WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES;
+    auto* lease=new scene_lease_v3(std::move(value),std::move(acknowledgement));
+    *result=&lease->view;
+    return WEBSCENE_SCENE_ACQUIRE_SUCCESS;
+}
 webscene_scene_acquire_status acquire_scene_v3(webscene_engine* engine,
     const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result,bool ordered)
 {
@@ -1255,12 +1267,8 @@ webscene_scene_acquire_status acquire_scene_v3(webscene_engine* engine,
     if (options->scene_version!=WEBSCENE_SCENE_VIEW_VERSION_3) return WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_VERSION;
     try {
         auto value=ordered ? engine->acquire_next() : engine->acquire_latest();
-        if (!value) return WEBSCENE_SCENE_ACQUIRE_EMPTY;
-        if (scene_capabilities(*value) & ~options->consumer_capabilities)
-            return WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES;
-        auto* lease=new scene_lease_v3(std::move(value),engine->acknowledgement_state_handle());
-        *result=&lease->view;
-        return WEBSCENE_SCENE_ACQUIRE_SUCCESS;
+        return acquire_scene_value_v3(std::move(value),engine->acknowledgement_state_handle(),
+            options->consumer_capabilities,result);
     } catch (const std::bad_alloc&) { return WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY; }
     catch (...) { return WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR; }
 }
@@ -1546,3 +1554,7 @@ uint8_t webscene_engine_get_memory_metrics(
 }
 
 } // extern "C"
+
+#if defined(WEBSCENE_GRAPHICS_SCENE_TESTS)
+#include "../tests/graphics_scene_lease_tests.inc"
+#endif

@@ -1118,6 +1118,7 @@ if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS AND WEBSCENE_NATIVE_
     target_include_directories(webscene_graphics_v8_runtime_tests PRIVATE
         "$<TARGET_PROPERTY:webscene_native_engine,INCLUDE_DIRECTORIES>")
     target_compile_definitions(webscene_graphics_v8_runtime_tests PRIVATE
+        WEBSCENE_GRAPHICS_SCENE_TESTS=1
         "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_DEFINITIONS>")
     target_compile_options(webscene_graphics_v8_runtime_tests PRIVATE
         "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_OPTIONS>")

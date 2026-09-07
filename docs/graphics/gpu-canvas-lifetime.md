@@ -331,3 +331,22 @@ uses the ordering of the same native queue, not cross-device or cross-backend
 synchronization. The readback is deliberately diagnostic and is not a production
 presentation path or evidence of zero-copy Skia composition. Browser bindings,
 Skia import/sampling and synchronization across backend APIs remain unfinished.
+
+## Scene capability and ordered acknowledgement fixture
+
+Acquisition now shares a small core that checks scene capabilities and creates
+the versioned lease. A white-box fixture, compiled only into the graphics runtime
+test executable, supplies retained GPU scenes to this production core and uses
+the exported scene/image operations. No fixture entry point is added to the
+production library or JS surface.
+
+The fixture rejects a consumer with no GPU capability without changing pending
+scenes, accepts a capable consumer, rejects an invalid image index, and retains
+an image plus a consumer independently. A later image-removal scene cannot be
+acknowledged before its base. After both acknowledgements and scene/owner disposal,
+the independent reference remains readable; releasing it still keeps the provider
+alive until consumer completion. Focused runtime CTest passes in 0.61 seconds.
+
+This tests production scene acquisition/acknowledgement code with native fixture
+images. Browser-driven worker publication and rendered Skia integration remain
+outstanding; it is not an end-to-end WebGPU browser test.
