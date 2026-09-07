@@ -1,16 +1,11 @@
 #pragma once
 #include <v8.h>
+#include "webgpu_buffer_descriptor.h"
 #include <cmath>
 #include <cstdint>
 #include <string>
 
 namespace webscene::graphics {
-struct webgpu_buffer_descriptor {
-    std::string label;
-    uint64_t size{};
-    uint32_t usage{};
-    bool mapped_at_creation{};
-};
 // Dictionary conversion only. Usage combinations, alignment, device limits and
 // allocation errors remain WebGPU/Dawn validation, not WebIDL TypeErrors.
 inline bool read_webgpu_buffer_descriptor(v8::Isolate* isolate,v8::Local<v8::Context> context,

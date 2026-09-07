@@ -134,3 +134,20 @@ mapped alignment and device limits are not dictionary conversion errors: those
 remain native WebGPU validation. The converter is not yet connected to a public
 GPUDevice.createBuffer binding; buffer allocation and JS resource wrappers still
 require integration.
+
+### Native buffer descriptor translation
+
+The converted buffer data now lives in a V8-independent descriptor. Its native
+translator explicitly maps the ten pinned GPUBufferUsage flags instead of casting
+JavaScript flags into Dawn's larger enum. Unknown bits (including Dawn's private
+TexelBuffer bit at 0x400) return an invalid translation. The forthcoming public
+createBuffer binding must route this through WebGPU validation/error-buffer
+semantics; it must not reinterpret it as a WebIDL exception or successful buffer.
+
+Native descriptors borrow label bytes with an explicit length, preserving embedded
+NUL. Translation from temporaries is deleted to prevent an immediately dangling
+label. The hardware test creates a mapped Dawn buffer from a translated descriptor,
+checks size/usage/map state and mapped range, then unmaps and destroys it. It also
+checks all 32 individual usage bits and unknown-bit combinations. Both the Dawn
+hardware and V8 runtime CTests pass on macOS. This does not yet connect JavaScript
+createBuffer to native allocation or qualify the public validation-error path.

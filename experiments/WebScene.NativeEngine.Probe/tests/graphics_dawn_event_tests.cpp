@@ -1,6 +1,7 @@
 #include "graphics/graphics_service.h"
 #include "graphics/webgpu_adapter_options.h"
 #include "graphics/webgpu_feature_names.h"
+#include "graphics/webgpu_buffer_descriptor.h"
 #include "graphics/engine_wake.h"
 #include "graphics/dawn_canvas_images.h"
 #include "graphics/dawn_dxgi_image.h"
@@ -377,6 +378,31 @@ int main() {
         if (!device_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
     }
     if (!device_done || !native_device->device) return 1;
+    for (uint32_t bit=0;bit<32;++bit) {
+        const auto usage=webgpu_buffer_usage(1u<<bit);
+        if (usage.has_value()!=(bit<10)) return 1;
+    }
+    if (webgpu_buffer_usage(0x408) || webgpu_buffer_usage(0xffffffff)
+        || webgpu_buffer_usage(0)!=wgpu::BufferUsage::None) return 1;
+    webgpu_buffer_descriptor browser_buffer;
+    browser_buffer.label=std::string("browser\0buffer",14);
+    browser_buffer.size=64;
+    browser_buffer.usage=0x6; // MAP_WRITE | COPY_SRC
+    browser_buffer.mapped_at_creation=true;
+    auto translated_buffer=make_dawn_buffer_descriptor(browser_buffer);
+    if (!translated_buffer || translated_buffer->nextInChain
+        || translated_buffer->label.length!=14
+        || translated_buffer->label.data!=browser_buffer.label.data()
+        || translated_buffer->usage!=(wgpu::BufferUsage::MapWrite|wgpu::BufferUsage::CopySrc)) return 1;
+    auto created_buffer=native_device->device.CreateBuffer(&*translated_buffer);
+    if (!created_buffer || created_buffer.GetSize()!=64
+        || created_buffer.GetUsage()!=translated_buffer->usage
+        || created_buffer.GetMapState()!=wgpu::BufferMapState::Mapped
+        || !created_buffer.GetMappedRange(0,64)) return 1;
+    created_buffer.Unmap();
+    created_buffer.Destroy();
+    browser_buffer.usage=0x400;
+    if (make_dawn_buffer_descriptor(browser_buffer)) return 1;
     const auto device_features=webgpu_supported_feature_names(native_device->device);
     for (const auto& feature:webgpu_feature_names) {
         const bool exposed=std::find(device_features.begin(),device_features.end(),feature.name)!=device_features.end();
