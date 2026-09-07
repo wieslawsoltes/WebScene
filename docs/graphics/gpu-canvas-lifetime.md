@@ -269,3 +269,28 @@ These are command-stream checks. The existing managed renderer separates some
 foreground/background passes; a GPU-aware presenter must implement the unified
 ordered sampling path. No rendered clip/transform/opacity or Skia sampling result
 is claimed, and actual native textures remain to be connected.
+
+## Dawn texture storage
+
+`dawn_canvas_images` now allocates actual Dawn textures behind the three-slot
+lease pool. Only an acquired idle slot may replace its texture. Matching size and
+format reuse that slot's allocation identity; content serial changes alone do
+not create textures. Replacement drops the slot's previous reference before
+creating the next texture. Supported color formats match the portable metadata.
+Device dimension limits and a per-pool color-byte budget are checked before
+allocation. The budget counts width × height × bytes per pixel; driver padding,
+backend heaps and other GPU resources are not included in this logical counter.
+
+The hardware Dawn fixture clears three textures through a real render pass and
+queue submission, records producer completion from OnSubmittedWorkDone, and
+verifies retained frames still block reuse afterward. One hundred subsequent
+metadata-only acquisitions/cancellations keep the creation count at three. Resize
+creates one replacement; an over-budget request creates none. The full focused
+Dawn event test passes on the local Metal hardware adapter in 0.50 seconds.
+
+This allocator is native engine-thread code, not yet called by browser canvas
+bindings. Its frame's native texture is for trusted producer use; native callers
+must not retain unaccounted texture references beyond that use. Provider lifetime
+retains Dawn object references but does not prevent an external Device.Destroy.
+Device-loss handling, provider resolution for presenters, Skia sharing, physical
+memory telemetry and rendered pixel/copy verification remain outstanding.

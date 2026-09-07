@@ -84,6 +84,10 @@ public:
             if (started_ && !completed_) std::terminate();
             if (!published_) state_->pool.cancel_write(token_);
         }
+        uint32_t slot() const {
+            if (!state_) throw std::invalid_argument("moved image producer");
+            return token_.slot;
+        }
         void set_metadata(const image_metadata& metadata) {
             if (!state_) throw std::invalid_argument("moved image producer");
             state_->pool.set_metadata(token_,metadata);

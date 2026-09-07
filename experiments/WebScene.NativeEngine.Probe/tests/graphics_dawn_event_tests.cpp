@@ -1,7 +1,55 @@
 #include "graphics/graphics_service.h"
 #include "graphics/engine_wake.h"
+#include "graphics/dawn_canvas_images.h"
 #include <iostream>
 using namespace webscene::graphics;
+void test_canvas_storage(dawn_event_service& service,const wgpu::Device& device) {
+    auto require=[](bool v) { if (!v) throw std::runtime_error("Dawn canvas storage requirement failed"); };
+    dawn_canvas_images images(device,3*128*128*4);
+    image_metadata m{100,0,1,1,200,1,64,64};
+    std::vector<dawn_canvas_images::frame> frames;
+    for (int i=0;i<3;++i) frames.push_back(std::move(images.acquire(m).value()));
+    require(!images.acquire(m) && images.created_images()==3 && images.resident_bytes()==3*64*64*4);
+    auto encoder=device.CreateCommandEncoder();
+    std::vector<owned_image_pool::retained> retained;
+    for (auto& frame:frames) {
+        frame.producer.begin();
+        wgpu::RenderPassColorAttachment attachment{};
+        attachment.view=frame.texture.CreateView();
+        attachment.loadOp=wgpu::LoadOp::Clear; attachment.storeOp=wgpu::StoreOp::Store;
+        attachment.clearValue={0.25,0.5,0.75,1};
+        wgpu::RenderPassDescriptor pass{}; pass.colorAttachmentCount=1; pass.colorAttachments=&attachment;
+        auto render=encoder.BeginRenderPass(&pass); render.End();
+        retained.push_back(std::move(frame.producer.publish().value()));
+    }
+    auto commands=encoder.Finish(); auto queue=device.GetQueue(); queue.Submit(1,&commands);
+    bool complete=false,success=false;
+    queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowProcessEvents,
+        [&](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
+            for (auto& frame:frames) frame.producer.complete();
+            success=status==wgpu::QueueWorkDoneStatus::Success; complete=true;
+        });
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+    while (!complete && std::chrono::steady_clock::now()<deadline) {
+        service.instance().ProcessEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(complete && success && !images.acquire(m));
+    frames.clear(); retained.clear(); require(images.busy_images()==0);
+    for (int i=0;i<100;++i) {
+        ++m.content_serial;
+        auto frame=images.acquire(m);
+        require(frame && frame->metadata.allocation!=0);
+        // Metadata-only acquisition/cancellation performs no GPU submission.
+    }
+    require(images.created_images()==3 && images.resident_bytes()==3*64*64*4);
+    m.width=128; m.height=128; ++m.allocation_generation;
+    { auto resized=images.acquire(m); require(resized && images.created_images()==4); }
+    require(images.resident_bytes()==128*128*4+2*64*64*4);
+    m.width=512; m.height=512;
+    require(!images.acquire(m) && images.created_images()==4);
+    images.close(); require(!images.acquire(image_metadata{100,0,1,200,200,2,64,64}));
+}
 int main() {
     auto wake=std::make_shared<engine_wake>();
     graphics_service root(wake),other_root(wake);
@@ -57,6 +105,7 @@ int main() {
         if (!device_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
     }
     if (!device_done || !native_device->device) return 1;
+    test_canvas_storage(service,native_device->device);
     auto owned_device=root.adopt_device(state->adapter,native_device->device);
     if (root.live_devices()!=1) return 1;
     root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
