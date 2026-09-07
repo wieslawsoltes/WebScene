@@ -608,7 +608,12 @@ int main() {
                     auto context=isolate->GetCurrentContext();
                     require(adapter_request->complete(isolate,context,record,[&](wgpu::Adapter adapter) -> v8::Local<v8::Value> {
                         auto mailbox=adapter_service->dawn().completions();
-                        wgpu::DeviceDescriptor descriptor{};
+                        wgpu::Limits adapter_limits{},requested_limits{};
+                        wgpu::CompatibilityModeLimits adapter_compatibility{},requested_compatibility{};
+                        require(adapter.GetLimits(&adapter_limits)==wgpu::Status::Success,"Adapter limits unavailable");
+                        std::vector<webgpu_required_limit> required{{u"maxBufferSize",8192}};
+                        require(prepare_webgpu_required_limits(required,adapter_limits,adapter_compatibility,requested_limits,requested_compatibility),"Actual adapter limit validation failed");
+                        wgpu::DeviceDescriptor descriptor{}; descriptor.requiredLimits=&requested_limits;
                         v8::Local<v8::Promise> promise;
                         device_request=v8_webgpu_device_request::start(isolate,context,descriptor,adapter,mailbox,
                             {adapter_service->engine_identity(),new_owner_token(),0},104,

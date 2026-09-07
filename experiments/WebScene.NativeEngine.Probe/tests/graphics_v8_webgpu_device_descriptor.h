@@ -1,9 +1,37 @@
 #pragma once
 #include "graphics/v8_webgpu_device_descriptor.h"
+#include "graphics/webgpu_limit_names.h"
+#include "graphics/webgpu_required_limits.h"
 inline void test_v8_webgpu_device_descriptor(v8::Isolate* isolate,v8::Local<v8::Context> context) {
     const auto evaluate=[&](const char* source) {
         return v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocalChecked()->Run(context).ToLocalChecked();
     };
+    wgpu::Limits native_limits{};
+    wgpu::CompatibilityModeLimits compatibility_limits{};
+    for (const auto& limit:webgpu_limit_names) {
+        require(webgpu_limit_from_name(limit.name)==&limit,"Limit name roundtrip failed");
+        require(limit.write(native_limits,compatibility_limits,1234) && limit.read(native_limits,compatibility_limits)==1234,"Native limit member mapping failed");
+        const bool wide=std::holds_alternative<uint64_t wgpu::Limits::*>(limit.member);
+        require(limit.write(native_limits,compatibility_limits,9007199254740991ull)==wide,"Limit width check failed");
+        require(!limit.write(native_limits,compatibility_limits,UINT64_MAX),"Dawn undefined sentinel accepted as requested limit");
+        if (!wide) require(!limit.write(native_limits,compatibility_limits,UINT32_MAX),"Dawn 32-bit undefined sentinel accepted");
+    }
+    require(!webgpu_limit_from_name(u"maxPixelLocalStorageSize") && !webgpu_limit_from_name(u"unknown"),"Private/unknown native limit exposed");
+    wgpu::Limits available{}; available.maxBufferSize=8192; available.minUniformBufferOffsetAlignment=256;
+    wgpu::CompatibilityModeLimits available_compatibility{}; available_compatibility.maxStorageBuffersInVertexStage=4;
+    std::vector<webgpu_required_limit> requested{{u"maxBufferSize",4096},{u"minUniformBufferOffsetAlignment",512},
+        {u"maxStorageBuffersInVertexStage",2},{u"unknown",std::nullopt}};
+    require(prepare_webgpu_required_limits(requested,available,available_compatibility,native_limits,compatibility_limits)
+        && native_limits.maxBufferSize==4096 && native_limits.minUniformBufferOffsetAlignment==512
+        && compatibility_limits.maxStorageBuffersInVertexStage==2,"Required limit mapping failed");
+    for (const webgpu_required_limit invalid:std::vector<webgpu_required_limit>{{u"unknown",0},{u"maxBufferSize",8193},
+        {u"minUniformBufferOffsetAlignment",128},{u"minUniformBufferOffsetAlignment",257},{u"minUniformBufferOffsetAlignment",0},
+        {u"minUniformBufferOffsetAlignment",uint64_t{1}<<32},{u"maxStorageBuffersInVertexStage",5}}) {
+        requested.push_back(invalid);
+        require(!prepare_webgpu_required_limits(requested,available,available_compatibility,native_limits,compatibility_limits)
+            && native_limits.maxBufferSize==4096 && compatibility_limits.maxStorageBuffersInVertexStage==2,"Invalid limits accepted or partially committed");
+        requested.pop_back();
+    }
     webgpu_device_descriptor descriptor;
     for (const char* source:{"undefined","null","{}"}) {
         require(read_webgpu_device_descriptor(isolate,context,evaluate(source),descriptor)

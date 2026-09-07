@@ -524,3 +524,28 @@ coercion, USVString versus DOMString, integer boundaries, exception identity, an
 no partially committed output after failure. The converter does not yet map
 required limits to Dawn or enforce adapter capabilities. Those validation steps
 and the public requestDevice entry point remain required.
+
+### Native required-limit mapping
+
+A generated catalog maps every GPUSupportedLimits attribute in the pinned IDL to
+its typed Dawn member. The four per-vertex/per-fragment storage limits map to
+Dawn's CompatibilityModeLimits chain; the remaining limits map to base Limits.
+The generator verifies the IDL hash, participates in npm generate/check, and
+requires an explicit review for new attribute types. Unknown/native-only names
+are not admitted by the catalog.
+
+`prepare_webgpu_required_limits` validates defined values against the supplied
+adapter limits, including the reversed comparison and power-of-two constraint
+for alignment limits. Unknown names with undefined values are ignored. Missing
+native capability values, narrowing overflow and Dawn's undefined sentinels are
+rejected; none silently becomes an omitted request. Output is committed only
+on success. The caller owns and chains any compatibility structures used for a
+native request. Failure is intended to become requestDevice OperationError;
+public promise wiring remains unfinished.
+
+The macOS runtime tests exercise every catalog member and integer width, missing
+names, limits above adapter capacity, invalid alignments, undefined entries and
+atomic failure. Its real Dawn device request now uses a maxBufferSize requirement
+validated against that actual adapter. The test and npm generation checks pass.
+This does not establish complete adapter capability reporting or compatibility
+mode qualification, nor does it expose public requestDevice.
