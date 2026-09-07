@@ -114,7 +114,19 @@ int main() {
             image_writer->begin(); auto image_frame=image_writer->publish();
             image_writer->complete();
             auto canvas_image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image_frame)); image_frame.reset();
-            canvas_node->mutable_canvas().publish_gpu_image(canvas_image);
+            document.layout(640,480);
+            const auto before_publication=document.scene_generation();
+            document.publish_gpu_canvas_image(*canvas_node,canvas_image);
+            require(document.scene_generation()==before_publication+1 && !document.dirty(),
+                "GPU publication did not request a scene independently of layout");
+            document.publish_gpu_canvas_image(*canvas_node,canvas_image);
+            require(document.scene_generation()==before_publication+1,"same image requested redundant scene");
+            webscene_native::native_document foreign_document;
+            bool foreign_image_rejected=false;
+            try { foreign_document.publish_gpu_canvas_image(*canvas_node,canvas_image); }
+            catch (const std::invalid_argument&) { foreign_image_rejected=true; }
+            require(foreign_image_rejected,"foreign document accepted GPU canvas");
+
             require(runtime.execute("globalThis.paintBefore=document.createElement('div'); paintBefore.id='gpu-before'; paintBefore.style.cssText='width:20px;height:20px;background:red'; document.body.insertBefore(paintBefore,canvasProbe); globalThis.paintAfter=document.createElement('div'); paintAfter.id='gpu-after'; paintAfter.style.cssText='width:20px;height:20px;background:blue'; document.body.appendChild(paintAfter);","gpu-paint-order"),"GPU paint siblings failed");
             document.layout(640,480);
             std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> captured;
@@ -152,7 +164,7 @@ int main() {
             }),"reset kept stale GPU paint operation");
             require(captured[0]->value.describe().width==640,"resize mutated retained frame");
             bool rejected=false;
-            try { canvas_node->mutable_canvas().publish_gpu_image(canvas_image); }
+            try { document.publish_gpu_canvas_image(*canvas_node,canvas_image); }
             catch (const std::invalid_argument&) { rejected=true; }
             require(rejected,"stale image generation accepted");
             image_writer.reset();
@@ -164,7 +176,7 @@ int main() {
                 before->set_metadata({backing.identity(),101,generation,serial,1,2,backing.width(),backing.height()});
                 before->begin(); auto ticket=before->publish(); before->complete(); before.reset();
                 auto old_image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*ticket)); ticket.reset();
-                canvas_node->mutable_canvas().publish_gpu_image(old_image);
+                document.publish_gpu_canvas_image(*canvas_node,old_image);
                 require(runtime.execute(script,"canvas-attribute-reset"),"canvas attribute operation failed");
                 require(backing.width()==expected_width && backing.height()==expected_height
                     && backing.content_serial()==serial+1

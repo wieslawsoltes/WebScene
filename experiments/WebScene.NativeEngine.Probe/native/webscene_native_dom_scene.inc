@@ -42,6 +42,17 @@ void native_document::build_scene(
     }
 }
 
+void native_document::publish_gpu_canvas_image(dom_node& node,
+    std::shared_ptr<const webscene_gpu_image_lease_v3> image)
+{
+    if (node.tag!="canvas" || find_by_native_id(node.id)!=&node)
+        throw std::invalid_argument("GPU canvas belongs to another document or is not a canvas");
+    auto& canvas=node.mutable_canvas();
+    const bool changed=canvas.gpu_image!=image;
+    canvas.publish_gpu_image(std::move(image));
+    if (changed) mark_scene_changed();
+}
+
 void native_document::build_gpu_canvas_images(
     std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images) const
 {

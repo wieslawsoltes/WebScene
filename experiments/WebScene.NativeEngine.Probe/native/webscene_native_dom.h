@@ -1555,6 +1555,9 @@ public:
         std::vector<webscene_scene_command>& commands,
         std::vector<webscene_scene_string>& strings,
         std::vector<char>& string_bytes) const;
+    // Engine-thread publication: validates document ownership and backing version,
+    // then requests a scene without forcing style/layout work.
+    void publish_gpu_canvas_image(dom_node& node,std::shared_ptr<const webscene_gpu_image_lease_v3> image);
     void build_gpu_canvas_images(std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images) const;
     void build_canvas_layouts(std::vector<webscene_canvas_layout>& layouts) const;
     void build_canvas_display_lists(

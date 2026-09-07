@@ -388,3 +388,17 @@ last completion and abandoned writer cancellation are covered. Pool and Dawn
 hardware CTests pass (0.72 seconds), and the pool fixture passes ThreadSanitizer.
 Browser binding admission/retry still needs to supply this sink and preserve its
 pending operation; this change does not create that browser binding.
+
+## Native producer scene notification
+
+Native producers now publish through `native_document::publish_gpu_canvas_image`.
+It validates that the target is a canvas owned by this document, validates the
+image against its backing version, and advances scene generation when replacing
+the current reference. It does not invalidate style/layout. Publishing the same
+reference again performs validation without scheduling redundant scene work.
+Like other native_document mutations, this entry point is engine-thread-only.
+
+Runtime fixtures now use this path and verify scene generation advances while
+layout stays clean, duplicate publication is quiet, and a foreign document rejects
+the canvas. Focused runtime CTest passes in 0.63 seconds. Browser GPU factories
+and their actual queue-to-publication calls still need implementation.
