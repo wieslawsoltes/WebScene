@@ -256,3 +256,23 @@ without stale-handle failure. The rebuilt V8 runtime CTest passes.
 This closes the previously untested GC-release path for the internal buffer
 registry. It does not prove mapped ArrayBuffer lifetime/detachment, in-flight GPU
 submission behavior for JavaScript buffers, or full navigation integration.
+
+### Mapped ArrayBuffer lifetime primitive
+
+`v8_webgpu_mapped_ranges.h` creates ArrayBuffers directly over an already mapped
+native memory region. Each view privately retains its buffer wrapper; the tracker
+holds weak view handles so it does not make dead mappings permanently reachable.
+Native storage remains owned by the buffer, never by a V8 backing-store deleter.
+A private detach key prevents outside detachment. Engine-side detachment clears
+all reachable views and their private owner references before native unmapping.
+
+The tracker enforces offset/size alignment, mapping bounds and non-overlap; empty
+ranges occupy no bytes. Range reservations last until unmap even if views become
+unreachable. Its owner must detach it before native destruction or unmapping.
+It is not yet connected to the public getMappedRange/unmap entry points.
+
+The rebuilt macOS V8 test checks that ArrayBuffer pointers equal Dawn's mapped
+addresses, JavaScript writes reach native mapped bytes, invalid ranges fail,
+foreign detachment is rejected, and authorized detachment empties typed-array
+views. This proves the tested mapped-memory path without a staging copy; it does
+not qualify mapAsync, device-loss detachment or full public error semantics.

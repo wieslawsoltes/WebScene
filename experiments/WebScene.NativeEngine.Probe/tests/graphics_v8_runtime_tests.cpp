@@ -5,6 +5,7 @@
 #include "graphics/v8_release_registry.h"
 #include "graphics/v8_webgpu_adapter_request.h"
 #include "graphics/v8_webgpu_buffers.h"
+#include "graphics/v8_webgpu_mapped_ranges.h"
 #include "graphics/image_lease_abi.h"
 #include <v8.h>
 #include <iostream>
@@ -297,6 +298,37 @@ int main() {
                         return v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocal(&script)
                             && !script->Run(context).IsEmpty();
                     };
+                    adapter_service->with_device(device_handle,[&](auto& device) {
+                        device.with_buffer(buffer_handle,[&](const auto& buffer) {
+                            auto* data=buffer.GetMappedRange(0,64);
+                            require(data!=nullptr,"Mapped fixture memory unavailable");
+                            v8_webgpu_mapped_ranges ranges(isolate,context,object,data,0,64);
+                            auto first=ranges.create(context,0,16).ToLocalChecked();
+                            auto second=ranges.create(context,16,16).ToLocalChecked();
+                            require(first->Data()==data && second->Data()==static_cast<uint8_t*>(data)+16,"Mapped range copied native storage");
+                            for (auto request:std::array<std::pair<uint64_t,uint64_t>,4>{{{8,8},{4,4},{32,6},{64,4}}}) {
+                                bool rejected=false;
+                                try { ranges.create(context,request.first,request.second); }
+                                catch (const std::invalid_argument&) { rejected=true; }
+                                require(rejected,"Invalid mapped range accepted");
+                            }
+                            require(!ranges.create(context,0,0).IsEmpty(),"Empty mapped range rejected");
+                            require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"mappedProbe"),first).FromMaybe(false),"Mapped view publication failed");
+                            require(run("globalThis.mappedWords=new Uint32Array(mappedProbe);mappedWords[0]=0x12345678;"),"Mapped JS write failed");
+                            uint32_t word{}; std::memcpy(&word,data,sizeof(word));
+                            require(word==0x12345678,"JavaScript write did not reach Dawn mapped memory");
+                            {
+                                v8::TryCatch caught(isolate);
+                                require(first->Detach(v8::Undefined(isolate)).IsNothing() && caught.HasCaught()
+                                    && !first->WasDetached(),"Mapped view allowed foreign detachment");
+                            }
+                            ranges.detach();
+                            require(run("if(mappedProbe.byteLength!==0||mappedWords.length!==0)throw new Error('mapped views not detached');delete globalThis.mappedProbe;delete globalThis.mappedWords;"),"Mapped view detachment failed");
+                            bool detached_rejected=false;
+                            try { ranges.create(context,32,4); } catch (const std::invalid_argument&) { detached_rejected=true; }
+                            require(detached_rejected,"Detached mapping accepted a new view");
+                        });
+                    });
                     require(run("if(bufferProbe.size!==64||bufferProbe.usage!==8||bufferProbe.mapState!=='mapped')throw new Error('buffer metadata'); let p=Object.getPrototypeOf(bufferProbe); for(let f of [p.destroy,Object.getOwnPropertyDescriptor(p,'size').get,Object.getOwnPropertyDescriptor(p,'usage').get,Object.getOwnPropertyDescriptor(p,'mapState').get]){let ok=false;try{f.call({})}catch(e){ok=e instanceof TypeError}if(!ok)throw new Error('buffer brand')} bufferProbe.destroy();bufferProbe.destroy();if(bufferProbe.size!==64||bufferProbe.mapState!=='unmapped')throw new Error('destroy metadata/state');"),"Native buffer wrapper behavior failed");
                     require(run(R"JS(
                         if(bufferProbe.label!=='')throw new Error('label default');
