@@ -15,3 +15,9 @@ ctest --test-dir <build-directory> --output-on-failure
 ```
 
 Next verification must establish the V8 SDK/build compatibility and investigate the failing runtime test in both configurations. The earlier hosted CI package successes use their own SDK builds and do not establish that this reused local SDK is valid. Issue #23 remains incomplete.
+
+## Follow-up: inspector ABI mismatch identified
+
+Symbolicating a graphics-disabled RelWithDebInfo reproduction located the failure in `shutdown_inspector()` at the call to `allAsyncTasksCanceled()`, dispatching into `V8StackTraceId` construction. The reused archive predates the patched inspector header: the header inserts the virtual `consoleAPICalled` method, but the archive does not define `V8InspectorImpl::consoleAPICalled`. This mismatches the vtable layout. `symbolized-control-crash.txt` preserves the call path.
+
+Native CMake now checks both the header declaration and the archive's defined implementation symbol when Inspector is enabled. It prefers the SDK's LLVM symbol reader for matching ThinLTO support, otherwise using the platform symbol tool. The actual stale archive fails configure with the explicit ABI diagnostic in `stale-sdk-rejection.log`. A newer local V8 15.3.10 archive containing the implementation passes the same check and links successfully. Matching-SDK runtime verification is still in progress; absence of the earlier immediate crash alone is not a suite pass. The original failed results above remain historical evidence.

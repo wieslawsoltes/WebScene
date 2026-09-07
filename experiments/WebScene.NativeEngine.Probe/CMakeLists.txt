@@ -322,6 +322,9 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
     if(NOT EXISTS "${WEBSCENE_V8_ICU_DATA}")
         message(FATAL_ERROR "WebScene native engine: ICU data not found at ${WEBSCENE_V8_ICU_DATA}")
     endif()
+    if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
+        include("${CMAKE_CURRENT_LIST_DIR}/cmake/VerifyV8Inspector.cmake")
+    endif()
 
     # WebSocket I/O is a native implementation detail. IXWebSocket supplies a
     # portable RFC 6455 client while the WebScene adapter below owns all V8

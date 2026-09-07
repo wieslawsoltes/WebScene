@@ -1,0 +1,16 @@
+-- WebScene native engine: generated WebIDL DOM bindings selected
+-- WebScene native engine: cssparser syntax parser selected
+-- WebScene native engine: Servo selector parser selected
+-- WebScene native engine: html5ever parser selected
+-- WebScene native engine: certification telemetry excluded
+-- WebScene native engine: V8 Inspector support enabled
+CMake Error at cmake/VerifyV8Inspector.cmake:37 (message):
+  V8 Inspector header/archive ABI mismatch: the header declares the console
+  bridge but the monolith has no V8InspectorImpl::consoleAPICalled
+  implementation.  Rebuild the monolith after applying
+  V8InspectorConsolePatch.txt; do not reuse an older archive.
+Call Stack (most recent call first):
+  CMakeLists.txt:326 (include)
+
+
+-- Configuring incomplete, errors occurred!
