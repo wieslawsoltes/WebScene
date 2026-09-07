@@ -5,6 +5,8 @@ namespace WebScene.Backends.Avalonia.Native;
 
 // Serialized by the composition owner. Replacement is CPU-only; all imported
 // resources stay here until retirement completes under the host graphics lease.
+internal enum NativeGpuSceneApplyResult { Applied, Backpressure, InvalidScene, RejectedDiff, AcknowledgementFailed }
+
 internal sealed class NativeMacOSGpuScenePresenter
 {
     private NativeMacOSGpuSceneImages? _current;
@@ -30,6 +32,55 @@ internal sealed class NativeMacOSGpuScenePresenter
             _retiring[slot] = _current;
         }
         _current = images;
+        _prepared = false;
+        return true;
+    }
+
+    // Apply under the composition owner's serialization. Image retention is
+    // completed before mutating the renderer; acknowledge only after both the
+    // renderer and its indexed image bindings have accepted the same version.
+    internal unsafe NativeGpuSceneApplyResult ApplyScene(NativeSceneLeaseV3 scene, NativeCanvasSceneRenderer renderer)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(renderer);
+        if (IsStopping || (_current is not null && Array.TrueForAll(_retiring, image => image is not null)))
+            return NativeGpuSceneApplyResult.Backpressure;
+        var result = NativeGpuSceneApplyResult.InvalidScene;
+        scene.WithView(view =>
+        {
+            const ulong supported = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability;
+            if (view.SceneVersion != 3 || view.StructSize != System.Runtime.InteropServices.Marshal.SizeOf<NativeSceneViewV3>() ||
+                (view.RequiredCapabilities & ~supported) != 0 || !NativeSceneViewValidation.IsValid((NativeSceneView*)view.CpuView)) return;
+            var status = NativeMacOSGpuSceneImages.Acquire(scene, out var images);
+            if (status == NativeSceneAcquireStatus.Backpressure) { result = NativeGpuSceneApplyResult.Backpressure; return; }
+            if (status != NativeSceneAcquireStatus.Success || images is null)
+                throw new InvalidOperationException($"Scene image retention failed: {status}");
+            try
+            {
+                var cpu = (NativeSceneView*)view.CpuView;
+                foreach (var command in new ReadOnlySpan<SceneCommand>(cpu->Commands, checked((int)cpu->Header.CommandCount)))
+                    if (command.Kind == NativeWebSceneApi.GpuImagePaintCommand &&
+                        ((view.RequiredCapabilities & NativeWebSceneApi.GpuImageCapability) == 0 || command.Rgba >= images.ImageCount)) return;
+                if (!renderer.ApplyDiff((NativeSceneView*)view.CpuView, orderedGpuImages: (view.RequiredCapabilities & supported) != 0))
+                { result = NativeGpuSceneApplyResult.RejectedDiff; return; }
+                if (!TryReplace(images)) throw new InvalidOperationException("Scene replacement lost its serialized admission slot.");
+                images = null; // Presenter now owns the bindings used by this renderer version.
+                result = scene.Acknowledge() ? NativeGpuSceneApplyResult.Applied : NativeGpuSceneApplyResult.AcknowledgementFailed;
+            }
+            finally { images?.DiscardUnprepared(); }
+        });
+        return result;
+    }
+
+    // A visual that never imported an image can stop synchronously. Once an
+    // import exists, shutdown must retain the visual's graphics retirement path.
+    internal bool TryDiscardUnprepared()
+    {
+        if ((_current?.ImportedCount ?? 0) != 0 || Array.Exists(_retiring, image => (image?.ImportedCount ?? 0) != 0)) return false;
+        IsStopping = true;
+        _current?.DiscardUnprepared(); _current = null;
+        for (var index = 0; index < _retiring.Length; ++index)
+        { _retiring[index]?.DiscardUnprepared(); _retiring[index] = null; }
         _prepared = false;
         return true;
     }

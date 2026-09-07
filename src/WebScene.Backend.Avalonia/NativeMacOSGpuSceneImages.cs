@@ -13,6 +13,7 @@ internal sealed class NativeMacOSGpuSceneImages
     private readonly NativeGpuImageInfoV3[] _metadata;
     internal bool IsRetiring { get; private set; }
     internal int ImportedCount { get; private set; }
+    internal int ImageCount => _images.Length;
     private NativeMacOSGpuSceneImages(int count)
     {
         _sources = new NativeGpuImageLeaseV3?[count];

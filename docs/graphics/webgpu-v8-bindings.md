@@ -1490,3 +1490,23 @@ and successful retirement of both groups. Evidence is recorded in
 with zero skips for capture rollback and unimported-candidate release. Probe
 build has zero warnings. Production composition-handler acquisition/replacement
 and shutdown scheduling still need to call this owner.
+
+### Transactional v3 scene application
+
+The managed GPU presenter can now apply a v3 scene while holding its SafeHandle
+view: it validates version/capabilities and CPU scene shape, retains all indexed
+images, verifies GPU command indices, applies the renderer diff, commits image
+bindings and only then acknowledges the native scene. Admission backpressure
+leaves the renderer and caller's scene lease unchanged. Rejected candidates
+release their unimported leases. A presenter with no imported groups can stop
+synchronously via TryDiscardUnprepared; imported groups still require host
+context retirement.
+
+A managed/native test applies and acknowledges an actual engine bootstrap v3
+scene, then verifies synchronous unimported cleanup and stopped admission. It
+passes on macOS/net10.0 with one pass and zero skips. This bootstrap scene has no
+GPU images; actual image import/draw/retirement remains covered separately by the
+window probe and native image tests. The normal composition handler is not opted
+in yet: its current Stop path removes the visual without guaranteeing later GPU
+retirement callbacks. That lifecycle must be connected before enabling GPU scene
+admission there.

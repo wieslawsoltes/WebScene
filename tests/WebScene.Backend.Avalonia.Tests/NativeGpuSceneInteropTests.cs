@@ -300,6 +300,39 @@ public sealed class NativeGpuSceneInteropTests
         }
     }
     [NativeRuntimeFact]
+    public void ScenePresenterAppliesAndAcknowledgesNativeVersionedScene()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        var options = NativeSceneAcquireOptionsV3.CpuOnly;
+        options.ConsumerCapabilities = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability;
+        var engine = NativeWebSceneApi.EngineCreate(0, null, new AvaloniaResourceLoader(), _ => { });
+        NativeSceneLeaseV3? scene = null;
+        var renderer = new NativeCanvasSceneRenderer();
+        var presenter = new NativeMacOSGpuScenePresenter();
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            NativeSceneAcquireStatus status;
+            do
+            {
+                status = NativeSceneLeaseV3.Acquire(engine, in options, true, out scene);
+                if (status == NativeSceneAcquireStatus.Empty) Thread.Sleep(1);
+            } while (status == NativeSceneAcquireStatus.Empty && DateTime.UtcNow < deadline);
+            Assert.Equal(NativeSceneAcquireStatus.Success, status);
+            Assert.NotNull(scene);
+            Assert.Equal(NativeGpuSceneApplyResult.Applied, presenter.ApplyScene(scene, renderer));
+            Assert.True(presenter.TryDiscardUnprepared());
+            Assert.Equal(NativeGpuSceneApplyResult.Backpressure, presenter.ApplyScene(scene, renderer));
+        }
+        finally
+        {
+            presenter.TryDiscardUnprepared();
+            renderer.Reset(); scene?.Dispose();
+            NativeWebSceneApi.EngineDestroy(engine);
+        }
+    }
+
+    [NativeRuntimeFact]
     public void SafeSceneLeaseProtectsBorrowedViewDuringConcurrentDispose()
     {
         NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
