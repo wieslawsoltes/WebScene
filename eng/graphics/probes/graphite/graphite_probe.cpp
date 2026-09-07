@@ -8,6 +8,9 @@
 #include "include/gpu/graphite/Surface.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkImage.h"
+#include "include/gpu/graphite/Image.h"
 // Diagnostic readback only. This executable is not a canvas presentation path.
 #include <webgpu/webgpu_cpp.h>
 
@@ -117,11 +120,30 @@ int main(int argc, char** argv) {
     backendContext.fQueue=device.GetQueue();
     auto graphite=skgpu::graphite::ContextFactory::MakeDawn(backendContext,{});
     if (!graphite) return finish("failed","Graphite context creation failed",1);
+    // Native WebGPU producer writes a separate image, then Graphite samples it
+    // on the same queue. No CPU wait or pixel upload sits between the submissions.
+    auto produced=device.CreateTexture(&textureDescriptor);
+    auto producerEncoder=device.CreateCommandEncoder();
+    wgpu::RenderPassColorAttachment attachment{};
+    attachment.view=produced.CreateView(); attachment.loadOp=wgpu::LoadOp::Clear;
+    attachment.storeOp=wgpu::StoreOp::Store; attachment.clearValue={1,0,0,1};
+    wgpu::RenderPassDescriptor producerPass{};
+    producerPass.colorAttachmentCount=1; producerPass.colorAttachments=&attachment;
+    auto render=producerEncoder.BeginRenderPass(&producerPass); render.End();
+    auto producerCommands=producerEncoder.Finish(); device.GetQueue().Submit(1,&producerCommands);
     auto recorder=graphite->makeRecorder();
     auto backendTexture=skgpu::graphite::BackendTextures::MakeDawn(texture.Get());
     auto surface=SkSurfaces::WrapBackendTexture(recorder.get(),backendTexture,nullptr,nullptr);
     if (!surface) return finish("failed","Graphite texture wrapping failed",1);
     surface->getCanvas()->clear(SkColorSetARGB(255,51,102,153));
+    auto image=SkImages::WrapTexture(recorder.get(),
+        skgpu::graphite::BackendTextures::MakeDawn(produced.Get()),kPremul_SkAlphaType,nullptr,
+        skgpu::Origin::kTopLeft,SkImages::GenerateMipmapsFromBase::kNo);
+    if (!image) return finish("failed","Graphite source image wrapping failed",1);
+    auto canvas=surface->getCanvas();
+    canvas->save(); canvas->clipRect(SkRect::MakeLTRB(2,1,8,3)); canvas->translate(1,0);
+    SkPaint paint; paint.setAlphaf(0.5f);
+    canvas->drawImage(image,0,0,SkSamplingOptions(),&paint); canvas->restore();
     auto recording=recorder->snap();
     skgpu::graphite::InsertRecordingInfo insert; insert.fRecording=recording.get();
     if (!graphite->insertRecording(insert) || !graphite->submit())
@@ -152,10 +174,13 @@ int main(int argc, char** argv) {
     bool valid = true;
     for (uint32_t y = 0; y < height; ++y)
         for (uint32_t x = 0; x < width; ++x)
-            for (uint32_t c = 0; c < 4; ++c)
-                valid &= std::abs(int(pixels[y * rowBytes + x * 4 + c]) - expected[c]) <= 1;
+            for (uint32_t c = 0; c < 4; ++c) {
+                constexpr std::array<int,4> blended{153,51,77,255};
+                const auto& wanted=(x>=2 && x<8 && y>=1 && y<3) ? blended : expected;
+                valid &= std::abs(int(pixels[y * rowBytes + x * 4 + c]) - wanted[c]) <= 1;
+            }
     buffer.Unmap();
-    if (!valid) return finish("failed", "Readback pixels differ from the clear color", 1);
+    if (!valid) return finish("failed", "Readback pixels differ from clipped image composition", 1);
     std::cout << "{\"schemaVersion\":1,\"probe\":\"graphite-shared-device\",\"status\":\"passed\","
               << "\"hardwareAccelerated\":true,\"backend\":" << json(backend)
               << ",\"adapter\":" << json(text(info.device))
@@ -163,6 +188,6 @@ int main(int argc, char** argv) {
               << ",\"driver\":" << json(text(info.description))
               << ",\"vendorId\":" << info.vendorID << ",\"deviceId\":" << info.deviceID
               << ",\"verifiedPixels\":" << width * height
-              << ",\"expectedRGBA\":[51,102,153,255],\"tolerance\":1,\"diagnosticReadback\":true}\n";
+              << ",\"backgroundRGBA\":[51,102,153,255],\"compositedRGBA\":[153,51,77,255],\"tolerance\":1,\"diagnosticReadback\":true}\n";
     return 0;
 }

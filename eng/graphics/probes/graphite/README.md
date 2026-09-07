@@ -89,3 +89,19 @@ This proves context creation, texture wrapping, submission and pixel correctness
 for this clear operation. It does not yet prove sampling a retained canvas image,
 clip/opacity/transform composition, resize lifetime, JavaScript WebGPU, or the
 Avalonia/Uno host presentation boundary. Those remain the next integration tests.
+
+## GPU image composition
+
+The probe now produces a separate red image with a Dawn render pass, then samples
+that texture through Graphite on the same device/queue. SkCanvas applies a clip
+(2,1)-(8,3), a translation and 50% paint opacity over the existing background.
+All 68 pixels pass on Apple M4: 12 clipped pixels match RGBA 153,51,77,255 and the
+remaining pixels match 51,102,153,255 (tolerance 1). Producer-to-compositor ordering
+uses queue submission order, with no intervening CPU wait or pixel upload. Only
+the final diagnostic verification copies pixels to a mapped buffer.
+
+This supersedes the clear-only scope above. The translation is exercised but a
+uniform source cannot independently establish transform positioning correctness.
+The probe still retains objects directly, not through WebScene's versioned image
+lease pool. Patterned transforms, retained-image resize/disposal and actual host
+presentation remain outstanding before claiming integrated canvas composition.
