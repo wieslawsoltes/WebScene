@@ -76,13 +76,18 @@ public:
     bool has_ready_work() const {
         check_thread();
         return dawn_ && (dawn_->completions()->has_ready()
-            || (!closed_ && std::chrono::steady_clock::now()>=next_event_poll_));
+            || (!closed_ && dawn_->completions()->has_pending()
+                && std::chrono::steady_clock::now()>=next_event_poll_));
     }
     std::chrono::milliseconds recommended_idle_wait(std::chrono::milliseconds maximum) const {
         check_thread();
-        if (!dawn_ || closed_) return maximum;
+        if (!dawn_) return maximum;
+        // Cancellation delivery remains runnable after admission closes.
+        if (dawn_->completions()->has_ready()) return std::chrono::milliseconds::zero();
+        // Only outstanding native operations require ProcessEvents polling.
+        if (closed_ || !dawn_->completions()->has_pending()) return maximum;
         const auto now=std::chrono::steady_clock::now();
-        if (dawn_->completions()->has_ready() || now>=next_event_poll_)
+        if (now>=next_event_poll_)
             return std::chrono::milliseconds::zero();
         return std::min(maximum,std::chrono::ceil<std::chrono::milliseconds>(next_event_poll_-now));
     }

@@ -90,6 +90,43 @@ int main() {
         if (!submission_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
     }
     if (!submission_done || buffers.resident_count()!=0 || buffers.deferred_count()!=0) return 1;
+    // Map completion must progress without presentation, including cancellation
+    // caused by destroying a buffer before ProcessEvents delivers the callback.
+    wgpu::BufferDescriptor map_descriptor{};
+    map_descriptor.size=4096;
+    map_descriptor.usage=wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
+    for (const bool destroy_pending : {false,true}) {
+        auto mapped=native_device->device.CreateBuffer(&map_descriptor);
+        auto map_ticket=mailbox->reserve(destroy_pending ? 13 : 12,owner).value();
+        auto map_status=std::make_shared<wgpu::MapAsyncStatus>();
+        mapped.MapAsync(wgpu::MapMode::Read,0,4096,wgpu::CallbackMode::AllowProcessEvents,
+            [mailbox,map_ticket,map_status](wgpu::MapAsyncStatus status,wgpu::StringView) {
+                *map_status=status;
+                mailbox->publish(map_ticket,status==wgpu::MapAsyncStatus::Success
+                    ? completion_status::success : completion_status::cancelled);
+            });
+        if (destroy_pending) mapped.Destroy();
+        bool map_done=false;
+        const auto map_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+        while (!map_done && std::chrono::steady_clock::now()<map_deadline) {
+            service.pump([&](auto record) {
+                if (record.operation!=(destroy_pending ? 13u : 12u))
+                    throw std::runtime_error("unexpected map completion");
+                map_done=true;
+            });
+            if (!map_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+        }
+        if (!map_done || *map_status!=(destroy_pending
+            ? wgpu::MapAsyncStatus::Aborted : wgpu::MapAsyncStatus::Success)) return 1;
+        if (!destroy_pending) {
+            const auto* bytes=static_cast<const unsigned char*>(mapped.GetConstMappedRange(0,4096));
+            if (!bytes) return 1;
+            for (size_t i=0;i<4096;++i) if (bytes[i]!=0) return 1;
+            mapped.Unmap();
+            mapped.Destroy();
+        }
+        if (mailbox->has_pending() || mailbox->has_ready()) return 1;
+    }
     native_device->device.Destroy();
     service.close();
     bool rejected=false;

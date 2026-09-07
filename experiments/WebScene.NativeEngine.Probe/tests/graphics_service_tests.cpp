@@ -35,9 +35,20 @@ int main() {
     b.with_angle_context(second,[] { GLfloat color[4]{}; glGetFloatv(GL_COLOR_CLEAR_VALUE,color); require(color[1]==1); });
     require(a.live_contexts()==0 && b.live_contexts()==1);
     rejects([&] { a.dawn(); });
-    b.dawn(); require(b.dawn_initialized() && b.has_ready_work());
+    b.dawn(); require(b.dawn_initialized() && !b.has_ready_work());
+    require(b.recommended_idle_wait(std::chrono::milliseconds(100))==std::chrono::milliseconds(100));
+    auto mailbox=b.dawn().completions();
+    resource_owner owner{b.engine_identity(),new_owner_token(),0};
+    auto ticket=mailbox->reserve(1,owner).value();
+    require(b.has_ready_work());
     b.pump([](auto) {});
     require(b.recommended_idle_wait(std::chrono::milliseconds(100))<=std::chrono::milliseconds(1));
     b.close(); require(b.live_contexts()==0);
+    require(b.has_ready_work());
+    require(b.recommended_idle_wait(std::chrono::milliseconds(100))==std::chrono::milliseconds::zero());
+    require(!mailbox->publish(ticket,completion_status::success));
+    require(b.pump([](auto record) { require(record.status==completion_status::cancelled); })==1);
+    require(!b.has_ready_work());
+    require(b.recommended_idle_wait(std::chrono::milliseconds(100))==std::chrono::milliseconds(100));
     std::cout << "lazy graphics service and cross-engine ANGLE lifetime isolation passed\n";
 }

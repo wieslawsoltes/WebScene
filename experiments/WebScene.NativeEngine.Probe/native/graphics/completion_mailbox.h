@@ -31,6 +31,7 @@ class completion_mailbox {
     std::vector<size_t> ready_;
     size_t head_{};
     size_t count_{};
+    size_t pending_{};
     bool closed_{};
     std::shared_ptr<completion_wake> wake_;
     void check_engine() const {
@@ -40,6 +41,7 @@ class completion_mailbox {
     void make_ready(size_t index) {
         auto& item = slots_[index];
         if (item.phase != state::ready) {
+            if (item.phase == state::pending) --pending_;
             ready_[(head_ + count_) % ready_.size()] = index;
             ++count_;
             item.phase = state::ready;
@@ -61,6 +63,7 @@ public:
             if (item.phase == state::free && item.generation != UINT64_MAX) {
                 ++item.generation;
                 item.phase = state::pending;
+                ++pending_;
                 item.record = {operation, owner, completion_status::success};
                 return completion_ticket{identity_, item.generation, i};
             }
@@ -103,6 +106,7 @@ public:
                 make_ready(i);
             }
     }
+    bool has_pending() const { std::lock_guard lock(mutex_); return pending_ != 0; }
     bool has_ready() const { std::lock_guard lock(mutex_); return count_ != 0; }
     template<class Deliver> bool drain_one(Deliver deliver) {
         check_engine();
