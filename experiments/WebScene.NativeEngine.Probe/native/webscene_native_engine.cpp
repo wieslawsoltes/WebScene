@@ -1265,12 +1265,15 @@ webscene_scene_acquire_status webscene_engine_acquire_next_scene_v3(webscene_eng
 { return acquire_scene_v3(engine,options,result,true); }
 uint8_t webscene_scene_acknowledge_v3(const webscene_scene_view_v3* view)
 {
-    if (!view || view->scene_version!=WEBSCENE_SCENE_VIEW_VERSION_3 || !view->lease_token) return 0;
+    if (!view || view->struct_size < sizeof(webscene_scene_view_v3) ||
+        view->scene_version!=WEBSCENE_SCENE_VIEW_VERSION_3 || !view->lease_token) return 0;
     return static_cast<scene_lease_v3*>(const_cast<void*>(view->lease_token))->cpu.acknowledge() ? 1 : 0;
 }
 void webscene_scene_release_v3(const webscene_scene_view_v3* view)
 {
-    if (view) delete static_cast<const scene_lease_v3*>(view->lease_token);
+    if (!view || view->struct_size < sizeof(webscene_scene_view_v3) ||
+        view->scene_version!=WEBSCENE_SCENE_VIEW_VERSION_3 || !view->lease_token) return;
+    delete static_cast<const scene_lease_v3*>(view->lease_token);
 }
 
 const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine* engine)

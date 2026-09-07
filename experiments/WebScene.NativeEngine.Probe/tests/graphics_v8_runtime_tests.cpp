@@ -33,6 +33,17 @@ void test_scene_acquisition_v3() {
     const auto* legacy=webscene_engine_acquire_latest_scene(engine.get());
     require(legacy && legacy->abi_version==2,"legacy scene acquisition regressed");
     webscene_scene_release(legacy);
+    auto incompatible=*view;
+    incompatible.struct_size=sizeof(uint32_t);
+    require(!webscene_scene_acknowledge_v3(&incompatible),"short scene view acknowledged");
+    webscene_scene_release_v3(&incompatible);
+    incompatible=*view; incompatible.scene_version=99;
+    require(!webscene_scene_acknowledge_v3(&incompatible),"unknown scene view acknowledged");
+    webscene_scene_release_v3(&incompatible);
+    const webscene_scene_view_v3* latest=nullptr;
+    require(webscene_engine_acquire_latest_scene_v3(engine.get(),&options,&latest)==WEBSCENE_SCENE_ACQUIRE_SUCCESS && latest,
+        "latest versioned acquisition failed");
+    webscene_scene_release_v3(latest);
     require(webscene_scene_acknowledge_v3(view),"versioned acknowledgement failed");
     const auto revision=view->cpu_view->header.revision;
     engine.reset();

@@ -161,3 +161,19 @@ lookup, managed consumers and Windows/Linux ABI/package verification remain open
 The plain-C fixture exposed a missing typedef for the existing interop callback
 view; adding the forward typedef restores C compilation without changing layout.
 The independent C layout test now passes.
+
+## Scene view validation
+
+Versioned acknowledgement and release reject short or unknown-version views
+before reading their lease tokens. The runtime fixture supplies incompatible
+copies of a live view, verifies rejection leaves the original lease usable, and
+checks successful latest-versioned acquisition as well as ordered acquisition.
+The focused runtime and plain-C ABI layout tests both pass (0.65 seconds):
+
+```sh
+ctest --test-dir artifacts/graphics-build/native-v8-enabled -R 'webscene_graphics_(v8_runtime|scene_abi_layout)_tests' --output-on-failure
+```
+
+These checks validate the ABI envelope; callers must still provide a valid, live
+view returned by the library. They do not make arbitrary or already-freed pointers
+safe to pass. GPU lease export and backend image ownership remain outstanding.
