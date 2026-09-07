@@ -12,7 +12,9 @@ permissions:
 
 concurrency:
   group: graphics-sdk-build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Preserve evidence from long clean SDK builds; the latest pending commit
+  # runs after the active build completes.
+  cancel-in-progress: false
 
 jobs:
   build:
