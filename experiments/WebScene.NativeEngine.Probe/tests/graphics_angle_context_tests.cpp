@@ -1,17 +1,12 @@
 #include "graphics/angle_context.h"
+#include "graphics/angle_display.h"
 #include <GLES2/gl2.h>
 #include <iostream>
 #include <string_view>
 using namespace webscene::graphics;
 void require(bool value) { if (!value) throw std::runtime_error("requirement failed"); }
-struct display_owner {
-    EGLDisplay display;
-    ~display_owner() { eglTerminate(display); }
-};
 int main(int argc, char** argv) {
     const EGLint major=argc==2 && std::string_view(argv[1])=="3" ? 3 : 2;
-    auto get_display=reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(eglGetProcAddress("eglGetPlatformDisplayEXT"));
-    if (!get_display) return 1;
 #if defined(__APPLE__)
     constexpr EGLint backend=EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE;
 #elif defined(_WIN32)
@@ -19,17 +14,18 @@ int main(int argc, char** argv) {
 #else
     constexpr EGLint backend=EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE;
 #endif
-    const EGLint attrs[]={EGL_PLATFORM_ANGLE_TYPE_ANGLE,backend,
-        EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE,EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,EGL_NONE};
-    auto display=get_display(EGL_PLATFORM_ANGLE_ANGLE,nullptr,attrs);
-    if (display==EGL_NO_DISPLAY || !eglInitialize(display,nullptr,nullptr)) return 77;
-    auto lease=std::make_shared<display_owner>(); lease->display=display;
+    auto lease=angle_display::acquire(backend);
+    const auto display=lease->get();
+    auto other_engine=angle_display::acquire(backend);
+    require(other_engine->get()==display);
+    other_engine.reset();
+    require(eglQueryString(display,EGL_VERSION)!=nullptr);
     const EGLint config_attrs[]={EGL_SURFACE_TYPE,EGL_PBUFFER_BIT,EGL_RENDERABLE_TYPE,major==2 ? EGL_OPENGL_ES2_BIT : EGL_OPENGL_ES3_BIT,EGL_NONE};
     EGLConfig config{}; EGLint count{};
     require(eglChooseConfig(display,config_attrs,&config,1,&count) && count==1);
-    angle_context first(display,lease,config,major);
+    angle_context first(lease,config,major);
     {
-        angle_context second(display,lease,config,major);
+        angle_context second(lease,config,major);
         angle_context::scope active(first);
         const auto first_context=eglGetCurrentContext();
         glClearColor(1,0,0,1);

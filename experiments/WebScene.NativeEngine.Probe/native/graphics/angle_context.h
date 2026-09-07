@@ -1,4 +1,5 @@
 #pragma once
+#include "angle_display.h"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <EGL/eglext_angle.h>
@@ -12,7 +13,7 @@ namespace webscene::graphics {
 // the display used by another engine/context.
 class angle_context {
     const std::thread::id thread_ = std::this_thread::get_id();
-    std::shared_ptr<void> display_lease_;
+    std::shared_ptr<angle_display> display_lease_;
     EGLDisplay display_;
     EGLContext context_{EGL_NO_CONTEXT};
     EGLSurface surface_{EGL_NO_SURFACE};
@@ -21,9 +22,10 @@ class angle_context {
             throw std::logic_error("ANGLE context requires its execution thread");
     }
 public:
-    angle_context(EGLDisplay display, std::shared_ptr<void> display_lease, EGLConfig config, EGLint major)
-        : display_lease_(std::move(display_lease)), display_(display) {
-        if (!display_lease_ || display==EGL_NO_DISPLAY || (major!=2 && major!=3))
+    angle_context(std::shared_ptr<angle_display> display_lease, EGLConfig config, EGLint major)
+        : display_lease_(std::move(display_lease)),
+          display_(display_lease_ ? display_lease_->get() : EGL_NO_DISPLAY) {
+        if (!display_lease_ || display_==EGL_NO_DISPLAY || (major!=2 && major!=3))
             throw std::invalid_argument("ANGLE context requires a display lease and ES version");
         if (!eglBindAPI(EGL_OPENGL_ES_API)) throw std::runtime_error("Cannot bind ANGLE ES API");
         const EGLint surface_attributes[]={EGL_WIDTH,1,EGL_HEIGHT,1,EGL_NONE};
