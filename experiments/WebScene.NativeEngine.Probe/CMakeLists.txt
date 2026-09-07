@@ -34,6 +34,25 @@ target_compile_features(webscene_native_engine PRIVATE cxx_std_20)
 target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_BUILD)
 target_include_directories(webscene_native_engine PUBLIC native)
 
+option(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS "Link the pinned Dawn and ANGLE graphics prerequisites" OFF)
+if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    set(WEBSCENE_GRAPHICS_COMPONENTS dawn angle)
+    include("${CMAKE_CURRENT_LIST_DIR}/../../eng/graphics/GraphicsDependencies.cmake")
+    target_link_libraries(webscene_native_engine PRIVATE
+        dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2)
+    target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=1)
+    if(APPLE)
+        set_target_properties(webscene_native_engine PROPERTIES BUILD_RPATH "@loader_path")
+    elseif(UNIX)
+        set_target_properties(webscene_native_engine PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
+    foreach(library EGL GLESv2)
+        add_custom_command(TARGET webscene_native_engine POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_native_engine>")
+    endforeach()
+endif()
+
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8 "Link the engine directly to the pinned V8 monolith" OFF)
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
     "Compile V8 Inspector state, hooks, queues, and worker dispatch into the runtime"

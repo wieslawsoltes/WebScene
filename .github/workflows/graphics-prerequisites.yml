@@ -1,0 +1,56 @@
+name: GPU prerequisite hardware evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      rid:
+        description: Native GPU runner profile (runner must be enrolled with these labels)
+        required: true
+        type: choice
+        options: [win-x64, osx-arm64, linux-x64]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpu-prerequisites-${{ inputs.rid }}
+  cancel-in-progress: false
+
+jobs:
+  prerequisites:
+    # These labels are an enrollment contract, not evidence that runners already exist.
+    # No untrusted pull_request trigger on persistent hardware machines.
+    runs-on: [self-hosted, webscene-gpu, '${{ inputs.rid }}']
+    timeout-minutes: 180
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Verify Kestrel input and evidence boundaries
+      run: |
+        python tests/GraphicsCompatibility/prepare-kestrel.py
+        python -m unittest discover -s eng/graphics/tests -v
+    - name: Build pinned Dawn
+      run: python eng/graphics/build.py dawn --rid ${{ inputs.rid }}
+    - name: Build pinned ANGLE
+      run: python eng/graphics/build.py angle --rid ${{ inputs.rid }}
+    - name: Verify SDK relocation and mismatch rejection
+      run: python eng/graphics/check-sdk-integrity.py --sdk artifacts/graphics-sdk/${{ inputs.rid }}/dawn --rid ${{ inputs.rid }} --output artifacts/graphics-evidence/sdk-integrity.json
+    - name: Configure and build hardware probes
+      run: |
+        cmake -S eng/graphics/probes -B artifacts/graphics-probes -G Ninja -DCMAKE_BUILD_TYPE=Release -DWEBSCENE_GRAPHICS_SDK_ROOT=${{ github.workspace }}/artifacts/graphics-sdk/${{ inputs.rid }}
+        cmake --build artifacts/graphics-probes --parallel 6
+    - name: Capture real hardware results
+      # Do not use CTest's successful process exit when all hardware tests were skipped.
+      # The evidence runner exits 77 on unavailable hardware, leaving this job non-successful.
+      run: python eng/graphics/run-probes.py --rid ${{ inputs.rid }} --sdk artifacts/graphics-sdk/${{ inputs.rid }} --probes artifacts/graphics-probes --output artifacts/graphics-evidence/native-probes.json
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: graphics-prerequisites-${{ inputs.rid }}
+        path: |
+          artifacts/graphics-evidence/
+          artifacts/graphics-sdk/**/webscene-graphics-package.json
+          artifacts/graphics-sdk/**/build-info/
+        if-no-files-found: warn

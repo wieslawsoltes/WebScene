@@ -31,6 +31,10 @@ jobs:
         node-version: 22
     - name: Restore
       run: dotnet restore WebScene.sln
+    - name: Verify immutable GPU compatibility fixture
+      run: python tests/GraphicsCompatibility/prepare-kestrel.py
+    - name: Graphics evidence boundary checks
+      run: python -m unittest discover -s eng/graphics/tests -v
     - name: Build Release
       run: dotnet build WebScene.sln -c Release --no-restore
     - name: Portable Core contracts
