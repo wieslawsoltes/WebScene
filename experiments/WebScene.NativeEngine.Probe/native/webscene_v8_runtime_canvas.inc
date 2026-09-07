@@ -258,6 +258,7 @@
             command.data.values[index++] = argument;
         }
         node.mutable_canvas().commands.push_back(command);
+        node.mutable_canvas().backing.publish_content();
     }
 
     static void canvas_append_resource_command(
@@ -277,6 +278,7 @@
             command.data.values[index++] = argument;
         }
         node.mutable_canvas().commands.push_back(command);
+        node.mutable_canvas().backing.publish_content();
     }
 
     static void canvas_append_line_dash_command(
@@ -292,6 +294,7 @@
             command.data.values[index + 1U] = segments[index];
         }
         node.mutable_canvas().commands.push_back(command);
+        node.mutable_canvas().backing.publish_content();
     }
 
     static uint32_t canvas_intern_string(dom_node& node, const std::string& value)
@@ -2692,6 +2695,10 @@
         }
         auto local_context = info.GetIsolate()->GetCurrentContext();
         auto result = v8::Object::New(info.GetIsolate());
+        auto& backing=node->mutable_canvas().backing;
+        const auto width=canvas_bitmap_dimension(*node,"width",300);
+        const auto height=canvas_bitmap_dimension(*node,"height",150);
+        if (backing.width()!=width || backing.height()!=height) backing.reset_bitmap(width,height);
         auto state = std::make_unique<canvas_state>();
         state->node = node;
         auto* state_pointer = state.get();

@@ -20,13 +20,16 @@ metadata owns no image allocation, pixels, native texture pointer or Skia object
 The native state test checks exclusive modes, distinct identities, 1,000 content
 updates without an allocation-generation change, same-size reset, changed-size
 reset and zero-sized bitmaps. This demonstrates metadata behavior, not actual
-GPU allocation/copy counters. Bitmap-attribute normalization and scene publication
-must still be wired to this state; existing canvas command generations remain
-unchanged while the lease API is implemented.
+GPU allocation/copy counters. Canvas command appends and backing-store resets now publish content changes.
+Initial 2D context creation synchronizes dimensions, and width/height property
+resets update bitmap dimensions. Existing canvas command generations remain
+unchanged while the lease API is implemented. General attribute mutation and
+standards-level dimension normalization still need coverage.
 
 ## Remaining G03 integration
 
-- Wire backing dimensions/content publication to canvas mutation and bitmap reset.
+- Complete general attribute mutation and dimension-normalization coverage;
+  connect backing versions to the new scene publication path.
 - Add separately versioned scene acquisition/capability negotiation without
   changing the existing scene-view ABI.
 - Carry opaque allocation identity, generation/content serial, format, alpha,
@@ -40,3 +43,18 @@ unchanged while the lease API is implemented.
 
 Advancing a frame serial must never itself allocate an image or copy pixels.
 GPU completion, scene retention and image reuse are separate lifetime conditions.
+
+## Runtime backing-reset verification
+
+The real V8 fixture draws into a 2D canvas and verifies content advances without
+an allocation-generation change. CSS width changes preserve both bitmap content
+and allocation generation. Resetting the width property to the same bitmap width
+advances content while retaining identity/generation. Changing bitmap width to
+640 advances allocation generation and updates dimensions while preserving 2D
+context ownership. Dimension conversion for backing metadata checks finiteness
+and bounds before integer conversion; it does not claim a redesign of existing
+HTML attribute parsing/getter semantics.
+
+The full 14-test local suite passed after the runtime wiring; the focused V8
+fixture is rerun with the separate CSS-size assertion. These remain metadata and
+2D recording checks, not proof of GPU pool allocation or zero-copy presentation.

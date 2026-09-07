@@ -1471,11 +1471,12 @@
         }
     }
 
-    static void advance_canvas_generation(dom_node& node)
+    static void advance_canvas_generation(dom_node& node, bool publish_backing = true)
     {
         mark_canvas_scene_changed();
         auto& canvas = node.mutable_canvas();
         ++canvas.generation;
+        if (publish_backing) canvas.backing.publish_content();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         constexpr uint64_t retained_diagnostic_generations = 64U;
         if (canvas.generation <= retained_diagnostic_generations) return;
@@ -1496,13 +1497,21 @@
             element_dimension(*node, "width", node->tag == "canvas" ? 300 : node->layout.width)));
     }
 
+    static uint32_t canvas_bitmap_dimension(dom_node& node,const char* name,uint32_t fallback)
+    {
+        const auto value=element_dimension(node,name,fallback);
+        if (!std::isfinite(value)) return fallback;
+        return static_cast<uint32_t>(std::clamp(value,0.0,static_cast<double>(UINT32_MAX)));
+    }
+
     static void reset_canvas_backing_store(implementation& self, dom_node& node)
     {
         if (node.tag != "canvas") return;
         auto& canvas = node.mutable_canvas();
         canvas.rects.clear();
         canvas.lines.clear();
-        advance_canvas_generation(node);
+        canvas.backing.reset_bitmap(canvas_bitmap_dimension(node,"width",300),canvas_bitmap_dimension(node,"height",150));
+        advance_canvas_generation(node,false);
         canvas.commands.clear();
         canvas.strings.clear();
         canvas.string_indices.clear();
