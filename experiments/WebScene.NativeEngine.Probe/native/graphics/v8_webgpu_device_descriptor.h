@@ -1,17 +1,10 @@
 #pragma once
-#include "webgpu_feature_names.h"
+#include "webgpu_device_descriptor.h"
 #include <v8.h>
 #include <cmath>
 #include <string>
 
 namespace webscene::graphics {
-struct webgpu_device_descriptor {
-    std::string label,queue_label;
-    std::vector<wgpu::FeatureName> required_features;
-    // DOMString keys preserve UTF-16, including unpaired surrogates. Unknown
-    // names and undefined values must reach subsequent WebGPU validation intact.
-    std::vector<std::pair<std::u16string,std::optional<uint64_t>>> required_limits;
-};
 // WebIDL conversion only: capability/limit checks precede native RequestDevice.
 inline bool read_webgpu_device_descriptor(v8::Isolate* isolate,v8::Local<v8::Context> context,
     v8::Local<v8::Value> input,webgpu_device_descriptor& output) {

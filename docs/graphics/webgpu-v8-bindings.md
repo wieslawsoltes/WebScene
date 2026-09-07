@@ -549,3 +549,28 @@ atomic failure. Its real Dawn device request now uses a maxBufferSize requiremen
 validated against that actual adapter. The test and npm generation checks pass.
 This does not establish complete adapter capability reporting or compatibility
 mode qualification, nor does it expose public requestDevice.
+
+### Prepared native device requests
+
+The device descriptor data model is now independent of V8.
+`webgpu_prepared_device_descriptor` validates required features against the actual
+adapter before consumed-adapter and required-limit validation. Its result
+classifies unsupported features separately (for TypeError) from operation
+failures (for OperationError). Private native features are rejected even when
+passed directly to the internal helper. Required features are deduplicated into
+a set while preserving first-occurrence order. Adapter compatibility limits are
+queried and chained only when the request includes those defined limits.
+
+The prepared object owns device/queue labels, features, limits and optional
+compatibility-chain storage. It cannot move or copy; its native descriptor is a
+borrowed view used while the owner remains alive. The macOS runtime fixture now
+converts an actual JavaScript device descriptor, prepares it against the real
+adapter, and uses that descriptor for Dawn RequestDevice. Tests verify every
+standard feature against the actual adapter, duplicate removal, consumed-state
+and feature-error precedence, unknown limits, and source-label mutation not
+changing prepared storage. The runtime test passed.
+
+This helper accepts consumed state from its caller; it does not implement the
+public adapter state machine. Public requestDevice still needs that state,
+error-to-promise integration, trusted realm initialization and wrapper lifetime
+ownership. Compatibility mode and full device-loss behavior remain unqualified.

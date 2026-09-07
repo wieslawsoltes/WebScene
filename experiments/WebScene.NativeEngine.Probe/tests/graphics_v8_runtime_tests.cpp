@@ -5,6 +5,7 @@
 #include "graphics/v8_release_registry.h"
 #include "graphics/v8_webgpu_adapter_request.h"
 #include "graphics/v8_webgpu_device_request.h"
+#include "graphics/webgpu_prepared_device_descriptor.h"
 #include "graphics/v8_webgpu_buffers.h"
 #include "graphics/v8_webgpu_devices.h"
 #include "graphics/v8_webgpu_mapped_ranges.h"
@@ -608,12 +609,33 @@ int main() {
                     auto context=isolate->GetCurrentContext();
                     require(adapter_request->complete(isolate,context,record,[&](wgpu::Adapter adapter) -> v8::Local<v8::Value> {
                         auto mailbox=adapter_service->dawn().completions();
-                        wgpu::Limits adapter_limits{},requested_limits{};
-                        wgpu::CompatibilityModeLimits adapter_compatibility{},requested_compatibility{};
-                        require(adapter.GetLimits(&adapter_limits)==wgpu::Status::Success,"Adapter limits unavailable");
-                        std::vector<webgpu_required_limit> required{{u"maxBufferSize",8192}};
-                        require(prepare_webgpu_required_limits(required,adapter_limits,adapter_compatibility,requested_limits,requested_compatibility),"Actual adapter limit validation failed");
-                        wgpu::DeviceDescriptor descriptor{}; descriptor.requiredLimits=&requested_limits;
+                        webgpu_device_descriptor requested;
+                        auto js_descriptor=v8::Script::Compile(context,v8::String::NewFromUtf8Literal(isolate,"({label:'requested device',defaultQueue:{label:'requested queue'},requiredLimits:{maxBufferSize:8192}})")).ToLocalChecked()->Run(context).ToLocalChecked();
+                        require(read_webgpu_device_descriptor(isolate,context,js_descriptor,requested),"Device descriptor conversion failed");
+                        webgpu_device_request_error preparation_error;
+                        auto prepared=webgpu_prepared_device_descriptor::prepare(requested,adapter,false,preparation_error);
+                        require(prepared && preparation_error==webgpu_device_request_error::none,"Actual adapter device preparation failed");
+                        auto descriptor=prepared->native();
+                        requested.label="mutated source"; requested.queue_label="mutated queue";
+                        require(std::string_view(descriptor.label.data,descriptor.label.length)=="requested device"
+                            && std::string_view(descriptor.defaultQueue.label.data,descriptor.defaultQueue.label.length)=="requested queue",
+                            "Prepared device labels borrow mutable source storage");
+                        require(!webgpu_prepared_device_descriptor::prepare(requested,adapter,true,preparation_error)
+                            && preparation_error==webgpu_device_request_error::operation_error,"Consumed adapter accepted");
+                        auto invalid_request=requested; invalid_request.required_features.push_back(wgpu::FeatureName::DawnInternalUsages);
+                        require(!webgpu_prepared_device_descriptor::prepare(invalid_request,adapter,true,preparation_error)
+                            && preparation_error==webgpu_device_request_error::unsupported_feature,"Private feature or feature-error precedence incorrect");
+                        invalid_request=requested; invalid_request.required_limits.emplace_back(u"unknownLimit",1);
+                        require(!webgpu_prepared_device_descriptor::prepare(invalid_request,adapter,false,preparation_error)
+                            && preparation_error==webgpu_device_request_error::operation_error,"Unknown required limit accepted");
+                        for (const auto& feature:webgpu_feature_names) {
+                            auto feature_request=requested; feature_request.required_features={feature.native,feature.native};
+                            auto feature_prepared=webgpu_prepared_device_descriptor::prepare(feature_request,adapter,false,preparation_error);
+                            if (adapter.HasFeature(feature.native)) {
+                                require(feature_prepared && feature_prepared->native().requiredFeatureCount==1
+                                    && feature_prepared->native().requiredFeatures[0]==feature.native,"Supported feature set preparation failed");
+                            } else require(!feature_prepared && preparation_error==webgpu_device_request_error::unsupported_feature,"Unsupported adapter feature accepted");
+                        }
                         v8::Local<v8::Promise> promise;
                         device_request=v8_webgpu_device_request::start(isolate,context,descriptor,adapter,mailbox,
                             {adapter_service->engine_identity(),new_owner_token(),0},104,
