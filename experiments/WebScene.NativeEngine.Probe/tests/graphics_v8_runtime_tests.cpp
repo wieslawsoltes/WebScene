@@ -296,6 +296,21 @@ int main() {
                             && !script->Run(context).IsEmpty();
                     };
                     require(run("if(bufferProbe.size!==64||bufferProbe.usage!==8||bufferProbe.mapState!=='mapped')throw new Error('buffer metadata'); let p=Object.getPrototypeOf(bufferProbe); for(let f of [p.destroy,Object.getOwnPropertyDescriptor(p,'size').get,Object.getOwnPropertyDescriptor(p,'usage').get,Object.getOwnPropertyDescriptor(p,'mapState').get]){let ok=false;try{f.call({})}catch(e){ok=e instanceof TypeError}if(!ok)throw new Error('buffer brand')} bufferProbe.destroy();bufferProbe.destroy();if(bufferProbe.size!==64||bufferProbe.mapState!=='unmapped')throw new Error('destroy metadata/state');"),"Native buffer wrapper behavior failed");
+                    require(run(R"JS(
+                        if(bufferProbe.label!=='')throw new Error('label default');
+                        bufferProbe.label='a\0\ud800';
+                        if(bufferProbe.label!=='a\0\ufffd')throw new Error('label USVString');
+                        let labelError={};
+                        try {bufferProbe.label={toString(){throw labelError}}}catch(e){if(e!==labelError)throw e}
+                        if(bufferProbe.label!=='a\0\ufffd')throw new Error('failed label mutation');
+                        let symbolRejected=false;try{bufferProbe.label=Symbol()}catch(e){symbolRejected=e instanceof TypeError}
+                        if(!symbolRejected)throw new Error('symbol label accepted');
+                        bufferProbe.label={toString(){bufferProbe.destroy();return 'after destroy'}};
+                        if(bufferProbe.label!=='after destroy')throw new Error('reentrant label');
+                        let brandRejected=false,coerced=false;
+                        try{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(bufferProbe),'label').set.call({}, {toString(){coerced=true;return ''}})}catch(e){brandRejected=e instanceof TypeError}
+                        if(!brandRejected||coerced)throw new Error('label brand ordering');
+                    )JS"),"Buffer label behavior failed");
                     buffer_registry.reset();
                     require(run("let stale=false;try{bufferProbe.destroy()}catch(e){stale=e instanceof TypeError}if(!stale)throw new Error('stale buffer realm');delete globalThis.bufferProbe;"),"Buffer wrapper teardown left native access");
                     // Teardown releases through the service queue; native device

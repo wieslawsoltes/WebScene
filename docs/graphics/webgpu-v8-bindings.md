@@ -227,3 +227,18 @@ observes `unmapped` while size remains available. Wrong-receiver checks include
 this getter. The rebuilt macOS runtime CTest passes. Pending-state behavior still
 needs end-to-end qualification when mapAsync is connected; mapped-range exposure
 and ArrayBuffer detachment remain unfinished.
+
+### Buffer labels
+
+The internal buffer prototype now implements a label getter/setter. Wrapper creation
+accepts the already-converted descriptor label; subsequent writes perform USVString
+conversion, pass explicit-length bytes to Dawn SetLabel and retain the converted
+value for reads. Branding is checked before conversion and receiver state is
+reacquired afterwards, because user conversion code may invalidate binding state.
+
+The rebuilt macOS V8 test passes default-label, embedded NUL/lone-surrogate,
+Symbol rejection, thrown conversion identity, unchanged value after failure,
+wrong-receiver-before-coercion, and reentrant Destroy during ToString assertions.
+Labels remain readable after buffer destruction. Full registry teardown during
+coercion is guarded by reacquisition but is not yet independently exercised; public
+GPUDevice/createBuffer wiring and mapping APIs remain outstanding.
