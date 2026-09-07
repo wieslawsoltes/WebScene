@@ -701,6 +701,20 @@ int main() {
                     auto discovery_adapters=std::make_unique<v8_webgpu_adapters>(isolate,context,*discovery_devices,exception_constructor,2);
                     auto discovery=std::make_unique<v8_webgpu_discovery>(isolate,context,adapter_fixture,*discovery_adapters);
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"gpuDiscoveryProbe"),discovery->object()).FromMaybe(false),"Discovery object publication failed");
+                    auto language_set=discovery->object()->Get(context,v8::String::NewFromUtf8Literal(isolate,"wgslLanguageFeatures")).ToLocalChecked().As<v8::Object>();
+                    auto language_has=language_set->Get(context,v8::String::NewFromUtf8Literal(isolate,"has")).ToLocalChecked().As<v8::Function>();
+                    size_t language_count=0;
+                    for(const auto& feature:wgsl_language_feature_names) {
+                        v8::Local<v8::Value> name=v8::String::NewFromUtf8(isolate,feature.name.data(),v8::NewStringType::kNormal,static_cast<int>(feature.name.size())).ToLocalChecked();
+                        bool expected=adapter_fixture.dawn().instance().HasWGSLLanguageFeature(feature.native);
+                        require(language_has->Call(context,language_set,1,&name).ToLocalChecked()->BooleanValue(isolate)==expected,"WGSL capability differs from native instance");
+                        language_count+=expected;
+                    }
+                    require(language_set->Get(context,v8::String::NewFromUtf8Literal(isolate,"size")).ToLocalChecked()->Uint32Value(context).FromJust()==language_count,"WGSL snapshot count incorrect");
+                    { v8::TryCatch caught(isolate);v8::Local<v8::Value> name=v8::String::NewFromUtf8Literal(isolate,"x");
+                        require(feature_has->Call(context,language_set,1,&name).IsEmpty() && caught.HasCaught(),"WGSL set accepted GPU feature-set receiver brand");
+                    }
+                    require(run("{let f=gpuDiscoveryProbe.wgslLanguageFeatures;if(f!==gpuDiscoveryProbe.wgslLanguageFeatures||Object.prototype.toString.call(f)!=='[object WGSLLanguageFeatures]'||[...f].length!==f.size||f.has('chromium_testing_shipped')||f.has('chromium_print')||f.has('f16')||f.add)throw new Error('WGSL snapshot');}"),"WGSL snapshot semantics failed");
                     require(run("if(gpuDiscoveryProbe.getPreferredCanvasFormat()!=='bgra8unorm'||gpuDiscoveryProbe.getPreferredCanvasFormat.length!==0)throw new Error('preferred format');let badFormatReceiver=false;try{gpuDiscoveryProbe.getPreferredCanvasFormat.call({})}catch(e){badFormatReceiver=e instanceof TypeError}if(!badFormatReceiver)throw new Error('format receiver');"),"Preferred canvas format behavior failed");
                     bool invalid_format=false;
                     try { v8_webgpu_discovery invalid(isolate,context,adapter_fixture,*discovery_adapters,wgpu::BackendType::Undefined,wgpu::TextureFormat::RGBA16Float); }

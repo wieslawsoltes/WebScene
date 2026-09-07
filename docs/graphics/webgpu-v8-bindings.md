@@ -695,3 +695,21 @@ The macOS runtime test checks default/explicit format selection, method arity,
 wrong-receiver TypeError and invalid host configuration. Runtime CTest passes.
 GPUCanvasContext configuration/current-texture and ordinary presentation wiring
 remain unfinished; this method alone does not enable canvas rendering.
+
+### WGSL language capability snapshot
+
+The internal discovery object now exposes SameObject wgslLanguageFeatures. An
+explicit allowlist of 13 language extensions from the [W3C WGSL specification](https://www.w3.org/TR/WGSL/#language-extensions-sec),
+reviewed 2026-09-07, is filtered against the actual Dawn instance's
+HasWGSLLanguageFeature results. Chromium testing/printing extensions are excluded;
+additional draft/native extension names require a standards review before adding
+them. Enable extensions such as f16 are not language-feature entries.
+
+The read-only set implementation now has distinct GPU and WGSL brands and
+prototype tags while sharing its iteration/coercion implementation. Discovery
+construction belongs in trusted realm initialization, before scripts can modify
+Set built-ins. The macOS runtime test compares every allowlisted feature with
+Dawn, checks count, iteration, identity, prototype tag and private-name exclusion,
+and rejects borrowing GPU feature-set methods onto a WGSL feature object.
+Runtime CTest passed. Shader compilation and public navigator exposure remain
+unfinished; reporting capabilities does not establish shader execution coverage.

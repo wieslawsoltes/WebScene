@@ -2,6 +2,7 @@
 #include "v8_webgpu_adapters.h"
 #include "v8_webgpu_adapter_request.h"
 #include "v8_webgpu_adapter_options.h"
+#include "wgsl_language_feature_names.h"
 #include <list>
 namespace webscene::graphics {
 // Internal realm-owned GPU discovery object. The host must apply its secure
@@ -17,6 +18,7 @@ class v8_webgpu_discovery {
     const wgpu::TextureFormat preferred_format_;
     v8::Global<v8::Context> realm_;
     v8::Global<v8::Object> wrapper_;
+    v8::Global<v8::Private> language_key_;
     std::list<std::unique_ptr<v8_webgpu_adapter_request>> requests_;
     void check_scope() const {
         if (std::this_thread::get_id()!=thread_ || v8::Isolate::GetCurrent()!=isolate_)
@@ -32,6 +34,12 @@ class v8_webgpu_discovery {
         }
         info.GetIsolate()->ThrowException(v8::Exception::TypeError(v8::String::NewFromUtf8Literal(info.GetIsolate(),"Illegal GPU receiver")));
         return nullptr;
+    }
+    static void language_features(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* owner=receiver(info); if (!owner) return;
+        v8::Local<v8::Value> value;
+        if (info.This()->GetPrivate(info.GetIsolate()->GetCurrentContext(),owner->language_key_.Get(info.GetIsolate())).ToLocal(&value))
+            info.GetReturnValue().Set(value);
     }
     static void preferred_canvas_format(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* owner=receiver(info); if (!owner) return;
@@ -86,12 +94,18 @@ public:
         realm_.Reset(isolate,context);
         auto instance=v8::ObjectTemplate::New(isolate); instance->SetInternalFieldCount(2);
         auto prototype=v8::ObjectTemplate::New(isolate);
+        prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"wgslLanguageFeatures"),v8::FunctionTemplate::New(isolate,language_features));
         prototype->Set(isolate,"getPreferredCanvasFormat",v8::FunctionTemplate::New(isolate,preferred_canvas_format));
         prototype->Set(isolate,"requestAdapter",v8::FunctionTemplate::New(isolate,request_adapter));
         auto wrapper=instance->NewInstance(context).ToLocalChecked();
         wrapper->SetPrototype(context,prototype->NewInstance(context).ToLocalChecked()).Check();
         wrapper->SetInternalField(0,v8::External::New(isolate,&brand_,v8::kExternalPointerTypeTagDefault));
         wrapper->SetAlignedPointerInInternalField(1,this,v8::kEmbedderDataTypeTagDefault);
+        v8_wgsl_language_features feature_factory(isolate,context);
+        auto names=supported_wgsl_language_feature_names(service_.dawn().instance());
+        auto features=feature_factory.create(context,names).ToLocalChecked();
+        language_key_.Reset(isolate,v8::Private::New(isolate));
+        wrapper->SetPrivate(context,language_key_.Get(isolate),features).Check();
         wrapper_.Reset(isolate,wrapper);
     }
     v8_webgpu_discovery(const v8_webgpu_discovery&)=delete;

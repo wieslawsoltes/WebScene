@@ -8,7 +8,7 @@
 namespace webscene::graphics {
 // Immutable WebIDL setlike contents. The backing Set stays in traced internal
 // fields, not in native globals; retained feature objects outlive their factory.
-class v8_webgpu_supported_features {
+template<bool Wgsl=false> class v8_webgpu_feature_set {
     alignas(void*) static inline char brand_{};
     v8::Isolate* isolate_;
     const std::thread::id thread_=std::this_thread::get_id();
@@ -60,7 +60,7 @@ class v8_webgpu_supported_features {
 public:
     // Initialize in the trusted realm bootstrap, before user scripts can modify
     // built-in Set iterator methods. Later global/prototype changes are ignored.
-    v8_webgpu_supported_features(v8::Isolate* isolate,v8::Local<v8::Context> context):isolate_(isolate) {
+    v8_webgpu_feature_set(v8::Isolate* isolate,v8::Local<v8::Context> context):isolate_(isolate) {
         realm_.Reset(isolate,context);
         auto set=v8::Set::New(isolate);
         auto native_prototype=set->GetPrototype().As<v8::Object>();
@@ -78,11 +78,11 @@ public:
         prototype->DefineOwnProperty(context,v8::String::NewFromUtf8Literal(isolate,"keys"),values_method).Check();
         prototype->DefineOwnProperty(context,v8::Symbol::GetIterator(isolate),values_method).Check();
         prototype->DefineOwnProperty(context,v8::String::NewFromUtf8Literal(isolate,"entries"),entries_method).Check();
-        prototype->DefineOwnProperty(context,v8::Symbol::GetToStringTag(isolate),v8::String::NewFromUtf8Literal(isolate,"GPUSupportedFeatures"),static_cast<v8::PropertyAttribute>(v8::ReadOnly|v8::DontEnum)).Check();
+        prototype->DefineOwnProperty(context,v8::Symbol::GetToStringTag(isolate),v8::String::NewFromUtf8(isolate,Wgsl?"WGSLLanguageFeatures":"GPUSupportedFeatures").ToLocalChecked(),static_cast<v8::PropertyAttribute>(v8::ReadOnly|v8::DontEnum)).Check();
         prototype_.Reset(isolate,prototype);
     }
-    v8_webgpu_supported_features(const v8_webgpu_supported_features&)=delete;
-    v8_webgpu_supported_features& operator=(const v8_webgpu_supported_features&)=delete;
+    v8_webgpu_feature_set(const v8_webgpu_feature_set&)=delete;
+    v8_webgpu_feature_set& operator=(const v8_webgpu_feature_set&)=delete;
     v8::MaybeLocal<v8::Object> create(v8::Local<v8::Context> context,std::span<const std::string_view> names) {
         if (std::this_thread::get_id()!=thread_ || v8::Isolate::GetCurrent()!=isolate_ || realm_.Get(isolate_)!=context)
             throw std::logic_error("Feature set belongs to another realm");
@@ -101,4 +101,6 @@ public:
         return object;
     }
 };
+using v8_webgpu_supported_features=v8_webgpu_feature_set<false>;
+using v8_wgsl_language_features=v8_webgpu_feature_set<true>;
 } // namespace webscene::graphics
