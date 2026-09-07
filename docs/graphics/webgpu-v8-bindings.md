@@ -1424,3 +1424,28 @@ and uses a 64 MiB per-canvas pool cap. Detached-canvas collection, aggregate
 resource budgeting, subframe exposure and failure semantics remain qualification
 work. Automatic frame expiration/scene publication and normal presenter
 consumption are not connected yet, so this is not a visible application pass.
+
+### Rendering opportunities and completed scene publication
+
+An acquired current texture now contributes to host frame demand even without
+requestAnimationFrame. At a signaled rendering opportunity, the runtime expires
+current textures after the last due RAF callback and hands already-submitted work
+to the provider. Completed provider retirements participate in task readiness;
+the normal task pump publishes matching canvas/generation/content versions into
+the document. Stale versions are dropped before publication. No GPU completion
+wait or pixel readback is introduced in this production path.
+
+Configure/unconfigure invalidate the document's displayed image and advance its
+content version so an older pending completion cannot restore it. Published
+unchanged content requests no further frame. Navigation clears pending rendering
+opportunity state along with canvas controllers.
+
+The macOS runtime test draws through a real DOM canvas without RAF, signals a
+host rendering opportunity and obtains the resulting document scene image. A
+post-completion diagnostic IOSurface read verifies all 16 opaque red pixels in
+the 8x2 image. It verifies automatic current-texture expiration, zero idle frame
+demand, image removal on unconfigure and current-texture identity across two RAF
+callbacks in one rendering opportunity. Runtime CTest passes after rebuild; the
+V8-disabled native library also builds. Normal desktop host enablement and
+managed v3 scene consumption remain outstanding, so this is document scene
+publication evidence rather than a visible WebGPU application qualification.

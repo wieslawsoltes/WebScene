@@ -10,6 +10,7 @@ struct webgpu_canvas_host {
     std::function<void(const webgpu_canvas_configuration&)> validate;
     std::function<wgpu::Texture(const webgpu_canvas_configuration&,const webgpu_texture_descriptor&)> acquire;
     std::function<void(const wgpu::Texture&,bool present)> retire;
+    std::function<void()> invalidate;
 };
 class v8_webgpu_canvas_context {
     alignas(void*) static inline char brand_{};
@@ -40,13 +41,13 @@ class v8_webgpu_canvas_context {
             // Host validation includes required format features and presenter
             // capabilities before the configuration is committed.
             self->host_.validate(converted);validate_webgpu_canvas_format_usage(converted);
-            self->end_frame(false);self->configuration_=std::move(converted);self->device_.Reset(isolate,device);
+            self->end_frame(false);if(self->host_.invalidate)self->host_.invalidate();self->configuration_=std::move(converted);self->device_.Reset(isolate,device);
         }catch(const std::invalid_argument& e){fail(isolate,e.what());}
         catch(const std::exception&){auto* self=receiver(info);if(self)self->exception("OperationError","Canvas configuration failed");}
     }
     static void unconfigure(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* self=receiver(info);if(!self)return;
-        try{self->end_frame(false);self->configuration_.reset();self->device_.Reset();}
+        try{self->end_frame(false);self->configuration_.reset();self->device_.Reset();if(self->host_.invalidate)self->host_.invalidate();}
         catch(const std::exception&){self->exception("OperationError","Canvas retirement failed");}
     }
     static void current(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -98,6 +99,7 @@ public:
     }
     ~v8_webgpu_canvas_context(){check_scope();wrapper_.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);end_frame(false);}
     v8::Local<v8::Object> object()const{check_scope();return wrapper_.Get(isolate_);}
+    bool has_current_texture()const noexcept{return !current_.IsEmpty();}
     void end_frame(bool present){check_scope();if(current_.IsEmpty())return;host_.retire(native_current_,present);current_.Reset();native_current_=nullptr;}
     void resize(uint32_t width,uint32_t height){check_scope();end_frame(false);width_=width;height_=height;}
 private:

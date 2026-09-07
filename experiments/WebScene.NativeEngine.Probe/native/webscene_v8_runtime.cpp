@@ -234,6 +234,7 @@ struct v8_dom_runtime::implementation final {
         std::unique_ptr<webscene::graphics::v8_webgpu_canvas_context> context;
     };
     std::unordered_map<uint64_t,gpu_canvas_entry> gpu_canvases;
+    bool gpu_rendering_opportunity=false;
     uint64_t gpu_canvas_timeline=webscene::graphics::new_owner_token();
 #endif
     std::function<void(webscene::graphics::completion_record)> graphics_deliver;
@@ -4510,6 +4511,9 @@ void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
         ? timestamp_ms
         : std::chrono::duration<double, std::milli>(now.time_since_epoch()).count();
     impl_->last_animation_frame_timestamp_ms = timestamp;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+    if(impl_->webgpu)impl_->gpu_rendering_opportunity=true;
+#endif
     if (impl_->is_text_control(impl_->active_element)
         && impl_->active_element->mutable_form_control().input_focused) {
         const auto elapsed = std::max(0.0, timestamp - impl_->caret_blink_epoch_ms);
@@ -4541,12 +4545,22 @@ bool v8_dom_runtime::pump_animation_frame_task()
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(local_context);
-    return impl_->drain_animation_frame_task()
-        && impl_->promote_pending_promise_error();
+    const bool result=impl_->drain_animation_frame_task()&&impl_->promote_pending_promise_error();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+    if(impl_->gpu_rendering_opportunity&&!impl_->has_due_animation_frame_task()) {
+        impl_->gpu_rendering_opportunity=false;
+        for(auto& [key,canvas]:impl_->gpu_canvases)canvas.context->end_frame(result);
+        impl_->publish_ready_gpu_canvases();
+    }
+#endif
+    return result;
 }
 
 bool v8_dom_runtime::has_pending_animation_frame_task() const noexcept
 {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+    if(impl_->gpu_rendering_opportunity)return true;
+#endif
     return impl_->has_due_animation_frame_task();
 }
 
@@ -4555,6 +4569,9 @@ uint8_t v8_dom_runtime::host_animation_frame_demand() const noexcept
     auto demand = impl_->has_waiting_animation_frame_task()
         ? uint8_t{1U}
         : uint8_t{0U};
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+    for(const auto& [key,canvas]:impl_->gpu_canvases)if(canvas.context->has_current_texture()){demand|=1U;break;}
+#endif
     if (impl_->is_text_control(impl_->active_element)
         && impl_->active_element->mutable_form_control().input_focused) {
         demand |= 4U;
@@ -4651,6 +4668,9 @@ bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     if (impl_->graphics && impl_->graphics->has_ready_work()) return true;
+#if defined(__APPLE__)
+    for(const auto& [key,canvas]:impl_->gpu_canvases)if(canvas.provider->has_completed_retirements())return true;
+#endif
 #endif
     return impl_->has_pending_detached_dom_collection()
         || impl_->websocket_transport.has_pending_events()

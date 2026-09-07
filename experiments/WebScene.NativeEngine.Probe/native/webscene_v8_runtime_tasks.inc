@@ -543,6 +543,9 @@
                 perform_microtask_checkpoint();
         }
 #endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+        publish_ready_gpu_canvases();
+#endif
         if (websocket_transport.has_pending_events()) {
             return drain_websocket_event();
         }

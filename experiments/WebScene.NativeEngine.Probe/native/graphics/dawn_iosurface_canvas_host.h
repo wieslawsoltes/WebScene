@@ -69,6 +69,11 @@ public:
         }
         return {};
     }
+    bool has_completed_retirements()const {
+        check_thread();
+        for(const auto& item:pending_)if(item&&item->state()!=dawn_iosurface_submission::status::pending)return true;
+        return false;
+    }
     bool idle() {
         check_thread();clear_retired();if(active_)return false;
         for(const auto& item:pending_)if(item)return false;

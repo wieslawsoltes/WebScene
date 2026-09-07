@@ -15,7 +15,7 @@
             webgpu_navigator.Reset();
         }
 #if defined(__APPLE__)
-        gpu_canvases.clear();
+        gpu_canvases.clear();gpu_rendering_opportunity=false;
 #endif
         webgpu_dom_exception.Reset();
         webgpu_wake.reset();

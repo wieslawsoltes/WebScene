@@ -144,6 +144,43 @@ void test_runtime_webgpu_installation() {
         const resizedTexture=domGPUContext.getCurrentTexture();if(resizedTexture===initialTexture||resizedTexture.width!==8)throw new Error('DOM GPU resize');
         domGPUContext.unconfigure();if(domGPUCanvas.getContext('2d')!==null)throw new Error('unconfigure released canvas mode');
     )JS","dom-gpu-canvas"),"DOM WebGPU canvas integration failed");
+    require(runtime.execute(R"JS(
+        domGPUCanvas.id='published-gpu-canvas';
+        domGPUContext.configure({device:installedDevice,format:navigator.gpu.getPreferredCanvasFormat()});
+        globalThis.publicationTexture=domGPUContext.getCurrentTexture();
+        const publicationEncoder=installedDevice.createCommandEncoder();
+        const publicationPass=publicationEncoder.beginRenderPass({colorAttachments:[{view:publicationTexture.createView(),loadOp:'clear',storeOp:'store',clearValue:[1,0,0,1]}]});
+        publicationPass.end();installedDevice.queue.submit([publicationEncoder.finish()]);
+    )JS","gpu-publication"),"GPU publication drawing failed");
+    require((runtime.host_animation_frame_demand()&1U)!=0,"Canvas without RAF did not request a rendering opportunity");
+    runtime.signal_animation_frame(100);
+    require(runtime.has_pending_animation_frame_task()&&runtime.pump_animation_frame_task(),"GPU rendering opportunity was not serviced");
+    auto* published_node=document.find_by_id("published-gpu-canvas");
+    deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(!published_node->canvas().gpu_image&&std::chrono::steady_clock::now()<deadline){
+        require(runtime.pump_task(),"GPU publication completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    auto published=published_node->canvas().gpu_image;
+    require(published!=nullptr,"Completed DOM GPU image did not publish");
+    auto consumer=published->value.begin_consumer();require(consumer.has_value(),"Published DOM canvas consumer unavailable");
+    auto surface=iosurface_canvas_images::resolve(*consumer).borrowed_handle();
+    require(IOSurfaceLock(surface,kIOSurfaceLockReadOnly,nullptr)==kIOReturnSuccess,"DOM canvas pixel lock failed");
+    auto pixels=static_cast<const uint8_t*>(IOSurfaceGetBaseAddress(surface));auto stride=IOSurfaceGetBytesPerRow(surface);bool correct=pixels!=nullptr;
+    if(pixels)for(size_t y=0;y<2;++y)for(size_t x=0;x<8;++x){auto pixel=pixels+y*stride+x*4;correct&=pixel[0]==0&&pixel[1]==0&&pixel[2]==255&&pixel[3]==255;}
+    auto unlocked=IOSurfaceUnlock(surface,kIOSurfaceLockReadOnly,nullptr);consumer->complete();
+    require(correct&&unlocked==kIOReturnSuccess,"Published DOM canvas pixel mismatch");
+    require(runtime.host_animation_frame_demand()==0,"Published unchanged GPU canvas kept requesting frames");
+    require(runtime.execute("if(domGPUContext.getCurrentTexture()===publicationTexture)throw new Error('frame texture not expired');domGPUContext.unconfigure();","gpu-publication-expire"),"GPU publication expiration failed");
+    require(!published_node->canvas().gpu_image,"Unconfigure retained the displayed GPU image");
+    require(runtime.execute(R"JS(
+        domGPUContext.configure({device:installedDevice,format:navigator.gpu.getPreferredCanvasFormat()});
+        requestAnimationFrame(()=>{globalThis.rafCanvasTexture=domGPUContext.getCurrentTexture();});
+        requestAnimationFrame(()=>{if(domGPUContext.getCurrentTexture()!==rafCanvasTexture)throw new Error('texture expired between RAF callbacks');});
+    )JS","gpu-raf-group"),"GPU RAF setup failed");
+    runtime.signal_animation_frame(116);
+    require(runtime.pump_animation_frame_task()&&runtime.has_pending_animation_frame_task(),"First GPU RAF lost remaining rendering work");
+    require(runtime.pump_animation_frame_task()&&!runtime.has_pending_animation_frame_task(),"GPU RAF group did not finish");
+    require(runtime.execute("domGPUContext.unconfigure();","gpu-raf-cleanup"),"GPU RAF cleanup failed");
 #endif
     require(runtime.load_url("https://graphics.test/webgpu-next"),"WebGPU navigation failed");
     require(runtime.execute("if('gpu' in navigator)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");
