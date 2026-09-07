@@ -307,3 +307,27 @@ previously recorded intermittent non-graphics DOM activation failure.
 
 The service fixture also passed with AddressSanitizer/UndefinedBehaviorSanitizer;
 the prebuilt Dawn/ANGLE libraries remained uninstrumented.
+
+## Native device-loss signal and engine delivery
+
+Device requests can install a shared loss signal in their Dawn descriptor before
+creation and pass it to native device adoption. Dawn's spontaneous loss callback
+only stores an atomic flag and signals the retained engine wake endpoint. It
+captures neither V8 nor a raw engine pointer. Waiting for device loss does not
+reserve a permanently pending completion slot or force periodic idle polling.
+Explicit Destroy and callback cancellation remain separate from unexpected loss.
+
+Service readiness observes pending loss; its engine-thread pump applies the lost
+state and cancels records belonging to that device with device_lost status.
+Subsequent native device access rejects the lost device, while close preserves an
+already applied loss outcome. Resource-table visitation stays on its owning
+execution thread and does not mutate the table during traversal.
+
+The Metal hardware test installs the descriptor observer, invokes Dawn ForceLoss,
+waits for its native signal, verifies service readiness, pumps a pending record
+to device_lost, rejects native access and rejects its late success publication.
+All nine graphics CTests passed in 2.17 seconds. The pending record in this loss
+case is synthetic; actual pending-map destruction is covered separately. Complete
+loss reason/message propagation, browser promise semantics, simultaneous live-
+device loss isolation and recovery/recreation remain outstanding. This is native
+loss-path evidence, not a hardware driver-reset or full browser conformance pass.

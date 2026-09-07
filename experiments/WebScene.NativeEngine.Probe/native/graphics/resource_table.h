@@ -148,6 +148,16 @@ public:
         completed_ = submission;
         release_ready();
     }
+    // Engine-internal visitors must not mutate this table during traversal.
+    template<class Visit> void visit_live(Visit visit) {
+        check_thread();
+        for (auto& item:entries_) if (item.value && !item.destroyed) visit(*item.value);
+    }
+    template<class Predicate> bool any_live(Predicate predicate) const {
+        check_thread();
+        for (const auto& item:entries_) if (item.value && !item.destroyed && predicate(*item.value)) return true;
+        return false;
+    }
     size_t resident_count() const
     {
         check_thread();

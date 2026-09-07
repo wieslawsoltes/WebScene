@@ -82,6 +82,8 @@ int main() {
     auto second_native=std::make_shared<device_result>();
     auto second_ticket=mailbox->reserve(20,owner).value();
     wgpu::DeviceDescriptor second_descriptor{};
+    auto second_loss=std::make_shared<device_loss_signal>(wake);
+    device_loss_signal::configure(second_descriptor,second_loss);
     second_adapter->adapter.RequestDevice(&second_descriptor,wgpu::CallbackMode::AllowProcessEvents,
         [mailbox,second_ticket,second_native](wgpu::RequestDeviceStatus status,wgpu::Device device,wgpu::StringView) {
             second_native->device=std::move(device);
@@ -99,7 +101,7 @@ int main() {
         if (!second_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
     }
     if (!second_done || !second_native->device) return 1;
-    auto second_owned=root.adopt_device(second_adapter->adapter,second_native->device);
+    auto second_owned=root.adopt_device(second_adapter->adapter,second_native->device,second_loss);
     resource_owner second_owner{};
     root.with_device(second_owned,[&](auto& device) { second_owner=device.owner(); });
     if (root.live_devices()!=2 || owner==second_owner) return 1;
@@ -237,6 +239,23 @@ int main() {
     for (size_t i=0;i<1024;++i) if (uploaded[i]!=0x13579bdfu) return 1;
     survivor_buffer.Unmap();
     survivor_buffer.Destroy();
+    auto loss_ticket=mailbox->reserve(22,second_owner).value();
+    second_native->device.ForceLoss(wgpu::DeviceLostReason::Unknown,"G02 loss test");
+    const auto loss_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while (!second_loss->lost.load(std::memory_order_acquire) && std::chrono::steady_clock::now()<loss_deadline)
+        wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    if (!second_loss->lost.load(std::memory_order_acquire) || !root.has_ready_work()) return 1;
+    bool loss_delivered=false;
+    root.pump([&](auto record) {
+        if (record.operation!=22 || record.status!=completion_status::device_lost)
+            throw std::runtime_error("device loss did not terminate its pending record");
+        loss_delivered=true;
+    });
+    bool lost_rejected=false;
+    root.with_device(second_owned,[&](auto& device) {
+        try { device.native(); } catch (const std::logic_error&) { lost_rejected=true; }
+    });
+    if (!loss_delivered || !lost_rejected || mailbox->publish(loss_ticket,completion_status::success)) return 1;
     auto releases=root.command_endpoint(2,0);
     auto release=graphics_service::deferred_device_release(second_owned);
     std::thread finalizer([&] {

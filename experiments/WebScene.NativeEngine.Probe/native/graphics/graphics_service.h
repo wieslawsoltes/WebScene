@@ -60,10 +60,10 @@ public:
     }
     // Internal request-device completion hook: pass a freshly created device
     // from this service's instance exactly once, with its originating adapter.
-    resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device) {
+    resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={}) {
         check_open();
         return devices_.insert(owner_,std::make_unique<dawn_device>(
-            owner_.engine,dawn().completions(),std::move(adapter),std::move(device)));
+            owner_.engine,dawn().completions(),std::move(adapter),std::move(device),std::move(loss)));
     }
     template<class Execute> void with_device(resource_handle<dawn_device> handle,Execute execute) {
         check_open();
@@ -160,6 +160,7 @@ public:
             explicit pump_guard(bool& value) : active(value) { active=true; }
             ~pump_guard() { active=false; }
         } scope(pumping_);
+        devices_.visit_live([](auto& device) { device.process_loss(); });
         drain_commands(budget);
         if (!dawn_) return 0;
         next_event_poll_=std::chrono::steady_clock::now()+std::chrono::milliseconds(1);
@@ -167,6 +168,7 @@ public:
     }
     bool has_ready_work() const {
         check_thread();
+        if (devices_.any_live([](const auto& device) { return device.loss_pending(); })) return true;
         if (commands_ && commands_->metrics().depth) return true;
         if (releases_ && releases_->has_ready(executed_command_serial_)) return true;
         return dawn_ && (dawn_->completions()->has_ready()
@@ -175,6 +177,7 @@ public:
     }
     std::chrono::milliseconds recommended_idle_wait(std::chrono::milliseconds maximum) const {
         check_thread();
+        if (devices_.any_live([](const auto& device) { return device.loss_pending(); })) return std::chrono::milliseconds::zero();
         if (commands_ && commands_->metrics().depth) return std::chrono::milliseconds::zero();
         if (releases_ && releases_->has_ready(executed_command_serial_)) return std::chrono::milliseconds::zero();
         if (!dawn_) return maximum;
