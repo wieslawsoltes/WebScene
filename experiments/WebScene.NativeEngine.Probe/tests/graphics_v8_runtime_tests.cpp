@@ -25,6 +25,7 @@ void require(bool value,const char* message) { if (!value) throw std::runtime_er
 #include "graphics_v8_webgpu_device_descriptor.h"
 #include "graphics_v8_webgpu_shader_descriptor.h"
 #include "graphics_v8_webgpu_programmable_stage.h"
+#include "graphics_v8_webgpu_render_state.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
 void test_image_lease_abi() {
@@ -929,6 +930,7 @@ int main() {
                     test_v8_webgpu_buffer_descriptor(isolate,context);
                     test_v8_webgpu_device_descriptor(isolate,context);
                     test_v8_webgpu_shader_descriptor(isolate,context);
+                test_v8_webgpu_render_state(isolate,context);
                     v8::Local<v8::Promise> promise;
                     webgpu_adapter_options options;
                     adapter_request=v8_webgpu_adapter_request::start(isolate,context,options,

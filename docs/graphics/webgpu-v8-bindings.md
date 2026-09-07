@@ -892,3 +892,22 @@ USVString replacement/NUL handling, normalized-key collisions, proxy property
 order, property deletion during enumeration, invalid values and atomic failure.
 The test passes against real shader wrappers. Derived vertex-buffer and fragment
 color-target conversion plus complete render-pipeline dispatch remain pending.
+
+
+### Render-state dictionaries and pinned enum mappings
+
+Primitive, multisample, blend-component/blend-state and stencil-face converters
+now apply WebIDL member order, defaults, boolean coercion and EnforceRange
+unsigned integers before committing native state. Invalid enums and non-finite/
+out-of-range integers throw TypeError; application getter exceptions propagate.
+Native semantic constraints, such as supported sample counts, remain Dawn's
+validation responsibility.
+
+Eleven render-related enum catalogs are generated from the pinned IDL and an
+explicit native spelling map. Generation rejects changed IDL membership/order;
+compilation verifies the mappings against the pinned Dawn headers. The npm
+check/generate scripts include this catalog. Browser-unknown native enum values
+are excluded. macOS V8 runtime tests cover defaults, conversion order, blend and
+stencil values, numeric truncation/bounds, exception identity and atomic failure.
+Both the runtime test and generator check pass. Vertex layouts, depth/color
+state and complete pipeline dispatch remain pending.
