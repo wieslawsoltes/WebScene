@@ -77,21 +77,32 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
         invalid_wake->count.load()!=1 || rejected.busy_images()!=0) return {};
     auto ready_wake=std::make_shared<counted_wake>();
     wgpu::Texture expired_texture;
-    auto submitted=webscene::graphics::dawn_iosurface_submission::submit(std::move(frame),*device,
-        [&](const wgpu::Texture& texture) {
-            // Diagnostic-only retained alias: verify old frame objects expire.
-            expired_texture=texture;
-            auto encoder=device->CreateCommandEncoder();
-            wgpu::RenderPassColorAttachment color{};
-            color.view=texture.CreateView();
-            color.loadOp=wgpu::LoadOp::Clear; color.storeOp=wgpu::StoreOp::Store;
-            color.clearValue={0.2,0.4,0.6,1};
-            wgpu::RenderPassDescriptor pass{}; pass.colorAttachmentCount=1; pass.colorAttachments=&color;
-            auto recording=encoder.BeginRenderPass(&pass); recording.End();
-            return encoder.Finish();
-        },storage,ready_wake);
+    auto surface=frame.color->borrowed_handle();
+    std::shared_ptr<void> owner(const_cast<void*>(CFRetain(surface)),[](void* value){CFRelease(value);});
+    wgpu::SharedTextureMemoryIOSurfaceDescriptor io{};io.ioSurface=surface;
+    wgpu::SharedTextureMemoryDescriptor import{};import.nextInChain=&io;
+    wgpu::TextureDescriptor description{};description.dimension=wgpu::TextureDimension::e2D;
+    description.size={frame.metadata.width,frame.metadata.height,1};description.format=wgpu::TextureFormat::BGRA8Unorm;description.usage=wgpu::TextureUsage::RenderAttachment;
+    auto shared=dawn_shared_image::import(*device,import,description,std::move(owner));
+    wgpu::SharedTextureMemoryBeginAccessDescriptor access{};access.initialized=false;
+    if(!shared||!shared->begin(access))return {};
+    expired_texture=shared->texture();
+    auto encoder=device->CreateCommandEncoder();
+    wgpu::RenderPassColorAttachment color{};color.view=shared->texture().CreateView();
+    color.loadOp=wgpu::LoadOp::Clear;color.storeOp=wgpu::StoreOp::Store;color.clearValue={0.2,0.4,0.6,1};
+    wgpu::RenderPassDescriptor pass{};pass.colorAttachmentCount=1;pass.colorAttachments=&color;
+    auto recording=encoder.BeginRenderPass(&pass);recording.End();auto commands=encoder.Finish();
+    // Model application-owned submission: handoff must not submit this again.
+    auto foreign=rejected.acquire(frame.metadata);if(!foreign)return {};
+    bool foreign_rejected=false;
+    try{dawn_iosurface_submission::publish_submitted(std::move(*foreign),*device,shared,storage);}
+    catch(const std::invalid_argument&){foreign_rejected=true;}
+    if(!foreign_rejected||!foreign->color)return {};foreign.reset();
+    device->GetQueue().Submit(1,&commands);
+    auto submitted=dawn_iosurface_submission::publish_submitted(std::move(frame),*device,shared,storage,ready_wake);
     if (!submitted || !wait(submitted->completion_future()) || !wait(submitted->validation_future()) ||
         ready_wake->count.load()!=1 || error->load()) return {};
+    if(shared->begin(access)||!shared->expire_texture())return {};
     device->PushErrorScope(wgpu::ErrorFilter::Validation);
     auto invalid_view=expired_texture.CreateView();
     auto expired_encoder=device->CreateCommandEncoder();

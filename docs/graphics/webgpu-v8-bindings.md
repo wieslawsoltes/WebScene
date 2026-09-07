@@ -1171,3 +1171,24 @@ attempted write. The real Ganesh window probe then verifies the original pixels:
 copies and four diagnostic readbacks. Physical scanout is not verified. Evidence:
 `evidence/ganesh-host/frame-texture-expiry.json`. This validates native frame
 expiration/presentation; JavaScript GPUCanvasContext remains unconnected.
+
+
+### Handoff after application-owned submission
+
+The IOSurface producer can now publish work already submitted on the device
+queue. This path never resubmits application commands. It verifies device/native
+allocation identity, ends shared access, expires the frame texture, requires
+initialized contents, and waits for queue completion plus its own handoff
+validation scope before exposing a versioned image. Its error scope covers only
+host handoff operations, not application recording or the application's scope
+stack. Publication backpressure still retains the producer through completion.
+
+The macOS fixture now records and submits independently, then invokes this
+handoff. It rejects a foreign allocation before consuming its frame, rejects
+reopening an expired texture, and verifies an expired alias cannot submit writes.
+The real Ganesh window pixel probe passes: 32 frames, one import, completed GPU
+retirement, zero explicit transport copies and four diagnostic readbacks.
+Evidence is in `evidence/ganesh-host/submitted-frame-handoff.json`; physical
+scanout is not verified. This supplies a native canvas frame-boundary primitive.
+JavaScript GPUCanvasContext, host device-feature provisioning and ordinary scene
+consumption remain integration work, not completed by this native fixture.

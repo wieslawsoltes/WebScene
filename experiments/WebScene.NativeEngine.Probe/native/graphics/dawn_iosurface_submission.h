@@ -40,6 +40,39 @@ public:
     // Exposed for diagnostic waits only. Ordinary callers poll state or use wake.
     wgpu::Future completion_future() const noexcept { return future_; }
     wgpu::Future validation_future() const noexcept { return validation_future_; }
+    // Handoff for application work already submitted on this device's queue.
+    // No command is resubmitted. Even publication backpressure must retain the
+    // frame until queue completion because its allocation may already be in use.
+    static std::shared_ptr<dawn_iosurface_submission> publish_submitted(
+        iosurface_canvas_images::frame&& frame,const wgpu::Device& device,
+        std::shared_ptr<dawn_shared_image> shared,std::shared_ptr<void> device_lifetime={},
+        std::shared_ptr<completion_wake> wake={}) {
+        if(!device||!frame.color||!shared||!shared->matches(device,frame.color->borrowed_handle()))
+            throw std::invalid_argument("Submitted image must match its device and native allocation");
+        auto result=std::make_shared<dawn_iosurface_submission>();
+        auto pending=std::make_shared<iosurface_canvas_images::frame>(std::move(frame));
+        pending->producer.begin();
+        auto image=pending->producer.publish();
+        result->valid_=bool(image);
+        if(image)result->image_.emplace(std::move(*image));
+        // Scope only host handoff operations, never application JS recording or
+        // its error-scope stack. Undefined image contents cannot be presented.
+        device.PushErrorScope(wgpu::ErrorFilter::Validation);
+        wgpu::SharedTextureMemoryEndAccessState end;
+        const bool ended=shared->end(end);
+        const bool expired=ended&&shared->expire_texture();
+        const bool valid=expired&&end.initialized;
+        result->future_=device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
+            [result,pending,shared,device,device_lifetime,wake,valid](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
+                pending->producer.complete();
+                result->finish(true,valid&&status==wgpu::QueueWorkDoneStatus::Success,wake);
+            });
+        result->validation_future_=device.PopErrorScope(wgpu::CallbackMode::AllowSpontaneous,
+            [result,device,device_lifetime,wake](wgpu::PopErrorScopeStatus status,wgpu::ErrorType error,wgpu::StringView) {
+                result->finish(false,status==wgpu::PopErrorScopeStatus::Success&&error==wgpu::ErrorType::NoError,wake);
+            });
+        return result;
+    }
     // Invoke on the device/producer owner thread. The recorder may only encode;
     // it must not submit, alter error scopes, or let the borrowed texture escape.
     // Validation and queue completion must both succeed before publication.

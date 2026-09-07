@@ -8,12 +8,13 @@ namespace webscene::graphics {
 // retain this object through GPU completion; EndAccess is not a completion wait.
 class dawn_shared_image final {
     std::shared_ptr<void> native_owner_;
+    wgpu::Device device_;
     wgpu::SharedTextureMemory memory_;
     wgpu::Texture texture_;
     bool active_=false, failed_=false, expired_=false;
-    dawn_shared_image(std::shared_ptr<void> owner,wgpu::SharedTextureMemory memory,
+    dawn_shared_image(wgpu::Device device,std::shared_ptr<void> owner,wgpu::SharedTextureMemory memory,
                       wgpu::Texture texture)
-        :native_owner_(std::move(owner)),memory_(std::move(memory)),texture_(std::move(texture)) {}
+        :native_owner_(std::move(owner)),device_(std::move(device)),memory_(std::move(memory)),texture_(std::move(texture)) {}
 public:
     dawn_shared_image(const dawn_shared_image&)=delete;
     dawn_shared_image& operator=(const dawn_shared_image&)=delete;
@@ -35,7 +36,10 @@ public:
         auto texture=memory.CreateTexture(&description);
         if (!texture) return {};
         return std::shared_ptr<dawn_shared_image>(
-            new dawn_shared_image(std::move(owner),std::move(memory),std::move(texture)));
+            new dawn_shared_image(device,std::move(owner),std::move(memory),std::move(texture)));
+    }
+    bool matches(const wgpu::Device& device,const void* allocation)const noexcept {
+        return device.Get()==device_.Get()&&allocation==native_owner_.get();
     }
     const wgpu::Texture& texture() const noexcept { return texture_; }
     bool begin(const wgpu::SharedTextureMemoryBeginAccessDescriptor& access) {
