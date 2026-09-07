@@ -8,11 +8,16 @@
 namespace webscene::graphics {
 // One instance per engine, created on its worker. This is native API state only;
 // framework-owned Skia contexts and presenter textures never enter this service.
+struct graphics_metrics {
+    size_t live_devices{},live_contexts{};
+    completion_metrics completions{};
+};
 class graphics_service {
     const std::thread::id thread_ = std::this_thread::get_id();
     const resource_owner owner_{new_owner_token(),new_owner_token(),0};
     std::shared_ptr<completion_wake> wake_;
     const size_t completion_capacity_;
+    const bool measure_latency_;
     resource_table<angle_context> contexts_;
     resource_table<dawn_device> devices_;
     std::unique_ptr<dawn_event_service> dawn_;
@@ -29,8 +34,8 @@ class graphics_service {
         if (closed_) throw std::logic_error("graphics service is closed");
     }
 public:
-    graphics_service(std::shared_ptr<completion_wake> wake,size_t context_capacity=64,size_t completion_capacity=256)
-        : wake_(std::move(wake)),completion_capacity_(completion_capacity),contexts_(context_capacity,owner_),devices_(context_capacity,owner_) {}
+    graphics_service(std::shared_ptr<completion_wake> wake,size_t context_capacity=64,size_t completion_capacity=256,bool measure_latency=false)
+        : wake_(std::move(wake)),completion_capacity_(completion_capacity),measure_latency_(measure_latency),contexts_(context_capacity,owner_),devices_(context_capacity,owner_) {}
     graphics_service(const graphics_service&)=delete;
     graphics_service& operator=(const graphics_service&)=delete;
     ~graphics_service() {
@@ -41,7 +46,7 @@ public:
     bool dawn_initialized() const { check_thread(); return dawn_!=nullptr; }
     dawn_event_service& dawn() {
         check_open();
-        if (!dawn_) dawn_=std::make_unique<dawn_event_service>(completion_capacity_,wake_);
+        if (!dawn_) dawn_=std::make_unique<dawn_event_service>(completion_capacity_,wake_,measure_latency_);
         return *dawn_;
     }
     // Internal request-device completion hook: pass a freshly created device
@@ -116,6 +121,11 @@ public:
         if (now>=next_event_poll_)
             return std::chrono::milliseconds::zero();
         return std::min(maximum,std::chrono::ceil<std::chrono::milliseconds>(next_event_poll_-now));
+    }
+    graphics_metrics metrics() const {
+        check_thread();
+        return {devices_.resident_count(),contexts_.resident_count(),
+            dawn_ ? dawn_->completions()->metrics() : completion_metrics{}};
     }
     size_t live_contexts() const { check_thread(); return contexts_.resident_count(); }
     void close() {

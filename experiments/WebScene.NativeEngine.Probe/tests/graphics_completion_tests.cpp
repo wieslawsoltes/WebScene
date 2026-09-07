@@ -33,5 +33,16 @@ int main() {
     require(!box.publish(reused,completion_status::success) && !box.reserve(4,b));
     require(box.drain_one([](auto record) { require(record.operation==3 && record.status==completion_status::cancelled); }));
     require(!box.has_ready());
+    auto counters=box.metrics();
+    require(counters.pending==0 && counters.ready==0 && counters.high_water==2);
+    require(counters.admitted==3 && counters.delivered==3 && counters.saturated_reservations==1);
+    require(counters.rejected_publications==4 && counters.latency_samples==0);
+    completion_mailbox timed(1,wake,true);
+    auto measured=timed.reserve(1,a).value();
+    require(timed.publish(measured,completion_status::success));
+    require(timed.drain_one([](auto) {}));
+    auto timings=timed.metrics();
+    require(timings.latency_samples==1 && timings.total_latency_ns==timings.max_latency_ns);
+    require(timings.pending==0 && timings.ready==0);
     std::cout << "completion capacity, engine affinity, isolation and late-callback cancellation passed\n";
 }

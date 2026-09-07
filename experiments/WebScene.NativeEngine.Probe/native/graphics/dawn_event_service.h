@@ -16,8 +16,8 @@ class dawn_event_service {
             throw std::logic_error("Dawn event service requires engine thread");
     }
 public:
-    dawn_event_service(size_t completion_capacity, std::shared_ptr<completion_wake> wake)
-        : completions_(std::make_shared<completion_mailbox>(completion_capacity, std::move(wake))),
+    dawn_event_service(size_t completion_capacity, std::shared_ptr<completion_wake> wake, bool measure_latency=false)
+        : completions_(std::make_shared<completion_mailbox>(completion_capacity, std::move(wake), measure_latency)),
           instance_(wgpu::CreateInstance()) {
         if (!instance_) throw std::runtime_error("Dawn instance creation failed");
     }

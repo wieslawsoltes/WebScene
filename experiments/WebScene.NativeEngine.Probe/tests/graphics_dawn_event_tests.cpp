@@ -60,6 +60,49 @@ int main() {
     auto owned_device=root.adopt_device(state->adapter,native_device->device);
     if (root.live_devices()!=1) return 1;
     root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
+    auto second_adapter=std::make_shared<result>();
+    auto adapter_ticket=mailbox->reserve(19,owner).value();
+    service.instance().RequestAdapter(&options,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,adapter_ticket,second_adapter](wgpu::RequestAdapterStatus status,wgpu::Adapter adapter,wgpu::StringView) {
+            second_adapter->adapter=std::move(adapter);
+            mailbox->publish(adapter_ticket,status==wgpu::RequestAdapterStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
+    bool adapter_done=false;
+    const auto adapter_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    while (!adapter_done && std::chrono::steady_clock::now()<adapter_deadline) {
+        service.pump([&](auto record) {
+            if (record.operation!=19 || record.status!=completion_status::success)
+                throw std::runtime_error("second adapter request failed");
+            adapter_done=true;
+        });
+        if (!adapter_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    }
+    if (!adapter_done || !second_adapter->adapter) return 1;
+    auto second_native=std::make_shared<device_result>();
+    auto second_ticket=mailbox->reserve(20,owner).value();
+    wgpu::DeviceDescriptor second_descriptor{};
+    second_adapter->adapter.RequestDevice(&second_descriptor,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,second_ticket,second_native](wgpu::RequestDeviceStatus status,wgpu::Device device,wgpu::StringView) {
+            second_native->device=std::move(device);
+            mailbox->publish(second_ticket,status==wgpu::RequestDeviceStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
+    const auto second_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    bool second_done=false;
+    while (!second_done && std::chrono::steady_clock::now()<second_deadline) {
+        service.pump([&](auto record) {
+            if (record.operation!=20 || record.status!=completion_status::success)
+                throw std::runtime_error("native device request failed");
+            second_done=true;
+        });
+        if (!second_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    }
+    if (!second_done || !second_native->device) return 1;
+    auto second_owned=root.adopt_device(second_adapter->adapter,second_native->device);
+    resource_owner second_owner{};
+    root.with_device(second_owned,[&](auto& device) { second_owner=device.owner(); });
+    if (root.live_devices()!=2 || owner==second_owner) return 1;
     bool foreign_rejected=false;
     try { other_root.with_device(owned_device,[](auto&) {}); }
     catch (const std::invalid_argument&) { foreign_rejected=true; }
@@ -144,10 +187,10 @@ int main() {
             cancelled_map->called=true;
             cancelled_map->accepted=mailbox->publish(pending_device,completion_status::success);
         });
-    auto independent_owner=owner; independent_owner.device=new_owner_token();
+    auto independent_owner=second_owner;
     auto independent=mailbox->reserve(15,independent_owner).value();
     root.destroy_device(owned_device);
-    if (root.live_devices()!=0 || mailbox->publish(pending_device,completion_status::success)) return 1;
+    if (root.live_devices()!=1 || mailbox->publish(pending_device,completion_status::success)) return 1;
     bool stale_rejected=false;
     try { root.with_device(owned_device,[](auto&) {}); }
     catch (const std::invalid_argument&) { stale_rejected=true; }
@@ -164,6 +207,36 @@ int main() {
         if (!cancelled_map->called) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
     }
     if (device_records!=2 || !cancelled_map->called || cancelled_map->accepted) return 1;
+    // The surviving native device must still execute an upload and map after
+    // its sibling was destroyed, with no presentation or animation-frame pump.
+    auto survivor_buffer=second_native->device.CreateBuffer(&map_descriptor);
+    std::vector<uint32_t> upload(1024,0x13579bdfu);
+    second_native->device.GetQueue().WriteBuffer(survivor_buffer,0,upload.data(),4096);
+    std::fill(upload.begin(),upload.end(),0u);
+    auto survivor_ticket=mailbox->reserve(21,second_owner).value();
+    survivor_buffer.MapAsync(wgpu::MapMode::Read,0,4096,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,survivor_ticket](wgpu::MapAsyncStatus status,wgpu::StringView) {
+            mailbox->publish(survivor_ticket,status==wgpu::MapAsyncStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
+    bool survivor_done=false;
+    const auto survivor_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    while (!survivor_done && std::chrono::steady_clock::now()<survivor_deadline) {
+        service.pump([&](auto record) {
+            if (record.operation!=21 || record.status!=completion_status::success)
+                throw std::runtime_error("surviving device failed after sibling destruction");
+            survivor_done=true;
+        });
+        if (!survivor_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    }
+    if (!survivor_done) return 1;
+    const auto* uploaded=static_cast<const uint32_t*>(survivor_buffer.GetConstMappedRange(0,4096));
+    if (!uploaded) return 1;
+    for (size_t i=0;i<1024;++i) if (uploaded[i]!=0x13579bdfu) return 1;
+    survivor_buffer.Unmap();
+    survivor_buffer.Destroy();
+    root.destroy_device(second_owned);
+    if (root.live_devices()!=0 || mailbox->has_pending() || mailbox->has_ready()) return 1;
     service.close();
     bool rejected=false;
     try { service.instance(); } catch (const std::logic_error&) { rejected=true; }

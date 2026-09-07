@@ -59,3 +59,28 @@ load. The full suite passed 12 tests in 12.75 seconds, followed by eight graphic
 tests after adding the pending-device-map case. Backend resource retention is
 still distinct from submission-table fence completion; the device owner does
 not substitute Destroy for a GPU completion fence.
+
+## Two-device hardware isolation and completion diagnostics
+
+The hardware test now requests two distinct adapters and creates one device
+from each. Dawn consumes an adapter on successful device creation, so reusing
+the first adapter is deliberately avoided. Both devices are owned by one
+engine service with different device identities. After destroying the first
+with a pending map, the surviving device uploads 4096 bytes and maps them
+successfully. The CPU upload array is overwritten immediately after WriteBuffer;
+every mapped word must retain the original pattern. Both device handles are
+then destroyed, leaving zero live service devices and no pending/ready records.
+This qualifies the native Dawn call-time upload behavior, not yet a JavaScript
+typed-array detachment path or the future native command queue.
+
+Completion snapshots report pending/ready counts, high-water storage occupancy,
+admitted/delivered records, saturated reservations and rejected publications.
+Admission-to-delivery latency samples, total and maximum nanoseconds are opt-in;
+default operation does not read the clock for this instrumentation. The service
+exposes completion snapshots alongside live native device/context counts and
+propagates its timing option through lazy Dawn initialization. Work-queue byte
+and presenter copy/readback counters still require later integration.
+
+The completion unit test checks counters across saturation, cancellation,
+duplicate publication and slot reuse, with timing disabled and enabled. It also
+passes under Clang ThreadSanitizer using `-fsanitize=thread -pthread`.
