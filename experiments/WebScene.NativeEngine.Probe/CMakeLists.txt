@@ -4,6 +4,15 @@ project(WebSceneNativeEngineProbe LANGUAGES C CXX)
 include(CTest)
 include(FetchContent)
 
+if(BUILD_TESTING)
+    find_package(Threads REQUIRED)
+    add_executable(webscene_graphics_resource_tests tests/graphics_resource_tests.cpp)
+    target_compile_features(webscene_graphics_resource_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_resource_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_resource_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_resource_tests COMMAND webscene_graphics_resource_tests)
+endif()
+
 # CMake 3.24 made extracted archive timestamps deterministic through CMP0135.
 # Use the policy when available while remaining compatible with the Ubuntu
 # 22.04 runner's CMake 3.22, which does not recognize
