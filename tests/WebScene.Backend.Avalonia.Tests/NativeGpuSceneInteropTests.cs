@@ -224,6 +224,23 @@ public sealed class NativeGpuSceneInteropTests
     }
 
     [IOSurfaceFixtureFact]
+    public void UnappliedSceneImagesReleaseWithoutAGraphicsContext()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        var library = NativeLibrary.Load(Environment.GetEnvironmentVariable("WEBSCENE_TEST_GPU_FIXTURE_LIBRARY")!);
+        var create = Marshal.GetDelegateForFunctionPointer<CreateIOSurface>(NativeLibrary.GetExport(library, "webscene_test_create_iosurface"));
+        var alive = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_iosurface_alive"));
+        Assert.Equal(1, create(out var source));
+        Assert.Equal(NativeSceneAcquireStatus.Success, NativeMacOSGpuSceneImages.Retain(new[] { source }, out var images));
+        source.Dispose();
+        Assert.Equal(1, alive());
+        images!.DiscardUnprepared();
+        images.DiscardUnprepared();
+        Assert.Equal(0, alive());
+        Assert.Throws<InvalidOperationException>(() => new NativeMacOSGpuScenePresenter().TryReplace(images));
+    }
+
+    [IOSurfaceFixtureFact]
     public void SceneImageCaptureRollsBackEarlierRetainsWhenALaterImageIsDisposed()
     {
         NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);

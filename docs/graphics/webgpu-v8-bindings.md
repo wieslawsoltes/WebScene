@@ -1468,3 +1468,25 @@ later source has been disposed: one passed, zero skipped on macOS/net10.0.
 The probe builds with zero warnings. Normal scene acquisition, old/new scene
 replacement and shutdown scheduling still need to adopt this owner in the
 production composition handler; this does not yet enable ordinary GPU scenes.
+
+### Bounded managed image-group replacement
+
+`NativeMacOSGpuScenePresenter` holds one current image group and at most two
+retiring groups. Replacement transfers ownership only when a retirement slot is
+available; otherwise the caller retains the candidate. Preparation drains old
+groups under the host graphics lease, prepares the current group and preserves
+its imports across unchanged draws. Shutdown stops admission and requires host
+graphics callbacks until every group has completed retirement. Unimported rejected
+candidates can now use DiscardUnprepared to release CPU leases without a graphics
+context; imported groups must use fence-based retirement.
+
+The Ganesh window probe replaces its image group after 16 frames and checks four
+destination pixels both before and after replacement. It retains the same source
+image into the replacement group; this tests ownership replacement, not distinct
+new image contents or cross-scene import deduplication. The run completes 32
+frames, two imports, eight diagnostic readbacks, zero explicit transport copies
+and successful retirement of both groups. Evidence is recorded in
+`evidence/ganesh-host/scene-image-replacement.json`. Two native managed tests pass
+with zero skips for capture rollback and unimported-candidate release. Probe
+build has zero warnings. Production composition-handler acquisition/replacement
+and shutdown scheduling still need to call this owner.

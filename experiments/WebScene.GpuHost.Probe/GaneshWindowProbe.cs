@@ -49,7 +49,8 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
     internal readonly TaskCompletionSource Completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly NativeCanvasSceneRenderer _renderer = new();
     private NativeGpuImageLeaseV3? _source;
-    private NativeMacOSGpuSceneImages? _retained;
+    private NativeMacOSGpuScenePresenter? _retained;
+    private NativeMacOSGpuSceneImages? _replacement;
     internal int Frames, Imports, VerifiedPixels;
     private readonly bool _verifyPixels = Environment.GetCommandLineArgs().Contains("--verify-window-pixels");
     public unsafe GaneshImageControl()
@@ -95,15 +96,24 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
             using var lease = feature.Lease();
             if (_retained is null)
             {
-                var status = NativeMacOSGpuSceneImages.Retain(new[] { _source! }, out _retained);
+                var status = NativeMacOSGpuSceneImages.Retain(new[] { _source! }, out var first);
                 if (status == NativeSceneAcquireStatus.Backpressure) return;
-                if (status != NativeSceneAcquireStatus.Success || _retained is null) throw new InvalidOperationException($"Scene image capture failed: {status}");
+                if (status != NativeSceneAcquireStatus.Success || first is null) throw new InvalidOperationException($"Scene image capture failed: {status}");
+                _retained = new NativeMacOSGpuScenePresenter();
+                if (!_retained.TryReplace(first)) throw new InvalidOperationException("Initial scene rejected");
+                status = NativeMacOSGpuSceneImages.Retain(new[] { _source! }, out _replacement);
+                if (status != NativeSceneAcquireStatus.Success || _replacement is null) throw new InvalidOperationException("Replacement capture failed");
                 _source!.Dispose(); _source = null;
             }
-            if (_retained.IsRetiring)
+            if (_retained.IsStopping)
             {
                 if (_retained.TryComplete(lease)) { _renderer.Reset(); Completed.TrySetResult(); }
                 return;
+            }
+            if (Frames == 16 && _replacement is not null)
+            {
+                if (!_retained.TryReplace(_replacement)) return;
+                _replacement = null;
             }
             if (!_retained.TryPrepare(lease)) return;
             Imports = _retained.ImportedCount;
@@ -114,7 +124,7 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
                     if (index != 0) throw new InvalidOperationException("Unknown scene GPU image slot");
                     _retained.Draw(lease, index, destination);
                 });
-            if (_verifyPixels && Frames == 0)
+            if (_verifyPixels && (Frames == 0 || Frames == 16))
             {
                 var surface = lease.SkSurface ?? throw new NotSupportedException("Host has no diagnostic surface");
                 // Read four destination pixels, solely when explicitly requested.
@@ -134,7 +144,7 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
                     ++VerifiedPixels;
                 }
             }
-            if (++Frames == 32) _retained.Retire(lease);
+            if (++Frames == 32) _retained.BeginShutdown();
         }
         catch (Exception error) { Completed.TrySetException(error); }
     }

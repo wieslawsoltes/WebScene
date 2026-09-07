@@ -60,6 +60,15 @@ internal sealed class NativeMacOSGpuSceneImages
         }
     }
 
+    // Rejecting an unapplied scene needs no graphics context because no import
+    // or GPU read has started. Imported groups must use Retire/TryComplete.
+    internal void DiscardUnprepared()
+    {
+        if (ImportedCount != 0) throw new InvalidOperationException("Imported scene images require GPU retirement.");
+        IsRetiring = true;
+        ReleaseSources();
+    }
+
     private void ReleaseSources()
     {
         for (var index = 0; index < _sources.Length; ++index)
