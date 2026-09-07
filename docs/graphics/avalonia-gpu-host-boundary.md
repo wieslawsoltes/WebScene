@@ -176,3 +176,39 @@ scene test. Uniform source color cannot qualify texture orientation or transpare
 source edges. Host context acquisition, import caching, retained replay lifetime,
 ordered DOM/canvas composition, and device-loss handling remain integration work.
 Graphite migration is not required by this demonstrated direct Ganesh route.
+
+### Actual Avalonia window using public pinned graphics leases
+
+`WebScene.GpuHost.Probe --ganesh-window` uses an ICustomDrawOperation in a real
+Avalonia 11.3.4 macOS window. It acquires ISkiaSharpApiLease.GrContext and
+TryLeasePlatformGraphicsApi, checks for IGlContext, and imports/wraps the native
+Dawn IOSurface with the production-source helpers. The pinned framework flushes
+Skia when entering the platform lease and resets its cached GL state on leaving
+it (verified in tag 11.3.4 DrawingContextImpl.ApiLease.PlatformApiLease). No
+framework patch is needed for these operations.
+
+The window draws the same imported SKImage 32 times with clipping and alpha,
+using one GL import. It disposes the retained SKImage after its last draw, enters
+the platform lease to flush Skia, inserts the host GL fence, polls on subsequent
+render callbacks, completes the native consumer and deletes the GL texture.
+The fixture's synchronous producer setup runs before the window opens. Ordinary
+window rendering has no explicit texture copy or pixel readback.
+
+Run with the already-built enabled native runtime and test fixture:
+
+```sh
+WEBSCENE_TEST_NATIVE_LIBRARY="$PWD/artifacts/graphics-build/native-v8-enabled/libwebscene_native_engine.dylib" \
+WEBSCENE_TEST_GPU_FIXTURE_LIBRARY="$PWD/artifacts/graphics-build/native-v8-enabled/libwebscene_graphics_iosurface_fixture.dylib" \
+dotnet run --project experiments/WebScene.GpuHost.Probe -- --ganesh-window
+```
+
+Add `--verify-window-pixels` for two explicit diagnostic destination reads inside
+the actual host callback: a blended interior pixel and an exterior clip pixel.
+Both executions completed 32 frames and fence retirement on the Apple M4 macOS
+arm64 host; raw result JSON is in `evidence/ganesh-host`. This proves host render
+surface pixels, not physical scanout. Internal driver copies still need tracing.
+
+This is a diagnostic control, not WebScene's retained DOM renderer. Production
+scene acquisition, paint ordering, live readiness delivery, resizing, teardown
+failure recovery and device recreation remain open. The diagnostic fails/exits on
+unsupported or lost host contexts; that is not qualified production loss recovery.

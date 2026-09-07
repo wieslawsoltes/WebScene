@@ -7,4 +7,5 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup><PackageReference Include="Avalonia.Desktop" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../../src/WebScene.Backend.Avalonia/WebScene.Backend.Avalonia.csproj" /></ItemGroup>
 </Project>
