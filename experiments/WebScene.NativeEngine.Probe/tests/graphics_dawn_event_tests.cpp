@@ -36,5 +36,28 @@ int main() {
     if (state->adapter.GetInfo(&info)!=wgpu::Status::Success) return 1;
     if (info.adapterType!=wgpu::AdapterType::IntegratedGPU && info.adapterType!=wgpu::AdapterType::DiscreteGPU) return 77;
     service.close();
+    bool rejected=false;
+    try { service.instance(); } catch (const std::logic_error&) { rejected=true; }
+    if (!rejected) return 1;
+    // Close before processing the next native request. The promise-side record
+    // must terminate once; the backend callback may arrive only after teardown.
+    auto cancelled=std::make_unique<dawn_event_service>(1,wake);
+    auto retained=cancelled->completions();
+    auto pending=retained->reserve(2,owner).value();
+    auto late_accepted=std::make_shared<bool>(false);
+    cancelled->instance().RequestAdapter(&options,wgpu::CallbackMode::AllowProcessEvents,
+        [retained,pending,late_accepted](wgpu::RequestAdapterStatus,wgpu::Adapter,wgpu::StringView) {
+            *late_accepted=retained->publish(pending,completion_status::success);
+        });
+    cancelled->close();
+    size_t terminated=0;
+    cancelled->pump([&](auto record) {
+        if (record.operation!=2 || record.status!=completion_status::cancelled)
+            throw std::runtime_error("pending operation not cancelled");
+        ++terminated;
+    });
+    cancelled.reset();
+    if (terminated!=1 || *late_accepted || retained->has_ready()
+        || retained->publish(pending,completion_status::success)) return 1;
     std::cout << "Native Dawn hardware adapter completion delivered without RAF/UI\n";
 }

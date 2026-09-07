@@ -28,7 +28,11 @@ public:
     }
     dawn_event_service(const dawn_event_service&) = delete;
     dawn_event_service& operator=(const dawn_event_service&) = delete;
-    const wgpu::Instance& instance() const { check_thread(); return instance_; }
+    const wgpu::Instance& instance() const {
+        check_thread();
+        if (closed_) throw std::logic_error("Dawn event service is closed");
+        return instance_;
+    }
     std::shared_ptr<completion_mailbox> completions() const { check_thread(); return completions_; }
     template<class Deliver> size_t pump(Deliver deliver, size_t budget = 64) {
         check_thread();
