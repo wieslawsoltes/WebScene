@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
             sharedMemory=runtime.outputMemory;
             texture=runtime.outputTexture;
         } else {
-            auto owner=webscene::graphics::iosurface_color::create_bgra8(width,height);
+            auto owner=webscene::graphics::iosurface_color::create_bgra8(width,height,1024*1024);
             if (!owner) return finish("failed","IOSurface allocation failed",1);
             auto ioSurface=owner->borrowed_handle();
             wgpu::SharedTextureMemoryIOSurfaceDescriptor io{}; io.ioSurface=ioSurface;

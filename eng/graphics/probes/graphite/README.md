@@ -435,3 +435,19 @@ shutdown cycles and the standalone 68-pixel IOSurface/CGL test. This is extracti
 of the proven allocation boundary for macOS integration, not a completed scene
 import hook. Format negotiation, allocation budgets and the ANGLE producer path
 remain required before general runtime use.
+
+### Budget padded IOSurface allocations
+
+The native allocation API now requires an available-byte budget. It aligns row
+storage using IOSurface's API, requests a page-rounded allocation, rejects
+overflow/insufficient budgets before creation, and checks the resulting reported
+allocation size. The diagnostic output has an explicit 1 MiB ceiling.
+This is a conservative page-rounded policy, not a claim that unpadded pixel
+bytes equal resident GPU memory.
+
+The macOS CTest webscene_iosurface_color_tests passed zero/oversized dimensions,
+insufficient pixel-only budget, one-byte-under-budget rejection and exact-budget
+allocation. The requested 17x4 surface reported 16,384 bytes on Apple M4.
+The rebuilt host probe also passed 64 changing markers and two shutdown cycles.
+This bounds one allocation; a complete per-engine aggregate residency policy
+and pressure handling remain integration work.

@@ -64,3 +64,14 @@ if(BUILD_TESTING)
     target_include_directories(webscene_nt_handle_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../../../experiments/WebScene.NativeEngine.Probe/native")
     add_test(NAME webscene_nt_handle_tests COMMAND webscene_nt_handle_tests)
 endif()
+
+if(BUILD_TESTING AND APPLE)
+    add_executable(webscene_iosurface_color_tests
+        "../../../experiments/WebScene.NativeEngine.Probe/tests/graphics_iosurface_color_tests.cpp")
+    target_compile_features(webscene_iosurface_color_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_iosurface_color_tests PRIVATE
+        "../../../experiments/WebScene.NativeEngine.Probe/native")
+    target_link_libraries(webscene_iosurface_color_tests PRIVATE
+        "-framework CoreFoundation" "-framework IOSurface" "-framework CoreVideo")
+    add_test(NAME webscene_iosurface_color_tests COMMAND webscene_iosurface_color_tests)
+endif()

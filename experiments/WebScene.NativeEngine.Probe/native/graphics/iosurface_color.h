@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <unistd.h>
 
 namespace webscene::graphics {
 // Native allocation ownership only. Callers retain this owner through producer
@@ -21,15 +22,22 @@ public:
 
     // BGRA8 is the negotiated Dawn/Metal-to-CGL diagnostic format. Other formats
     // require explicit negotiation, not reinterpretation of these storage bytes.
-    static std::shared_ptr<iosurface_color> create_bgra8(uint32_t width,uint32_t height) {
+    static std::shared_ptr<iosurface_color> create_bgra8(uint32_t width,uint32_t height,uint64_t available_bytes) {
         if (!width || !height || width>uint32_t(std::numeric_limits<int32_t>::max()/4) ||
             height>uint32_t(std::numeric_limits<int32_t>::max())) return {};
+        const uint64_t row=IOSurfaceAlignProperty(kIOSurfaceBytesPerRow,uint64_t(width)*4);
+        const auto page=static_cast<uint64_t>(getpagesize());
+        if (!row || !page || row>uint64_t(INT64_MAX)/height) return {};
+        const uint64_t raw=row*height;
+        if (raw>uint64_t(INT64_MAX)-page+1) return {};
+        const uint64_t allocation=((raw+page-1)/page)*page;
+        if (allocation>available_bytes) return {};
         auto dictionary=CFDictionaryCreateMutable(nullptr,0,&kCFTypeDictionaryKeyCallBacks,
                                                   &kCFTypeDictionaryValueCallBacks);
         if (!dictionary) return {};
         bool valid=true;
-        auto add=[&](CFStringRef key,int32_t value) {
-            auto number=CFNumberCreate(nullptr,kCFNumberSInt32Type,&value);
+        auto add=[&](CFStringRef key,int64_t value) {
+            auto number=CFNumberCreate(nullptr,kCFNumberSInt64Type,&value);
             if (!number) { valid=false; return; }
             CFDictionarySetValue(dictionary,key,number);
             CFRelease(number);
@@ -37,10 +45,16 @@ public:
         add(kIOSurfaceWidth,static_cast<int32_t>(width));
         add(kIOSurfaceHeight,static_cast<int32_t>(height));
         add(kIOSurfaceBytesPerElement,4);
+        add(kIOSurfaceBytesPerRow,static_cast<int64_t>(row));
+        add(kIOSurfaceAllocSize,static_cast<int64_t>(allocation));
         add(kIOSurfacePixelFormat,kCVPixelFormatType_32BGRA);
         auto surface=valid ? IOSurfaceCreate(dictionary) : nullptr;
         CFRelease(dictionary);
         if (!surface) return {};
+        if (IOSurfaceGetAllocSize(surface)>available_bytes) {
+            CFRelease(surface);
+            return {};
+        }
         // Take ownership before allocating the shared control block.
         std::unique_ptr<iosurface_color> owner;
         try { owner.reset(new iosurface_color(surface)); }
