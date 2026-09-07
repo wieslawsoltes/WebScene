@@ -155,6 +155,15 @@ struct scene final {
     uint64_t published_timestamp_nanoseconds{0};
 };
 
+constexpr uint64_t scene_command_capabilities(uint32_t kind) noexcept
+{
+    switch (kind) {
+        case WEBSCENE_SCENE_COMMAND_GPU_IMAGE: return WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES;
+        case WEBSCENE_SCENE_COMMAND_CANVAS_LAYER: return WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS;
+        default: return 0;
+    }
+}
+
 uint64_t scene_capabilities(const scene& value)
 {
     return value.required_capabilities | (value.gpu_images.empty() ? 0 : WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES);

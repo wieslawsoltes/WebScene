@@ -629,3 +629,20 @@ It currently imports on each submission; import caching by allocation/device and
 long-run resource/performance qualification remain required. Device-loss recovery,
 ANGLE production, delayed-completion stress, and presenter scheduling remain open
 under #27 and the presenter issues. No platform issue is closed by this fixture.
+
+### Ordered paint capability propagation
+
+The native builder now derives required capabilities from the full DOM paint
+stream during its existing hash pass: command 256 requires GPU_IMAGES; command
+257 requires ORDERED_CANVAS. It does so before removing unchanged DOM commands
+from an incremental payload. Therefore a layer-only diff still carries its
+retained paint stream's consumer requirements. Acquisition checks the stored
+mask without rescanning commands.
+
+The native graphics V8 runtime fixture verifies ordered-only scenes reject
+CPU-only and GPU-only consumers, and mixed masks require both bits. Empty
+incremental command payloads retain their required mask. Validation command:
+`ctest --test-dir artifacts/graphics-build/native-v8-enabled -R '^webscene_graphics_v8_runtime_tests$' --output-on-failure`
+passes on the macOS arm64 build. The native builder's current DOM producer still
+does not emit GPU/ordered-canvas commands; this change secures the publication
+boundary for that upcoming integration, without advertising a working browser API.

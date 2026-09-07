@@ -185,6 +185,9 @@
 
             uint64_t dom_hash = 1469598103934665603ULL;
             for (const auto& command : next->commands) {
+                // Compute from the full paint stream before unchanged DOM
+                // commands are removed from an incremental scene below.
+                next->required_capabilities |= scene_command_capabilities(command.kind);
                 dom_hash = mix_hash(dom_hash, static_cast<uint64_t>(command.kind) << 32U | command.flags);
                 dom_hash = mix_hash(dom_hash, static_cast<uint64_t>(command.node_id) << 32U | command.rgba);
                 dom_hash = mix_hash(

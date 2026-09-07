@@ -3,6 +3,28 @@
 void test_native_gpu_scene_leases()
 {
     const auto require=[](bool value) { if (!value) throw std::runtime_error("GPU scene lease requirement failed"); };
+    // Ordered Canvas2D placement is independently negotiated, including a diff
+    // whose unchanged command payload has been stripped after capability hashing.
+    auto ordered=std::make_shared<scene>();
+    ordered->required_capabilities=scene_command_capabilities(WEBSCENE_SCENE_COMMAND_CANVAS_LAYER);
+    require(ordered->required_capabilities==WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS);
+    require(scene_command_capabilities(1)==0);
+    require(scene_command_capabilities(WEBSCENE_SCENE_COMMAND_GPU_IMAGE)==WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES);
+    const webscene_scene_view_v3* ordered_view=nullptr;
+    for (const uint64_t offered : {uint64_t(0), uint64_t(WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES)}) {
+        require(acquire_scene_value_v3(ordered,{},offered,&ordered_view)==
+            WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES && !ordered_view);
+    }
+    require(acquire_scene_value_v3(ordered,{},WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS,&ordered_view)==
+        WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+    require(ordered_view->required_capabilities==WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS);
+    webscene_scene_release_v3(ordered_view);
+    ordered->required_capabilities |= scene_command_capabilities(WEBSCENE_SCENE_COMMAND_GPU_IMAGE);
+    require(acquire_scene_value_v3(ordered,{},WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS,&ordered_view)==
+        WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES && !ordered_view);
+    require(acquire_scene_value_v3(ordered,{},WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS |
+        WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES,&ordered_view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+    webscene_scene_release_v3(ordered_view);
     struct provider final : webscene::graphics::image_provider_lifetime {};
     auto backend=std::make_shared<provider>();
     auto weak=std::weak_ptr<provider>(backend);
