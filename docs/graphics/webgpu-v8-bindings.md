@@ -1705,3 +1705,19 @@ This verifies producer progress through combined rendering and discrete resizing
 not display of every submitted frame or live-drag timing. Non-RAF acquisition
 under pressure, multi-canvas fairness, device loss, Retina resolution, and
 smooth-presentation qualification remain open.
+
+### Original Kestrel startup acceptance baseline (2026-09-08)
+
+Run the host probe with --webgpu-document --kestrel /path/to/Kestrel-CAD.zip
+--verify-kestrel, with WEBSCENE_TEST_NATIVE_LIBRARY pointing to the graphics
+runtime. The harness extracts the standalone HTML unchanged, reports its SHA256,
+loads it through the normal GPU-enabled NativeWebSceneView, inspects the app's
+own readiness/backend label and history, disposes the view, and returns failure
+unless Kestrel reports WebGPU startup. Without --verify-kestrel the window stays
+open for investigation. This startup check does not replace interaction,
+geometry, export, resize, or performance acceptance.
+
+The supplied original document starts but selects Canvas 2D compatibility:
+"d.pushErrorScope is not a function". The real startup check returned exit 1.
+The failure baseline and original hash are in evidence/kestrel/startup.json.
+GPUDevice error scopes are the first observed WebGPU initialization blocker.

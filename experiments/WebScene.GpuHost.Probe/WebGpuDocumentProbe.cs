@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -71,11 +73,24 @@ internal sealed class WebGpuDocumentProbeApp : Application
                 })().catch(e=>{globalThis.webGpuDemoError=String(e);console.error(e)});
                 </script></body></html>
                 """.Replace("__FRAME_LIMIT__", Environment.GetCommandLineArgs().Contains("--stress-webgpu") ? "120" : "1"));
+            var arguments = Environment.GetCommandLineArgs();
+            var kestrelIndex = Array.IndexOf(arguments, "--kestrel");
+            var kestrel = kestrelIndex >= 0;
+            if (kestrel)
+            {
+                if (kestrelIndex + 1 >= arguments.Length) throw new ArgumentException("--kestrel requires the original archive path");
+                using var archive = ZipFile.OpenRead(arguments[kestrelIndex + 1]);
+                var entry = archive.GetEntry("Kestrel-CAD/Kestrel-CAD.html")
+                    ?? throw new InvalidDataException("Original standalone Kestrel document is missing");
+                using (var input = entry.Open())
+                using (var output = File.Create(path)) input.CopyTo(output);
+                Console.WriteLine("Kestrel original document SHA256: " + Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant());
+            }
             var uri = new Uri(path).AbsoluteUri;
             var view = new NativeWebSceneView(true, url => url == uri || url == path);
             desktop.MainWindow = new Window
             {
-                Width = 400, Height = 240, Title = "WebScene WebGPU document", Content = view
+                Width = 400, Height = 240, Title = kestrel ? "Kestrel in WebScene" : "WebScene WebGPU document", Content = view
             };
             desktop.MainWindow.Opened += async (_, _) =>
             {
@@ -84,6 +99,19 @@ internal sealed class WebGpuDocumentProbeApp : Application
                     await view.LoadAsync(uri, Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")
                         ?? throw new InvalidOperationException("Set WEBSCENE_TEST_NATIVE_LIBRARY"));
                     Console.WriteLine("WebGPU document loaded through NativeWebSceneView.");
+                    if (kestrel)
+                    {
+                        await Task.Delay(3000);
+                        Console.WriteLine(await view.EvaluateTextAsync("({ready:document.documentElement.dataset.ready,backend:document.getElementById('engine-label')?.textContent,history:document.getElementById('command-history')?.textContent,gpu:!!navigator.gpu})"));
+                        if (arguments.Contains("--verify-kestrel"))
+                        {
+                            var webGpuReady = await view.EvaluateTextAsync("document.documentElement.dataset.ready==='true'&&document.getElementById('engine-label').textContent.startsWith('WebGPU')");
+                            Console.WriteLine(webGpuReady == "true" ? "Kestrel WebGPU startup check passed (interaction qualification remains)." : "FAIL: Kestrel did not initialize its WebGPU renderer.");
+                            await view.DisposeAsync();
+                            desktop.Shutdown(webGpuReady == "true" ? 0 : 1);
+                        }
+                        return;
+                    }
                     if (Environment.GetCommandLineArgs().Contains("--resize-webgpu"))
                     {
                         foreach (var size in new[] { (640, 360), (280, 180), (520, 320), (400, 240) })
