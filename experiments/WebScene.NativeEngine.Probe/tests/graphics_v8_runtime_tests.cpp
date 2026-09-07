@@ -42,10 +42,15 @@ void test_compilation_info_snapshot() {
     message.type=wgpu::CompilationMessageType::Error;
     message.lineNum=2;message.linePos=3;message.offset=4;message.length=5;
     wgpu::CompilationInfo info{};info.messageCount=1;info.messages=&message;
+    wgpu::DawnCompilationMessageUtf16 utf16{};
+    utf16.linePos=2;utf16.offset=3;utf16.length=4;
+    message.nextInChain=&utf16;
     auto snapshot=webgpu_compilation_info::copy(info);
     text[0]='X';
     require(snapshot.messages.size()==1&&snapshot.messages[0].message=="diagnostic"
-        &&snapshot.messages[0].offset==4&&snapshot.messages[0].length==5,
+        &&snapshot.messages[0].offset==4&&snapshot.messages[0].length==5
+        &&snapshot.messages[0].has_utf16&&snapshot.messages[0].utf16_offset==3
+        &&snapshot.messages[0].utf16_line_pos==2&&snapshot.messages[0].utf16_length==4,
         "Compilation diagnostics did not retain callback data");
     bool bounded=false;try{webgpu_compilation_info::copy(info,1,2);}catch(const std::length_error&){bounded=true;}
     require(bounded,"Compilation diagnostic byte budget ignored");
@@ -1414,7 +1419,7 @@ int main() {
                         }
                         require(captured->load()==1,"JavaScript scope did not capture Dawn validation error");
                         native.PushErrorScope(wgpu::ErrorFilter::Validation);
-                        wgpu::ShaderSourceWGSL invalid_source{};invalid_source.code="this is invalid WGSL";
+                        wgpu::ShaderSourceWGSL invalid_source{};invalid_source.code="/* 😀 */ this is invalid WGSL";
                         wgpu::ShaderModuleDescriptor invalid_descriptor{};invalid_descriptor.nextInChain=&invalid_source;
                         auto invalid_shader=native.CreateShaderModule(&invalid_descriptor);
                         native.PopErrorScope(wgpu::CallbackMode::AllowSpontaneous,
@@ -1427,7 +1432,7 @@ int main() {
                                     auto snapshot=webgpu_compilation_info::copy(*info);
                                     bool error=false;
                                     for(const auto& message:snapshot.messages)
-                                        error|=message.type==wgpu::CompilationMessageType::Error&&!message.message.empty();
+                                        error|=message.type==wgpu::CompilationMessageType::Error&&!message.message.empty()&&message.has_utf16&&message.offset>message.utf16_offset;
                                     diagnostics->store(error?1:-1);
                                 }catch(...){diagnostics->store(-1);}
                             });

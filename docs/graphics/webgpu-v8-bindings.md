@@ -1750,3 +1750,12 @@ This is the native data-lifetime component for getCompilationInfo, not the
 JavaScript API. Promise/mailbox routing, cancellation/realm teardown,
 GPUCompilationInfo/GPUCompilationMessage objects, and UTF-16 position mapping
 remain required. Kestrel's missing getCompilationInfo failure remains open.
+
+Diagnostic coordinate follow-up: the pinned Dawn CompilationMessages.cpp already
+attaches DawnCompilationMessageUtf16 to every diagnostic. Owned snapshots now
+preserve those UTF-16 coordinates separately from base byte offsets, with bounded
+extension traversal and duplicate rejection. A real invalid WGSL shader containing
+a supplementary Unicode character before the error verifies that the captured
+byte and UTF-16 offsets differ correctly. The runtime suite passes. This avoids
+reimplementing source mapping in WebScene; V8 delivery must use the UTF-16 fields
+and must not silently substitute byte offsets if the extension is unavailable.
