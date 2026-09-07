@@ -1622,3 +1622,15 @@ or display:block; the window again visibly renders the green canvas, captured
 in evidence/webgpu-document/macos-intrinsic-canvas.png. The managed probe builds
 with zero warnings/errors. Broader replaced-element layout conformance remains
 separate from these focused canvas checks.
+
+### Shader triangle in ordinary view (2026-09-08)
+
+The --webgpu-document demo now draws a 400x240 interpolated-color triangle.
+Its JavaScript creates a WGSL shader module and an automatic-layout render
+pipeline, sets that pipeline on a render pass, and draws three vertices before
+queue submission. The normal macOS NativeWebSceneView visibly renders the
+triangle (evidence/webgpu-document/macos-triangle.png). Runtime evaluation
+reports GPU exposure, submission, and RAF completion without a demo error.
+The managed probe builds with no warnings/errors. This is visual end-to-end
+evidence for the basic shader/draw route; it does not qualify exact color
+management, continuous frame replacement, or full WebGPU conformance.
