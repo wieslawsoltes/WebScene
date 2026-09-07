@@ -1224,3 +1224,19 @@ identity, and accesses metadata/createView from JavaScript on an adopted texture
 Runtime CTest passes, including the offscreen triangle pixel assertion. The host
 canvas controller still needs to provide/cache this wrapper from getCurrentTexture
 and connect frame expiration/publication to ordinary scene consumption.
+
+
+### Canvas texture descriptor construction
+
+Canvas-specific content validation now restricts the base format to bgra8unorm,
+rgba8unorm or rgba16float and rejects TRANSIENT_ATTACHMENT usage. The canvas
+texture descriptor builder copies bitmap width/height, format, usage and view
+formats, preserving zero dimensions and explicit usage rather than adding render
+or host-only flags. Other texture members retain standard defaults.
+
+MacOS runtime tests cover all three base formats, rejected sRGB base formats,
+transient usage, zero dimensions and unchanged explicit usage/defaults. Runtime
+CTest passes. Required-format feature checks must precede this validation;
+native texture validation and presenter capability negotiation still follow.
+These helpers do not expose GPUCanvasContext or establish presenter support for
+all required canvas color/HDR modes.

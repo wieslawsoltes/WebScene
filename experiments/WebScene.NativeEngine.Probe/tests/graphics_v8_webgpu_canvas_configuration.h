@@ -1,5 +1,6 @@
 #pragma once
 #include "graphics/v8_webgpu_canvas_configuration.h"
+#include "graphics/webgpu_canvas_texture_descriptor.h"
 inline void test_v8_webgpu_canvas_configuration(v8::Isolate* isolate,v8::Local<v8::Context> context) {
     const auto evaluate=[&](const char* source){return v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocalChecked()->Run(context).ToLocalChecked();};
     const auto device=[](auto value){return v8_webgpu_devices::native_reference(value);};
@@ -17,6 +18,19 @@ inline void test_v8_webgpu_canvas_configuration(v8::Isolate* isolate,v8::Local<v
         v8::TryCatch caught(isolate);configuration.alpha_mode="unchanged";
         require(!read_webgpu_canvas_configuration(isolate,context,evaluate(source),configuration,device)&&caught.HasCaught()&&configuration.alpha_mode=="unchanged","Invalid canvas configuration accepted or committed");
     }
+    for(auto format:{wgpu::TextureFormat::RGBA8Unorm,wgpu::TextureFormat::BGRA8Unorm,wgpu::TextureFormat::RGBA16Float}) {
+        configuration.format=format;configuration.usage=1;
+        validate_webgpu_canvas_format_usage(configuration);
+        auto texture=webgpu_canvas_texture_descriptor(configuration,0,17);
+        require(texture.size.width==0&&texture.size.height==17&&texture.size.depthOrArrayLayers==1&&texture.usage==1
+            &&texture.mip_levels==1&&texture.samples==1&&texture.dimension==wgpu::TextureDimension::e2D
+            &&texture.format==format&&texture.view_formats==configuration.view_formats,"Canvas texture descriptor altered requested metadata");
+    }
+    configuration.format=wgpu::TextureFormat::RGBA8UnormSrgb;bool bad_format=false;
+    try{validate_webgpu_canvas_format_usage(configuration);}catch(const std::invalid_argument&){bad_format=true;}
+    configuration.format=wgpu::TextureFormat::BGRA8Unorm;configuration.usage=0x30;bool transient=false;
+    try{validate_webgpu_canvas_format_usage(configuration);}catch(const std::invalid_argument&){transient=true;}
+    require(bad_format&&transient,"Canvas-only format/usage validation missing");
     auto throwing=evaluate("(()=>{globalThis.canvasConfigError={};return {get colorSpace(){throw canvasConfigError},get device(){throw 'wrong getter'}}})()");
     v8::TryCatch caught(isolate);
     require(!read_webgpu_canvas_configuration(isolate,context,throwing,configuration,device)&&caught.HasCaught()
