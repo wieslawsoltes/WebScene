@@ -39,15 +39,19 @@ class dawn_device {
     resource_table<wgpu::Texture> textures_;
     resource_table<wgpu::TextureView> texture_views_;
     size_t active_texture_scopes_{},active_texture_view_scopes_{};
+    resource_table<wgpu::CommandEncoder> command_encoders_;
+    resource_table<wgpu::RenderPassEncoder> render_passes_;
+    resource_table<wgpu::CommandBuffer> command_buffers_;
+    size_t active_command_scopes_{};
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
             throw std::logic_error("Dawn device requires its engine thread");
     }
 public:
     dawn_device(uint64_t engine,std::shared_ptr<completion_mailbox> mailbox,
-                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024,size_t texture_capacity=1024,size_t texture_view_capacity=4096)
+                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024,size_t texture_capacity=1024,size_t texture_view_capacity=4096,size_t command_capacity=1024)
         : owner_{engine,new_owner_token(),0},mailbox_(std::move(mailbox)),
-          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_),render_pipelines_(render_pipeline_capacity,owner_),textures_(texture_capacity,owner_),texture_views_(texture_view_capacity,owner_) {
+          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_),render_pipelines_(render_pipeline_capacity,owner_),textures_(texture_capacity,owner_),texture_views_(texture_view_capacity,owner_),command_encoders_(command_capacity,owner_),render_passes_(command_capacity,owner_),command_buffers_(command_capacity,owner_) {
         if (!engine || !mailbox_ || !adapter_ || !device_)
             throw std::invalid_argument("Dawn device requires native ownership");
     }
@@ -174,6 +178,51 @@ public:
         textures_.get(handle,owner_).Destroy();
     }
     size_t live_texture_views() const {check_thread();return texture_views_.resident_count();}
+    resource_handle<wgpu::CommandEncoder> create_command_encoder(const wgpu::CommandEncoderDescriptor& descriptor) {
+        const auto& device=native();if(!command_encoders_.can_insert())throw std::length_error("Command encoder capacity exhausted");
+        auto encoder=device.CreateCommandEncoder(&descriptor);if(!encoder)throw std::runtime_error("Dawn did not return a command encoder");
+        return command_encoders_.insert(owner_,std::make_unique<wgpu::CommandEncoder>(std::move(encoder)));
+    }
+    resource_handle<wgpu::RenderPassEncoder> begin_render_pass(resource_handle<wgpu::CommandEncoder> encoder,const wgpu::RenderPassDescriptor& descriptor) {
+        native();if(!render_passes_.can_insert())throw std::length_error("Render pass capacity exhausted");
+        auto pass=command_encoders_.get(encoder,owner_).BeginRenderPass(&descriptor);if(!pass)throw std::runtime_error("Dawn did not return a render pass");
+        return render_passes_.insert(owner_,std::make_unique<wgpu::RenderPassEncoder>(std::move(pass)));
+    }
+    resource_handle<wgpu::CommandBuffer> finish_command_encoder(resource_handle<wgpu::CommandEncoder> encoder,const wgpu::CommandBufferDescriptor& descriptor) {
+        native();if(!command_buffers_.can_insert())throw std::length_error("Command buffer capacity exhausted");
+        auto command=command_encoders_.get(encoder,owner_).Finish(&descriptor);if(!command)throw std::runtime_error("Dawn did not return a command buffer");
+        return command_buffers_.insert(owner_,std::make_unique<wgpu::CommandBuffer>(std::move(command)));
+    }
+    template<class Execute> void with_command_encoder(resource_handle<wgpu::CommandEncoder> handle,Execute execute) {
+        check_thread();const auto& resource=command_encoders_.get(handle,owner_);
+        struct guard {size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;}} scope(active_command_scopes_);
+        execute(resource);
+    }
+    void release_command_encoder(resource_handle<wgpu::CommandEncoder> handle) {
+        check_thread();if(active_command_scopes_)throw std::logic_error("Cannot release command resources during execution");
+        command_encoders_.destroy(handle,owner_);
+    }
+    size_t live_command_encoders() const {check_thread();return command_encoders_.resident_count();}
+    template<class Execute> void with_render_pass(resource_handle<wgpu::RenderPassEncoder> handle,Execute execute) {
+        check_thread();const auto& resource=render_passes_.get(handle,owner_);
+        struct guard {size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;}} scope(active_command_scopes_);
+        execute(resource);
+    }
+    void release_render_pass(resource_handle<wgpu::RenderPassEncoder> handle) {
+        check_thread();if(active_command_scopes_)throw std::logic_error("Cannot release command resources during execution");
+        render_passes_.destroy(handle,owner_);
+    }
+    size_t live_render_passes() const {check_thread();return render_passes_.resident_count();}
+    template<class Execute> void with_command_buffer(resource_handle<wgpu::CommandBuffer> handle,Execute execute) {
+        check_thread();const auto& resource=command_buffers_.get(handle,owner_);
+        struct guard {size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;}} scope(active_command_scopes_);
+        execute(resource);
+    }
+    void release_command_buffer(resource_handle<wgpu::CommandBuffer> handle) {
+        check_thread();if(active_command_scopes_)throw std::logic_error("Cannot release command resources during execution");
+        command_buffers_.destroy(handle,owner_);
+    }
+    size_t live_command_buffers() const {check_thread();return command_buffers_.resident_count();}
     bool loss_pending() const {
         check_thread();
         return !closed_ && !lost_ && loss_ && loss_->lost.load(std::memory_order_acquire);
@@ -187,7 +236,7 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_buffer_scopes_ || active_shader_scopes_ || active_render_pipeline_scopes_ || active_texture_scopes_ || active_texture_view_scopes_) throw std::logic_error("Cannot close device during resource execution");
+        if (active_buffer_scopes_ || active_shader_scopes_ || active_render_pipeline_scopes_ || active_texture_scopes_ || active_texture_view_scopes_ || active_command_scopes_) throw std::logic_error("Cannot close device during resource execution");
         process_loss();
         closed_=true;
         // Logical cancellation is independent of physical GPU completion.
@@ -195,6 +244,9 @@ public:
         // higher-level submission tables still require their completion fences.
         if (!lost_) mailbox_->cancel_owner(owner_);
         device_.Destroy();
+        render_passes_.destroy_owner(owner_);
+        command_encoders_.destroy_owner(owner_);
+        command_buffers_.destroy_owner(owner_);
         buffers_.destroy_owner(owner_);
         shaders_.destroy_owner(owner_);
         render_pipelines_.destroy_owner(owner_);

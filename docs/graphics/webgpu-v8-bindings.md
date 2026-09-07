@@ -1046,3 +1046,21 @@ labels and readonly metadata, rejects wrong receivers and invalid extent shapes,
 and checks metadata after repeated destroy. Runtime CTest passes. Command
 encoding, queue submission and ordinary GPU canvas presentation remain pending;
 this test does not draw from JavaScript or prove pixel output.
+
+
+### Owned native command resources
+
+Dawn devices now own bounded generational tables for command encoders, render
+passes and command buffers. Capacity is checked before create/begin/finish;
+borrowed command scopes prevent release or device close. Deferred release
+commands carry complete device/resource identity. Native WebGPU recording-state
+validation remains Dawn's responsibility rather than being replaced with silent
+host no-ops.
+
+The macOS triangle-command test now uses these tables to begin a render pass,
+set its pipeline, draw, end, finish and submit. It releases the pass and encoder
+before submission, then releases the submitted command-buffer reference. Tests
+verify capacity rejection, borrowed scopes, stale-handle rejection and empty
+tables, alongside the completed native validation scope. Dawn event and V8
+runtime tests pass. JavaScript command methods, queue submission and canvas
+presentation remain pending; this is not evidence of JavaScript pixel output.

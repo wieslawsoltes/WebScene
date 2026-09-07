@@ -426,7 +426,7 @@ int main() {
     invalid_handles[0]=reinterpret_cast<void*>(uintptr_t{1});
     if (import_dxgi_fences(native_device->device,invalid_handles,wait_values,imported)
         !=dxgi_fence_status::missing_device_feature || !imported.fences.empty()) return 1;
-    auto owned_device=root.adopt_device(state->adapter,native_device->device,{},1,1,1,1,1);
+    auto owned_device=root.adopt_device(state->adapter,native_device->device,{},1,1,1,1,1,1);
     if (root.live_devices()!=1) return 1;
     root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
     root.with_device(owned_device,[&](auto& device) {
@@ -499,18 +499,37 @@ int main() {
         wgpu::RenderPassColorAttachment attachment{};attachment.view=view;
         attachment.loadOp=wgpu::LoadOp::Clear;attachment.storeOp=wgpu::StoreOp::Store;
         wgpu::RenderPassDescriptor pass_desc{};pass_desc.colorAttachmentCount=1;pass_desc.colorAttachments=&attachment;
-        auto encoder=device.native().CreateCommandEncoder();auto pass=encoder.BeginRenderPass(&pass_desc);
+        auto encoder=device.create_command_encoder({});auto pass=device.begin_render_pass(encoder,pass_desc);
+        bool encoder_full=false,pass_full=false;
+        try{device.create_command_encoder({});}catch(const std::length_error&){encoder_full=true;}
+        try{device.begin_render_pass(encoder,pass_desc);}catch(const std::length_error&){pass_full=true;}
+        if(!encoder_full || !pass_full)throw std::runtime_error("Command resource capacity failed");
         device.with_render_pipeline(pipeline,[&](const auto& native) {
             bool guarded=false;try{device.release_render_pipeline(pipeline);}catch(const std::logic_error&){guarded=true;}
             bool close_guarded=false;try{device.close();}catch(const std::logic_error&){close_guarded=true;}
             if(!guarded || !close_guarded)throw std::runtime_error("Borrowed render pipeline lifetime unguarded");
-            pass.SetPipeline(native);pass.Draw(3);
+            device.with_render_pass(pass,[&](const auto& native_pass) {
+                bool guarded=false;try{device.release_render_pass(pass);}catch(const std::logic_error&){guarded=true;}
+                if(!guarded)throw std::runtime_error("Borrowed render pass release unguarded");
+                native_pass.SetPipeline(native);native_pass.Draw(3);native_pass.End();
+            });
         });
-        pass.End();auto command=encoder.Finish();
+        device.release_render_pass(pass);
+        auto command=device.finish_command_encoder(encoder,{});
+        bool command_full=false;try{device.finish_command_encoder(encoder,{});}catch(const std::length_error&){command_full=true;}
+        if(!command_full)throw std::runtime_error("Command buffer capacity failed");
+        device.release_command_encoder(encoder);
         device.release_render_pipeline(pipeline);
         bool stale=false;try{device.with_render_pipeline(pipeline,[](const auto&){});}catch(const std::invalid_argument&){stale=true;}
         if(!stale || device.live_render_pipelines()!=0)throw std::runtime_error("Render pipeline stale handle accepted");
-        device.native().GetQueue().Submit(1,&command);
+        device.with_command_buffer(command,[&](const auto& native_command) {
+            bool close_guard=false;try{device.close();}catch(const std::logic_error&){close_guard=true;}
+            if(!close_guard)throw std::runtime_error("Borrowed command buffer did not guard device close");
+            device.native().GetQueue().Submit(1,&native_command);
+        });
+        device.release_command_buffer(command);
+        bool stale_command=false;try{device.with_command_buffer(command,[](const auto&){});}catch(const std::invalid_argument&){stale_command=true;}
+        if(!stale_command || device.live_command_buffers() || device.live_command_encoders() || device.live_render_passes())throw std::runtime_error("Command handles did not retire");
     });
     bool render_checked=false;
     native_device->device.PopErrorScope(wgpu::CallbackMode::AllowProcessEvents,

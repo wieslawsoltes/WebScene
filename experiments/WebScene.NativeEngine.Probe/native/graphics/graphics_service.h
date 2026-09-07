@@ -87,10 +87,10 @@ public:
     size_t live_adapters() const { check_thread(); return adapters_.resident_count(); }
     // Internal request-device completion hook: pass a freshly created device
     // from this service's instance exactly once, with its originating adapter.
-    resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024,size_t texture_capacity=1024,size_t texture_view_capacity=4096) {
+    resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024,size_t texture_capacity=1024,size_t texture_view_capacity=4096,size_t command_capacity=1024) {
         check_open();
         return devices_.insert(owner_,std::make_unique<dawn_device>(
-            owner_.engine,dawn().completions(),std::move(adapter),std::move(device),std::move(loss),buffer_capacity,shader_capacity,render_pipeline_capacity,texture_capacity,texture_view_capacity));
+            owner_.engine,dawn().completions(),std::move(adapter),std::move(device),std::move(loss),buffer_capacity,shader_capacity,render_pipeline_capacity,texture_capacity,texture_view_capacity,command_capacity));
     }
     template<class Execute> void with_device(resource_handle<dawn_device> handle,Execute execute) {
         check_open();
@@ -177,6 +177,33 @@ public:
             try {
                 service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
                     owner.release_texture_view({args[3],args[4],static_cast<uint32_t>(args[5])});
+                });
+            } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
+        },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
+    }
+    static graphics_command deferred_command_encoder_release(resource_handle<dawn_device> device,resource_handle<wgpu::CommandEncoder> pipeline) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try {
+                service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
+                    owner.release_command_encoder({args[3],args[4],static_cast<uint32_t>(args[5])});
+                });
+            } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
+        },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
+    }
+    static graphics_command deferred_render_pass_release(resource_handle<dawn_device> device,resource_handle<wgpu::RenderPassEncoder> pipeline) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try {
+                service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
+                    owner.release_render_pass({args[3],args[4],static_cast<uint32_t>(args[5])});
+                });
+            } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
+        },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
+    }
+    static graphics_command deferred_command_buffer_release(resource_handle<dawn_device> device,resource_handle<wgpu::CommandBuffer> pipeline) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try {
+                service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
+                    owner.release_command_buffer({args[3],args[4],static_cast<uint32_t>(args[5])});
                 });
             } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
         },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
