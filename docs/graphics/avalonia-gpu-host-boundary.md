@@ -237,3 +237,33 @@ Both real-window modes again completed 32 redraws, one import and retirement;
 the diagnostic mode verified both host pixels. General compositor loss recovery
 and automatic retirement scheduling are still unfinished, and the retained DOM
 renderer still needs to consume this owner.
+
+### Opt-in ordered retained GPU paint replay
+
+NativeCanvasSceneRenderer now accepts `orderedGpuImages: true` when applying a
+scene. It compiles contiguous static DOM commands into retained SKPictures and
+keeps GPU image command 256 as a dynamic slot between them. Clip, scale, rotation
+and opacity scopes replay around both picture segments and image slots. Scope
+pairs are validated before applying the diff; replay restores the host canvas
+state even if an image draw throws. GPU image changes can therefore replay with
+new slot contents without recompiling static DOM pictures.
+
+The actual Avalonia window now feeds a constructed scene command stream through
+this shared renderer instead of manually drawing its image. That stream places
+DOM behind the image and a yellow DOM rectangle over it, with clip and group
+opacity around the GPU slot. The 32-frame run with one import verified three
+host-surface pixels (blend, exterior clip and foreground DOM), then retired its
+GPU consumer. Result: `evidence/ganesh-host/ordered-scene-pixels.json`.
+
+Validation: 20 focused ordered-renderer/culling/native-interop tests pass on both
+net8.0 and net10.0; the complete Avalonia net10.0 suite passes 270 tests with no
+skips; the Uno backend builds without warnings/errors. CPU-only callers retain
+the existing rendering path.
+
+This opt-in integration is not yet enabled by ordinary native scene acquisition.
+The diagnostic constructs its command stream; V8 GPU canvas publication and v3
+image-slot binding remain unfinished. Legacy Canvas2D layers have no ordered
+placement marker yet, so this mode rejects scenes with those layers instead of
+silently painting them in the old global split. Full mixed Canvas2D/SVG/GPU DOM
+coverage, transformed bounds/culling qualification, and generation cache updates
+remain required before advertising the GPU scene capability in production.

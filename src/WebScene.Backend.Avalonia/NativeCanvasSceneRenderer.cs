@@ -54,6 +54,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private float _presenterDeviceScaleFactor = 1f;
 
     internal float PresenterDeviceScaleFactor => _presenterDeviceScaleFactor;
+    private List<OrderedGpuPaint>? _orderedGpuPaint;
     private SKPicture? s_domBackdropPicture;
     private SKPicture? s_domOverlayPicture;
     private uint s_domCommandCount;
@@ -146,10 +147,14 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         return true;
     }
 
-    public bool ApplyDiff(NativeSceneView* view)
+    public bool ApplyDiff(NativeSceneView* view, bool orderedGpuImages = false)
     {
         var header = view->Header;
         var checkpoint = (header.Flags & SceneCheckpoint) != 0;
+        // The opt-in path requires explicit image slots. Legacy Canvas2D layers
+        // have no ordered paint marker yet, so reject that combination explicitly.
+        if (orderedGpuImages && (header.CanvasLayerCount != 0 || (!checkpoint && s_layers.Count != 0)
+            || !ValidateOrderedGpuState(view))) return false;
         if (!checkpoint
             && header.Revision != s_revision
             && header.BaseRevision != s_revision)
@@ -185,7 +190,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             _webTypefaceReference ??= _webTypefaces?.Retain();
             if ((header.Flags & SceneDomReplacement) != 0)
             {
-                var compiledDom = CompileDom(view);
+                var ordered = orderedGpuImages ? CompileOrderedGpuDom(view) : null;
+                var compiledDom = orderedGpuImages ? default : CompileDom(view);
+                DisposeOrderedGpuDom();
+                _orderedGpuPaint = ordered;
                 s_domBackdropPicture?.Dispose();
                 s_domOverlayPicture?.Dispose();
                 s_domBackdropPicture = compiledDom.Backdrop;
@@ -364,8 +372,14 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         SKCanvas canvas,
         float viewportWidth,
         float viewportHeight,
-        Func<SKRect, bool>? intersects)
+        Func<SKRect, bool>? intersects,
+        Action<uint, SKRect>? drawGpuImage = null)
     {
+        if (_orderedGpuPaint is not null)
+        {
+            RenderOrderedGpuDom(canvas, drawGpuImage);
+            return;
+        }
         if (s_domBackdropPicture is not null
             && (intersects is null || intersects(new SKRect(0, 0, viewportWidth, viewportHeight))))
         {
@@ -499,7 +513,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             && layer.StringOffset <= view->StringCount
             && layer.StringCount <= view->StringCount - layer.StringOffset;
 
-    private (SKPicture Backdrop, SKPicture Overlay) CompileDom(NativeSceneView* view)
+    private (SKPicture Backdrop, SKPicture Overlay) CompileDom(NativeSceneView* view,
+        int startIndex = 0, int endIndex = -1, bool mergePaintOrder = false)
     {
         using var backdropRecorder = new SKPictureRecorder();
         using var overlayRecorder = new SKPictureRecorder();
@@ -509,7 +524,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             Math.Max(1, view->Header.ViewportWidth),
             Math.Max(1, view->Header.ViewportHeight));
         var backdrop = backdropRecorder.BeginRecording(recordingBounds);
-        var overlay = overlayRecorder.BeginRecording(recordingBounds);
+        var overlayRecording = overlayRecorder.BeginRecording(recordingBounds);
+        var overlay = mergePaintOrder ? backdrop : overlayRecording;
         var commands = new ReadOnlySpan<SceneCommand>(
             view->Commands,
             checked((int)view->Header.CommandCount));
@@ -525,9 +541,10 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         var textShapers = new Dictionary<string, SKShaper>(StringComparer.Ordinal);
         try
         {
-            for (var commandIndex = 0; commandIndex < commands.Length; commandIndex++)
+            var end = endIndex < 0 ? commands.Length : endIndex;
+            for (var commandIndex = startIndex; commandIndex < end; commandIndex++)
             {
-                if (BackgroundPaintIsFullyOccludedByLaterRoundedFill(
+                if (!mergePaintOrder && BackgroundPaintIsFullyOccludedByLaterRoundedFill(
                     commands,
                     commandIndex))
                 {
@@ -3451,8 +3468,89 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             (byte)(rgba >> 8),
             (byte)rgba);
 
+    private sealed record OrderedGpuPaint(SceneCommand Command, DomCornerRadii Radii, SKPicture? Picture);
+
+    private static bool ValidateOrderedGpuState(NativeSceneView* view)
+    {
+        var stack = new Stack<uint>();
+        foreach (var command in new ReadOnlySpan<SceneCommand>(view->Commands, checked((int)view->Header.CommandCount)))
+        {
+            if (command.Kind is 12 or 15 or 19 or 30) stack.Push(command.Kind);
+            else if (command.Kind is 13 or 16 or 20 or 31)
+            {
+                if (stack.Count == 0 || stack.Pop() != command.Kind - 1) return false;
+            }
+        }
+        return stack.Count == 0;
+    }
+
+    private List<OrderedGpuPaint> CompileOrderedGpuDom(NativeSceneView* view)
+    {
+        var result = new List<OrderedGpuPaint>();
+        var commands = new ReadOnlySpan<SceneCommand>(view->Commands, checked((int)view->Header.CommandCount));
+        var start = 0;
+        try
+        {
+            for (var index = 0; index <= commands.Length; ++index)
+            {
+                if (index != commands.Length && commands[index].Kind is not (12 or 13 or 15 or 16 or 19 or 20 or 30 or 31 or 256))
+                    continue;
+                if (start < index)
+                {
+                    var pictures = CompileDom(view, start, index, mergePaintOrder: true);
+                    pictures.Overlay.Dispose();
+                    result.Add(new(default, default, pictures.Backdrop));
+                }
+                if (index != commands.Length)
+                    result.Add(new(commands[index], ResolveDomCornerRadii(commands, index), null));
+                start = index + 1;
+            }
+            return result;
+        }
+        catch { foreach (var entry in result) entry.Picture?.Dispose(); throw; }
+    }
+    private void DisposeOrderedGpuDom()
+    {
+        if (_orderedGpuPaint is null) return;
+        foreach (var entry in _orderedGpuPaint) entry.Picture?.Dispose();
+        _orderedGpuPaint = null;
+    }
+    private void RenderOrderedGpuDom(SKCanvas canvas, Action<uint, SKRect>? drawGpuImage)
+    {
+        if (drawGpuImage is null) throw new InvalidOperationException("Ordered GPU replay requires an image renderer.");
+        var save = canvas.Save();
+        using var opacity = new SKPaint();
+        try
+        {
+            foreach (var entry in _orderedGpuPaint!)
+            {
+                if (entry.Picture is not null) { canvas.DrawPicture(entry.Picture); continue; }
+                var command = entry.Command;
+                switch (command.Kind)
+                {
+                    case 12:
+                        canvas.Save(); ClipDomRoundedRect(canvas, command, entry.Radii); break;
+                    case 15: ApplyScale(canvas, command); break;
+                    case 19: ApplyRotation(canvas, command); break;
+                    case 30:
+                        opacity.Color = new SKColor(255, 255, 255, (byte)(command.Rgba & 255));
+                        canvas.SaveLayer(opacity); break;
+                    case 13: case 16: case 20: case 31:
+                        // Never allow an invalid stream to pop the host's state.
+                        if (canvas.SaveCount <= save + 1) throw new InvalidOperationException("Unbalanced GPU scene state.");
+                        canvas.Restore(); break;
+                    case 256:
+                        drawGpuImage(command.Rgba, new SKRect(command.X, command.Y,
+                            command.X + command.Width, command.Y + command.Height)); break;
+                }
+            }
+        }
+        finally { canvas.RestoreToCount(save); }
+    }
+
     internal void Reset()
     {
+        DisposeOrderedGpuDom();
         s_domBackdropPicture?.Dispose();
         s_domBackdropPicture = null;
         s_domOverlayPicture?.Dispose();
