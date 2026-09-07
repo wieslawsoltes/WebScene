@@ -87,7 +87,27 @@ void test_owned_lifetime() {
     bounded->close(); require(!bounded->acquire());
     bounded.reset(); require(destroyed==2);
 }
+void test_cache_eviction_reservations() {
+    auto provider=std::make_shared<image_provider_lifetime>();
+    owned_image_pool pool(provider);
+    auto producer=pool.acquire();
+    const auto protected_slot=producer->slot();
+    producer->set_metadata(metadata); producer->begin();
+    auto scene=producer->publish();
+    auto consumer=scene->begin_consumer();
+    producer->complete(); producer.reset(); scene.reset();
+    // A GPU consumer alone protects its allocation from cache eviction.
+    auto first=pool.acquire(); auto second=pool.acquire();
+    require(first && second && first->slot()!=second->slot()
+        && first->slot()!=protected_slot && second->slot()!=protected_slot && !pool.acquire());
+    first->cancel(false); second->cancel(false);
+    require(pool.busy_images()==1);
+    consumer->complete(); consumer.reset();
+    auto reusable=pool.acquire();
+    require(reusable && reusable->slot()==protected_slot);
+}
 int main() {
+    test_cache_eviction_reservations();
     test_capacity_wake();
     test_owned_lifetime();
     image_lease_pool pool;

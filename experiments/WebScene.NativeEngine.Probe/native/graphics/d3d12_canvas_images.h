@@ -37,6 +37,9 @@ public:
         check_thread(); status=S_OK;
         auto writer=pool_.acquire();
         if (!writer) { status=DXGI_ERROR_WAS_STILL_DRAWING; return {}; }
+        // Reservations outlive the lock on exceptional unwind, so completion
+        // wake callbacks cannot re-enter while the storage mutex is held.
+        std::array<std::optional<owned_image_pool::producer>,2> idle;
         std::lock_guard lock(storage_->mutex);
         auto& slot=storage_->slots[writer->slot()];
         const bool reuse=slot.color && slot.metadata.width==metadata.width
@@ -47,6 +50,19 @@ public:
             if (slot.color) storage_->bytes-=slot.color->allocation_bytes();
             slot.color.reset();
             status=d3d12_shared_color::create(storage_->device.Get(),metadata,limit_-storage_->bytes,slot.color);
+            for (auto& reservation:idle) {
+                if (status!=E_OUTOFMEMORY) break;
+                auto candidate=pool_.acquire();
+                if (!candidate) break; // Busy images cannot be evicted.
+                reservation.emplace(std::move(*candidate));
+                auto& cached=storage_->slots[reservation->slot()];
+                if (cached.color) storage_->bytes-=cached.color->allocation_bytes();
+                cached.color.reset();
+                status=d3d12_shared_color::create(storage_->device.Get(),metadata,limit_-storage_->bytes,slot.color);
+            }
+            // Keep reservations until all retries finish, or acquire() could
+            // select the same empty slot repeatedly instead of the next cache.
+            for (auto& reservation:idle) if (reservation) reservation->cancel(false);
             if (FAILED(status)) { writer->cancel(false); return {}; }
             storage_->bytes+=slot.color->allocation_bytes();
         }

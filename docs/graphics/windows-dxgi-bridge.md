@@ -223,3 +223,18 @@ The portable NT ownership target passes (0.20 seconds) and the existing image-le
 test passes (0.01 seconds). The Windows target includes the provider and validates
 null-device rejection, but Windows compilation and successful provider allocation,
 retention, resize, lookup and GPU completion remain unverified locally.
+
+## Idle-cache reclamation under allocation pressure
+
+The D3D12 pool now retries out-of-memory allocation after reserving and clearing
+other idle cache slots. Reservations remain held across retries to prevent repeatedly
+selecting the same empty slot. Busy allocations cannot be selected, and cancellations
+are quiet so reclamation does not wake its own retry loop. Exceptional unwinding
+releases the storage mutex before reservation destruction can signal capacity.
+This supersedes the idle-cache limitation noted above.
+
+A new portable lease test retains only an outstanding GPU consumer, reserves both
+other slots, proves neither aliases the protected slot, then verifies reuse only
+after explicit consumer completion. The image-lease suite passes (0.28 seconds).
+This verifies the reservation invariant; Windows native allocation pressure and
+successful resize after cache reclamation remain required hardware tests.
