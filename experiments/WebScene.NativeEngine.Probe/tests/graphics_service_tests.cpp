@@ -9,6 +9,8 @@ int main() {
     auto wake=std::make_shared<engine_wake>();
     graphics_service a(wake),b(wake);
     require(!a.dawn_initialized() && !b.dawn_initialized());
+    require(!a.has_ready_work());
+    require(a.recommended_idle_wait(std::chrono::milliseconds(100))==std::chrono::milliseconds(100));
     require(a.pump([](auto) {})==0 && !a.dawn_initialized());
 #if defined(__APPLE__)
     constexpr auto backend=EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE;
@@ -33,7 +35,9 @@ int main() {
     b.with_angle_context(second,[] { GLfloat color[4]{}; glGetFloatv(GL_COLOR_CLEAR_VALUE,color); require(color[1]==1); });
     require(a.live_contexts()==0 && b.live_contexts()==1);
     rejects([&] { a.dawn(); });
-    b.dawn(); require(b.dawn_initialized());
+    b.dawn(); require(b.dawn_initialized() && b.has_ready_work());
+    b.pump([](auto) {});
+    require(b.recommended_idle_wait(std::chrono::milliseconds(100))<=std::chrono::milliseconds(1));
     b.close(); require(b.live_contexts()==0);
     std::cout << "lazy graphics service and cross-engine ANGLE lifetime isolation passed\n";
 }

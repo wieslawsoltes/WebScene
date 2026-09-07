@@ -1,6 +1,8 @@
 #pragma once
 #include "angle_context.h"
 #include "dawn_event_service.h"
+#include <chrono>
+#include <algorithm>
 
 namespace webscene::graphics {
 // One instance per engine, created on its worker. This is native API state only;
@@ -13,6 +15,7 @@ class graphics_service {
     resource_table<angle_context> contexts_;
     std::unique_ptr<dawn_event_service> dawn_;
     bool closed_{};
+    std::chrono::steady_clock::time_point next_event_poll_{};
     size_t active_context_scopes_{};
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
@@ -66,7 +69,22 @@ public:
     }
     template<class Deliver> size_t pump(Deliver deliver,size_t budget=64) {
         check_thread();
-        return dawn_ ? dawn_->pump(deliver,budget) : 0;
+        if (!dawn_) return 0;
+        next_event_poll_=std::chrono::steady_clock::now()+std::chrono::milliseconds(1);
+        return dawn_->pump(deliver,budget);
+    }
+    bool has_ready_work() const {
+        check_thread();
+        return dawn_ && (dawn_->completions()->has_ready()
+            || (!closed_ && std::chrono::steady_clock::now()>=next_event_poll_));
+    }
+    std::chrono::milliseconds recommended_idle_wait(std::chrono::milliseconds maximum) const {
+        check_thread();
+        if (!dawn_ || closed_) return maximum;
+        const auto now=std::chrono::steady_clock::now();
+        if (dawn_->completions()->has_ready() || now>=next_event_poll_)
+            return std::chrono::milliseconds::zero();
+        return std::min(maximum,std::chrono::ceil<std::chrono::milliseconds>(next_event_poll_-now));
     }
     size_t live_contexts() const { check_thread(); return contexts_.resident_count(); }
     void close() {
