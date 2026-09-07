@@ -18,6 +18,7 @@ class image_lease_pool {
         uint64_t generation{};
         size_t retained{},consumers{};
         bool producer_done{};
+        bool producer_started{};
         bool metadata_set{};
         image_metadata metadata{};
     };
@@ -68,7 +69,7 @@ public:
         for (uint32_t i=0;i<images_.size();++i) {
             auto& item=images_[i];
             if (item.state==phase::idle && item.generation!=UINT64_MAX) {
-                ++item.generation; item.state=phase::writing; item.producer_done=false; item.metadata_set=false;
+                ++item.generation; item.state=phase::writing; item.producer_done=false; item.producer_started=false; item.metadata_set=false;
                 return image_write_token{identity_,item.generation,i};
             }
         }
@@ -77,7 +78,7 @@ public:
     void set_metadata(image_write_token writer,const image_metadata& metadata) {
         std::lock_guard lock(mutex_);
         auto& item=image(writer);
-        if (item.state!=phase::writing) throw std::invalid_argument("published image metadata is immutable");
+        if (item.state!=phase::writing || item.producer_started) throw std::invalid_argument("submitted image metadata is immutable");
         if (!metadata.canvas || !metadata.allocation || !metadata.allocation_generation
             || !metadata.width || !metadata.height || !metadata.producer_timeline
             || static_cast<uint32_t>(metadata.format)<1 || static_cast<uint32_t>(metadata.format)>5
@@ -85,6 +86,12 @@ public:
             || static_cast<uint32_t>(metadata.color_space)<1 || static_cast<uint32_t>(metadata.color_space)>2
             || static_cast<uint32_t>(metadata.orientation)<1 || static_cast<uint32_t>(metadata.orientation)>2)
             throw std::invalid_argument("invalid portable image metadata");
+        // Different frame slots must not alias the same busy physical image.
+        // Re-presenting unchanged pixels uses retain(), not another writer.
+        for (const auto& other:images_)
+            if (&other!=&item && other.state!=phase::idle && other.metadata_set
+                && other.metadata.allocation==metadata.allocation)
+                throw std::invalid_argument("image allocation already has an active frame");
         item.metadata=metadata; item.metadata_set=true;
     }
     image_metadata describe(image_lease_token token) const {
@@ -95,22 +102,32 @@ public:
             throw std::invalid_argument("stale image lease");
         return images_[owned.image].metadata;
     }
+    // Call before submitting any backend work against this image. Producer
+    // completion is required even if the frame is abandoned before publication.
+    void begin_producer(image_write_token writer) {
+        std::lock_guard lock(mutex_);
+        auto& item=image(writer);
+        if (item.state!=phase::writing || item.producer_started || !item.metadata_set)
+            throw std::invalid_argument("invalid producer submission");
+        item.producer_started=true;
+    }
     // On capacity exhaustion the writer stays reserved; the caller retries.
     std::optional<image_lease_token> publish(image_write_token writer) {
         std::lock_guard lock(mutex_);
         auto& item=image(writer);
         if (item.state!=phase::writing) throw std::invalid_argument("image already published");
-        if (!item.metadata_set) throw std::invalid_argument("image publication requires metadata");
+        if (!item.metadata_set || !item.producer_started) throw std::invalid_argument("image publication requires metadata and producer submission");
         auto token=allocate(writer.slot,lease_kind::retained);
         if (!token) return {};
         item.state=phase::published; item.retained=1;
         return token;
     }
-    // Only cancel a reservation before any backend work uses its allocation.
+    // Cancel before submission, or after an abandoned producer has completed.
     void cancel_write(image_write_token writer) {
         std::lock_guard lock(mutex_);
         auto& item=image(writer);
         if (item.state!=phase::writing) throw std::invalid_argument("cannot cancel published image");
+        if (item.producer_started && !item.producer_done) throw std::invalid_argument("producer still uses cancelled image");
         item.state=phase::idle;
     }
     std::optional<image_lease_token> retain(image_lease_token source) {
@@ -144,7 +161,7 @@ public:
     void finish_producer(image_write_token writer) {
         std::lock_guard lock(mutex_);
         auto& item=image(writer);
-        if (item.producer_done) throw std::invalid_argument("invalid producer completion");
+        if (!item.producer_started || item.producer_done) throw std::invalid_argument("invalid producer completion");
         item.producer_done=true; recycle(item);
     }
     // Stop new frames. Existing retained scenes can still be redrawn/released.

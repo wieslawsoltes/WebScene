@@ -70,7 +70,9 @@ duplicate release/completion cannot decrement another consumer's ownership.
 stateDiagram-v2
     [*] --> Idle
     Idle --> Writing: acquire writer
-    Writing --> Published: publish retained reference
+    Writing --> Submitted: begin producer before backend use
+    Submitted --> Published: publish retained reference
+    Submitted --> Idle: cancel after producer completion
     Writing --> Idle: cancel before backend use
     Published --> Published: retain / begin consumer / release / completion
     Published --> Idle: producer done AND no retained references AND no consumers
@@ -115,3 +117,24 @@ image allocation or pixel copy is performed by descriptor publication/lookup.
 This is the internal descriptor/lease association. C ABI versioning, native image
 provider lookup, scene acquisition and actual resize allocation/fence integration
 remain outstanding; no physical resize or zero-copy presentation pass is claimed.
+
+## Active allocation aliasing and abandoned producers
+
+Metadata binding now rejects an allocation identity already assigned to another
+busy frame slot, even if its allocation-generation value differs. Re-presenting
+unchanged pixels must retain the existing lease; it must not acquire a second
+writer for the same physical image. The backend provider must also enforce its
+allocation ownership across different pools.
+
+A writer must explicitly begin producer work before backend submission and
+publication. This freezes its metadata. Cancellation while producer work remains
+pending is rejected; an abandoned frame can be cancelled once producer completion
+arrives. Closing the pool does not silently recycle such a frame. Unsubmitted
+writers remain cancellable without a GPU fence. Duplicate producer starts and
+completion before a start are rejected.
+
+The native fixture covers a busy-allocation alias across resized generations,
+failed metadata mutation preserving the original descriptor, cancellation of an
+in-flight producer, completion after close and final slot reclamation. Focused
+CTest and ThreadSanitizer runs pass. These are lifetime protocol checks; physical
+backend submission, memory accounting and scene ABI integration remain pending.
