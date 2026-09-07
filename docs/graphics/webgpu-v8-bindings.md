@@ -574,3 +574,22 @@ This helper accepts consumed state from its caller; it does not implement the
 public adapter state machine. Public requestDevice still needs that state,
 error-to-promise integration, trusted realm initialization and wrapper lifetime
 ownership. Compatibility mode and full device-loss behavior remain unqualified.
+
+### Checked request promise entry
+
+The internal request bridge's `start_checked` entry combines JavaScript descriptor
+conversion, adapter-state reacquisition, native preparation and asynchronous Dawn
+request submission. Its ownership callback runs after all descriptor getters and
+coercions, allowing the eventual adapter registry to reject invalidated or
+consumed receivers instead of carrying a stale native-entry pointer across user
+code. Conversion exceptions reject the returned promise with the original thrown
+value. Unsupported features reject with TypeError, and limit/consumed failures
+with OperationError. Rejected preparation does not reserve native completion
+storage or call Dawn RequestDevice.
+
+The macOS runtime device fixture now uses this checked entry for successful native
+creation. Tests verify rejected promise types for unknown features and limits,
+getter exception identity, unchanged completion occupancy after rejection, and
+adapter consumed state changed by a descriptor getter. Runtime CTest passes.
+This remains an internal entry: GPUAdapter prototype installation, receiver brand
+handling, real consumed/expired state and public exposure are still pending.

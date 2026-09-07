@@ -636,8 +636,35 @@ int main() {
                                     && feature_prepared->native().requiredFeatures[0]==feature.native,"Supported feature set preparation failed");
                             } else require(!feature_prepared && preparation_error==webgpu_device_request_error::unsupported_feature,"Unsupported adapter feature accepted");
                         }
+                        for (const auto& [source,expected]:std::vector<std::pair<const char*,const char*>>{
+                            {"({requiredFeatures:['unknown-feature']})","TypeError"},
+                            {"({requiredLimits:{unknown:1}})","OperationError"},
+                            {"({get label(){throw globalThis.requestSentinel=new Error('sentinel')}})","Error"}}) {
+                            auto input=v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocalChecked()->Run(context).ToLocalChecked();
+                            const auto occupied=mailbox->metrics().occupied;
+                            v8::Local<v8::Promise> rejected;
+                            auto invalid=v8_webgpu_device_request::start_checked(isolate,context,input,[&] { return std::pair{adapter,false}; },mailbox,
+                                {adapter_service->engine_identity(),new_owner_token(),0},new_owner_token(),
+                                context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),rejected);
+                            require(invalid && !invalid->pending() && rejected->State()==v8::Promise::kRejected
+                                && mailbox->metrics().occupied==occupied,"Invalid descriptor reached native admission or failed to reject");
+                            rejected->MarkAsHandled();
+                            auto error_name=rejected->Result().As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"name")).ToLocalChecked();
+                            require(error_name->StrictEquals(v8::String::NewFromUtf8(isolate,expected).ToLocalChecked()),"Checked device rejection type incorrect");
+                            if (std::string_view(expected)=="Error") require(rejected->Result()->StrictEquals(context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"requestSentinel")).ToLocalChecked()),"Descriptor exception identity lost");
+                        }
+                        auto changing_input=v8::Script::Compile(context,v8::String::NewFromUtf8Literal(isolate,"({get label(){globalThis.adapterConsumedDuringConversion=true;return ''}})")).ToLocalChecked()->Run(context).ToLocalChecked();
+                        v8::Local<v8::Promise> consumed_promise;
+                        bool consumed_observed=false;
+                        auto consumed_request=v8_webgpu_device_request::start_checked(isolate,context,changing_input,[&] {
+                            bool consumed=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"adapterConsumedDuringConversion")).ToLocalChecked()->IsTrue();
+                            consumed_observed=consumed;return std::pair{adapter,consumed};
+                        },mailbox,{adapter_service->engine_identity(),new_owner_token(),0},new_owner_token(),
+                            context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),consumed_promise);
+                        require(consumed_observed && consumed_request && !consumed_request->pending() && consumed_promise->State()==v8::Promise::kRejected,"Consumed adapter did not reject");
+                        consumed_promise->MarkAsHandled();
                         v8::Local<v8::Promise> promise;
-                        device_request=v8_webgpu_device_request::start(isolate,context,descriptor,adapter,mailbox,
+                        device_request=v8_webgpu_device_request::start_checked(isolate,context,js_descriptor,[&] { return std::pair{adapter,false}; },mailbox,
                             {adapter_service->engine_identity(),new_owner_token(),0},104,
                             context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),promise);
                         require(device_request && device_request->pending(),"Device promise did not start");

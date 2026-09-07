@@ -1,6 +1,8 @@
 #pragma once
 #include <webgpu/webgpu_cpp.h>
 #include "completion_mailbox.h"
+#include "v8_webgpu_device_descriptor.h"
+#include "webgpu_prepared_device_descriptor.h"
 #include <v8.h>
 
 namespace webscene::graphics {
@@ -49,6 +51,53 @@ public:
     v8_webgpu_device_request(const v8_webgpu_device_request&)=delete;
     v8_webgpu_device_request& operator=(const v8_webgpu_device_request&)=delete;
     bool pending() const { check_thread(); return !resolver_.IsEmpty(); }
+    // ResolveAdapter rechecks native ownership and consumed state after all
+    // user-controlled descriptor getters/coercions have run. It returns
+    // pair<Adapter,bool>; callbacks must not hold a borrowed registry entry
+    // across the conversion phase.
+    template<class ResolveAdapter>
+    static std::unique_ptr<v8_webgpu_device_request> start_checked(v8::Isolate* isolate,
+        v8::Local<v8::Context> context,v8::Local<v8::Value> input,ResolveAdapter resolve_adapter,
+        std::shared_ptr<completion_mailbox> mailbox,resource_owner owner,uint64_t operation,
+        v8::Local<v8::Function> dom_exception,v8::Local<v8::Promise>& promise) {
+        if (v8::Isolate::GetCurrent()!=isolate || isolate->GetCurrentContext()!=context)
+            throw std::logic_error("Device request requires its owning isolate scope");
+        if (!mailbox || !operation || dom_exception.IsEmpty())
+            throw std::invalid_argument("Device request lacks mailbox or trusted DOMException");
+        v8::Local<v8::Value> failure;
+        std::unique_ptr<webgpu_prepared_device_descriptor> prepared;
+        wgpu::Adapter adapter;
+        {
+            v8::TryCatch caught(isolate);
+            try {
+                webgpu_device_descriptor converted;
+                if (read_webgpu_device_descriptor(isolate,context,input,converted)) {
+                    auto state=resolve_adapter(); adapter=std::move(state.first);
+                    webgpu_device_request_error error;
+                    prepared=webgpu_prepared_device_descriptor::prepare(converted,adapter,state.second,error);
+                    if (error==webgpu_device_request_error::unsupported_feature)
+                        failure=v8::Exception::TypeError(v8::String::NewFromUtf8Literal(isolate,"Required WebGPU feature is unavailable"));
+                }
+            } catch (const std::exception&) {
+                failure=v8::Exception::Error(v8::String::NewFromUtf8Literal(isolate,"Device request preparation failed"));
+            }
+            if (caught.HasTerminated()) return {};
+            if (caught.HasCaught()) failure=caught.Exception();
+        }
+        if (prepared && failure.IsEmpty()) {
+            auto descriptor=prepared->native();
+            return start(isolate,context,descriptor,adapter,std::move(mailbox),owner,operation,dom_exception,promise);
+        }
+        v8::Local<v8::Promise::Resolver> resolver;
+        if (!v8::Promise::Resolver::New(context).ToLocal(&resolver)) return {};
+        promise=resolver->GetPromise();
+        auto result=std::unique_ptr<v8_webgpu_device_request>(new v8_webgpu_device_request(isolate,owner,operation));
+        result->dom_exception_.Reset(isolate,dom_exception);
+        if (failure.IsEmpty()) {
+            if (!result->reject(context,resolver)) return {};
+        } else if (!resolver->Reject(context,failure).FromMaybe(false)) return {};
+        return result;
+    }
     static std::unique_ptr<v8_webgpu_device_request> start(v8::Isolate* isolate,
         v8::Local<v8::Context> context,const wgpu::DeviceDescriptor& descriptor,
         const wgpu::Adapter& adapter,std::shared_ptr<completion_mailbox> mailbox,
