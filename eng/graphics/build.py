@@ -164,7 +164,7 @@ def angle(args):
     settings["angle_enable_" + profile["angleBackend"].lower()] = True
     if args.angle_gl:
         settings["angle_enable_gl"] = True
-    output = source / "out" / ("WebScene-" + args.rid + ("-gl" if args.angle_gl else ""))
+    output = args.build / ("angle-" + args.rid + ("-gl" if args.angle_gl else ""))
     output.mkdir(parents=True, exist_ok=True)
     (output / "args.gn").write_text("\n".join(k + " = " + json.dumps(v) for k, v in settings.items()) + "\n")
     gn_os = {"win": "win", "osx": "mac", "linux": "linux64"}[args.rid.split("-")[0]]
