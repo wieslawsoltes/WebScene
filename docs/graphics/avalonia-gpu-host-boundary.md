@@ -68,3 +68,11 @@ Avalonia's Skia importer specifically verifies the context share group.
 Next exercise context creation, drawing into its composition texture, import and
 surface update. Then determine the supported Metal/Dawn-to-GL allocation bridge;
 shared GL context availability alone does not make a Dawn Metal texture importable.
+
+The shared-context import/update sequence now executes successfully in the probe:
+a 32x32 shared GL texture is cleared through a complete framebuffer, flushed,
+imported, and copied/snapshotted through an awaited drawing-surface update. Async
+import disposal precedes texture/context teardown. No CPU pixel upload/readback
+is used by the probe. This establishes successful API execution, not displayed
+pixel correctness: the surface is not yet attached to a visual, and the source
+is GL-produced rather than Dawn/Metal-produced. These remain separate gates.

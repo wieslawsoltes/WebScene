@@ -16,3 +16,11 @@ The probe additionally queries Avalonia's public OpenGL texture-sharing feature.
 On this host `canCreateSharedOpenGlContext` is true, despite the empty external
 handle lists. This is the next candidate to exercise; no shared texture has yet
 been drawn or presented by this capability probe.
+
+The probe now exercises the shared-context route when available: create a 32x32
+composition texture, attach it to an FBO, check completeness, clear via OpenGL,
+flush, import and await CompositionDrawingSurface.UpdateAsync. On the M4 host it
+reports `sharedTextureUpdateCompleted=true` and exits successfully. Imported image
+disposal is awaited before texture/context teardown. The surface is not attached
+to a visual and its snapshot pixels are not inspected, so `presentationVerified`
+remains false. This is not yet a Dawn-to-host bridge test.

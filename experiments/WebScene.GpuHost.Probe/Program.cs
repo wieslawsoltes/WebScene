@@ -29,6 +29,35 @@ internal sealed class ProbeApp : Application
                     var interop = await visual.Compositor.TryGetCompositionGpuInterop().AsTask().WaitAsync(TimeSpan.FromSeconds(30));
                     var sharing = await visual.Compositor.TryGetRenderInterfaceFeature(typeof(IOpenGlTextureSharingRenderInterfaceContextFeature))
                         as IOpenGlTextureSharingRenderInterfaceContextFeature;
+                    bool sharedTextureUpdateCompleted = false;
+                    if (interop is not null && sharing?.CanCreateSharedContext == true)
+                    {
+                        using var glContext = sharing.CreateSharedContext()
+                            ?? throw new InvalidOperationException("Shared context creation failed");
+                        using var texture = sharing.CreateSharedTextureForComposition(glContext, new PixelSize(32,32));
+                        using (glContext.EnsureCurrent())
+                        {
+                            var gl = glContext.GlInterface;
+                            var framebuffer = gl.GenFramebuffer();
+                            try
+                            {
+                                gl.BindFramebuffer(GlConsts.GL_FRAMEBUFFER, framebuffer);
+                                gl.FramebufferTexture2D(GlConsts.GL_FRAMEBUFFER, GlConsts.GL_COLOR_ATTACHMENT0,
+                                    GlConsts.GL_TEXTURE_2D, texture.TextureId, 0);
+                                if (gl.CheckFramebufferStatus(GlConsts.GL_FRAMEBUFFER) != GlConsts.GL_FRAMEBUFFER_COMPLETE)
+                                    throw new InvalidOperationException("Shared framebuffer incomplete");
+                                gl.Viewport(0,0,32,32);
+                                gl.ClearColor(0.2f,0.4f,0.6f,1);
+                                gl.Clear(GlConsts.GL_COLOR_BUFFER_BIT); gl.Flush();
+                            }
+                            finally { gl.BindFramebuffer(GlConsts.GL_FRAMEBUFFER,0); gl.DeleteFramebuffer(framebuffer); }
+                        }
+                        using var surface = visual.Compositor.CreateDrawingSurface();
+                        await using var imported = interop.ImportImage(texture);
+                        await imported.ImportCompleted.WaitAsync(TimeSpan.FromSeconds(30));
+                        await surface.UpdateAsync(imported).WaitAsync(TimeSpan.FromSeconds(30));
+                        sharedTextureUpdateCompleted = true;
+                    }
                     Console.WriteLine(JsonSerializer.Serialize(new
                     {
                         schemaVersion = 1,
@@ -40,6 +69,7 @@ internal sealed class ProbeApp : Application
                         semaphoreTypes = interop?.SupportedSemaphoreTypes.ToArray(),
                         isLost = interop?.IsLost,
                         canCreateSharedOpenGlContext = sharing?.CanCreateSharedContext ?? false,
+                        sharedTextureUpdateCompleted,
                         presentationVerified = false
                     }));
                     if (interop is null) exit = 77;
