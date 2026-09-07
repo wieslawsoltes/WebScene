@@ -14,6 +14,7 @@ class v8_webgpu_discovery {
     graphics_service& service_;
     v8_webgpu_adapters& adapters_;
     const wgpu::BackendType backend_;
+    const wgpu::TextureFormat preferred_format_;
     v8::Global<v8::Context> realm_;
     v8::Global<v8::Object> wrapper_;
     std::list<std::unique_ptr<v8_webgpu_adapter_request>> requests_;
@@ -31,6 +32,11 @@ class v8_webgpu_discovery {
         }
         info.GetIsolate()->ThrowException(v8::Exception::TypeError(v8::String::NewFromUtf8Literal(info.GetIsolate(),"Illegal GPU receiver")));
         return nullptr;
+    }
+    static void preferred_canvas_format(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* owner=receiver(info); if (!owner) return;
+        const char* format=owner->preferred_format_==wgpu::TextureFormat::BGRA8Unorm?"bgra8unorm":"rgba8unorm";
+        info.GetReturnValue().Set(v8::String::NewFromUtf8(info.GetIsolate(),format).ToLocalChecked());
     }
     static void request_adapter(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* isolate=info.GetIsolate(); auto context=isolate->GetCurrentContext();
@@ -71,11 +77,16 @@ class v8_webgpu_discovery {
     }
 public:
     v8_webgpu_discovery(v8::Isolate* isolate,v8::Local<v8::Context> context,graphics_service& service,
-        v8_webgpu_adapters& adapters,wgpu::BackendType backend=wgpu::BackendType::Undefined)
-        :isolate_(isolate),service_(service),adapters_(adapters),backend_(backend) {
-        check_scope(); realm_.Reset(isolate,context);
+        v8_webgpu_adapters& adapters,wgpu::BackendType backend=wgpu::BackendType::Undefined,
+        wgpu::TextureFormat preferred_format=wgpu::TextureFormat::BGRA8Unorm)
+        :isolate_(isolate),service_(service),adapters_(adapters),backend_(backend),preferred_format_(preferred_format) {
+        check_scope();
+        if (preferred_format!=wgpu::TextureFormat::BGRA8Unorm && preferred_format!=wgpu::TextureFormat::RGBA8Unorm)
+            throw std::invalid_argument("Preferred canvas format must be BGRA8Unorm or RGBA8Unorm");
+        realm_.Reset(isolate,context);
         auto instance=v8::ObjectTemplate::New(isolate); instance->SetInternalFieldCount(2);
         auto prototype=v8::ObjectTemplate::New(isolate);
+        prototype->Set(isolate,"getPreferredCanvasFormat",v8::FunctionTemplate::New(isolate,preferred_canvas_format));
         prototype->Set(isolate,"requestAdapter",v8::FunctionTemplate::New(isolate,request_adapter));
         auto wrapper=instance->NewInstance(context).ToLocalChecked();
         wrapper->SetPrototype(context,prototype->NewInstance(context).ToLocalChecked()).Check();

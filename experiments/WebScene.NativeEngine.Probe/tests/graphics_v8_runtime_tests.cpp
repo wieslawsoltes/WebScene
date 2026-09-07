@@ -701,6 +701,16 @@ int main() {
                     auto discovery_adapters=std::make_unique<v8_webgpu_adapters>(isolate,context,*discovery_devices,exception_constructor,2);
                     auto discovery=std::make_unique<v8_webgpu_discovery>(isolate,context,adapter_fixture,*discovery_adapters);
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"gpuDiscoveryProbe"),discovery->object()).FromMaybe(false),"Discovery object publication failed");
+                    require(run("if(gpuDiscoveryProbe.getPreferredCanvasFormat()!=='bgra8unorm'||gpuDiscoveryProbe.getPreferredCanvasFormat.length!==0)throw new Error('preferred format');let badFormatReceiver=false;try{gpuDiscoveryProbe.getPreferredCanvasFormat.call({})}catch(e){badFormatReceiver=e instanceof TypeError}if(!badFormatReceiver)throw new Error('format receiver');"),"Preferred canvas format behavior failed");
+                    bool invalid_format=false;
+                    try { v8_webgpu_discovery invalid(isolate,context,adapter_fixture,*discovery_adapters,wgpu::BackendType::Undefined,wgpu::TextureFormat::RGBA16Float); }
+                    catch(const std::invalid_argument&) { invalid_format=true; }
+                    require(invalid_format,"Unsupported preferred format admitted");
+                    { v8_webgpu_discovery rgba(isolate,context,adapter_fixture,*discovery_adapters,wgpu::BackendType::Undefined,wgpu::TextureFormat::RGBA8Unorm);
+                        auto object=rgba.object();
+                        auto method=object->Get(context,v8::String::NewFromUtf8Literal(isolate,"getPreferredCanvasFormat")).ToLocalChecked().As<v8::Function>();
+                        require(method->Call(context,object,0,nullptr).ToLocalChecked()->StrictEquals(v8::String::NewFromUtf8Literal(isolate,"rgba8unorm")),"Host RGBA format selection ignored");
+                    }
                     require(run("globalThis.discoveryPromise=gpuDiscoveryProbe.requestAdapter();"),"JavaScript adapter discovery failed");
                     auto discovery_promise=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"discoveryPromise")).ToLocalChecked().As<v8::Promise>();
                     auto discovery_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);

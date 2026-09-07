@@ -683,3 +683,15 @@ unmap/destroy on the returned native device. It verifies unsupported feature-lev
 null results, invalid-option rejection and final native handle reclamation.
 Runtime CTest passes. Public exposure policy, complete GPU prototypes and
 capabilities, canvas configuration and rendering commands remain unfinished.
+
+### Preferred canvas format
+
+The internal GPU discovery object now implements getPreferredCanvasFormat as a
+synchronous, receiver-checked method. The host selects BGRA8Unorm or RGBA8Unorm;
+other formats are rejected during controller construction. The default is
+bgra8unorm, matching the current macOS IOSurface submission path. No adapter
+request, allocation or readback is required to report this preference.
+The macOS runtime test checks default/explicit format selection, method arity,
+wrong-receiver TypeError and invalid host configuration. Runtime CTest passes.
+GPUCanvasContext configuration/current-texture and ordinary presentation wiring
+remain unfinished; this method alone does not enable canvas rendering.
