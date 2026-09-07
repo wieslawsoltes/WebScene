@@ -1,6 +1,7 @@
 #pragma once
 #include "angle_context.h"
 #include "dawn_event_service.h"
+#include "dawn_device.h"
 #include <chrono>
 #include <algorithm>
 
@@ -13,10 +14,12 @@ class graphics_service {
     std::shared_ptr<completion_wake> wake_;
     const size_t completion_capacity_;
     resource_table<angle_context> contexts_;
+    resource_table<dawn_device> devices_;
     std::unique_ptr<dawn_event_service> dawn_;
     bool closed_{};
     std::chrono::steady_clock::time_point next_event_poll_{};
     size_t active_context_scopes_{};
+    size_t active_device_scopes_{};
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
             throw std::logic_error("graphics service requires its engine worker");
@@ -27,7 +30,7 @@ class graphics_service {
     }
 public:
     graphics_service(std::shared_ptr<completion_wake> wake,size_t context_capacity=64,size_t completion_capacity=256)
-        : wake_(std::move(wake)),completion_capacity_(completion_capacity),contexts_(context_capacity,owner_) {}
+        : wake_(std::move(wake)),completion_capacity_(completion_capacity),contexts_(context_capacity,owner_),devices_(context_capacity,owner_) {}
     graphics_service(const graphics_service&)=delete;
     graphics_service& operator=(const graphics_service&)=delete;
     ~graphics_service() {
@@ -41,6 +44,29 @@ public:
         if (!dawn_) dawn_=std::make_unique<dawn_event_service>(completion_capacity_,wake_);
         return *dawn_;
     }
+    // Internal request-device completion hook: pass a freshly created device
+    // from this service's instance exactly once, with its originating adapter.
+    resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device) {
+        check_open();
+        return devices_.insert(owner_,std::make_unique<dawn_device>(
+            owner_.engine,dawn().completions(),std::move(adapter),std::move(device)));
+    }
+    template<class Execute> void with_device(resource_handle<dawn_device> handle,Execute execute) {
+        check_open();
+        auto& device=devices_.get(handle,owner_);
+        struct guard {
+            size_t& count;
+            explicit guard(size_t& value) : count(value) { ++count; }
+            ~guard() { --count; }
+        } scope(active_device_scopes_);
+        execute(device);
+    }
+    void destroy_device(resource_handle<dawn_device> handle) {
+        check_open();
+        if (active_device_scopes_) throw std::logic_error("Cannot destroy devices during execution");
+        devices_.destroy(handle,owner_);
+    }
+    size_t live_devices() const { check_thread(); return devices_.resident_count(); }
     resource_handle<angle_context> create_angle_context(EGLint backend,EGLint major) {
         check_open();
         auto display=angle_display::acquire(backend);
@@ -95,8 +121,10 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_context_scopes_) throw std::logic_error("Cannot close graphics service during ANGLE execution");
+        if (active_context_scopes_ || active_device_scopes_)
+            throw std::logic_error("Cannot close graphics service during native execution");
         closed_=true;
+        devices_.destroy_owner(owner_);
         if (dawn_) dawn_->close();
         contexts_.destroy_owner(owner_);
     }

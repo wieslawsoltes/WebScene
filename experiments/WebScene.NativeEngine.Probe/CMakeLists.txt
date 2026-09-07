@@ -69,12 +69,14 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
         add_executable(webscene_graphics_dawn_event_tests tests/graphics_dawn_event_tests.cpp)
         target_compile_features(webscene_graphics_dawn_event_tests PRIVATE cxx_std_20)
         target_include_directories(webscene_graphics_dawn_event_tests PRIVATE native)
-        target_link_libraries(webscene_graphics_dawn_event_tests PRIVATE dawn::webgpu_dawn Threads::Threads)
+        target_link_libraries(webscene_graphics_dawn_event_tests PRIVATE dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2 Threads::Threads)
         add_test(NAME webscene_graphics_dawn_event_tests COMMAND webscene_graphics_dawn_event_tests)
         set_tests_properties(webscene_graphics_dawn_event_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
         add_custom_command(TARGET webscene_graphics_dawn_event_tests POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "$<TARGET_FILE:dawn::webgpu_dawn>" "$<TARGET_FILE_DIR:webscene_graphics_dawn_event_tests>")
+                "$<TARGET_FILE:dawn::webgpu_dawn>"
+                "$<TARGET_FILE:webscene_angle_EGL>" "$<TARGET_FILE:webscene_angle_GLESv2>"
+                "$<TARGET_FILE_DIR:webscene_graphics_dawn_event_tests>")
         add_executable(webscene_graphics_angle_context_tests tests/graphics_angle_context_tests.cpp)
         target_compile_features(webscene_graphics_angle_context_tests PRIVATE cxx_std_20)
         target_include_directories(webscene_graphics_angle_context_tests PRIVATE native)

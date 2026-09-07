@@ -1,10 +1,11 @@
-#include "graphics/dawn_event_service.h"
+#include "graphics/graphics_service.h"
 #include "graphics/engine_wake.h"
 #include <iostream>
 using namespace webscene::graphics;
 int main() {
     auto wake=std::make_shared<engine_wake>();
-    dawn_event_service service(4,wake);
+    graphics_service root(wake),other_root(wake);
+    auto& service=root.dawn();
     auto mailbox=service.completions();
     resource_owner owner{new_owner_token(),new_owner_token(),0};
     auto ticket=mailbox->reserve(1,owner).value();
@@ -56,6 +57,13 @@ int main() {
         if (!device_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
     }
     if (!device_done || !native_device->device) return 1;
+    auto owned_device=root.adopt_device(state->adapter,native_device->device);
+    if (root.live_devices()!=1) return 1;
+    root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
+    bool foreign_rejected=false;
+    try { other_root.with_device(owned_device,[](auto&) {}); }
+    catch (const std::invalid_argument&) { foreign_rejected=true; }
+    if (!foreign_rejected) return 1;
     // Resource-table destruction is logical until this device's GPU queue has
     // completed. Exercise a real command buffer, rather than a synthetic serial.
     resource_table<wgpu::Buffer> buffers(2,owner);
@@ -127,7 +135,35 @@ int main() {
         }
         if (mailbox->has_pending() || mailbox->has_ready()) return 1;
     }
-    native_device->device.Destroy();
+    auto pending_device=mailbox->reserve(14,owner).value();
+    auto pending_map=native_device->device.CreateBuffer(&map_descriptor);
+    struct cancelled_map_result { bool called{},accepted{}; };
+    auto cancelled_map=std::make_shared<cancelled_map_result>();
+    pending_map.MapAsync(wgpu::MapMode::Read,0,4096,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,pending_device,cancelled_map](wgpu::MapAsyncStatus,wgpu::StringView) {
+            cancelled_map->called=true;
+            cancelled_map->accepted=mailbox->publish(pending_device,completion_status::success);
+        });
+    auto independent_owner=owner; independent_owner.device=new_owner_token();
+    auto independent=mailbox->reserve(15,independent_owner).value();
+    root.destroy_device(owned_device);
+    if (root.live_devices()!=0 || mailbox->publish(pending_device,completion_status::success)) return 1;
+    bool stale_rejected=false;
+    try { root.with_device(owned_device,[](auto&) {}); }
+    catch (const std::invalid_argument&) { stale_rejected=true; }
+    if (!stale_rejected || !mailbox->publish(independent,completion_status::success)) return 1;
+    size_t device_records=0;
+    service.pump([&](auto record) {
+        if ((record.operation==14 && record.status==completion_status::cancelled)
+            || (record.operation==15 && record.status==completion_status::success)) ++device_records;
+        else throw std::runtime_error("device cancellation crossed ownership boundary");
+    });
+    const auto cancellation_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    while (!cancelled_map->called && std::chrono::steady_clock::now()<cancellation_deadline) {
+        service.pump([](auto) { throw std::runtime_error("duplicate device cancellation"); });
+        if (!cancelled_map->called) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    }
+    if (device_records!=2 || !cancelled_map->called || cancelled_map->accepted) return 1;
     service.close();
     bool rejected=false;
     try { service.instance(); } catch (const std::logic_error&) { rejected=true; }

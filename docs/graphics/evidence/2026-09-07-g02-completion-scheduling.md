@@ -39,3 +39,23 @@ Still outstanding: full native device/resource management and queue integration,
 navigation and promise cancellation integration, finalizer release routing,
 device loss, multi-engine stress, detailed diagnostics and performance gates,
 and Windows/Linux hardware evidence. No issue is closed by these results.
+
+## Native device ownership follow-up
+
+The graphics service now owns generation-bearing Dawn device handles. Each
+native device wrapper retains its adapter and device, creates a distinct device
+owner identity, and closes on its engine thread. Destroy cancels that owner's
+mailbox records before calling native Device.Destroy. The registry rejects
+foreign-engine and stale handles and disallows destruction during an active
+device execution scope. The internal adoption hook requires a freshly requested
+device from this service's instance, supplied once with its originating adapter;
+it is not a JavaScript-facing arbitrary device import API.
+
+The extended hardware test destroys an owned device while MapAsync is pending.
+Its cancellation record is delivered once, the actual late native callback runs
+but cannot republish, and a separate owner's mailbox record remains successful.
+This proves mailbox isolation, not yet two independent hardware devices under
+load. The full suite passed 12 tests in 12.75 seconds, followed by eight graphics
+tests after adding the pending-device-map case. Backend resource retention is
+still distinct from submission-table fence completion; the device owner does
+not substitute Destroy for a GPU completion fence.
