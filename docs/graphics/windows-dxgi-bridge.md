@@ -179,3 +179,26 @@ This is a conservative candidate filter, not proof of shared allocation/import o
 sRGB view compatibility. Windows test branches cover format mapping and clearing
 stale masks on invalid input. The portable test target passes locally (0.20 seconds),
 but those Windows branches and real format queries remain unverified on this host.
+
+## D3D12 shared color allocation
+
+`d3d12_shared_color` creates a committed default-heap, single-sample color texture
+with a shared heap and an owned, unnamed, non-inheritable NT handle. It validates
+native adapter/format support and checks GetResourceAllocationInfo's byte size
+against a caller-supplied available budget before allocation. Failed creation
+unwinds the native resource; successful output owns both resource and handle.
+An existing output is rejected rather than implicitly discarding a potentially
+in-flight allocation. Depth and MSAA resources are not shared by this allocator.
+
+The resource starts in COMMON state; access transitions and synchronization belong
+to Dawn shared-texture access and the native consumer protocol. A lease provider
+must retain this allocation through producer and consumer completion. It does not
+perform a device-idle wait or CPU pixel transfer, and is not yet connected to the
+production lease pool. The budget value is allocation size, not a measured driver
+residency counter.
+
+API basis: Microsoft's [committed resource contract](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-createcommittedresource)
+and [shared handle contract](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-createsharedhandle).
+The hosted test target includes the allocator and a null-device rejection check.
+Portable tests pass locally (0.20 seconds); the Windows branch still requires
+compilation, successful allocation/import, budget/failure tests and GPU qualification.
