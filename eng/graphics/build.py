@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a pinned Dawn or ANGLE SDK; requires Git, CMake, Ninja and platform SDKs."""
 import argparse
+from dawn_exports import inspect_exports
 import hashlib
 import json
 import os
@@ -115,14 +116,20 @@ def dawn(args):
         settings["CMAKE_MSVC_RUNTIME_LIBRARY"] = "MultiThreaded"
     if args.rid.startswith("osx-"):
         settings["CMAKE_OSX_ARCHITECTURES"] = "arm64"
+    symbol_policy = Path(__file__).with_name("DawnSymbolBoundary.cmake").resolve()
     run(["cmake", "-S", source, "-B", output, "-G", "Ninja",
-         f"-DCMAKE_INSTALL_PREFIX={sdk}"] + [f"-D{k}={v}" for k, v in settings.items()])
+         f"-DCMAKE_INSTALL_PREFIX={sdk}", f"-DCMAKE_PROJECT_Dawn_INCLUDE={symbol_policy}",
+         "-DCMAKE_SHARED_LINKER_FLAGS="] + [f"-D{k}={v}" for k, v in settings.items()])
     run(["cmake", "--build", output, "--parallel", args.jobs])
     # Old installed headers/libraries must not survive a dependency roll.
     if sdk.exists():
         shutil.rmtree(sdk)
     run(["cmake", "--install", output])
     sdk.joinpath("build-info").mkdir()
+    shutil.copy2(symbol_policy, sdk / "build-info/DawnSymbolBoundary.cmake")
+    binary = sdk / {"win-x64": "bin/webgpu_dawn.dll", "osx-arm64": "lib/libwebgpu_dawn.dylib",
+                    "linux-x64": "lib/libwebgpu_dawn.so"}[args.rid]
+    (sdk / "build-info/exports.json").write_text(json.dumps(inspect_exports(binary, args.rid), indent=2) + "\n")
     shutil.copy2(output / "CMakeCache.txt", sdk / "build-info/CMakeCache.txt")
     for name in ["CMakeCCompiler.cmake", "CMakeCXXCompiler.cmake", "CMakeSystem.cmake"]:
         metadata = max(output.glob("CMakeFiles/*/" + name), key=lambda p: p.stat().st_mtime)

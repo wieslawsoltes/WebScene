@@ -57,7 +57,8 @@ def check(args):
         extra.write_text("// unexpected header\n")
         verify(False, "unexpected installed header rejection")
         extra.unlink()
-        library = sdk / "lib" / ("webgpu_dawn.lib" if args.rid.startswith("win-") else "libwebgpu_dawn.a")
+        library = sdk / ({"win-x64": "bin/webgpu_dawn.dll", "osx-arm64": "lib/libwebgpu_dawn.dylib",
+                          "linux-x64": "lib/libwebgpu_dawn.so"}[args.rid])
         with library.open("ab") as stream:
             stream.write(b"mismatched library")
         verify(False, "mismatched native library rejection")

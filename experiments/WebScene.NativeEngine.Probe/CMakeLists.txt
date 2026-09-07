@@ -41,6 +41,9 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     target_link_libraries(webscene_native_engine PRIVATE
         dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2)
     target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=1)
+    add_custom_command(TARGET webscene_native_engine POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:dawn::webgpu_dawn>" "$<TARGET_FILE_DIR:webscene_native_engine>")
     if(APPLE)
         set_target_properties(webscene_native_engine PROPERTIES BUILD_RPATH "@loader_path")
     elseif(UNIX)

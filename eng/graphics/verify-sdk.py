@@ -52,9 +52,10 @@ def verify(sdk, component, rid):
             raise ValueError(f"{component}: unsafe file path")
         if sha(sdk / name) != digest:
             raise ValueError(f"{component}: checksum mismatch: {name}")
-    suffix = ".lib" if rid.startswith("win-") else ".a"
+    suffix = {"win": ".dll", "osx": ".dylib", "linux": ".so"}[rid.split("-")[0]]
     required = ({"include/dawn/webgpu.h", "include/dawn/webgpu_cpp.h", "include/webgpu/webgpu.h",
-                 "lib/" + ("webgpu_dawn" if rid.startswith("win-") else "libwebgpu_dawn") + suffix}
+                 ("bin/webgpu_dawn" if rid.startswith("win-") else "lib/libwebgpu_dawn") + suffix,
+                 "build-info/DawnSymbolBoundary.cmake", "build-info/exports.json"}
                 if component == "dawn" else
                 {"include/EGL/egl.h", "include/EGL/eglext_angle.h", "include/GLES2/gl2.h", "include/GLES3/gl3.h"})
     if component == "angle":
@@ -62,6 +63,11 @@ def verify(sdk, component, rid):
         required |= {"lib/libEGL" + dynamic_suffix, "lib/libGLESv2" + dynamic_suffix}
         if rid.startswith("win-"):
             required |= {"lib/libEGL.lib", "lib/libGLESv2.lib"}
+    else:
+        if rid.startswith("win-"):
+            required.add("lib/webgpu_dawn.lib")
+        if sha(sdk / "build-info/DawnSymbolBoundary.cmake") != sha(LOCK_PATH.with_name("DawnSymbolBoundary.cmake")):
+            raise ValueError("dawn: symbol isolation policy mismatch; rebuild the SDK")
     if not required <= set(files):
         raise ValueError(f"{component}: required headers/libraries missing: {sorted(required - set(files))}")
     print(f"Verified {component} {manifest['revision']} for {rid}: {len(files)} files")

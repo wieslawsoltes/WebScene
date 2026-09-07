@@ -60,6 +60,10 @@ def run(args):
         library = args.probes / (name + library_suffix)
         if not library.is_file() or sha(library) != packages["angle"]["files"]["lib/" + library.name]:
             raise ValueError(f"Adjacent probe library does not match the verified SDK: {library}; rebuild the probes")
+    dawn_name = ("webgpu_dawn" if args.rid.startswith("win-") else "libwebgpu_dawn") + library_suffix
+    dawn_path = ("bin/" if args.rid.startswith("win-") else "lib/") + dawn_name
+    if not (args.probes / dawn_name).is_file() or sha(args.probes / dawn_name) != packages["dawn"]["files"][dawn_path]:
+        raise ValueError("Adjacent Dawn probe library does not match the verified SDK; rebuild the probes")
     cases = [("dawn", profile["dawnBackend"].lower(), None),
              ("angle", profile["angleBackend"].lower(), 2), ("angle", profile["angleBackend"].lower(), 3)]
     results = []
