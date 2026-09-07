@@ -359,3 +359,18 @@ operations use service readiness and idle recommendations without RAF; occupied
 completion storage returns to zero after each. The Metal hardware fixture passed
 in 0.48 seconds. This verifies native error-scope progress and isolation, not yet
 JavaScript GPUError object construction or browser error-scope conformance.
+
+## Repeated stale-finalizer/native-context reuse
+
+The hardware service fixture now runs 64 iterations with a one-context resource
+table. Each iteration reserves a finalizer release, explicitly destroys the old
+ANGLE context, creates a replacement in the same slot with a new generation,
+then publishes and drains the old release. The replacement must remain alive and
+its GL state must remain usable. After explicit replacement destruction, live
+contexts, release registrations and command depth return to zero on every cycle.
+The focused Metal service fixture passed in 0.44 seconds. This is bounded native
+context lifetime stress, not a general leak/performance qualification.
+
+G02 implementation continues to have qualification/integration gaps recorded
+above. Work can now proceed on G03's scene lease layer without closing G01/G02
+or treating unavailable hardware, missing bindings or baseline gates as passes.

@@ -115,6 +115,31 @@ int main() {
     require(!gc_releases->publish(registration));
     gc.close();
     require(!gc_releases->publish(abandoned) && gc_releases->occupied()==0);
+    // A delayed finalizer may refer to a slot reused by a new native context.
+    // Repeat real context teardown/recreation while forcing slot reuse.
+    graphics_service recycled(wake,1);
+    recycled.command_endpoint(1,0);
+    auto recycled_releases=recycled.release_endpoint(1);
+    for (int iteration=0;iteration<64;++iteration) {
+        auto old=recycled.create_angle_context(backend,2);
+        auto late=recycled_releases->reserve(graphics_service::deferred_context_release(old)).value();
+        recycled.destroy_angle_context(old);
+        auto replacement=recycled.create_angle_context(backend,2);
+        require(replacement.slot==old.slot && replacement.generation!=old.generation);
+        require(recycled_releases->publish(late));
+        recycled.pump([](auto) { throw std::runtime_error("unexpected context completion"); });
+        require(recycled.live_contexts()==1);
+        recycled.with_angle_context(replacement,[] {
+            glClearColor(0.25f,0.5f,0.75f,1);
+            GLfloat color[4]{};
+            glGetFloatv(GL_COLOR_CLEAR_VALUE,color);
+            require(color[0]==0.25f && color[1]==0.5f && color[2]==0.75f);
+        });
+        recycled.destroy_angle_context(replacement);
+        auto baseline=recycled.metrics();
+        require(baseline.live_contexts==0 && baseline.release_registrations==0 && baseline.commands.depth==0);
+    }
+    recycled.close();
     graphics_service delivery(wake);
     auto delivery_mailbox=delivery.dawn().completions();
     auto delivery_ticket=delivery_mailbox->reserve(1,{delivery.engine_identity(),new_owner_token(),0}).value();
