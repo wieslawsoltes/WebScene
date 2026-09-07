@@ -270,11 +270,26 @@ int main() {
             std::unique_ptr<v8_release_registry> wrappers;
             std::unique_ptr<v8_webgpu_buffers> gc_buffers,async_buffers;
             size_t binding_map_completions=0;
+            std::unique_ptr<v8_webgpu_devices> device_registry;
+            v8::Global<v8::Object> retired_device_probe;
+            bool device_map_retired=false;
             bool buffer_validation_seen=false;
             resource_handle<dawn_device> gc_buffer_device;
             std::array<std::unique_ptr<v8_webgpu_map_request>,3> map_requests;
             size_t map_completions=0;
             auto& graphics=runtime.initialize_graphics(wake,[&](completion_record record) {
+                if (device_registry && device_registry->complete(record)) {
+                    auto* isolate=v8::Isolate::GetCurrent(); auto context=isolate->GetCurrentContext();
+                    device_registry.reset();
+                    {
+                        v8::TryCatch caught(isolate);
+                        auto object=retired_device_probe.Get(isolate);
+                        auto method=object->Get(context,v8::String::NewFromUtf8Literal(isolate,"destroy")).ToLocalChecked().As<v8::Function>();
+                        require(method->Call(context,object,0,nullptr).IsEmpty() && caught.HasCaught(),"Retired device wrapper retained native access");
+                    }
+                    retired_device_probe.Reset(); device_map_retired=true;
+                    return;
+                }
                 if (record.operation==110) {
                     require(record.status==completion_status::success,"Invalid browser usage did not generate native validation");
                     buffer_validation_seen=true; return;
@@ -657,7 +672,7 @@ int main() {
                         require(gc_buffers->detach_device(*adapter_service,gc_buffer_device)==0,"Device detachment was not idempotent");
 
                     });
-                    auto device_registry=std::make_unique<v8_webgpu_devices>(isolate,context,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),1,2);
+                    device_registry=std::make_unique<v8_webgpu_devices>(isolate,context,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),1,2);
                     auto device_object=device_registry->wrap(context,*adapter_service,gc_buffer_device).ToLocalChecked();
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"deviceProbe"),device_object).FromMaybe(false),"Device wrapper publication failed");
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
@@ -670,7 +685,12 @@ int main() {
                             let buffer=deviceProbe.createBuffer({size:32,usage:8,mappedAtCreation:true,label:'via device'});
                             if(buffer.size!==32||buffer.usage!==8||buffer.label!=='via device')throw new Error('device-created buffer metadata');
                             let range=buffer.getMappedRange(),words=new Uint32Array(range);words[0]=123;
+                            let pending=deviceProbe.createBuffer({size:16,usage:6});
+                            globalThis.deviceMapCancelled=false;
+                            pending.mapAsync(2).catch(e=>{if(!(e instanceof DOMException)||e.name!=='AbortError')throw e;deviceMapCancelled=true});
+                            if(pending.mapState!=='pending')throw new Error('device map did not become pending');
                             deviceProbe.destroy();deviceProbe.destroy();
+                            if(pending.mapState!=='unmapped')throw new Error('device destroy did not cancel map');
                             if(range.byteLength!==0||words.length!==0||buffer.mapState!=='unmapped'||buffer.size!==32)throw new Error('device destroy mapping lifetime');
                             let rejected=false;try{buffer.getMappedRange()}catch(e){rejected=e instanceof DOMException&&e.name==='OperationError'}
                             if(!rejected)throw new Error('destroyed device mapping remained available');
@@ -679,12 +699,7 @@ int main() {
                     )JS");
                     v8::Local<v8::Script> device_test;
                     require(v8::Script::Compile(context,device_script).ToLocal(&device_test) && !device_test->Run(context).IsEmpty(),"JavaScript device buffer creation/destruction failed");
-                    device_registry.reset();
-                    {
-                        v8::TryCatch caught(isolate);
-                        auto method=device_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"destroy")).ToLocalChecked().As<v8::Function>();
-                        require(method->Call(context,device_object,0,nullptr).IsEmpty() && caught.HasCaught(),"Retired device wrapper retained native access");
-                    }
+                    retired_device_probe.Reset(isolate,device_object);
                     async_buffers.reset();
                     adapter_service->destroy_device(gc_buffer_device);
                     gc_buffers.reset(); // Delayed wrapper releases tolerate retired native devices.
@@ -768,6 +783,13 @@ int main() {
             require(runtime.execute("void 0","graphics-execute-drain"),"execute completion drain failed");
             require(delivered,"execute did not drain completion");
             require(runtime.execute("if(gpuDone!==1 || rafDone!==0) throw new Error('execute checkpoint failed');","graphics-second-check"),"execute promise checkpoint failed");
+            const auto device_map_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+            while (!device_map_retired && std::chrono::steady_clock::now()<device_map_deadline) {
+                if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Device map retirement task failed");
+                else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
+            }
+            require(device_map_retired,"Device map native completion did not retire");
+            require(runtime.execute("if(!deviceMapCancelled)throw new Error('device cancellation promise not delivered');", "device-map-cancel-check"),"Device map rejection failed");
             require(weak_releases==2 && releases->occupied()==0,"registry disposal release did not drain");
             require(mailbox->metrics().occupied==0,"completion storage not reclaimed");
             require(!runtime.load_url("https://graphics.test/missing"),"missing navigation unexpectedly succeeded");

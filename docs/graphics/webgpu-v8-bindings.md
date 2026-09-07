@@ -437,3 +437,18 @@ queue/resources beyond buffers, capabilities, labels, device.lost/error events,
 full WebIDL prototypes and automatic loss/navigation integration remain unfinished.
 The parent-device GC edge and asynchronous completion routing through this new
 device registry still need dedicated qualification.
+
+### Pending map cancellation through the device registry
+
+The macOS runtime fixture now creates a buffer through the internal device object,
+starts mapAsync from JavaScript, and destroys the device while the map is pending.
+It verifies immediate unmapped state and AbortError rejection. Completion routing
+passes through the device registry after the native device handle has been released;
+the late callback retires safely before registry disposal. A retained device object
+is then checked for rejected access after disposal. The rebuilt runtime CTest passes
+and explicitly waits for native retirement rather than treating rejection as GPU
+completion.
+
+This qualifies the tested device-destroy path. Physical device loss, parent-device
+GC retention, public adapter discovery and complete device/queue capabilities remain
+unfinished or require dedicated verification.
