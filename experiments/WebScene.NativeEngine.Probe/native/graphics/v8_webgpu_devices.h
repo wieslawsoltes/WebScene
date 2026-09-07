@@ -1,6 +1,8 @@
 #pragma once
 #include "v8_webgpu_buffers.h"
 #include "v8_webgpu_shaders.h"
+#include "v8_webgpu_render_pipelines.h"
+#include "v8_webgpu_render_descriptor.h"
 #include "v8_webgpu_shader_descriptor.h"
 #include "v8_webgpu_supported_features.h"
 #include "webgpu_feature_names.h"
@@ -21,6 +23,7 @@ class v8_webgpu_devices {
         resource_handle<dawn_device> device;
         std::unique_ptr<v8_webgpu_buffers> buffers;
         std::unique_ptr<v8_webgpu_shaders> shaders;
+        std::unique_ptr<v8_webgpu_render_pipelines> pipelines;
         std::shared_ptr<release_channel> releases;
         release_ticket ticket;
         bool published{},destroyed{};
@@ -105,6 +108,38 @@ class v8_webgpu_devices {
             isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Shader capacity exhausted")));
         } catch (const std::exception&) { fail(isolate,"GPUDevice native shader ownership is unavailable"); }
     }
+    static void create_pipeline(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if (!receiver(info)) return;
+        auto* isolate=info.GetIsolate(); auto context=isolate->GetCurrentContext();
+        if (!info.Length()) { fail(isolate,"createRenderPipeline requires a descriptor"); return; }
+        try {
+            webgpu_render_descriptor converted;
+            // Explicit GPUPipelineLayout wrappers remain unexposed; the
+            // internal surface currently accepts the automatic layout branch.
+            if (!read_webgpu_render_descriptor(isolate,context,info[0],converted,
+                [](v8::Local<v8::Value>) { return std::optional<wgpu::PipelineLayout>{}; })) return;
+            auto* item=receiver(info); if (!item) return; // Coercion can reenter.
+            resource_handle<wgpu::RenderPipeline> pipeline;
+            converted.with_native([&](const auto& descriptor) {
+                item->service->with_device(item->device,[&](auto& owned) { pipeline=owned.create_render_pipeline(descriptor); });
+            });
+            v8::Local<v8::Object> wrapper;
+            try {
+                if (!item->pipelines->wrap(context,*item->service,item->device,pipeline,info.This(),converted.label).ToLocal(&wrapper)) {
+                    item->service->with_device(item->device,[&](auto& owned) { owned.release_render_pipeline(pipeline); });
+                    fail(isolate,"Pipeline wrapper capacity exhausted"); return;
+                }
+            } catch (...) {
+                item->service->with_device(item->device,[&](auto& owned) { owned.release_render_pipeline(pipeline); });
+                throw;
+            }
+            info.GetReturnValue().Set(wrapper);
+        } catch (const std::bad_alloc&) {
+            isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Pipeline allocation failed")));
+        } catch (const std::length_error&) {
+            isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Pipeline capacity exhausted")));
+        } catch (const std::exception&) { fail(isolate,"GPUDevice native pipeline ownership is unavailable"); }
+    }
     static void adapter_info(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info); if (!item) return;
         v8::Local<v8::Value> value;
@@ -176,6 +211,8 @@ public:
         prototype->Set(isolate,"createBuffer",create);
         auto shader_create=v8::FunctionTemplate::New(isolate,create_shader); shader_create->SetLength(1);
         prototype->Set(isolate,"createShaderModule",shader_create);
+        auto pipeline_create=v8::FunctionTemplate::New(isolate,create_pipeline);pipeline_create->SetLength(1);
+        prototype->Set(isolate,"createRenderPipeline",pipeline_create);
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"label"),v8::FunctionTemplate::New(isolate,label),v8::FunctionTemplate::New(isolate,set_label));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"adapterInfo"),v8::FunctionTemplate::New(isolate,adapter_info));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"limits"),v8::FunctionTemplate::New(isolate,limits));
@@ -189,6 +226,7 @@ public:
         check_scope();
         for (auto& item:entries_) if (item) {
             if (!item->wrapper.IsEmpty()) item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
+            item->pipelines.reset();
             item->shaders.reset();
             item->buffers.reset(); // Invalidate first; cancellation can construct JS exceptions.
             item->wrapper.Reset();
@@ -218,6 +256,7 @@ public:
         item->service=&service; item->device=device; item->releases=service.release_endpoint();
         item->buffers=std::make_unique<v8_webgpu_buffers>(isolate_,context,buffer_capacity_,dom_exception_.Get(isolate_));
         item->shaders=std::make_unique<v8_webgpu_shaders>(isolate_,context);
+        item->pipelines=std::make_unique<v8_webgpu_render_pipelines>(isolate_,context);
         item->buffer_owner_key.Reset(isolate_,v8::Private::New(isolate_));
         item->features_key.Reset(isolate_,v8::Private::New(isolate_));
         std::vector<std::string_view> names;

@@ -943,3 +943,28 @@ undefined slots, instance layouts, native attribute views, required fields,
 integer bounds, exact property access order and atomic conversion failure. It
 passes. Complete render-pipeline descriptor assembly and device dispatch remain
 pending; no JavaScript draw or presentation is claimed by these tests.
+
+
+### Internal createRenderPipeline dispatch
+
+The internal GPUDevice prototype now accepts render-pipeline descriptors and
+calls Dawn's owned render-pipeline creation. Conversion follows inherited label/
+layout then depthStencil, fragment, multisample, primitive and vertex order.
+Fragment targets preserve null slots. Native assembly keeps nested arrays,
+constant keys, entry-point strings and blend pointers alive for the call. It
+rechecks the device after JavaScript conversion and rolls back native ownership
+if wrapper adoption fails. Returned pipeline wrappers retain their parent device.
+
+The exposed internal layout branch is currently auto. Descriptor conversion has
+an explicit-layout resolver hook, but GPUPipelineLayout objects and their creation
+remain unimplemented. Async pipeline creation and getBindGroupLayout also remain
+pending. This is not complete WebGPU or navigator.gpu exposure.
+
+The macOS runtime test now creates a shader module and render pipeline from
+JavaScript, checks labels/branding, rejects invalid calls, and verifies native
+module/pipeline counts. Descriptor tests check property order and native nested
+storage after moving converted data, including null buffer/color slots. The
+bounded eight-ticket fixture drains disposed resources before its next unrelated
+registration; collection still only publishes deferred releases. Runtime CTest
+passes. Drawing commands, textures and normal canvas presentation remain needed
+for a visible JavaScript triangle; this test does not verify rendered pixels.

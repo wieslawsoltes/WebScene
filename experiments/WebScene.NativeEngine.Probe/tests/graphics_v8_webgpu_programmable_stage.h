@@ -1,6 +1,7 @@
 #pragma once
 #include "graphics/v8_webgpu_programmable_stage.h"
 #include "graphics/v8_webgpu_vertex_state.h"
+#include "graphics/v8_webgpu_render_descriptor.h"
 inline void test_v8_webgpu_programmable_stage(v8::Isolate* isolate,v8::Local<v8::Context> context) {
     const auto evaluate=[&](const char* source){return v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocalChecked()->Run(context).ToLocalChecked();};
     webgpu_programmable_stage stage;
@@ -43,6 +44,16 @@ inline void test_v8_webgpu_programmable_stage(v8::Isolate* isolate,v8::Local<v8:
     webgpu_vertex_buffer_layout layout;
     require(read_webgpu_vertex_buffer_layout(isolate,context,evaluate("(()=>{globalThis.vertexOrder=[];const attr=new Proxy({format:'float32',offset:0,shaderLocation:0},{get(o,k){vertexOrder.push(k);return o[k]}});return new Proxy({arrayStride:4,attributes:[attr]},{get(o,k){vertexOrder.push(k);return o[k]}})})()"),layout)
         && evaluate("vertexOrder.join(',')==='arrayStride,attributes,format,offset,shaderLocation,stepMode'")->IsTrue(),"Vertex layout property order failed");
+    webgpu_render_descriptor render;
+    const auto no_layout=[](auto){return std::optional<wgpu::PipelineLayout>{};};
+    require(read_webgpu_render_descriptor(isolate,context,evaluate("(()=>{globalThis.pipelineOrder=[];return new Proxy({layout:'auto',vertex:{module:shaderProbe,buffers:[null]},fragment:{module:shaderProbe,targets:[null,{format:'rgba8unorm',blend:{alpha:{},color:{}}}]}},{get(o,k){pipelineOrder.push(k);return o[k]}})})()"),render,no_layout)
+        && evaluate("pipelineOrder.join(',')==='label,layout,depthStencil,fragment,multisample,primitive,vertex'")->IsTrue(),"Render descriptor order failed");
+    auto moved_render=std::move(render);
+    moved_render.with_native([&](const auto& native) {
+        require(!native.layout && native.vertex.bufferCount==1 && native.vertex.buffers[0].stepMode==wgpu::VertexStepMode::Undefined
+            && native.fragment && native.fragment->targetCount==2 && native.fragment->targets[0].format==wgpu::TextureFormat::Undefined
+            && native.fragment->targets[1].blend && native.fragment->targets[1].blend->color.srcFactor==wgpu::BlendFactor::One,"Render descriptor nested native storage failed");
+    });
     auto throwing=evaluate("(()=>{globalThis.stageError={};return {constants:{get x(){throw stageError}},get module(){throw 'wrong getter'}}})()");
     v8::TryCatch caught(isolate);
     require(!read_webgpu_programmable_stage(isolate,context,throwing,stage) && caught.HasCaught()

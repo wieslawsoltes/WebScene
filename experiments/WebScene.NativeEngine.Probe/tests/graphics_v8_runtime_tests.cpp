@@ -1074,8 +1074,15 @@ int main() {
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {
                             if(deviceProbe.createShaderModule.length!==1)throw new Error('shader arity');
-                            const module=deviceProbe.createShaderModule({label:'JS shader',code:'@compute @workgroup_size(1) fn main() {}',compilationHints:[{entryPoint:'main',layout:'auto'}]});
+                            const module=deviceProbe.createShaderModule({label:'JS shader',code:'@compute @workgroup_size(1) fn main() {} @vertex fn vs()->@builtin(position) vec4f {return vec4f(0,0,0,1);} @fragment fn fs()->@location(0) vec4f {return vec4f(1,0,0,1);}',compilationHints:[{entryPoint:'main',layout:'auto'}]});
                             if(Object.prototype.toString.call(module)!=='[object GPUShaderModule]' || module.label!=='JS shader')throw new Error('shader creation');
+                            if(deviceProbe.createRenderPipeline.length!==1)throw new Error('pipeline arity');
+                            const pipeline=deviceProbe.createRenderPipeline({label:'JS pipeline',layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format:'rgba8unorm'}]}});
+                            if(Object.prototype.toString.call(pipeline)!=='[object GPURenderPipeline]'||pipeline.label!=='JS pipeline')throw new Error('pipeline creation');
+                            pipeline.label='updated pipeline';if(pipeline.label!=='updated pipeline')throw new Error('pipeline label');
+                            for(const call of [()=>deviceProbe.createRenderPipeline(),()=>deviceProbe.createRenderPipeline({}),()=>deviceProbe.createRenderPipeline.call({},{}),()=>deviceProbe.createRenderPipeline({layout:'auto',vertex:{module:{}}})]) {
+                                let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid pipeline call');
+                            }
                             module.label='updated shader';if(module.label!=='updated shader')throw new Error('created shader label');
                             for(const call of [()=>deviceProbe.createShaderModule(),()=>deviceProbe.createShaderModule({}),()=>deviceProbe.createShaderModule.call({}, {code:''})]) {
                                 let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('shader invalid call');
@@ -1142,11 +1149,15 @@ int main() {
                     require(v8::Script::Compile(context,device_script).ToLocal(&device_test) && !device_test->Run(context).IsEmpty(),"JavaScript device buffer creation/destruction failed");
                     adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
                         require(owned.live_shader_modules()==2,"JavaScript shader creation did not adopt exactly one native module");
+                        require(owned.live_render_pipelines()==2,"JavaScript pipeline creation did not adopt exactly one native pipeline");
                     });
                     retired_device_probe.Reset(isolate,device_object);
                     async_buffers.reset();
                     adapter_service->destroy_device(gc_buffer_device);
                     gc_buffers.reset(); // Delayed wrapper releases tolerate retired native devices.
+                    // Retire disposed shader/pipeline fixture tickets before the
+                    // next registration in this deliberately eight-ticket queue.
+                    adapter_service->drain_commands();
 
                     graphics_command release{[](graphics_service&,std::span<const std::byte>,const graphics_command::arguments&) noexcept { ++weak_releases; }};
                     auto reachable=v8::Object::New(isolate);
