@@ -313,3 +313,17 @@ that a stale generation does not detach it, detaches with the live device handle
 then destroys the native device and disposes the wrapper registry. It passes.
 This establishes the lifecycle hook and explicit ordering, not automatic device-loss
 integration: the public device binding and runtime loss delivery still must call it.
+
+### Reachable mapped views retain native buffers
+
+The macOS V8 lifetime fixture now drops the ordinary buffer reference while
+keeping only its mapped ArrayBuffer reachable. After forced collection and an
+engine pump, the native buffer and wrapper release registration remain live; the
+ArrayBuffer retains its byte length and accepts a JavaScript write. Dropping that
+view and collecting again leaves native storage intact during GC, then the next
+engine pump releases the buffer and registration. The collected registry slot is
+subsequently reused by the existing teardown test. The rebuilt runtime CTest passes.
+
+This verifies the mapped view's private owner edge as well as deferred native
+release. Asynchronous mapping, device loss and application-level WebGPU exposure
+remain outside this test's coverage.

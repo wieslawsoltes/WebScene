@@ -392,10 +392,13 @@ int main() {
                     gc_buffers=std::make_unique<v8_webgpu_buffers>(isolate,context,1,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>());
                     adapter_service->with_device(device_handle,[&](auto& device) {
                         wgpu::BufferDescriptor descriptor{};
-                        descriptor.size=32; descriptor.usage=wgpu::BufferUsage::CopyDst;
+                        descriptor.size=32; descriptor.usage=wgpu::BufferUsage::CopyDst; descriptor.mappedAtCreation=true;
                         auto collectible=device.create_buffer(descriptor);
                         auto gc_object=gc_buffers->wrap(context,*adapter_service,device_handle,collectible).ToLocalChecked();
                         require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"gcBufferProbe"),gc_object).FromMaybe(false),"Collectible buffer wrapper failed");
+                        auto get_range=gc_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"getMappedRange")).ToLocalChecked().template As<v8::Function>();
+                        auto held_range=get_range->Call(context,gc_object,0,nullptr).ToLocalChecked();
+                        require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"gcMappedProbe"),held_range).FromMaybe(false),"Retained mapped view publication failed");
                         auto overflow=device.create_buffer(descriptor);
                         require(gc_buffers->wrap(context,*adapter_service,device_handle,overflow).IsEmpty(),"Buffer wrapper registry was not bounded");
                         device.release_buffer(overflow); // Failed wrap did not take ownership.
@@ -591,9 +594,18 @@ int main() {
             require(weak_releases==0,"GC callback executed a native graphics release");
             require(runtime.has_pending_tasks(),"GC did not enqueue release work");
             require(runtime.pump_task(),"GC release task failed");
-            require(weak_releases==1 && releases->occupied()==0,"weak wrapper release did not drain");
+            require(weak_releases==1 && releases->occupied()==1,"Reachable mapped view did not retain its wrapper registration");
             adapter_service->with_device(gc_buffer_device,[&](auto& device) {
-                require(device.live_buffers()==0,"GC buffer release did not drain");
+                require(device.live_buffers()==1,"Mapped view lost its native buffer after wrapper references were dropped");
+            });
+            require(runtime.execute("if(gcMappedProbe.byteLength!==32)throw new Error('retained mapping detached');new Uint8Array(gcMappedProbe)[0]=91;delete globalThis.gcMappedProbe;", "mapped-owner-drop"),"Mapped view did not survive owner GC");
+            runtime.notify_low_memory();
+            adapter_service->with_device(gc_buffer_device,[&](auto& device) {
+                require(device.live_buffers()==1,"Mapped-view GC released native storage inline");
+            });
+            require(runtime.has_pending_tasks() && runtime.pump_task(),"Mapped-view release did not wake the engine");
+            adapter_service->with_device(gc_buffer_device,[&](auto& device) {
+                require(device.live_buffers()==0 && releases->occupied()==0,"Mapped-view owner release did not drain");
             });
             require(runtime.execute("if(gpuDone!==1 || rafDone!==0) throw new Error('completion or RAF scheduling failed');","graphics-check"),"promise continuation failed without RAF");
             require(runtime.execute("globalThis.gpuDone=0; new Promise(r=>globalThis.gpuResolve=r).then(()=>globalThis.gpuDone=1);","graphics-second-setup"),"second promise setup failed");
