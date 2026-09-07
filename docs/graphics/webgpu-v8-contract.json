@@ -1,0 +1,11 @@
+{
+  "package": "@webref/idl",
+  "version": "3.82.1",
+  "file": "webgpu.idl",
+  "sha256": "009934b7965059a9ac5a855b3d809e6f18841ab1021605c84751b6e6aa7f978d",
+  "source": "https://gpuweb.github.io/gpuweb/",
+  "implementedConverters": [
+    "GPURequestAdapterOptions"
+  ],
+  "browserExposureEnabled": false
+}

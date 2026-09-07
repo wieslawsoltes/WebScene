@@ -8,6 +8,7 @@
 #include <iostream>
 using namespace webscene::graphics;
 void require(bool value,const char* message) { if (!value) throw std::runtime_error(message); }
+#include "graphics_v8_webgpu_options.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
 void test_image_lease_abi() {
@@ -272,6 +273,7 @@ int main() {
                 require(isolate!=nullptr && isolate->InContext(),"completion has no V8 context");
                 auto context=isolate->GetCurrentContext();
                 if (record.operation==1) {
+                    test_v8_webgpu_adapter_options(isolate,context);
                     bool rejected=false;
                     try { runtime.load_url("https://graphics.test/next"); }
                     catch (const std::logic_error&) { rejected=true; }
