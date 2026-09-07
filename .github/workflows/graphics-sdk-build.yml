@@ -37,6 +37,10 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+    - name: Install pinned Windows SDK for ANGLE
+      if: matrix.rid == 'win-x64' && matrix.component == 'angle'
+      shell: pwsh
+      run: ./eng/graphics/install-windows-sdk.ps1
     - name: Initialize Windows x64 compiler environment
       if: matrix.rid == 'win-x64'
       shell: pwsh
