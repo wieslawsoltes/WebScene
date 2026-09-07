@@ -599,3 +599,28 @@ and importer-exception unwinding followed by a successful retry.
 
 The fixture submits no GPU commands. It proves the managed/native ownership
 protocol and race behavior, not Metal/CGL fence completion or rendered pixels.
+
+### macOS asynchronous Dawn producer handoff
+
+`dawn_iosurface_submission` joins the versioned IOSurface pool to Dawn shared
+texture access. It records work synchronously, submits without waiting, ends
+shared access, and keeps the producer, imported texture, device and optional
+callback-state anchor alive through `OnSubmittedWorkDone`. An optional wake only
+signals the engine task queue. A private retained image cannot be transferred
+through `take_ready()` until successful queue completion and EndAccess; transfer
+is permitted once. Queue failure discards publication. Empty/throwing recorders
+end access and release the unsubmitted slot.
+
+The macOS fixture now uses this component for its Dawn clear instead of publishing
+an unrelated logical producer after a standalone GPU wait. Its explicit timed
+wait is diagnostic only. The .NET 8/10 interop tests exercise actual producer
+submission, one-time image transfer, failed recording cleanup, native leases,
+CGL import, GPU copy and consumer fence retirement. Command validation remains
+the device owner's error-scope responsibility; queue success alone cannot prove
+valid rendering.
+
+This component is not yet connected to the JavaScript canvas or retained renderer.
+It currently imports on each submission; import caching by allocation/device and
+long-run resource/performance qualification remain required. Device-loss recovery,
+ANGLE production, delayed-completion stress, and presenter scheduling remain open
+under #27 and the presenter issues. No platform issue is closed by this fixture.

@@ -15,10 +15,15 @@ static uint8_t create_iosurface(webscene_gpu_image_lease_v3** result,bool paint)
         using namespace webscene::graphics;
         iosurface_canvas_images pool(1024*1024);
         auto frame=pool.acquire({700,0,1,1,701,1,17,4,image_format::bgra8_unorm});
-        if (!frame || (paint && !fixture_dawn_clear(frame->color->borrowed_handle()))) return 0;
-        frame->producer.begin();
-        auto image=frame->producer.publish();
-        frame->producer.complete(); frame.reset(); // Any diagnostic producer has already completed.
+        if (!frame) return 0;
+        auto image=[&]() -> std::optional<owned_image_pool::retained> {
+            if (paint) return fixture_dawn_clear(std::move(*frame));
+            frame->producer.begin();
+            auto unpainted=frame->producer.publish();
+            frame->producer.complete();
+            return unpainted;
+        }();
+        frame.reset(); // The diagnostic wait has completed any submitted producer.
         if (!image) return 0;
         auto observer=image->begin_consumer();
         if (!observer) return 0;
