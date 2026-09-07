@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "suite": "wpt",
+  "repository": "https://github.com/web-platform-tests/wpt.git",
+  "revision": "f2666d25c2aa2e1a33cf553c0386c65482dbcdc9",
+  "trackedFiles": 162979,
+  "status": "acquired",
+  "conformanceStatus": "not-run"
+}

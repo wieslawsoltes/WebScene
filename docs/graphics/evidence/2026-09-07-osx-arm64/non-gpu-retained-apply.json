@@ -1,0 +1,31 @@
+{
+  "schema": "webscene-native-retained-apply-v1",
+  "capturedUtc": "2026-09-07T09:43:25.269883+00:00",
+  "options": {
+    "layerCount": 4096,
+    "batchSize": 256,
+    "iterations": 100,
+    "samples": 11
+  },
+  "correctness": {
+    "retainedOrderConsistent": true
+  },
+  "sparseReplacement": {
+    "MedianNanosecondsPerOperation": 4213,
+    "P95NanosecondsPerOperation": 29498,
+    "MeanNanosecondsPerOperation": 6717.545454545455,
+    "AllocatedBytesPerOperation": 3616
+  },
+  "batchReplacement": {
+    "MedianNanosecondsPerOperation": 593143,
+    "P95NanosecondsPerOperation": 1411059,
+    "MeanNanosecondsPerOperation": 868994,
+    "AllocatedBytesPerOperation": 888848
+  },
+  "zOrderChange": {
+    "MedianNanosecondsPerOperation": 5717,
+    "P95NanosecondsPerOperation": 16610,
+    "MeanNanosecondsPerOperation": 7002.545454545455,
+    "AllocatedBytesPerOperation": 3360
+  }
+}

@@ -1,0 +1,79 @@
+.NET SDK:
+ Version:           10.0.301
+ Commit:            96856fd726
+ Workload version:  10.0.301.1
+ MSBuild version:   18.6.4+96856fd72
+
+Runtime Environment:
+ OS Name:     Mac OS X
+ OS Version:  26.6
+ OS Platform: Darwin
+ RID:         osx-arm64
+ Base Path:   /Volumes/SSD/dotnet/sdk/10.0.301/
+
+.NET workloads installed:
+ [macos]
+   Installation Source: SDK 10.0.300
+   Manifest Version:    26.5.10284/10.0.100
+   Manifest Path:       /Volumes/SSD/dotnet/sdk-manifests/10.0.100/microsoft.net.sdk.macos/26.5.10284/WorkloadManifest.json
+   Install Type:        FileBased
+
+ [ios]
+   Installation Source: SDK 10.0.300
+   Manifest Version:    26.5.10284/10.0.100
+   Manifest Path:       /Volumes/SSD/dotnet/sdk-manifests/10.0.100/microsoft.net.sdk.ios/26.5.10284/WorkloadManifest.json
+   Install Type:        FileBased
+
+ [android]
+   Installation Source: SDK 10.0.300
+   Manifest Version:    36.1.69/10.0.100
+   Manifest Path:       /Volumes/SSD/dotnet/sdk-manifests/10.0.100/microsoft.net.sdk.android/36.1.69/WorkloadManifest.json
+   Install Type:        FileBased
+
+Configured to use workload sets when installing new manifests.
+
+Host:
+  Version:      10.0.9
+  Architecture: arm64
+  Commit:       901ca94124
+
+.NET SDKs installed:
+  9.0.305 [/Volumes/SSD/dotnet/sdk]
+  10.0.301 [/Volumes/SSD/dotnet/sdk]
+
+.NET runtimes installed:
+  Microsoft.AspNetCore.App 8.0.10 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 8.0.19 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 9.0.0 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 9.0.3 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 9.0.9 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 10.0.0-rc.2.25502.107 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 10.0.0 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 10.0.2 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 10.0.7 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.AspNetCore.App 10.0.9 [/Volumes/SSD/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.NETCore.App 8.0.10 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+  Microsoft.NETCore.App 8.0.19 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+  Microsoft.NETCore.App 9.0.0 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+  Microsoft.NETCore.App 9.0.3 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+  Microsoft.NETCore.App 9.0.9 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+  Microsoft.NETCore.App 10.0.0-rc.2.25502.107 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+  Microsoft.NETCore.App 10.0.0 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+  Microsoft.NETCore.App 10.0.2 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+  Microsoft.NETCore.App 10.0.7 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+  Microsoft.NETCore.App 10.0.9 [/Volumes/SSD/dotnet/shared/Microsoft.NETCore.App]
+
+Other architectures found:
+  None
+
+Environment variables:
+  Not set
+
+global.json file:
+  /Volumes/SSD/repos/worktrees/aa5a/HtmlML/global.json
+
+Learn more:
+  https://aka.ms/dotnet/info
+
+Download .NET:
+  https://aka.ms/dotnet/download

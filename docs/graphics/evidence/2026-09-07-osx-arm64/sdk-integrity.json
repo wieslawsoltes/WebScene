@@ -1,0 +1,86 @@
+{
+  "scope": "SDK input integrity only; not graphics execution",
+  "status": "passed",
+  "checks": [
+    {
+      "test": "relocated SDK integrity",
+      "passed": true,
+      "expectedSuccess": true,
+      "exitCode": 0,
+      "stdout": "Verified dawn 2ca8cbfe0f8275aa0f739e7b6b4345a16e2f0378 for osx-arm64: 77 files\n",
+      "stderr": ""
+    },
+    {
+      "test": "relocated CMake import",
+      "passed": true,
+      "expectedSuccess": true,
+      "exitCode": 0,
+      "stdout": "-- The C compiler identification is AppleClang 21.0.0.21000101\n-- The CXX compiler identification is AppleClang 21.0.0.21000101\n-- Detecting C compiler ABI info\n-- Detecting C compiler ABI info - done\n-- Check for working C compiler: /usr/bin/cc - skipped\n-- Detecting C compile features\n-- Detecting C compile features - done\n-- Detecting CXX compiler ABI info\n-- Detecting CXX compiler ABI info - done\n-- Check for working CXX compiler: /usr/bin/c++ - skipped\n-- Detecting CXX compile features\n-- Detecting CXX compile features - done\n-- Found Python3: /opt/homebrew/Frameworks/Python.framework/Versions/3.14/bin/python3.14 (found version \"3.14.4\") found components: Interpreter\n-- Performing Test CMAKE_HAVE_LIBC_PTHREAD\n-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success\n-- Found Threads: TRUE\n-- Verified dawn 2ca8cbfe0f8275aa0f739e7b6b4345a16e2f0378 for osx-arm64: 77 files\n\n-- Configuring done (0.9s)\n-- Generating done (0.0s)\n-- Build files have been written to: /var/folders/75/zbbvxqqn0nq344djj53fzz0h0000gn/T/webscene-sdk-integrity-v9_sf4kv/build\n",
+      "stderr": ""
+    },
+    {
+      "test": "foreign cached Dawn_DIR rejection",
+      "passed": true,
+      "expectedSuccess": false,
+      "exitCode": 1,
+      "stdout": "-- Verified dawn 2ca8cbfe0f8275aa0f739e7b6b4345a16e2f0378 for osx-arm64: 77 files\n\n-- Configuring incomplete, errors occurred!\n",
+      "stderr": "CMake Error at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/eng/graphics/GraphicsDependencies.cmake:45 (message):\n  Dawn_DIR points outside the verified SDK; clear the stale cache\nCall Stack (most recent call first):\n  CMakeLists.txt:10 (include)\n\n\n"
+    },
+    {
+      "test": "revision mismatch rejection",
+      "passed": true,
+      "expectedSuccess": false,
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Graphics SDK verification failed: dawn: revision mismatch; rebuild using the current dependency lock\n"
+    },
+    {
+      "test": "rid mismatch rejection",
+      "passed": true,
+      "expectedSuccess": false,
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Graphics SDK verification failed: dawn: rid mismatch; rebuild using the current dependency lock\n"
+    },
+    {
+      "test": "lockSha256 mismatch rejection",
+      "passed": true,
+      "expectedSuccess": false,
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Graphics SDK verification failed: dawn: lockSha256 mismatch; rebuild using the current dependency lock\n"
+    },
+    {
+      "test": "wrong build settings rejection",
+      "passed": true,
+      "expectedSuccess": false,
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Graphics SDK verification failed: dawn: build settings mismatch\n"
+    },
+    {
+      "test": "mismatched generated WebGPU header rejection",
+      "passed": true,
+      "expectedSuccess": false,
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Graphics SDK verification failed: dawn: checksum mismatch: include/dawn/webgpu.h\n"
+    },
+    {
+      "test": "unexpected installed header rejection",
+      "passed": true,
+      "expectedSuccess": false,
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Graphics SDK verification failed: dawn: installed file inventory mismatch\n"
+    },
+    {
+      "test": "mismatched native library rejection",
+      "passed": true,
+      "expectedSuccess": false,
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "Graphics SDK verification failed: dawn: checksum mismatch: lib/libwebgpu_dawn.a\n"
+    }
+  ]
+}

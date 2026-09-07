@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "codeCommit": "215bb60c7f58e456e7011ac6e791d65612cddcbe",
+  "qualificationScope": "Partial G01 macOS prerequisites only",
+  "epicStatus": "incomplete",
+  "issue23Status": "incomplete",
+  "hardware": {
+    "osx-arm64": "native prerequisite probes passed on Apple M4",
+    "win-x64": "not-run; runner access unconfirmed",
+    "linux-x64": "not-run; runner access unconfirmed"
+  },
+  "missing": [
+    "Windows/Linux native builds and GPU evidence",
+    "V8-enabled runtime/package integration",
+    "independent GL qualification where needed",
+    "hardware Chrome reference scenes and interaction traces",
+    "complete non-GPU baseline",
+    "WebScene unchanged Kestrel execution",
+    "browser bindings and all later epic sub-issues"
+  ],
+  "files": {
+    "angle-reproduction.txt": "aa35a146648dadb6ca41d1765e462d1b1e3aaa7235e265f2915d0fa8b6d047b7",
+    "dawn-build.txt": "9442aa005b18f1abd29c1e8f70aba25c5ac518943228612304f2cd35cfdf2132",
+    "dawn-configure.txt": "3ea596d926c88b5eb50551d941d938d8ea0e92d0e32143facb26cd1a27ae3100",
+    "dawn-reproduction.txt": "4519ea34ae29bc1351fa915f1247ad3ddfd2b57bbe0333e97c646d4a2ea1cb0e",
+    "dotnet-info.txt": "606903843e17a39c9e8c70f86c2f5ca7c3d5ff74e4fdeeb80f2b4a5f0552f819",
+    "native-disabled-tests.txt": "de752415c348b364186326671420ae2669245050ff4dab83c83b6a73eaad37d4",
+    "native-enabled-tests.txt": "bd628ff1d0c6c48226195ce757ad88553ea388d30711fdd6384907f78d77f2dc",
+    "native-probes.json": "301dd76e9d6ceb5a6b6e7ce3ccbbe3b685337c0e3101d5f87e83e0ac07083438",
+    "non-gpu-retained-apply.json": "3e698917284ff4b35218f467006f60149f3eae9fc685d6d1f7c505928be8408a",
+    "non-gpu-retained-render.json": "c383894d77adbb4b1f795b74f39152e235b0495486bf45652251ef777421ed5d",
+    "relocation.json": "9ae8db4b3864ef611cd3d7a2f3a8dcb88ab330446dcd1a309898f7afcc645ed6",
+    "sdk-integrity.json": "712f96d9dc0a21e2e4f6d451158af4163e4f03bdf70592e309fd29ab37884cc8",
+    "webgl-cts-acquisition.json": "316ede989a534444d94786eae8468de63663d2663e99bac9384c9e9de7b334d6",
+    "webgpu-cts-acquisition.json": "e136a561ae6075f1dda3081097f9910e02ec5ddf44f77ab54e9387a6c815e638",
+    "wpt-acquisition.json": "1b1460a43d6d716f17ef83e45ef42a8ba7db48bebc8cb0bcb3e5ff8c93c6ea61"
+  }
+}
