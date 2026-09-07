@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.OpenGL;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Rendering.Composition;
 
@@ -26,6 +27,8 @@ internal sealed class ProbeApp : Application
                     var visual = ElementComposition.GetElementVisual(window)
                         ?? throw new InvalidOperationException("No composition visual");
                     var interop = await visual.Compositor.TryGetCompositionGpuInterop().AsTask().WaitAsync(TimeSpan.FromSeconds(30));
+                    var sharing = await visual.Compositor.TryGetRenderInterfaceFeature(typeof(IOpenGlTextureSharingRenderInterfaceContextFeature))
+                        as IOpenGlTextureSharingRenderInterfaceContextFeature;
                     Console.WriteLine(JsonSerializer.Serialize(new
                     {
                         schemaVersion = 1,
@@ -36,6 +39,7 @@ internal sealed class ProbeApp : Application
                         { type = t, synchronization = interop.GetSynchronizationCapabilities(t).ToString() }).ToArray(),
                         semaphoreTypes = interop?.SupportedSemaphoreTypes.ToArray(),
                         isLost = interop?.IsLost,
+                        canCreateSharedOpenGlContext = sharing?.CanCreateSharedContext ?? false,
                         presentationVerified = false
                     }));
                     if (interop is null) exit = 77;

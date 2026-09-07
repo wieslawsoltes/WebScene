@@ -57,3 +57,14 @@ This rules out selecting an external-handle import route from this host's report
 capabilities. It does not prove that all Avalonia macOS configurations lack interop.
 Next inspect the shared-context import contract and available host backend options;
 do not implement an IOSurface handle adapter assuming this host will accept it.
+
+The probe now queries IOpenGlTextureSharingRenderInterfaceContextFeature through
+Compositor.TryGetRenderInterfaceFeature. It reports CanCreateSharedContext=true on
+the same default macOS host, with external handle lists still empty. This is a
+capability result, not a successful import. The public feature creates a compatible
+GL context and composition texture, avoiding arbitrary user-supplied texture wrappers.
+Avalonia's Skia importer specifically verifies the context share group.
+
+Next exercise context creation, drawing into its composition texture, import and
+surface update. Then determine the supported Metal/Dawn-to-GL allocation bridge;
+shared GL context availability alone does not make a Dawn Metal texture importable.

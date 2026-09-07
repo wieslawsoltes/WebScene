@@ -11,3 +11,8 @@ interop available, device not lost, imageTypes empty, semaphoreTypes empty.
 Therefore no external-handle route can be selected from this capability result.
 Shared-context APIs or another explicitly supported host backend require separate
 investigation. This does not contradict the standalone Dawn/Graphite GPU test.
+
+The probe additionally queries Avalonia's public OpenGL texture-sharing feature.
+On this host `canCreateSharedOpenGlContext` is true, despite the empty external
+handle lists. This is the next candidate to exercise; no shared texture has yet
+been drawn or presented by this capability probe.
