@@ -248,3 +248,24 @@ This connects native canvas state to the scene image collection. It does not yet
 provide paint operations identifying where each GPU image is sampled, clipping,
 transforms or isolation. Actual native GPU texture production and end-to-end
 ordered-scene GPU fixtures remain incomplete, so G03 remains open.
+
+## GPU paint operation in the native traversal
+
+Scene command kind 256 identifies GPU image sampling at the canvas layout bounds.
+The node ID remains the canvas node ID; the otherwise-unused color field carries
+the scene-local GPU image index. Publication resolves that index before hashing
+and exporting commands. The operation is emitted at canvas content traversal,
+inside the existing transform/clip/opacity command scopes, and invalidated image
+versions produce no sampling operation. Legacy consumers are rejected through
+the GPU scene capability guard.
+
+The V8 fixture checks placement and command ordering between sibling backgrounds,
+including the existing foreground-background command variant, and confirms bitmap
+reset removes the stale operation. It passes in 0.55 seconds. Producer completion
+is recorded before these CPU paint assertions so test failure cannot abandon an
+in-flight producer.
+
+These are command-stream checks. The existing managed renderer separates some
+foreground/background passes; a GPU-aware presenter must implement the unified
+ordered sampling path. No rendered clip/transform/opacity or Skia sampling result
+is claimed, and actual native textures remain to be connected.

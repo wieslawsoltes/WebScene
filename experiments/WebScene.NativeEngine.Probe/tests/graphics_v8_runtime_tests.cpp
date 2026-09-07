@@ -111,12 +111,30 @@ int main() {
             auto image_writer=images.acquire();
             image_writer->set_metadata({backing.identity(),100,backing.allocation_generation(),backing.content_serial(),1,1,backing.width(),backing.height()});
             image_writer->begin(); auto image_frame=image_writer->publish();
+            image_writer->complete();
             auto canvas_image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image_frame)); image_frame.reset();
             canvas_node->mutable_canvas().publish_gpu_image(canvas_image);
+            require(runtime.execute("globalThis.paintBefore=document.createElement('div'); paintBefore.id='gpu-before'; paintBefore.style.cssText='width:20px;height:20px;background:red'; document.body.insertBefore(paintBefore,canvasProbe); globalThis.paintAfter=document.createElement('div'); paintAfter.id='gpu-after'; paintAfter.style.cssText='width:20px;height:20px;background:blue'; document.body.appendChild(paintAfter);","gpu-paint-order"),"GPU paint siblings failed");
             document.layout(640,480);
             std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> captured;
             document.build_gpu_canvas_images(captured);
             require(captured.size()==1 && captured[0]==canvas_image,"canvas GPU image capture failed");
+            std::vector<webscene_scene_command> paint;
+            std::vector<webscene_scene_string> paint_strings;
+            std::vector<char> paint_bytes;
+            document.build_scene(paint,paint_strings,paint_bytes);
+            const auto gpu_paint=std::find_if(paint.begin(),paint.end(),[](const auto& c) {
+                return c.kind==WEBSCENE_SCENE_COMMAND_GPU_IMAGE;
+            });
+            require(gpu_paint!=paint.end() && gpu_paint->node_id==canvas_node->id
+                && gpu_paint->x==canvas_node->layout.x && gpu_paint->width==canvas_node->layout.width,
+                "GPU image paint placement missing");
+            const auto before_id=document.find_by_id("gpu-before")->id;
+            const auto after_id=document.find_by_id("gpu-after")->id;
+            const auto before_paint=std::find_if(paint.begin(),paint.end(),[&](const auto& c) { return (c.kind==1 || c.kind==9) && c.node_id==before_id; });
+            const auto after_paint=std::find_if(paint.begin(),paint.end(),[&](const auto& c) { return (c.kind==1 || c.kind==9) && c.node_id==after_id; });
+            require(before_paint<gpu_paint && after_paint!=paint.end() && gpu_paint<after_paint,
+                "GPU canvas did not interleave with sibling backgrounds");
             require(runtime.execute("canvasProbe.remove();","gpu-remove"),"canvas removal failed");
             std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> detached;
             document.build_gpu_canvas_images(detached);
@@ -127,12 +145,16 @@ int main() {
             require(runtime.execute("canvasProbe.width=800;","gpu-resize"),"GPU canvas reset failed");
             document.build_gpu_canvas_images(detached);
             require(detached.empty() && !canvas_node->canvas().gpu_image,"reset kept stale canvas image");
+            document.build_scene(paint,paint_strings,paint_bytes);
+            require(std::none_of(paint.begin(),paint.end(),[](const auto& c) {
+                return c.kind==WEBSCENE_SCENE_COMMAND_GPU_IMAGE;
+            }),"reset kept stale GPU paint operation");
             require(captured[0]->value.describe().width==640,"resize mutated retained frame");
             bool rejected=false;
             try { canvas_node->mutable_canvas().publish_gpu_image(canvas_image); }
             catch (const std::invalid_argument&) { rejected=true; }
             require(rejected,"stale image generation accepted");
-            image_writer->complete(); image_writer.reset();
+            image_writer.reset();
             captured.clear(); canvas_image.reset();
             require(images.busy_images()==0,"captured image leaked pool slot");
             runtime.set_visible(false);

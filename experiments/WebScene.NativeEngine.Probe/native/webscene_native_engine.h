@@ -481,6 +481,9 @@ struct webscene_scene_view {
 /* Separately versioned scene acquisition. No GPU capability is advertised yet. */
 #define WEBSCENE_SCENE_VIEW_VERSION_3 3U
 #define WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES (UINT64_C(1) << 0)
+/* Draw in the existing command stream at x/y/width/height. rgba carries the
+ * scene GPU image index (not a color); node_id retains the canvas node ID. Existing transform/clip/isolation operations apply. */
+#define WEBSCENE_SCENE_COMMAND_GPU_IMAGE 256U
 typedef struct webscene_scene_acquire_options_v3 {
     uint32_t struct_size;
     uint32_t scene_version;

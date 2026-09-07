@@ -96,6 +96,16 @@
                 next->commands,
                 next->canvas_strings,
                 next->canvas_string_bytes);
+            document_.build_gpu_canvas_images(next->gpu_images);
+            std::unordered_map<uint64_t,uint32_t> gpu_indices;
+            for (uint32_t index=0;index<next->gpu_images.size();++index)
+                gpu_indices.emplace(next->gpu_images[index]->value.describe().canvas,index);
+            for (auto& command:next->commands) {
+                if (command.kind!=WEBSCENE_SCENE_COMMAND_GPU_IMAGE) continue;
+                const auto* node=document_.find_by_native_id(command.node_id);
+                if (!node) throw std::logic_error("GPU paint node missing");
+                command.rgba=gpu_indices.at(node->canvas().backing.identity());
+            }
             last_scene_build_nanoseconds_.store(
                 static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now() - scene_build_started).count()),
@@ -203,7 +213,6 @@
             for (const auto byte : next->canvas_string_bytes) {
                 dom_hash = mix_hash(dom_hash, static_cast<uint8_t>(byte));
             }
-            document_.build_gpu_canvas_images(next->gpu_images);
             for (const auto& image:next->gpu_images) {
                 const auto m=image->value.describe();
                 dom_hash=mix_hash(dom_hash,m.canvas);

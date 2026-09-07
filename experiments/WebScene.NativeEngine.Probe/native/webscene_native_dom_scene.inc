@@ -1211,7 +1211,19 @@ void native_document::append_scene(
         append_pseudo(node.style.after_pseudo());
     }
     const auto& canvas = node.canvas();
-    if (paint_self
+    const auto gpu_metadata=canvas.gpu_image
+        ? std::optional(canvas.gpu_image->value.describe()) : std::nullopt;
+    const bool paints_gpu=gpu_metadata
+        && gpu_metadata->allocation_generation==canvas.backing.allocation_generation()
+        && gpu_metadata->content_serial==canvas.backing.content_serial();
+    if (paint_self && node.tag=="canvas" && paints_gpu) {
+        // Native DOM output carries the node ID. Publication resolves it to the
+        // scene-local image index before exposing the command to consumers.
+        commands.push_back(webscene_scene_command{
+            WEBSCENE_SCENE_COMMAND_GPU_IMAGE,0U,node.layout.x,node.layout.y,
+            node.layout.width,node.layout.height,0U,node.id,0,0,0,0,0});
+    }
+    if (paint_self && !paints_gpu
         && node.tag == "canvas"
         && canvas.commands.empty()
         && (!canvas.rects.empty() || !canvas.lines.empty())) {
