@@ -27,3 +27,21 @@ is ready for the discovery binding but is not yet called by navigator.gpu.
 Secure-origin exposure, asynchronous adapter/device promises, wrapper identity,
 resources, pipelines and command encoding remain incomplete. No browser WebGPU
 capability is advertised by this change, and no JavaScript triangle has run yet.
+
+## Dawn adapter request mapping
+
+`webgpu_adapter_options.h` separates the converted browser dictionary from V8 and
+maps it to Dawn request options. Core/compatibility levels, power preference and
+forceFallbackAdapter are preserved. Unknown feature-level strings produce no
+request, matching the null-adapter outcome in the
+[WebGPU requestAdapter algorithm](https://gpuweb.github.io/gpuweb/#dom-gpu-requestadapter).
+XR-compatible requests currently produce no request because WebScene has no WebXR
+device integration. Backend selection is a separate host argument; it is never
+read from a JavaScript dictionary or exposed as a browser extension.
+
+The Dawn event test now uses mapped browser defaults for real asynchronous adapter
+discovery, followed by its device/resource/completion tests. Both
+`webscene_graphics_dawn_event_tests` and `webscene_graphics_v8_runtime_tests` pass
+on the macOS arm64 hardware build. Mapping tests also cover fallback/preferences,
+compatibility, unknown levels and unsupported XR. This verifies native selection
+plumbing, not the still-unimplemented navigator.gpu promise/wrapper exposure.

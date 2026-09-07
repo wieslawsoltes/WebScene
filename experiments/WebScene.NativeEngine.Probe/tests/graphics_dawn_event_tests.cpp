@@ -1,4 +1,5 @@
 #include "graphics/graphics_service.h"
+#include "graphics/webgpu_adapter_options.h"
 #include "graphics/engine_wake.h"
 #include "graphics/dawn_canvas_images.h"
 #include "graphics/dawn_dxgi_image.h"
@@ -239,7 +240,25 @@ int main() {
     auto ticket=mailbox->reserve(1,owner).value();
     struct result { wgpu::Adapter adapter; };
     auto state=std::make_shared<result>();
-    wgpu::RequestAdapterOptions options{};
+    webgpu_adapter_options browser_options;
+    auto converted=make_dawn_adapter_options(browser_options);
+    if (!converted || converted->featureLevel!=wgpu::FeatureLevel::Core ||
+        converted->backendType!=wgpu::BackendType::Undefined || converted->nextInChain ||
+        converted->powerPreference!=wgpu::PowerPreference::Undefined || converted->forceFallbackAdapter)
+        throw std::runtime_error("Default browser adapter selection changed");
+    browser_options.feature_level=u"compatibility";
+    browser_options.power_preference=wgpu::PowerPreference::LowPower;
+    browser_options.force_fallback_adapter=true;
+    auto fallback=make_dawn_adapter_options(browser_options);
+    if (!fallback || fallback->featureLevel!=wgpu::FeatureLevel::Compatibility ||
+        !fallback->forceFallbackAdapter || fallback->powerPreference!=wgpu::PowerPreference::LowPower)
+        throw std::runtime_error("Browser adapter preferences were lost");
+    browser_options.feature_level=u"unknown";
+    if (make_dawn_adapter_options(browser_options)) throw std::runtime_error("Unknown feature level accepted");
+    browser_options.feature_level=u"core"; browser_options.xr_compatible=true;
+    if (make_dawn_adapter_options(browser_options)) throw std::runtime_error("Unsupported XR adapter accepted");
+    // Exercise the converted browser defaults through actual asynchronous Dawn discovery.
+    auto options=*converted;
 #if defined(__APPLE__)
     options.backendType=wgpu::BackendType::Metal;
 #elif defined(_WIN32)

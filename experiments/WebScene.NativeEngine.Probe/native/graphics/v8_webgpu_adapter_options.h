@@ -1,18 +1,10 @@
 #pragma once
 #include <v8.h>
-#include <webgpu/webgpu_cpp.h>
+#include "webgpu_adapter_options.h"
 #include <optional>
 #include <string>
 
 namespace webscene::graphics {
-// GPURequestAdapterOptions from @webref/idl 3.82.1. Browser dictionary fields
-// remain separate from Dawn's backend/private adapter selection extensions.
-struct webgpu_adapter_options {
-    std::u16string feature_level=u"core";
-    std::optional<wgpu::PowerPreference> power_preference;
-    bool force_fallback_adapter=false;
-    bool xr_compatible=false;
-};
 inline bool read_webgpu_adapter_options(v8::Isolate* isolate,v8::Local<v8::Context> context,
     v8::Local<v8::Value> input,webgpu_adapter_options& output) {
     const auto string=[&](const char* value) { return v8::String::NewFromUtf8(isolate,value).ToLocalChecked(); };
