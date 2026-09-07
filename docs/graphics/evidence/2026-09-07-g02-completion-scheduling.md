@@ -220,3 +220,29 @@ The raw destructor remains a no-JS fallback for bootstrap/terminal-failure clean
 this does not claim graceful promise delivery after an unrecoverable runtime
 failure. Actual WebGPU binding promise types and iframe resource ownership are
 still outstanding.
+
+## Reserved finalizer-release capacity
+
+The native service now has a separate fixed-capacity release channel. A wrapper
+must reserve a generation-bearing slot before it becomes GC-visible; if no slot
+is available, wrapper creation must handle backpressure before exposing the
+object. A finalizer publishes that existing slot without allocation or competing
+for command-queue space. The record captures the accepted command prefix, and
+the engine dispatches release only after that prefix has executed. Later queued
+commands cannot indefinitely postpone an eligible release. This CPU execution
+barrier does not substitute for GPU submission fences.
+
+The channel retains native command/wake endpoints, not an engine pointer. Duplicate
+and stale tickets are rejected. Shutdown closes publication, drains published
+releases after accepted commands, and leaves unpublished registrations to the
+service's owner-wide resource teardown. Registration occupancy is exposed in
+service metrics. The older ordinary-command release helpers remain available;
+GC bindings should use reserved slots to avoid retrying a full command queue.
+
+The hardware service test reserves one slot, saturates a two-command queue,
+publishes release from another thread, and verifies the context stays alive after
+one command but is released after both. It checks duplicate/stale publication,
+slot reuse and shutdown of an unpublished registration. All 13 local CTests
+passed in 13.62 seconds. The service test also passed under Clang ThreadSanitizer;
+Dawn/ANGLE SDK binaries themselves were not rebuilt with sanitizer instrumentation.
+Actual V8 weak-handle registration is the next integration step, not claimed here.

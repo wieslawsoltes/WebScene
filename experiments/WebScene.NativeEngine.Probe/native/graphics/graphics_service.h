@@ -3,6 +3,7 @@
 #include "dawn_event_service.h"
 #include "dawn_device.h"
 #include "command_channel.h"
+#include "release_channel.h"
 #include <chrono>
 #include <algorithm>
 
@@ -13,6 +14,7 @@ struct graphics_metrics {
     size_t live_devices{},live_contexts{};
     completion_metrics completions{};
     queue_metrics commands{};
+    size_t release_registrations{};
 };
 class graphics_service {
     const std::thread::id thread_ = std::this_thread::get_id();
@@ -29,6 +31,8 @@ class graphics_service {
     size_t active_device_scopes_{};
     bool executing_commands_{};
     std::shared_ptr<command_channel> commands_;
+    std::shared_ptr<release_channel> releases_;
+    uint64_t executed_command_serial_{};
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
             throw std::logic_error("graphics service requires its engine worker");
@@ -122,6 +126,11 @@ public:
         if (!commands_) commands_=std::make_shared<command_channel>(capacity,upload_limit,wake_);
         return commands_;
     }
+    std::shared_ptr<release_channel> release_endpoint(size_t capacity=256) {
+        check_open();
+        if (!releases_) releases_=std::make_shared<release_channel>(capacity,command_endpoint(),wake_);
+        return releases_;
+    }
     size_t drain_commands(size_t budget=64) {
         check_thread();
         if (!commands_) return 0;
@@ -132,9 +141,14 @@ public:
             ~guard() { active=false; }
         } scope(executing_commands_);
         size_t count=0;
-        while (count<budget && commands_->consume_one([&](const auto& command,auto upload,uint64_t) {
+        while (count<budget && commands_->consume_one([&](const auto& command,auto upload,uint64_t serial) {
             command.execute(*this,upload,command.values);
+            executed_command_serial_=serial;
         })) ++count;
+        size_t released=0;
+        while (releases_ && released<budget && releases_->consume_one(executed_command_serial_,[&](const auto& command) {
+            command.execute(*this,{},command.values);
+        })) ++released;
         return count;
     }
     template<class Deliver> size_t pump(Deliver deliver,size_t budget=64) {
@@ -147,6 +161,7 @@ public:
     bool has_ready_work() const {
         check_thread();
         if (commands_ && commands_->metrics().depth) return true;
+        if (releases_ && releases_->has_ready(executed_command_serial_)) return true;
         return dawn_ && (dawn_->completions()->has_ready()
             || (!closed_ && dawn_->completions()->has_pending()
                 && std::chrono::steady_clock::now()>=next_event_poll_));
@@ -154,6 +169,7 @@ public:
     std::chrono::milliseconds recommended_idle_wait(std::chrono::milliseconds maximum) const {
         check_thread();
         if (commands_ && commands_->metrics().depth) return std::chrono::milliseconds::zero();
+        if (releases_ && releases_->has_ready(executed_command_serial_)) return std::chrono::milliseconds::zero();
         if (!dawn_) return maximum;
         // Cancellation delivery remains runnable after admission closes.
         if (dawn_->completions()->has_ready()) return std::chrono::milliseconds::zero();
@@ -168,7 +184,8 @@ public:
         check_thread();
         return {devices_.resident_count(),contexts_.resident_count(),
             dawn_ ? dawn_->completions()->metrics() : completion_metrics{},
-            commands_ ? commands_->metrics() : queue_metrics{}};
+            commands_ ? commands_->metrics() : queue_metrics{},
+            releases_ ? releases_->occupied() : 0};
     }
     size_t live_contexts() const { check_thread(); return contexts_.resident_count(); }
     void close() {
@@ -176,6 +193,7 @@ public:
         if (closed_) return;
         if (active_context_scopes_ || active_device_scopes_ || executing_commands_)
             throw std::logic_error("Cannot close graphics service during native execution");
+        if (releases_) releases_->close();
         if (commands_) {
             commands_->close();
             drain_commands(std::numeric_limits<size_t>::max());
