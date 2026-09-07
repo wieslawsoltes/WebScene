@@ -298,3 +298,18 @@ This is working internal mapped-at-creation behavior, not complete mapping suppo
 mapAsync and selected subrange attachment, device-loss/device-destroy detachment,
 full navigation integration and public WebGPU discovery/resource exposure remain
 unfinished. The runtime CTest passes; those missing paths remain unqualified.
+
+### Device-wide mapped-view detachment hook
+
+The buffer registry now supplies detach_device for the binding's device lifecycle.
+It matches the service and complete device handle, detaches matching mappings,
+and leaves wrapper/native device destruction to the caller. Calls are idempotent
+and stale device generations cannot affect a live mapping. It requires the owning
+isolate scope and must run before native device destruction or before JavaScript
+resumes after device-loss delivery.
+
+The rebuilt macOS V8 test creates a mapped buffer and JavaScript range, confirms
+that a stale generation does not detach it, detaches with the live device handle,
+then destroys the native device and disposes the wrapper registry. It passes.
+This establishes the lifecycle hook and explicit ordering, not automatic device-loss
+integration: the public device binding and runtime loss delivery still must call it.

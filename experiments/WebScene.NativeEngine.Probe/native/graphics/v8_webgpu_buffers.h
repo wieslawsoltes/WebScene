@@ -196,6 +196,19 @@ public:
             if (!item->published) item->releases->publish(item->ticket);
         }
     }
+    // Binding lifecycle hook: invoke before destroying the corresponding native
+    // device, and during engine-thread device-loss delivery before JS can run.
+    // It does not destroy devices or release wrappers, and is idempotent.
+    size_t detach_device(graphics_service& service,resource_handle<dawn_device> device) {
+        check_scope();
+        size_t detached=0;
+        for (auto& item:entries_) if (item && item->service==&service
+            && item->device.table==device.table && item->device.generation==device.generation
+            && item->device.slot==device.slot && item->mapping) {
+            item->mapping.reset(); ++detached;
+        }
+        return detached;
+    }
     // Ownership transfers only on success. Caller releases the native handle if
     // allocation/registration fails. No native operation runs in GC callbacks.
     v8::MaybeLocal<v8::Object> wrap(v8::Local<v8::Context> context,graphics_service& service,

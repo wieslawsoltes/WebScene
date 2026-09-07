@@ -519,12 +519,20 @@ int main() {
                     adapter_service->with_device(gc_buffer_device,[&](auto& device) {
                         require(device.live_buffers()==0,"Collected buffer native handle survived engine drain");
                         wgpu::BufferDescriptor descriptor{};
-                        descriptor.size=16; descriptor.usage=wgpu::BufferUsage::CopyDst;
+                        descriptor.size=16; descriptor.usage=wgpu::BufferUsage::CopyDst; descriptor.mappedAtCreation=true;
                         auto replacement=device.create_buffer(descriptor);
-                        require(!gc_buffers->wrap(context,*adapter_service,gc_buffer_device,replacement).IsEmpty(),"Collected buffer wrapper slot was not reusable");
+                        auto replacement_object=gc_buffers->wrap(context,*adapter_service,gc_buffer_device,replacement).ToLocalChecked();
+                        auto method=replacement_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"getMappedRange")).ToLocalChecked().template As<v8::Function>();
+                        auto view=method->Call(context,replacement_object,0,nullptr).ToLocalChecked().template As<v8::ArrayBuffer>();
+                        require(view->ByteLength()==16,"Replacement buffer mapping failed");
+                        auto stale_device=gc_buffer_device; ++stale_device.generation;
+                        require(gc_buffers->detach_device(*adapter_service,stale_device)==0 && view->ByteLength()==16,"Stale device detached a live mapping");
+                        require(gc_buffers->detach_device(*adapter_service,gc_buffer_device)==1 && view->ByteLength()==0,"Device-wide detachment failed");
+                        require(gc_buffers->detach_device(*adapter_service,gc_buffer_device)==0,"Device detachment was not idempotent");
+
                     });
-                    gc_buffers.reset();
                     adapter_service->destroy_device(gc_buffer_device);
+                    gc_buffers.reset(); // Delayed wrapper releases tolerate retired native devices.
 
                     graphics_command release{[](graphics_service&,std::span<const std::byte>,const graphics_command::arguments&) noexcept { ++weak_releases; }};
                     auto reachable=v8::Object::New(isolate);
