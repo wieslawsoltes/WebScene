@@ -654,3 +654,14 @@ passes. This tests cancellation of the native failure path; successful native
 creation racing registry teardown still needs targeted qualification. The host
 teardown policy currently rejects OperationError, while full browser expired/
 lost-device behavior remains separate and unfinished.
+
+### Successful creation racing adapter-registry teardown
+
+The macOS runtime test now discovers a second fresh adapter, starts requestDevice,
+and disposes its registry while the promise is pending, before delivering the
+native completion. It requires an actual successful Dawn device completion rather
+than accepting a native error as evidence. The original cancellation rejection
+remains unchanged, no orphan device is adopted into the graphics service, and
+the completion ticket and adapter handle are reclaimed. Runtime CTest passed.
+This closes the specific successful-completion teardown gap above; it does not
+qualify all browser device-loss or navigation behavior.

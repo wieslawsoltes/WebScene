@@ -647,6 +647,45 @@ int main() {
                         const char* expected=std::string_view(name)=="consumedAdapterPromise"?"OperationError":"TypeError";
                         require(error_name->StrictEquals(v8::String::NewFromUtf8(isolate,expected).ToLocalChecked()),"Adapter rejection type incorrect");
                     }
+                    // Dispose the registry before delivering successful native
+                    // device completion. Use a fresh, unconsumed adapter.
+                    auto cancel_adapter=std::make_shared<wgpu::Adapter>();
+                    auto cancel_adapter_ticket=fixture_mailbox->reserve(new_owner_token(),{adapter_fixture.engine_identity(),new_owner_token(),0}).value();
+                    adapter_fixture.dawn().instance().RequestAdapter(&adapter_options,wgpu::CallbackMode::AllowSpontaneous,
+                        [cancel_adapter,fixture_mailbox,cancel_adapter_ticket](wgpu::RequestAdapterStatus status,wgpu::Adapter adapter,wgpu::StringView) {
+                            *cancel_adapter=std::move(adapter);
+                            fixture_mailbox->publish(cancel_adapter_ticket,status==wgpu::RequestAdapterStatus::Success?completion_status::success:completion_status::failed);
+                        });
+                    bool cancel_adapter_ready=false;
+                    auto cancel_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                    while(!cancel_adapter_ready && std::chrono::steady_clock::now()<cancel_deadline) {
+                        adapter_fixture.pump([&](auto completion) { require(completion.status==completion_status::success,"Cancellation fixture adapter failed");cancel_adapter_ready=true; });
+                        if(!cancel_adapter_ready)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                    require(cancel_adapter_ready && *cancel_adapter,"Cancellation fixture adapter unavailable");
+                    auto cancel_handle=adapter_fixture.adopt_adapter(std::move(*cancel_adapter));
+                    auto cancel_registry=std::make_unique<v8_webgpu_adapters>(isolate,context,*adapter_devices,exception_constructor,1);
+                    auto cancel_object=cancel_registry->wrap(context,adapter_fixture,cancel_handle).ToLocalChecked();
+                    auto request_method=cancel_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"requestDevice")).ToLocalChecked().As<v8::Function>();
+                    auto cancel_promise=request_method->Call(context,cancel_object,0,nullptr).ToLocalChecked().As<v8::Promise>();
+                    require(cancel_promise->State()==v8::Promise::kPending,"Teardown fixture did not admit native request");
+                    cancel_promise->MarkAsHandled();
+                    cancel_registry.reset();
+                    require(cancel_promise->State()==v8::Promise::kRejected,"Registry teardown left pending device promise");
+                    auto cancelled_reason=cancel_promise->Result();
+                    size_t successful_retirements=0;
+                    cancel_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                    while(fixture_mailbox->metrics().occupied && std::chrono::steady_clock::now()<cancel_deadline) {
+                        adapter_fixture.pump([&](auto completion) {
+                            require(completion.status==completion_status::success,"Native creation did not succeed in teardown race");++successful_retirements;
+                        });
+                        if(fixture_mailbox->metrics().occupied)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                    require(successful_retirements==1 && fixture_mailbox->metrics().occupied==0
+                        && adapter_fixture.live_devices()==1 && adapter_fixture.live_adapters()==1,
+                        "Successful teardown race leaked completion or adopted an orphan device");
+                    require(cancel_promise->State()==v8::Promise::kRejected && cancel_promise->Result()->StrictEquals(cancelled_reason),
+                        "Late native success replaced cancellation rejection");
                     adapter_registry.reset();
                     { v8::TryCatch caught(isolate);
                         require(adapter_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"features")).IsEmpty() && caught.HasCaught(),"Retired adapter retained native access");
