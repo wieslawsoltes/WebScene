@@ -666,6 +666,17 @@ int main() {
                         let infoBrand=false;try{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ai),'vendor').get.call({})}catch(e){infoBrand=e instanceof TypeError}if(!infoBrand)throw new Error('adapter info receiver');
                         globalThis.retainedAdapterInfo=ai;
                         if(adapterDeviceProbe.label!=='via adapter')throw new Error('requested device label');
+                        {const encoder=adapterDeviceProbe.createCommandEncoder({label:'JS encoder'});
+                         if(Object.prototype.toString.call(encoder)!=='[object GPUCommandEncoder]'||encoder.label!=='JS encoder'||encoder.finish.length!==0)throw new Error('encoder wrapper');
+                         const sentinel={};let propagated=false;try{encoder.finish({get label(){throw sentinel}})}catch(e){propagated=e===sentinel}if(!propagated)throw new Error('finish exception');
+                         const command=encoder.finish({label:'JS commands'});
+                         if(Object.prototype.toString.call(command)!=='[object GPUCommandBuffer]'||command.label!=='JS commands')throw new Error('command buffer wrapper');
+                         command.label='updated commands';if(command.label!=='updated commands')throw new Error('command label');
+                         for(const call of [()=>adapterDeviceProbe.createCommandEncoder(1),()=>encoder.finish.call({}),()=>encoder.finish(1)]) {
+                             let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid encoder call');
+                         }
+                         const empty=adapterDeviceProbe.createCommandEncoder().finish();if(empty.label!=='')throw new Error('encoder defaults');}
+
                         {const texture=adapterDeviceProbe.createTexture({label:'JS texture',size:[4,2],format:'rgba8unorm',usage:16});
                          if(texture.width!==4||texture.height!==2||texture.depthOrArrayLayers!==1||texture.mipLevelCount!==1||texture.sampleCount!==1||texture.dimension!=='2d'||texture.format!=='rgba8unorm'||texture.usage!==16)throw new Error('texture metadata');
                          if(Object.prototype.toString.call(texture)!=='[object GPUTexture]'||texture.label!=='JS texture')throw new Error('texture wrapper');

@@ -1064,3 +1064,19 @@ verify capacity rejection, borrowed scopes, stale-handle rejection and empty
 tables, alongside the completed native validation scope. Dawn event and V8
 runtime tests pass. JavaScript command methods, queue submission and canvas
 presentation remain pending; this is not evidence of JavaScript pixel output.
+
+
+### Internal JavaScript command encoders and finish
+
+GPUDevice.createCommandEncoder and GPUCommandEncoder.finish now convert their
+optional label dictionaries, recheck receivers after user coercion, invoke the
+owned Dawn command-resource APIs and adopt typed wrappers. Command buffers retain
+an encoder/device reachability chain. Failed wrapper adoption releases the newly
+created native reference. The shared label converter preserves USVString and
+exception semantics; native recording-state validation remains in Dawn.
+
+The macOS V8 runtime test creates and finishes encoders from JavaScript, checks
+brands, labels and defaults, rejects invalid dictionaries/receivers, and verifies
+a throwing finish label getter leaves the encoder usable for a valid finish.
+Runtime CTest passes. These are empty command buffers: JavaScript render-pass
+recording, queue submission and canvas presentation remain pending.
