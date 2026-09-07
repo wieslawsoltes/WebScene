@@ -30,8 +30,8 @@ standards-level dimension normalization still need coverage.
 
 - Complete general attribute mutation and dimension-normalization coverage;
   connect backing versions to the new scene publication path.
-- Add separately versioned scene acquisition/capability negotiation without
-  changing the existing scene-view ABI.
+- Extend the new v3 acquisition/capability envelope with GPU image lease
+  records while preserving existing scene-view consumers.
 - Carry opaque allocation identity, generation/content serial, format, alpha,
   color space, orientation and producer readiness in portable scene metadata.
 - Implement explicit retained resource leases and consumer GPU completion.
@@ -138,3 +138,26 @@ failed metadata mutation preserving the original descriptor, cancellation of an
 in-flight producer, completion after close and final slot reclamation. Focused
 CTest and ThreadSanitizer runs pass. These are lifetime protocol checks; physical
 backend submission, memory accounting and scene ABI integration remain pending.
+
+## Separately versioned scene acquisition
+
+The C ABI now provides acquire_latest_scene_v3/acquire_next_scene_v3, explicit
+acquisition statuses, version/size validation and consumer capability negotiation.
+The v3 view currently wraps a borrowed CPU view with the unchanged v2 layout.
+Callers release/acknowledge through the v3 functions; the borrowed CPU view must
+not be released separately. Required scene capabilities are checked against the
+consumer mask. Legacy acquisition refuses scenes requiring capabilities it cannot
+represent. Current producers require zero capabilities; GPU image export is not
+yet advertised or implemented by this envelope.
+
+The native runtime fixture checks unsupported versions, short options, null
+engines, ordered acquisition, legacy acquisition, v3 acknowledgement and retaining
+the CPU view after engine destruction. All 15 local tests passed in 13.37 seconds.
+The built macOS library exports all four new functions. A separate plain-C fixture
+checks options/status sizes and view-field offsets without linking the engine.
+GPU capability rejection with real GPU scenes, GPU lease operations, provider
+lookup, managed consumers and Windows/Linux ABI/package verification remain open.
+
+The plain-C fixture exposed a missing typedef for the existing interop callback
+view; adding the forward typedef restores C compilation without changing layout.
+The independent C layout test now passes.

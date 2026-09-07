@@ -64,3 +64,8 @@ _webscene_scene_acknowledge
 _webscene_scene_get_commands
 _webscene_scene_get_header
 _webscene_scene_release
+
+_webscene_engine_acquire_latest_scene_v3
+_webscene_engine_acquire_next_scene_v3
+_webscene_scene_acknowledge_v3
+_webscene_scene_release_v3

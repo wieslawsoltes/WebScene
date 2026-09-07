@@ -8,6 +8,37 @@
 using namespace webscene::graphics;
 void require(bool value,const char* message) { if (!value) throw std::runtime_error(message); }
 int weak_releases=0;
+void test_scene_acquisition_v3() {
+    std::unique_ptr<webscene_engine,decltype(&webscene_engine_destroy)> engine(webscene_engine_create(64),webscene_engine_destroy);
+    require(engine!=nullptr,"scene ABI engine creation failed");
+    webscene_scene_acquire_options_v3 options{sizeof(options),WEBSCENE_SCENE_VIEW_VERSION_3,0};
+    const webscene_scene_view_v3* view=nullptr;
+    auto invalid=options; invalid.scene_version=99;
+    require(webscene_engine_acquire_next_scene_v3(engine.get(),&invalid,&view)==WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_VERSION && !view,"scene version rejection failed");
+    invalid=options; invalid.struct_size=0;
+    require(webscene_engine_acquire_next_scene_v3(engine.get(),&invalid,&view)==WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT && !view,"scene options size rejection failed");
+    require(webscene_engine_acquire_next_scene_v3(nullptr,&options,&view)==WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT,"null scene engine accepted");
+    auto status=webscene_engine_acquire_next_scene_v3(engine.get(),&options,&view);
+    if (view) { webscene_scene_release_v3(view); view=nullptr; }
+    constexpr char source[]="document.body.innerHTML='<div>scene lease ABI</div>';";
+    require(webscene_engine_execute_script(engine.get(),source,sizeof(source)-1,"scene-v3",8),"scene ABI script failed");
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    do {
+        status=webscene_engine_acquire_next_scene_v3(engine.get(),&options,&view);
+        if (status==WEBSCENE_SCENE_ACQUIRE_EMPTY) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (status==WEBSCENE_SCENE_ACQUIRE_EMPTY && std::chrono::steady_clock::now()<deadline);
+    require(status==WEBSCENE_SCENE_ACQUIRE_SUCCESS && view,"versioned scene acquisition failed");
+    require(view->struct_size==sizeof(*view) && view->scene_version==3 && view->required_capabilities==0,"invalid versioned scene layout");
+    require(view->cpu_view && view->cpu_view->abi_version==2,"CPU scene compatibility view missing");
+    const auto* legacy=webscene_engine_acquire_latest_scene(engine.get());
+    require(legacy && legacy->abi_version==2,"legacy scene acquisition regressed");
+    webscene_scene_release(legacy);
+    require(webscene_scene_acknowledge_v3(view),"versioned acknowledgement failed");
+    const auto revision=view->cpu_view->header.revision;
+    engine.reset();
+    require(view->cpu_view->header.revision==revision,"retained scene did not survive engine disposal");
+    webscene_scene_release_v3(view);
+}
 int main() {
     std::exception_ptr failure;
     std::thread worker([&] {
@@ -166,5 +197,6 @@ int main() {
         catch (const std::exception& error) { std::cerr << error.what() << '\n'; }
         return 1;
     }
+    test_scene_acquisition_v3();
     std::cout << "Hidden V8 graphics completion, context affinity and promise checkpoint passed without RAF\n";
 }

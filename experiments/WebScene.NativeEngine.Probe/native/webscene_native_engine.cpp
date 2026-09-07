@@ -138,6 +138,7 @@ struct canvas_layer_version final {
 
 struct scene final {
     webscene_scene_header header{};
+    uint64_t required_capabilities{};
     std::vector<webscene_scene_command> commands;
     std::vector<webscene_canvas_layer> canvas_layers;
     std::vector<webscene_canvas_command> canvas_commands;
@@ -1229,6 +1230,49 @@ uint8_t webscene_engine_set_preferred_color_scheme(
         : 0U;
 }
 
+namespace {
+struct scene_lease_v3 {
+    webscene_scene_lease cpu;
+    webscene_scene_view_v3 view;
+    scene_lease_v3(std::shared_ptr<const scene> value,std::shared_ptr<acknowledgement_state> acknowledgement)
+        : cpu(std::move(value),std::move(acknowledgement)),
+          view{sizeof(webscene_scene_view_v3),WEBSCENE_SCENE_VIEW_VERSION_3,cpu.value->required_capabilities,&cpu.view,this} {}
+};
+webscene_scene_acquire_status acquire_scene_v3(webscene_engine* engine,
+    const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result,bool ordered)
+{
+    if (!result) return WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT;
+    *result=nullptr;
+    if (!engine || !options || options->struct_size<sizeof(*options)) return WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT;
+    if (options->scene_version!=WEBSCENE_SCENE_VIEW_VERSION_3) return WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_VERSION;
+    try {
+        auto value=ordered ? engine->acquire_next() : engine->acquire_latest();
+        if (!value) return WEBSCENE_SCENE_ACQUIRE_EMPTY;
+        if (value->required_capabilities & ~options->consumer_capabilities)
+            return WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES;
+        auto* lease=new scene_lease_v3(std::move(value),engine->acknowledgement_state_handle());
+        *result=&lease->view;
+        return WEBSCENE_SCENE_ACQUIRE_SUCCESS;
+    } catch (const std::bad_alloc&) { return WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY; }
+    catch (...) { return WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR; }
+}
+}
+webscene_scene_acquire_status webscene_engine_acquire_latest_scene_v3(webscene_engine* engine,
+    const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result)
+{ return acquire_scene_v3(engine,options,result,false); }
+webscene_scene_acquire_status webscene_engine_acquire_next_scene_v3(webscene_engine* engine,
+    const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result)
+{ return acquire_scene_v3(engine,options,result,true); }
+uint8_t webscene_scene_acknowledge_v3(const webscene_scene_view_v3* view)
+{
+    if (!view || view->scene_version!=WEBSCENE_SCENE_VIEW_VERSION_3 || !view->lease_token) return 0;
+    return static_cast<scene_lease_v3*>(const_cast<void*>(view->lease_token))->cpu.acknowledge() ? 1 : 0;
+}
+void webscene_scene_release_v3(const webscene_scene_view_v3* view)
+{
+    if (view) delete static_cast<const scene_lease_v3*>(view->lease_token);
+}
+
 const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine* engine)
 {
     if (engine == nullptr) {
@@ -1236,7 +1280,7 @@ const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine*
     }
 
     auto scene_value = engine->acquire_latest();
-    if (!scene_value) {
+    if (!scene_value || scene_value->required_capabilities) {
         return nullptr;
     }
 
@@ -1257,7 +1301,7 @@ const webscene_scene_view* webscene_engine_acquire_next_scene(webscene_engine* e
     }
 
     auto scene_value = engine->acquire_next();
-    if (!scene_value) {
+    if (!scene_value || scene_value->required_capabilities) {
         return nullptr;
     }
 

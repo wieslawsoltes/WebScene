@@ -39,6 +39,7 @@ WEBSCENE_API size_t webscene_engine_copy_runtime_failure(
     webscene_engine* engine, char* destination, size_t destination_capacity);
 typedef struct webscene_scene_view webscene_scene_view;
 typedef struct webscene_interop_result_view_v3 webscene_interop_result_view_v3;
+typedef struct webscene_interop_callback_view_v3 webscene_interop_callback_view_v3;
 
 /* Legacy direct-message callback retained for ABI compatibility. */
 typedef void (*webscene_inspector_message_callback)(
@@ -476,6 +477,38 @@ struct webscene_scene_view {
     uint32_t string_byte_count;
     uint32_t reserved;
 };
+
+/* Separately versioned scene acquisition. No GPU capability is advertised yet. */
+#define WEBSCENE_SCENE_VIEW_VERSION_3 3U
+#define WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES (UINT64_C(1) << 0)
+typedef struct webscene_scene_acquire_options_v3 {
+    uint32_t struct_size;
+    uint32_t scene_version;
+    uint64_t consumer_capabilities;
+} webscene_scene_acquire_options_v3;
+typedef enum webscene_scene_acquire_status {
+    WEBSCENE_SCENE_ACQUIRE_SUCCESS = 0,
+    WEBSCENE_SCENE_ACQUIRE_EMPTY = 1,
+    WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT = 2,
+    WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_VERSION = 3,
+    WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES = 4,
+    WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY = 5,
+    WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR = 6
+} webscene_scene_acquire_status;
+typedef struct webscene_scene_view_v3 {
+    uint32_t struct_size;
+    uint32_t scene_version;
+    uint64_t required_capabilities;
+    /* Borrowed for this v3 lease's lifetime. Do not release separately. */
+    const webscene_scene_view* cpu_view;
+    const void* lease_token;
+} webscene_scene_view_v3;
+WEBSCENE_API webscene_scene_acquire_status webscene_engine_acquire_latest_scene_v3(
+    webscene_engine* engine,const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result);
+WEBSCENE_API webscene_scene_acquire_status webscene_engine_acquire_next_scene_v3(
+    webscene_engine* engine,const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result);
+WEBSCENE_API uint8_t webscene_scene_acknowledge_v3(const webscene_scene_view_v3* scene);
+WEBSCENE_API void webscene_scene_release_v3(const webscene_scene_view_v3* scene);
 
 typedef enum webscene_resource_kind {
     WEBSCENE_RESOURCE_DOCUMENT = 0,
