@@ -223,6 +223,24 @@ public sealed class NativeGpuSceneInteropTests
         Assert.Equal(0UL, view.AllocationBytes);
     }
 
+    [IOSurfaceFixtureFact]
+    public void SceneImageCaptureRollsBackEarlierRetainsWhenALaterImageIsDisposed()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        var library = NativeLibrary.Load(Environment.GetEnvironmentVariable("WEBSCENE_TEST_GPU_FIXTURE_LIBRARY")!);
+        var create = Marshal.GetDelegateForFunctionPointer<CreateIOSurface>(NativeLibrary.GetExport(library, "webscene_test_create_iosurface"));
+        var alive = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_iosurface_alive"));
+        Assert.Equal(1, create(out var image));
+        try
+        {
+            Assert.Equal(NativeSceneAcquireStatus.Success, image.Retain(out var disposed));
+            disposed!.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => NativeMacOSGpuSceneImages.Retain(new[] { image, disposed }, out _));
+        }
+        finally { image.Dispose(); }
+        Assert.Equal(0, alive());
+    }
+
     [NativeRuntimeFact]
     public void VersionedAcquisitionCrossesManagedNativeBoundary()
     {

@@ -1449,3 +1449,22 @@ callbacks in one rendering opportunity. Runtime CTest passes after rebuild; the
 V8-disabled native library also builds. Normal desktop host enablement and
 managed v3 scene consumption remain outstanding, so this is document scene
 publication evidence rather than a visible WebGPU application qualification.
+
+### Managed scene image ownership for Ganesh
+
+`NativeMacOSGpuSceneImages` captures indexed GPU image leases from a v3 scene
+(or retains a supplied list), rolling back earlier captures if a later one fails.
+It validates the negotiated image metadata, prepares every import before replay,
+and retains completed imports across admission retries and unchanged renders.
+Drawing resolves scene image indices; retirement releases unused CPU leases and
+keeps imported resources until their host GPU fences complete. Callers must keep
+the owner through successful TryComplete; it deliberately does not equate
+managed disposal/finalization with GPU completion.
+
+The Ganesh window probe now uses this owner and passes its four destination-pixel
+checks across 32 frames with one import, completed retirement and zero explicit
+transport copies. A native managed integration test verifies rollback when a
+later source has been disposed: one passed, zero skipped on macOS/net10.0.
+The probe builds with zero warnings. Normal scene acquisition, old/new scene
+replacement and shutdown scheduling still need to adopt this owner in the
+production composition handler; this does not yet enable ordinary GPU scenes.

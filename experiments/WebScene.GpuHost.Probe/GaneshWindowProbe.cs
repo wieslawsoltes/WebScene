@@ -49,7 +49,7 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
     internal readonly TaskCompletionSource Completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly NativeCanvasSceneRenderer _renderer = new();
     private NativeGpuImageLeaseV3? _source;
-    private NativeMacOSRetainedGpuImage? _retained;
+    private NativeMacOSGpuSceneImages? _retained;
     internal int Frames, Imports, VerifiedPixels;
     private readonly bool _verifyPixels = Environment.GetCommandLineArgs().Contains("--verify-window-pixels");
     public unsafe GaneshImageControl()
@@ -95,23 +95,24 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
             using var lease = feature.Lease();
             if (_retained is null)
             {
-                _retained = NativeMacOSRetainedGpuImage.Import(_source!, lease,
-                    GRSurfaceOrigin.TopLeft, SKAlphaType.Premul);
-                if (_retained is null) return; // Admission backpressure: retry on the next callback.
+                var status = NativeMacOSGpuSceneImages.Retain(new[] { _source! }, out _retained);
+                if (status == NativeSceneAcquireStatus.Backpressure) return;
+                if (status != NativeSceneAcquireStatus.Success || _retained is null) throw new InvalidOperationException($"Scene image capture failed: {status}");
                 _source!.Dispose(); _source = null;
-                ++Imports;
             }
             if (_retained.IsRetiring)
             {
                 if (_retained.TryComplete(lease)) { _renderer.Reset(); Completed.TrySetResult(); }
                 return;
             }
+            if (!_retained.TryPrepare(lease)) return;
+            Imports = _retained.ImportedCount;
             var canvas = lease.SkCanvas;
             _renderer.RenderRetained(canvas, 400, 220, null,
                 (index, destination) =>
                 {
                     if (index != 0) throw new InvalidOperationException("Unknown scene GPU image slot");
-                    _retained.Draw(lease, destination);
+                    _retained.Draw(lease, index, destination);
                 });
             if (_verifyPixels && Frames == 0)
             {
