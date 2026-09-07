@@ -173,6 +173,11 @@ void test_runtime_webgpu_installation() {
         require(runtime.pump_task(),"Installed GPU completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     require(document.find_by_id("gpu-installed-ready")!=nullptr,"Installed GPU did not create a device");
+    require(runtime.execute("globalThis.pressureTexture=installedDevice.createTexture({size:[1,1],format:'rgba8unorm',usage:16});globalThis.livePressureView=pressureTexture.createView();","view-pressure-setup"),"View pressure setup failed");
+    for(unsigned i=0;i<300;++i)
+        require(runtime.execute("pressureTexture.createView();","view-pressure"),"Unreachable texture views exhausted release tickets");
+    require(runtime.execute("livePressureView.label='still-live';if(livePressureView.label!=='still-live')throw new Error('live view collected');pressureTexture.destroy();delete globalThis.livePressureView;delete globalThis.pressureTexture;","view-pressure-cleanup"),"Pressure reclamation damaged a reachable view");
+
 #if defined(__APPLE__)
     require(runtime.execute(R"JS(
         globalThis.domGPUCanvas=document.createElement('canvas');domGPUCanvas.width=4;domGPUCanvas.height=2;document.body.appendChild(domGPUCanvas);

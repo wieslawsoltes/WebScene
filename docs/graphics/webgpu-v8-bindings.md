@@ -1670,3 +1670,20 @@ unresolved and must still be retested/fixed.
 Unchanged Kestrel-CAD from the supplied archive remains the application acceptance
 test. The clear/triangle/resize probes are diagnostic fixtures and must not be
 counted as Kestrel compatibility or epic completion.
+
+### Wrapper release pressure recovery (2026-09-08)
+
+Labeled GPU-resource wrapping now makes one V8 reclamation attempt when the
+bounded release-ticket pool is full, then drains only releases whose accepted
+command-prefix barrier is already satisfied and retries reservation. This
+does not dispatch queued commands or JS completions. Weak callbacks still only
+publish tickets; native GPU releases occur afterward on the runtime owner.
+Reachable wrappers remain rooted and capacity remains bounded.
+
+The runtime regression creates 300 unreachable texture views across evaluation
+scopes while retaining another view, then verifies the retained view's label
+still works. The complete runtime suite passes. This is a pressure fallback,
+not a performance-qualified GC scheduling policy; latency and native-memory
+accounting still need qualification. The normal-window stress rerun still
+failed after three frames with canvas texture acquisition unavailable, so
+continuous rendering remains unqualified independently of this ticket fix.

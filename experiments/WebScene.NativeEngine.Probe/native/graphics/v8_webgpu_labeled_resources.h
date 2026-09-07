@@ -134,7 +134,15 @@ public:
         item->device_owner_key.Reset(isolate_,v8::Private::New(isolate_));
         if(!wrapper->SetPrivate(context,item->device_owner_key.Get(isolate_),parent).FromMaybe(false))return {};
         auto ticket=item->releases->reserve(Traits::release(device,resource));
-        if (!ticket) return {};
+        if (!ticket) {
+            // Native lifetime tickets can fill before the small JS wrappers
+            // create enough heap pressure for V8 to collect them naturally.
+            // Live JS objects remain rooted; weak callbacks only publish.
+            isolate_->LowMemoryNotification();
+            service.drain_completed_releases();
+            ticket=item->releases->reserve(Traits::release(device,resource));
+            if(!ticket)return {};
+        }
         item->ticket=*ticket;
         wrapper->SetInternalField(0,v8::External::New(isolate_,&brand_,v8::kExternalPointerTypeTagDefault));
         wrapper->SetAlignedPointerInInternalField(1,item.get(),v8::kEmbedderDataTypeTagDefault);

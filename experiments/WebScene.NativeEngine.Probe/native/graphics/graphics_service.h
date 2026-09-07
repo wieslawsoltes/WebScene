@@ -257,6 +257,18 @@ public:
         })) ++released;
         return count;
     }
+    // Pressure recovery may release collected wrappers without dispatching new
+    // commands or entering JavaScript completion delivery. Accepted uses that
+    // have not executed still prevent release through their serial barrier.
+    size_t drain_completed_releases(size_t budget=256) {
+        check_thread();
+        if(executing_commands_)throw std::logic_error("Release drain is not reentrant");
+        size_t count=0;
+        while(releases_&&count<budget&&releases_->consume_one(executed_command_serial_,[&](const auto& command){
+            command.execute(*this,{},command.values);
+        }))++count;
+        return count;
+    }
     template<class Deliver> size_t pump(Deliver deliver,size_t budget=64) {
         check_thread();
         if (pumping_) throw std::logic_error("graphics completion pumping is not reentrant");
