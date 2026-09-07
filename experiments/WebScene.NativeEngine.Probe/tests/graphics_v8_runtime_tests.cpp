@@ -8,6 +8,7 @@
 #include "graphics/webgpu_prepared_device_descriptor.h"
 #include "graphics/v8_webgpu_buffers.h"
 #include "graphics/v8_webgpu_devices.h"
+#include "graphics/v8_webgpu_adapters.h"
 #include "graphics/v8_webgpu_mapped_ranges.h"
 #include "graphics/v8_webgpu_map_request.h"
 #include "graphics/image_lease_abi.h"
@@ -574,6 +575,33 @@ int main() {
                             });
                         }
                     )JS"),"JavaScript mapAsync dispatch failed");
+                    wgpu::Adapter adapter_copy;
+                    adapter_service->with_adapter(discovered_adapter,[&](const auto& native) { adapter_copy=native; });
+                    graphics_service adapter_fixture(wake,2);
+                    auto adapter_handle=adapter_fixture.adopt_adapter(std::move(adapter_copy));
+                    auto adapter_registry=std::make_unique<v8_webgpu_adapters>(isolate,context,1);
+                    auto adapter_object=adapter_registry->wrap(context,adapter_fixture,adapter_handle).ToLocalChecked();
+                    bool duplicate_adapter=false,foreign_realm=false;
+                    try { adapter_registry->wrap(context,adapter_fixture,adapter_handle); } catch (const std::invalid_argument&) { duplicate_adapter=true; }
+                    try { adapter_registry->wrap(v8::Context::New(isolate),adapter_fixture,adapter_handle); } catch (const std::logic_error&) { foreign_realm=true; }
+                    require(duplicate_adapter && foreign_realm,"Adapter identity or realm ownership duplicated");
+                    auto adapter_features=adapter_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"features")).ToLocalChecked();
+                    require(adapter_features->StrictEquals(adapter_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"features")).ToLocalChecked()),"Adapter feature identity changed");
+                    auto feature_has=adapter_features.As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"has")).ToLocalChecked().As<v8::Function>();
+                    adapter_fixture.with_adapter(adapter_handle,[&](const auto& native) {
+                        for (const auto& feature:webgpu_feature_names) {
+                            v8::Local<v8::Value> name=v8::String::NewFromUtf8(isolate,feature.name.data(),v8::NewStringType::kNormal,static_cast<int>(feature.name.size())).ToLocalChecked();
+                            require(feature_has->Call(context,adapter_features,1,&name).ToLocalChecked()->BooleanValue(isolate)==native.HasFeature(feature.native),"Adapter capability snapshot differs from Dawn");
+                        }
+                    });
+                    adapter_registry.reset();
+                    { v8::TryCatch caught(isolate);
+                        require(adapter_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"features")).IsEmpty() && caught.HasCaught(),"Retired adapter retained native access");
+                    }
+                    require(adapter_features.As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"size")).ToLocalChecked()->IsUint32(),"Retained adapter features lost after disposal");
+                    require(adapter_fixture.live_adapters()==1,"Adapter disposal bypassed deferred release");
+                    adapter_fixture.pump([](completion_record) {});
+                    require(adapter_fixture.live_adapters()==0,"Adapter deferred release leaked native handle");
                     buffer_wrappers_tested=true;
                     return;
                 }

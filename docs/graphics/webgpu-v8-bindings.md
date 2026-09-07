@@ -593,3 +593,21 @@ getter exception identity, unchanged completion occupancy after rejection, and
 adapter consumed state changed by a descriptor getter. Runtime CTest passes.
 This remains an internal entry: GPUAdapter prototype installation, receiver brand
 handling, real consumed/expired state and public exposure are still pending.
+
+### Adapter wrapper identity and lifetime
+
+The realm-owned adapter registry now wraps generation-checked graphics-service
+adapter handles. It rejects duplicate wrappers within the registry and foreign
+realms, reserves deferred-release storage before exposure, and exposes a stable
+read-only feature snapshot from the native adapter. Weak callbacks publish only
+release commands; registry disposal invalidates native receiver access and queues
+release instead of calling GPU APIs in GC. Retained feature snapshots remain
+usable after wrapper registry disposal.
+
+The macOS runtime fixture verifies feature membership against every standard
+Dawn feature, repeated snapshot identity, duplicate/foreign-realm rejection,
+receiver invalidation after disposal, snapshot survival and actual deferred
+native-handle reclamation. It uses an independent graphics-service fixture
+because the existing buffer test deliberately occupies every release slot.
+Runtime CTest passes. This registry does not yet dispatch requestDevice or install
+navigator.gpu; those remain necessary for public discovery.
