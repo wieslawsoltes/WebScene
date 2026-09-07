@@ -76,3 +76,5 @@ _webscene_gpu_image_describe_v3
 _webscene_gpu_image_release_v3
 _webscene_gpu_image_begin_consumer_v3
 _webscene_gpu_image_complete_consumer_v3
+
+_webscene_gpu_image_get_iosurface_v3

@@ -4,6 +4,9 @@
 #include "webscene_runtime_diagnostics.h"
 #include "graphics/engine_wake.h"
 #include "graphics/image_lease_abi.h"
+#if defined(__APPLE__) && defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+#include "graphics/iosurface_canvas_images.h"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -1355,6 +1358,23 @@ webscene_scene_acquire_status webscene_gpu_image_begin_consumer_v3(
         return WEBSCENE_SCENE_ACQUIRE_SUCCESS;
     } catch (const std::bad_alloc&) { return WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY; }
       catch (...) { return WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR; }
+}
+uint8_t webscene_gpu_image_get_iosurface_v3(
+    const webscene_gpu_image_consumer_v3* consumer,webscene_gpu_iosurface_view_v3* result)
+{
+    if (!result || result->struct_size<sizeof(*result) || result->version!=3) return 0;
+    result->borrowed_iosurface=nullptr; result->allocation_bytes=0;
+    if (!consumer) return 0;
+#if defined(__APPLE__) && defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    try {
+        const auto& image=webscene::graphics::iosurface_canvas_images::resolve(consumer->value);
+        result->borrowed_iosurface=image.borrowed_handle();
+        result->allocation_bytes=image.allocation_bytes();
+        return 1;
+    } catch (...) { return 0; }
+#else
+    return 0;
+#endif
 }
 void webscene_gpu_image_complete_consumer_v3(webscene_gpu_image_consumer_v3* consumer)
 {

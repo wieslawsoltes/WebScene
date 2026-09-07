@@ -8,6 +8,7 @@ namespace webscene::graphics {
 // consumer GPU completion are supplied by the Dawn/ANGLE/presenter integrations.
 class iosurface_canvas_images {
     struct storage final : image_provider_lifetime {
+        image_provider_kind kind() const noexcept override { return image_provider_kind::iosurface; }
         struct slot { std::shared_ptr<iosurface_color> color; image_metadata metadata{}; };
         std::array<slot,3> slots;
         std::mutex mutex;
@@ -52,8 +53,10 @@ public:
     }
     static const iosurface_color& resolve(const owned_image_pool::consumer& consumer) {
         const auto metadata=consumer.describe();
-        const auto provider=std::dynamic_pointer_cast<storage>(consumer.provider());
-        if (!provider) throw std::invalid_argument("Foreign IOSurface lease provider");
+        const auto anchor=consumer.provider();
+        if (anchor->kind()!=image_provider_kind::iosurface)
+            throw std::invalid_argument("Foreign IOSurface lease provider");
+        const auto provider=std::static_pointer_cast<storage>(anchor);
         std::lock_guard lock(provider->mutex);
         for (const auto& slot:provider->slots)
             if (slot.color && slot.metadata.allocation==metadata.allocation &&

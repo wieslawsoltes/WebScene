@@ -531,3 +531,27 @@ image-index and disposed-scene checks. Uno builds without warnings/errors.
 Positive managed GPU-image acquisition/retention is not exercised yet because
 the managed fixture currently produces CPU scenes; native GPU image lifetime
 fixtures do not substitute for that missing integration coverage.
+
+### macOS native consumer lookup
+
+The additive webscene_gpu_image_get_iosurface_v3 export accepts an active
+consumer and a size/versioned webscene_gpu_iosurface_view_v3. It returns a
+borrowed IOSurface pointer and its padded allocation size only for the native
+IOSurface lease provider. Portable image metadata remains pointer-free.
+The caller must retain the consumer through native GPU completion; lookup
+does not wait for the producer or begin/end a graphics access interval.
+
+Graphics-disabled and non-macOS implementations return unavailable (zero).
+Valid output views are cleared before failure. Invalid size/version descriptors
+are rejected without writing beyond their declared layout. The opaque consumer
+must itself be a live API handle, as with the existing consumer operations.
+
+The macOS graphics runtime test verifies lookup after canvas and retained-image
+release, invalid views and foreign provider rejection. Provider identification
+uses a native virtual kind tag because the runtime disables RTTI. Both enabled
+and disabled native libraries built; the new symbol was inspected in the enabled
+dylib, and a ctypes load of the disabled dylib verified rejection/cleared output.
+The common image-lease CTest and graphics V8 runtime CTest passed.
+
+This is the native presenter lookup boundary. Producer completion resolution,
+framework import and actual V8 GPU canvas publication remain unfinished.

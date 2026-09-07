@@ -544,6 +544,19 @@ WEBSCENE_API void webscene_gpu_image_release_v3(webscene_gpu_image_lease_v3* ima
 WEBSCENE_API webscene_scene_acquire_status webscene_gpu_image_begin_consumer_v3(
     const webscene_gpu_image_lease_v3* image,webscene_gpu_image_consumer_v3** result);
 WEBSCENE_API void webscene_gpu_image_complete_consumer_v3(webscene_gpu_image_consumer_v3* consumer);
+/* macOS native presenter hook, not portable image metadata or a JavaScript API.
+ * The pointer is borrowed until consumer completion. This lookup does not wait
+ * for the producer, begin native access, or authorize early consumer completion.
+ * Returns zero for unsupported providers/platforms/builds or invalid arguments.
+ */
+typedef struct webscene_gpu_iosurface_view_v3 {
+    uint32_t struct_size, version;
+    void* borrowed_iosurface;
+    uint64_t allocation_bytes;
+} webscene_gpu_iosurface_view_v3;
+WEBSCENE_API uint8_t webscene_gpu_image_get_iosurface_v3(
+    const webscene_gpu_image_consumer_v3* consumer,webscene_gpu_iosurface_view_v3* result);
+
 
 typedef enum webscene_resource_kind {
     WEBSCENE_RESOURCE_DOCUMENT = 0,

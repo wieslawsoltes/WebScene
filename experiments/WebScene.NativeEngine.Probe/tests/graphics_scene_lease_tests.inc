@@ -65,5 +65,31 @@ void test_native_gpu_scene_leases()
     webscene_gpu_image_info_v3 info{}; info.struct_size=sizeof(info); info.version=3;
     require(webscene_gpu_image_describe_v3(retained,&info) && info.content_serial==1 && !weak.expired());
     webscene_gpu_image_release_v3(retained); require(!weak.expired());
+    webscene_gpu_iosurface_view_v3 native_view{sizeof(native_view),3,nullptr,0};
+    require(!webscene_gpu_image_get_iosurface_v3(consumer,&native_view) && !native_view.borrowed_iosurface);
     webscene_gpu_image_complete_consumer_v3(consumer); require(weak.expired());
+#if defined(__APPLE__)
+    auto surfaces=std::make_unique<webscene::graphics::iosurface_canvas_images>(1024*1024);
+    auto surface=surfaces->acquire({700,0,1,1,701,1,17,4,webscene::graphics::image_format::bgra8_unorm});
+    require(surface.has_value());
+    surface->producer.begin();
+    auto published=surface->producer.publish();
+    surface->producer.complete(); surface.reset();
+    require(published.has_value());
+    auto surface_lease=std::make_unique<webscene_gpu_image_lease_v3>(std::move(*published));
+    webscene_gpu_image_consumer_v3* surface_consumer=nullptr;
+    require(webscene_gpu_image_begin_consumer_v3(surface_lease.get(),&surface_consumer)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+    surface_lease.reset(); surfaces.reset();
+    require(webscene_gpu_image_get_iosurface_v3(surface_consumer,&native_view) &&
+        native_view.borrowed_iosurface && native_view.allocation_bytes>=17*4*4);
+    require(IOSurfaceGetWidth(static_cast<IOSurfaceRef>(native_view.borrowed_iosurface))==17);
+    native_view.version=2;
+    require(!webscene_gpu_image_get_iosurface_v3(surface_consumer,&native_view));
+    native_view.version=3; native_view.struct_size=0;
+    require(!webscene_gpu_image_get_iosurface_v3(surface_consumer,&native_view));
+    native_view.struct_size=sizeof(native_view);
+    require(!webscene_gpu_image_get_iosurface_v3(nullptr,&native_view) &&
+        !native_view.borrowed_iosurface && !native_view.allocation_bytes);
+    webscene_gpu_image_complete_consumer_v3(surface_consumer);
+#endif
 }

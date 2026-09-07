@@ -86,6 +86,10 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     target_link_libraries(webscene_native_engine PRIVATE
         dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2)
     target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=1)
+    if(APPLE)
+        target_link_libraries(webscene_native_engine PRIVATE
+            "-framework CoreFoundation" "-framework IOSurface" "-framework CoreVideo")
+    endif()
     if(BUILD_TESTING)
         add_executable(webscene_graphics_dawn_event_tests tests/graphics_dawn_event_tests.cpp)
         target_compile_features(webscene_graphics_dawn_event_tests PRIVATE cxx_std_20)

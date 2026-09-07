@@ -7,7 +7,9 @@ namespace webscene::graphics {
 // Native provider lifetime anchor. Its destructor must be safe on a completion
 // thread (thread-affine GPU destruction must be dispatched by the provider).
 // No native pointer is exported through portable image metadata.
+enum class image_provider_kind { generic, iosurface };
 struct image_provider_lifetime {
+    virtual image_provider_kind kind() const noexcept { return image_provider_kind::generic; }
     virtual ~image_provider_lifetime() = default;
 };
 class owned_image_pool {
