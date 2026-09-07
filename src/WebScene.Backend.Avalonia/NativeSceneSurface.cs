@@ -38,6 +38,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 {
     private IntPtr _engine;
     private readonly bool _useCompositionVisual;
+    private readonly bool _enableGpuScenes;
     private readonly bool _submitAnimationFrames;
     private readonly NativeCanvasSceneRenderer _renderer = new();
     private readonly object _rendererGate = new();
@@ -73,8 +74,9 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     public NativeSceneSurface(
         IntPtr engine,
         bool useCompositionVisual = false,
-        bool submitAnimationFrames = true)
-        : this(engine, useCompositionVisual, submitAnimationFrames, null)
+        bool submitAnimationFrames = true,
+        bool enableGpuScenes = false)
+        : this(engine, useCompositionVisual, submitAnimationFrames, null, enableGpuScenes)
     {
     }
 
@@ -82,7 +84,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         IntPtr engine,
         bool useCompositionVisual,
         bool submitAnimationFrames,
-        Func<InputEvent, bool>? enqueuePointerInput)
+        Func<InputEvent, bool>? enqueuePointerInput,
+        bool enableGpuScenes = false)
     {
         _performanceInstrumentation = new NativePerformanceInstrumentation();
         _renderObserver = new NativeSceneRenderObserver(_performanceInstrumentation);
@@ -94,6 +97,9 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                     "WEBSCENE_AVALONIA_DIRECT_DRAW"),
                 "1",
                 StringComparison.Ordinal);
+        if (enableGpuScenes && (!OperatingSystem.IsMacOS() || !_useCompositionVisual))
+            throw new PlatformNotSupportedException("GPU scenes require macOS composition rendering.");
+        _enableGpuScenes = enableGpuScenes;
         _submitAnimationFrames = submitAnimationFrames;
         Focusable = true;
         ClipToBounds = true;
@@ -220,7 +226,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                         _compositionUiWakeGate,
                         _performanceInstrumentation,
                         ScheduleCompositionUiWake,
-                        TopLevel.GetTopLevel(this)?.RenderScaling ?? 1));
+                        TopLevel.GetTopLevel(this)?.RenderScaling ?? 1,
+                        enableGpuScenes: _enableGpuScenes));
                 _customVisual.Size = new Vector2((float)Bounds.Width, (float)Bounds.Height);
                 ElementComposition.SetElementChildVisual(this, _customVisual);
                 Volatile.Write(ref _compositionProjectionActive, 1);
@@ -229,6 +236,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             }
         }
 
+        if (_enableGpuScenes)
+            throw new InvalidOperationException("GPU scene rendering requires an attached compositor.");
         _frameLoopActive = true;
         RequestNextFrame();
     }

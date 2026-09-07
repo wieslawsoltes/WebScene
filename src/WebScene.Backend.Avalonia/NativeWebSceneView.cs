@@ -20,6 +20,7 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
     private static long s_nextContextId;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly NativeSceneSurface _surface;
+    private readonly Func<string, bool>? _admitWebGpuDocument;
     private IntPtr _engine;
     private long _contextId;
     private NativeInteropInvoker? _interop;
@@ -35,8 +36,20 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
     }
 
     public NativeWebSceneView(bool useCompositionVisual)
+        : this(useCompositionVisual, null)
     {
-        _surface = new NativeSceneSurface(IntPtr.Zero, useCompositionVisual);
+    }
+
+    /// <summary>
+    /// Enables the experimental macOS IOSurface WebGPU route when a policy is supplied.
+    /// The host must provide a CGL/Skia compositor and approve only secure documents.
+    /// The policy runs on the native runtime worker before each document's scripts.
+    /// </summary>
+    public NativeWebSceneView(bool useCompositionVisual, Func<string, bool>? admitWebGpuDocument)
+    {
+        _admitWebGpuDocument = admitWebGpuDocument;
+        _surface = new NativeSceneSurface(IntPtr.Zero, useCompositionVisual,
+            enableGpuScenes: admitWebGpuDocument is not null);
         Content = _surface;
         InitializeRuntimeDiagnostics();
         ActualThemeVariantChanged += OnActualThemeVariantChanged;
@@ -430,7 +443,8 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
                 _surface.OnNativeScenePublished,
                 hostRequestAvailable: OnNativeHostRequestAvailable,
                 interopCallbackAvailable: callbackSignal.Notify,
-                animationFrameRequested: _surface.OnNativeAnimationFrameRequested);
+                animationFrameRequested: _surface.OnNativeAnimationFrameRequested,
+                admitWebGpuDocument: _admitWebGpuDocument);
             if (engine == IntPtr.Zero)
             {
                 throw new InvalidOperationException(

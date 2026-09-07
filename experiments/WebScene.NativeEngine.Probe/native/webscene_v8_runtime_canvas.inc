@@ -2649,6 +2649,12 @@
     }
 
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+    void finish_gpu_rendering_opportunity(bool present) {
+        if(!gpu_rendering_opportunity||has_due_animation_frame_task())return;
+        gpu_rendering_opportunity=false;
+        for(auto& [key,canvas]:gpu_canvases)canvas.context->end_frame(present);
+        publish_ready_gpu_canvases();
+    }
     void publish_ready_gpu_canvases() {
         for(auto& [key,canvas]:gpu_canvases)while(auto image=canvas.provider->take_ready()) {
             const auto metadata=image->describe();const auto& backing=canvas.node->canvas().backing;

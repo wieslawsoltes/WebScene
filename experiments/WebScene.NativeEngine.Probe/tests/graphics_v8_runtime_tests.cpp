@@ -182,7 +182,7 @@ void test_runtime_webgpu_installation() {
     )JS","gpu-publication"),"GPU publication drawing failed");
     require((runtime.host_animation_frame_demand()&1U)!=0,"Canvas without RAF did not request a rendering opportunity");
     runtime.signal_animation_frame(100);
-    require(runtime.has_pending_animation_frame_task()&&runtime.pump_animation_frame_task(),"GPU rendering opportunity was not serviced");
+    require(runtime.has_pending_tasks()&&runtime.pump_task(),"Ordinary task pump did not service the GPU rendering opportunity");
     auto* published_node=document.find_by_id("published-gpu-canvas");
     deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
     while(!published_node->canvas().gpu_image&&std::chrono::steady_clock::now()<deadline){

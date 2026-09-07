@@ -4552,11 +4552,7 @@ bool v8_dom_runtime::pump_animation_frame_task()
     v8::Context::Scope context_scope(local_context);
     const bool result=impl_->drain_animation_frame_task()&&impl_->promote_pending_promise_error();
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
-    if(impl_->gpu_rendering_opportunity&&!impl_->has_due_animation_frame_task()) {
-        impl_->gpu_rendering_opportunity=false;
-        for(auto& [key,canvas]:impl_->gpu_canvases)canvas.context->end_frame(result);
-        impl_->publish_ready_gpu_canvases();
-    }
+    impl_->finish_gpu_rendering_opportunity(result);
 #endif
     return result;
 }
@@ -4677,8 +4673,11 @@ bool v8_dom_runtime::pump_task()
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(local_context);
-    return impl_->drain_tasks()
-        && impl_->promote_pending_promise_error();
+    const bool result = impl_->drain_tasks() && impl_->promote_pending_promise_error();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+    impl_->finish_gpu_rendering_opportunity(result);
+#endif
+    return result;
 }
 
 bool v8_dom_runtime::has_pending_tasks() const noexcept
@@ -4686,6 +4685,7 @@ bool v8_dom_runtime::has_pending_tasks() const noexcept
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     if (impl_->graphics && impl_->graphics->has_ready_work()) return true;
 #if defined(__APPLE__)
+    if(impl_->gpu_rendering_opportunity)return true;
     for(const auto& [key,canvas]:impl_->gpu_canvases)if(canvas.provider->has_completed_retirements())return true;
 #endif
 #endif

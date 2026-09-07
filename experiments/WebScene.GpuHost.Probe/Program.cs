@@ -27,7 +27,9 @@ internal static class Program
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_shutdown")]
     internal static extern int ShutdownGraphite();
     [STAThread]
-    public static int Main(string[] args) => args.Contains("--ganesh-window")
+    public static int Main(string[] args) => args.Contains("--webgpu-document")
+        ? AppBuilder.Configure<WebGpuDocumentProbeApp>().UsePlatformDetect().StartWithClassicDesktopLifetime(args)
+        : args.Contains("--ganesh-window")
         ? AppBuilder.Configure<GaneshWindowProbeApp>().UsePlatformDetect().StartWithClassicDesktopLifetime(args)
         : AppBuilder.Configure<ProbeApp>().UsePlatformDetect().StartWithClassicDesktopLifetime(args);
 }

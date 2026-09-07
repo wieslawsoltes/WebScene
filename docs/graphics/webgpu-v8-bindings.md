@@ -1592,3 +1592,23 @@ with no skips, verifying the initial URL, runtime-worker invocation, successful
 admission, and safe teardown when the policy throws. The GPU host probe builds.
 The normal surface still needs producer/consumer negotiation before enabling
 this option; the callback test does not establish end-to-end window rendering.
+
+### Ordinary WebScene document window (2026-09-08)
+
+The opt-in NativeWebSceneView constructor now connects its host admission
+delegate and GPU composition consumer. The --webgpu-document host probe loads
+HTML through that view, requests an adapter/device, clears a 256x128 canvas, and
+submits it. The macOS window visibly displays the green canvas; screenshot:
+evidence/webgpu-document/macos-clear.png. Runtime diagnostics confirmed GPU
+exposure, submission, and RAF execution. Temporary tracing confirmed one
+scene image imported and drawn at 256x128; tracing was removed.
+
+This exposed and fixed ordinary task pumping failing to end GPU rendering
+opportunities (only the resize-specialized pump previously did so). The native
+runtime pixel-publication regression now uses the ordinary task pump and passes.
+Explicit CSS display:block and dimensions are currently needed by this demo:
+default inline canvas layout emitted a zero-sized GPU paint rectangle and is
+still an open defect. This screenshot proves a clear pass in the ordinary view,
+not Kestrel, full WebGPU support, calibrated color correctness, or lifecycle
+qualification. The demo's admission callback approves only its generated local
+document; it is an explicit trusted test host.
