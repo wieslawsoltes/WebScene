@@ -421,20 +421,21 @@ int main() {
                         require(gc_buffers->wrap(context,*adapter_service,device_handle,overflow).IsEmpty(),"Buffer wrapper registry was not bounded");
                         device.release_buffer(overflow); // Failed wrap did not take ownership.
                     });
+                    require(run("globalThis.mapExceptionSentinel={};globalThis.throwingMapException=class {constructor(){throw mapExceptionSentinel}};"),"Map exception fixture setup failed");
                     adapter_service->with_device(device_handle,[&](auto& device) {
                         for (size_t i=0;i<map_requests.size();++i) {
                             wgpu::BufferDescriptor descriptor{}; descriptor.size=64;
                             descriptor.usage=wgpu::BufferUsage::MapWrite|wgpu::BufferUsage::CopySrc;
                             auto buffer=device.native().CreateBuffer(&descriptor);
                             map_requests[i]=std::make_unique<v8_webgpu_map_request>(isolate,context,v8::Object::New(isolate),
-                                context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),
+                                context->Global()->Get(context,v8::String::NewFromUtf8(isolate,i==1 ? "throwingMapException" : "DOMException").ToLocalChecked()).ToLocalChecked().As<v8::Function>(),
                                 std::move(buffer),device.owner(),106+i);
                             auto promise=map_requests[i]->start(adapter_service->dawn().completions(),wgpu::MapMode::Write,8,16).ToLocalChecked();
                             require(context->Global()->Set(context,v8::String::NewFromUtf8(isolate,i==0 ? "asyncMapProbe" : i==1 ? "cancelMapProbe" : "allocationMapProbe").ToLocalChecked(),promise).FromMaybe(false),"Map promise publication failed");
                         }
                     });
-                    require(run("globalThis.asyncMapDone=false;globalThis.cancelMapDone=false;globalThis.allocationMapDone=false;allocationMapProbe.catch(e=>{if(!(e instanceof RangeError))throw e;allocationMapDone=true});asyncMapProbe.then(v=>{if(v!==undefined)throw new Error('map result');asyncMapDone=true});cancelMapProbe.catch(e=>{if(!(e instanceof DOMException)||e.name!=='AbortError')throw e;cancelMapDone=true});"),"Map promise observers failed");
-                    require(map_requests[1]->cancel() && !map_requests[1]->pending(),"Map cancellation failed");
+                    require(run("globalThis.asyncMapDone=false;globalThis.cancelMapDone=false;globalThis.allocationMapDone=false;allocationMapProbe.catch(e=>{if(!(e instanceof RangeError))throw e;allocationMapDone=true});asyncMapProbe.then(v=>{if(v!==undefined)throw new Error('map result');asyncMapDone=true});cancelMapProbe.catch(e=>{if(e!==mapExceptionSentinel)throw e;cancelMapDone=true});"),"Map promise observers failed");
+                    require(map_requests[1]->cancel() && !map_requests[1]->pending() && !map_requests[1]->cancel(),"Map cancellation with throwing exception factory failed");
                     async_buffers=std::make_unique<v8_webgpu_buffers>(isolate,context,3,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>());
                     adapter_service->with_device(device_handle,[&](auto& device) {
                         for (const char* name:{"bindingBuffer","bindingCancelBuffer","bindingReadBuffer"}) {

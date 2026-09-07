@@ -23,13 +23,25 @@ class v8_webgpu_map_request {
     }
     bool reject(const char* name) {
         auto context=realm_.Get(isolate_);
+        auto resolver=resolver_.Get(isolate_);
+        // Settle ownership before calling the exception factory. Even a damaged
+        // factory must not leave this request pending or permit recursive cancel.
+        [[maybe_unused]] auto keep_alive=wrapper_.Get(isolate_);
+        resolver_.Reset(); wrapper_.Reset();
         v8::Local<v8::Value> args[]{v8::String::NewFromUtf8Literal(isolate_,"Buffer mapping failed"),
             v8::String::NewFromUtf8(isolate_,name).ToLocalChecked()};
-        v8::Local<v8::Object> exception;
-        if (!dom_exception_.Get(isolate_)->NewInstance(context,2,args).ToLocal(&exception)) return false;
-        auto resolver=resolver_.Get(isolate_);
-        resolver_.Reset(); wrapper_.Reset();
-        return resolver->Reject(context,exception).FromMaybe(false);
+        v8::Local<v8::Value> reason;
+        {
+            v8::TryCatch caught(isolate_);
+            v8::Local<v8::Object> exception;
+            if (dom_exception_.Get(isolate_)->NewInstance(context,2,args).ToLocal(&exception)) reason=exception;
+            else {
+                if (caught.HasTerminated()) return false;
+                if (caught.HasCaught()) reason=caught.Exception();
+            }
+        }
+        if (reason.IsEmpty()) reason=v8::Exception::Error(v8::String::NewFromUtf8Literal(isolate_,"Mapping exception construction failed"));
+        return resolver->Reject(context,reason).FromMaybe(false);
     }
     bool reject_allocation() {
         auto resolver=resolver_.Get(isolate_);
@@ -87,7 +99,7 @@ public:
     // owns range offsets/mode and must use GetConstMappedRange for READ mappings.
     template<class Attach> bool complete(completion_record record,Attach attach) {
         check_scope();
-        if (record.operation!=operation_ || record.owner!=owner_ || retired_) return false;
+        if (record.operation!=operation_ || record.owner!=owner_ || retired_ || !started_) return false;
         if (isolate_->GetCurrentContext()!=realm_.Get(isolate_)) throw std::logic_error("Map completion belongs to another realm");
         retired_=true;
         if (resolver_.IsEmpty()) return true; // Late callback after cancellation.

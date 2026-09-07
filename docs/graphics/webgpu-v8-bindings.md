@@ -378,3 +378,17 @@ error-scope/uncaptured-error integration, loss delivery, all invalid-descriptor
 and saturation cases, trusted DOMException-construction reentrancy, and complete
 WebIDL interface exposure remain unfinished or unqualified. No app-level WebGPU
 readiness or conformance claim follows from this test.
+
+### Mapping rejection remains settled if exception construction fails
+
+The map request now clears pending resolver ownership before invoking its exception
+factory, while a local handle retains the wrapper through construction. A thrown
+JavaScript exception becomes the rejection reason instead of leaving a pending
+request. Repeated cancel remains inert, and completions for requests that were
+never started are ignored.
+
+The rebuilt macOS runtime test deliberately supplies a throwing exception factory
+for a canceled native map. It verifies thrown-value identity in the promise
+rejection, cleared pending state, repeat cancellation and late callback retirement.
+The ordinary prototype cancellation/remap tests continue to verify AbortError.
+Broader public error-scope and device-loss integration remains outstanding.
