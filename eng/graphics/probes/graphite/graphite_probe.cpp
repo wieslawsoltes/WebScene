@@ -58,6 +58,15 @@ bool wait(const wgpu::Instance& instance, wgpu::Future future) {
 }
 } // namespace
 
+struct DawnRuntime {
+    // Declare callback storage first so it outlives device destruction.
+    std::shared_ptr<std::atomic<bool>> error=std::make_shared<std::atomic<bool>>(false);
+    wgpu::Instance instance;
+    wgpu::Adapter adapter;
+    wgpu::Device device;
+    unsigned initializations=0;
+};
+static thread_local DawnRuntime hostRuntime;
 static thread_local unsigned hostDestinationTexture=0;
 static thread_local std::function<int(bool)> pendingProducer;
 int main(int argc, char** argv) {
@@ -71,24 +80,33 @@ int main(int argc, char** argv) {
     else return finish("failed", "Unsupported backend", 1);
     options.forceFallbackAdapter = false;
 
-    auto error=std::make_shared<std::atomic<bool>>(false); // Retained through asynchronous device use.
-    constexpr auto timedWait = wgpu::InstanceFeatureName::TimedWaitAny;
-    wgpu::InstanceDescriptor instanceDescriptor{};
-    instanceDescriptor.requiredFeatureCount = 1;
-    instanceDescriptor.requiredFeatures = &timedWait;
-    auto instance = wgpu::CreateInstance(&instanceDescriptor);
-    if (!instance) return finish("failed", "Instance creation failed", 1);
-
-    struct AdapterResult { wgpu::Adapter adapter; std::string message; };
-    auto adapterResult = std::make_shared<AdapterResult>();
-    auto adapterFuture = instance.RequestAdapter(&options, wgpu::CallbackMode::WaitAnyOnly,
-        [adapterResult](wgpu::RequestAdapterStatus status, wgpu::Adapter adapter, wgpu::StringView message) {
-            if (status == wgpu::RequestAdapterStatus::Success) adapterResult->adapter = std::move(adapter);
-            adapterResult->message = text(message);
-        });
-    if (!wait(instance, adapterFuture)) return finish("failed", "Adapter request timed out", 1);
-    if (!adapterResult->adapter) return finish("unavailable", adapterResult->message, 77);
-    const auto& adapter = adapterResult->adapter;
+    DawnRuntime standaloneRuntime;
+    auto& runtime=hostDestinationTexture ? hostRuntime : standaloneRuntime;
+    auto error=runtime.error;
+    if (error->load()) return finish("failed","Dawn runtime has an uncaptured error",1);
+    auto& instance=runtime.instance;
+    auto& adapter=runtime.adapter;
+    auto& device=runtime.device;
+    if (!instance) {
+        constexpr auto timedWait = wgpu::InstanceFeatureName::TimedWaitAny;
+        wgpu::InstanceDescriptor instanceDescriptor{};
+        instanceDescriptor.requiredFeatureCount = 1;
+        instanceDescriptor.requiredFeatures = &timedWait;
+        instance = wgpu::CreateInstance(&instanceDescriptor);
+        if (!instance) return finish("failed", "Instance creation failed", 1);
+    }
+    if (!adapter) {
+        struct AdapterResult { wgpu::Adapter adapter; std::string message; };
+        auto adapterResult = std::make_shared<AdapterResult>();
+        auto adapterFuture = instance.RequestAdapter(&options, wgpu::CallbackMode::WaitAnyOnly,
+            [adapterResult](wgpu::RequestAdapterStatus status, wgpu::Adapter adapter, wgpu::StringView message) {
+                if (status == wgpu::RequestAdapterStatus::Success) adapterResult->adapter = std::move(adapter);
+                adapterResult->message = text(message);
+            });
+        if (!wait(instance, adapterFuture)) return finish("failed", "Adapter request timed out", 1);
+        if (!adapterResult->adapter) return finish("unavailable", adapterResult->message, 77);
+        adapter = adapterResult->adapter;
+    }
     wgpu::AdapterInfo info{};
     if (adapter.GetInfo(&info) != wgpu::Status::Success)
         return finish("failed", "Cannot inspect adapter", 1);
@@ -97,29 +115,32 @@ int main(int argc, char** argv) {
          info.adapterType != wgpu::AdapterType::IntegratedGPU))
         return finish("unavailable", "Selected adapter is not confirmed hardware on the requested backend", 77);
 
-    struct DeviceResult { wgpu::Device device; std::string message; };
-    auto deviceResult = std::make_shared<DeviceResult>();
-    wgpu::DeviceDescriptor deviceDescriptor{};
-    const std::array sharedFeatures{wgpu::FeatureName::SharedTextureMemoryIOSurface,
-        wgpu::FeatureName::SharedFenceMTLSharedEvent};
-    if (sharedOutput) {
-        for (auto feature:sharedFeatures) if (!adapter.HasFeature(feature))
-            return finish("unavailable","IOSurface sharing features unavailable",77);
-        deviceDescriptor.requiredFeatureCount=sharedFeatures.size();
-        deviceDescriptor.requiredFeatures=sharedFeatures.data();
+    if (!device) {
+        struct DeviceResult { wgpu::Device device; std::string message; };
+        auto deviceResult = std::make_shared<DeviceResult>();
+        wgpu::DeviceDescriptor deviceDescriptor{};
+        const std::array sharedFeatures{wgpu::FeatureName::SharedTextureMemoryIOSurface,
+            wgpu::FeatureName::SharedFenceMTLSharedEvent};
+        if (sharedOutput) {
+            for (auto feature:sharedFeatures) if (!adapter.HasFeature(feature))
+                return finish("unavailable","IOSurface sharing features unavailable",77);
+            deviceDescriptor.requiredFeatureCount=sharedFeatures.size();
+            deviceDescriptor.requiredFeatures=sharedFeatures.data();
+        }
+        deviceDescriptor.SetUncapturedErrorCallback(
+            [](const wgpu::Device&, wgpu::ErrorType, wgpu::StringView, std::atomic<bool>* state) {
+                state->store(true);
+            }, error.get());
+        auto deviceFuture = adapter.RequestDevice(&deviceDescriptor, wgpu::CallbackMode::WaitAnyOnly,
+            [deviceResult](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
+                if (status == wgpu::RequestDeviceStatus::Success) deviceResult->device = std::move(device);
+                deviceResult->message = text(message);
+            });
+        if (!wait(instance, deviceFuture)) return finish("failed", "Device request timed out", 1);
+        if (!deviceResult->device) return finish("failed", deviceResult->message, 1);
+        device = deviceResult->device;
+        ++runtime.initializations;
     }
-    deviceDescriptor.SetUncapturedErrorCallback(
-        [](const wgpu::Device&, wgpu::ErrorType, wgpu::StringView, std::atomic<bool>* state) {
-            state->store(true);
-        }, error.get());
-    auto deviceFuture = adapter.RequestDevice(&deviceDescriptor, wgpu::CallbackMode::WaitAnyOnly,
-        [deviceResult](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
-            if (status == wgpu::RequestDeviceStatus::Success) deviceResult->device = std::move(device);
-            deviceResult->message = text(message);
-        });
-    if (!wait(instance, deviceFuture)) return finish("failed", "Device request timed out", 1);
-    if (!deviceResult->device) return finish("failed", deviceResult->message, 1);
-    const auto& device = deviceResult->device;
 
     // Non-row-aligned width exercises the texture-copy layout, not just the first pixel.
     constexpr uint32_t width = 17, height = 4, rowBytes = 256;
@@ -325,6 +346,9 @@ int main(int argc, char** argv) {
 }
 
 #if defined(__APPLE__) && defined(WEBSCENE_GRAPHITE_HOST_PROBE)
+extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_initializations() {
+    return hostRuntime.initializations;
+}
 // Diagnostic bridge only: caller supplies a current CGL context and a 17x4 2D
 // texture. Defers producer delivery and GL retirement; not a production API.
 extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_poll(int drain) {

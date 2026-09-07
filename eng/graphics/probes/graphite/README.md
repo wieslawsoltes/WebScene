@@ -254,3 +254,28 @@ still uses synchronous request waits and is recreated per invocation. Pending st
 is single-transfer and thread-local; cancellation, allocation-failure and device-loss
 paths need further qualification. Production requires persistent engine-owned state,
 bounded pooling and completion wakes rather than this diagnostic polling interface.
+
+### Persistent Dawn runtime across host submissions (2026-09-07)
+
+The host diagnostic now retains its Dawn instance, hardware adapter and device
+on its calling thread. Initialization occurs once; an uncaptured device error
+makes later submissions fail instead of silently rebuilding the device.
+Callback state outlives device destruction. Standalone invocations retain their
+own runtime and pixel-verification path.
+
+The Avalonia probe submits eight sequential native compositions before importing
+the final texture into its compositor. Every submission rejects overlap, polls
+producer and GL completion, and rejects duplicate completion. It checks exactly
+one successful Dawn device initialization. This verifies repeated native
+submission and resource retirement, not eight displayed frames.
+
+Local Apple M4 / Metal validation:
+- Host run exited 0: graphiteSubmissionsCompleted=8,
+  dawnDeviceInitializations=1, sharedTextureUpdateCompleted=true,
+  visualCommitCompleted=true, presentationVerified=false.
+- Standalone IOSurface/CGL diagnostic exited 0 with all 68 pixels verified.
+
+Graphite contexts, recordings, canvas pools and output allocations are still
+created per submission. The probe has no device-loss recovery, throughput
+qualification, browser bindings or production WebScene presenter integration.
+This evidence closes no epic sub-issue.

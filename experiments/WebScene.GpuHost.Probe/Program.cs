@@ -12,6 +12,8 @@ internal static class Program
     internal static extern int RenderGraphite(uint texture);
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_poll")]
     internal static extern int PollGraphite(int drain);
+    [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_initializations")]
+    internal static extern uint GraphiteInitializations();
     [STAThread]
     public static int Main(string[] args) => AppBuilder.Configure<ProbeApp>()
         .UsePlatformDetect().StartWithClassicDesktopLifetime(args);
@@ -37,6 +39,7 @@ internal sealed class ProbeApp : Application
                     bool graphiteSource = Environment.GetCommandLineArgs().Contains("--graphite");
                     bool sharedTextureUpdateCompleted = false;
                     bool visualCommitCompleted = false;
+                    int graphiteSubmissionsCompleted = 0;
                     if (interop is not null && sharing?.CanCreateSharedContext == true)
                     {
                         using var glContext = sharing.CreateSharedContext()
@@ -58,14 +61,15 @@ internal sealed class ProbeApp : Application
                                 gl.Clear(GlConsts.GL_COLOR_BUFFER_BIT); gl.Flush();
                             }
                             finally { gl.BindFramebuffer(GlConsts.GL_FRAMEBUFFER,0); gl.DeleteFramebuffer(framebuffer); }
-                            if (graphiteSource) {
+                        }
+                        if (graphiteSource) {
+                          for (int submission=0; submission<8; submission++) {
+                            using (glContext.EnsureCurrent()) {
                                 if (Program.RenderGraphite((uint)texture.TextureId) != 0)
                                     throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
                                 if (Program.RenderGraphite((uint)texture.TextureId) == 0)
                                     throw new InvalidOperationException("Overlapping host submission was accepted");
                             }
-                        }
-                        if (graphiteSource) {
                             var deadline = DateTime.UtcNow.AddSeconds(30);
                             while (true) {
                                 int completion;
@@ -75,6 +79,7 @@ internal sealed class ProbeApp : Application
                                         if (Program.PollGraphite(0) != -1)
                                             throw new InvalidOperationException("Duplicate completion was accepted");
                                     }
+                                    graphiteSubmissionsCompleted++;
                                     break;
                                 }
                                 if (completion < 0 || DateTime.UtcNow >= deadline) {
@@ -83,6 +88,9 @@ internal sealed class ProbeApp : Application
                                 }
                                 await Task.Delay(1);
                             }
+                          }
+                          if (Program.GraphiteInitializations() != 1)
+                              throw new InvalidOperationException("Dawn device was recreated between submissions");
                         }
                         using var surface = visual.Compositor.CreateDrawingSurface();
                         await using var imported = interop.ImportImage(texture);
@@ -122,6 +130,8 @@ internal sealed class ProbeApp : Application
                         isLost = interop?.IsLost,
                         canCreateSharedOpenGlContext = sharing?.CanCreateSharedContext ?? false,
                         graphiteSource,
+                        graphiteSubmissionsCompleted,
+                        dawnDeviceInitializations = graphiteSource ? Program.GraphiteInitializations() : 0,
                         sharedTextureUpdateCompleted,
                         visualCommitCompleted,
                         presentationVerified = false
