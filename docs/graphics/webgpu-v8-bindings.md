@@ -45,3 +45,27 @@ discovery, followed by its device/resource/completion tests. Both
 on the macOS arm64 hardware build. Mapping tests also cover fallback/preferences,
 compatibility, unknown levels and unsupported XR. This verifies native selection
 plumbing, not the still-unimplemented navigator.gpu promise/wrapper exposure.
+
+## Asynchronous adapter promise delivery
+
+`v8_webgpu_adapter_request` bridges native Dawn discovery to a V8 promise. It
+reserves the bounded graphics completion mailbox, retains native callback results
+separately from V8 handles, and resolves only during engine-thread delivery for
+the matching operation, owner, isolate and realm. Driver callbacks capture no V8
+handles. Unsupported requests or admission backpressure resolve null; native
+failure/cancellation also resolves null. Destruction abandons native storage so a
+late callback cannot publish an adapter into a discarded binding object.
+
+The runtime fixture now starts real asynchronous Dawn discovery from an active
+V8 graphics callback and observes its JavaScript promise continuation while RAF
+is paused. A separate request is cancelled through the mailbox; its promise
+resolves null without invoking the wrapper factory. The test waits for physical
+native callback retirement as well as logical cancellation. The enabled macOS
+`webscene_graphics_v8_runtime_tests` passes.
+
+This is the promise-delivery component, not complete navigator.gpu exposure. The
+fixture uses a diagnostic JavaScript wrapper while retaining the real native
+adapter. The standards GPUAdapter object/prototype/feature/limit registry and
+secure-origin navigator integration still need implementation. Navigation-wide
+binding teardown must route through the existing cancellation lifecycle before
+releasing the realm; that full integration remains unqualified.

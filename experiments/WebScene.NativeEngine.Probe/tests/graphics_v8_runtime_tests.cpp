@@ -3,6 +3,7 @@
 #include "graphics/graphics_service.h"
 #include "graphics/engine_wake.h"
 #include "graphics/v8_release_registry.h"
+#include "graphics/v8_webgpu_adapter_request.h"
 #include "graphics/image_lease_abi.h"
 #include <v8.h>
 #include <iostream>
@@ -252,10 +253,34 @@ int main() {
             runtime.set_visible(false);
             auto wake=std::make_shared<engine_wake>();
             const auto owner_thread=std::this_thread::get_id();
-            bool delivered=false;
+            bool delivered=false, adapter_delivered=false, adapter_cancelled=false;
+            graphics_service* adapter_service=nullptr;
+            std::unique_ptr<v8_webgpu_adapter_request> adapter_request, cancelled_adapter;
+            wgpu::Adapter discovered_adapter;
             std::shared_ptr<release_channel> releases;
             std::unique_ptr<v8_release_registry> wrappers;
             auto& graphics=runtime.initialize_graphics(wake,[&](completion_record record) {
+                if (record.operation==101) {
+                    auto* isolate=v8::Isolate::GetCurrent();
+                    require(record.status==completion_status::cancelled,"Adapter cancellation lost");
+                    require(cancelled_adapter->complete(isolate,isolate->GetCurrentContext(),record,
+                        [](wgpu::Adapter) -> v8::Local<v8::Value> { throw std::runtime_error("Cancelled adapter was wrapped"); }),
+                        "Cancelled adapter promise did not resolve");
+                    adapter_cancelled=true;
+                    return;
+                }
+                if (record.operation==100) {
+                    auto* isolate=v8::Isolate::GetCurrent();
+                    auto context=isolate->GetCurrentContext();
+                    require(adapter_request->complete(isolate,context,record,[&](wgpu::Adapter adapter) -> v8::Local<v8::Value> {
+                        discovered_adapter=std::move(adapter);
+                        // Diagnostic wrapper only; the standards GPUAdapter registry is separate work.
+                        return v8::Object::New(isolate);
+                    }), "Adapter promise completion failed");
+                    require(!adapter_request->pending(), "Adapter promise remained pending");
+                    adapter_delivered=true;
+                    return;
+                }
                 require(((record.operation==1 || record.operation==2) && record.status==completion_status::success)
                     || (record.operation==3 && record.status==completion_status::cancelled),"unexpected completion");
                 if (record.operation==3) {
@@ -274,6 +299,23 @@ int main() {
                 auto context=isolate->GetCurrentContext();
                 if (record.operation==1) {
                     test_v8_webgpu_adapter_options(isolate,context);
+                    v8::Local<v8::Promise> promise;
+                    webgpu_adapter_options options;
+                    adapter_request=v8_webgpu_adapter_request::start(isolate,context,options,
+                        adapter_service->dawn().instance(),adapter_service->dawn().completions(),
+                        {adapter_service->engine_identity(),new_owner_token(),0},100,wgpu::BackendType::Undefined,promise);
+                    require(adapter_request && adapter_request->pending(), "Adapter request did not become pending");
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"adapterProbePromise"),promise).FromMaybe(false),
+                        "Adapter promise publication failed");
+                    const resource_owner cancelled_owner{adapter_service->engine_identity(),new_owner_token(),0};
+                    v8::Local<v8::Promise> cancelled_promise;
+                    cancelled_adapter=v8_webgpu_adapter_request::start(isolate,context,options,
+                        adapter_service->dawn().instance(),adapter_service->dawn().completions(),
+                        cancelled_owner,101,wgpu::BackendType::Undefined,cancelled_promise);
+                    require(cancelled_adapter && cancelled_adapter->pending(),"Cancelled request was not admitted");
+                    adapter_service->dawn().completions()->cancel_owner(cancelled_owner);
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"cancelledAdapterPromise"),cancelled_promise).FromMaybe(false),
+                        "Cancelled adapter promise publication failed");
                     bool rejected=false;
                     try { runtime.load_url("https://graphics.test/next"); }
                     catch (const std::logic_error&) { rejected=true; }
@@ -308,6 +350,7 @@ int main() {
             });
             wrong.join();
             require(wrong_thread_rejected,"wrong-thread initialization accepted");
+            adapter_service=&graphics;
             releases=graphics.release_endpoint(1);
             auto mailbox=graphics.dawn().completions();
             auto ticket=mailbox->reserve(1,{graphics.engine_identity(),new_owner_token(),0}).value();
@@ -320,6 +363,14 @@ int main() {
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
             require(delivered,"hidden completion did not progress");
+            require(runtime.execute("globalThis.adapterPromiseDone=false; globalThis.cancelledAdapterDone=false; adapterProbePromise.then(a=>{if(!a)throw new Error('adapter absent');adapterPromiseDone=true}); cancelledAdapterPromise.then(a=>{if(a!==null)throw new Error('cancelled adapter present');cancelledAdapterDone=true});", "adapter-promise-observe"),"Adapter observer failed");
+            while ((!adapter_delivered || !adapter_cancelled || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
+                if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Adapter task failed");
+                else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
+            }
+            require(adapter_delivered && discovered_adapter && adapter_cancelled,"Actual Dawn adapter discovery/cancellation failed");
+            require(runtime.execute("if(!adapterPromiseDone || !cancelledAdapterDone || rafDone!==0)throw new Error('adapter promise did not progress while hidden');", "adapter-promise-check"),"Adapter promise checkpoint failed");
+            adapter_request.reset(); cancelled_adapter.reset(); discovered_adapter=nullptr;
             runtime.notify_low_memory();
             require(weak_releases==0,"GC callback executed a native graphics release");
             require(runtime.has_pending_tasks(),"GC did not enqueue release work");
