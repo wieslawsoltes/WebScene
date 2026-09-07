@@ -46,3 +46,20 @@ revision or from the same-device Metal test path.
   consumers, device removal, import failure and repeated resource/handle teardown.
 - Record Windows GPU/driver/LUID manifests and copy/residency counters. No Windows
   hardware pass or zero-copy Windows rendering result has been obtained yet.
+
+## NT handle ownership implementation
+
+`nt_handle.h` implements move-only adoption, duplication, release and idempotent
+reset. The Windows adapter uses DuplicateHandle with non-inheritable, same-access
+semantics and closes only its owned handles. Legacy DXGI shared-handle values must
+not enter this NT-handle wrapper. No texture/fence import uses it yet.
+
+Portable ownership tests cover moves, replacement, duplicate failure, explicit
+transfer and preservation of the borrowed source. CTest passes locally in 0.32
+seconds, and AddressSanitizer/UndefinedBehaviorSanitizer also pass. A Windows-only
+branch creates and duplicates an NT event, closes the original, then signals/waits
+through the duplicate. That native branch has not run on this macOS host.
+
+The SDK probe build now includes this test, and the hosted SDK workflow runs it
+as a non-GPU test. Pending hosted execution is not a Windows handle test pass,
+and neither event-handle tests nor compilation prove DXGI texture/fence sharing.
