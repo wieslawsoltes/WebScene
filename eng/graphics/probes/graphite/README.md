@@ -120,3 +120,14 @@ This replaces the direct-owner lifetime in the earlier probe. It tests preservat
 across an allocated/cancelled resize, not presentation of a submitted replacement.
 Actual scene-v3 acquisition, framework presentation and JS canvas bindings remain
 outside this standalone native test.
+
+## Submitted resize generations
+
+The resize replacement is now submitted and cleared green through Dawn, rather
+than cancelled. Both old and new images are retained by consumers after the canvas
+and scene references are disposed, then sampled in the same Graphite recording.
+The old generation remains red with 50% opacity in its 12-pixel clip; the resized
+9x4 generation appears green in a separate 10-pixel clip. All 68 pixels pass on M4,
+including the remaining background. Both consumer leases retire only after the
+ordered diagnostic readback completes. This supersedes the cancelled-resize scope
+above; it still does not exercise the application host or JavaScript bindings.

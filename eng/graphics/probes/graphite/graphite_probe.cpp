@@ -144,11 +144,20 @@ int main(int argc, char** argv) {
     if (!resized || resized->metadata.allocation==consumer->describe().allocation
         || consumer->describe().width!=width)
         return finish("failed","Resize changed the retained allocation",1);
-    resized.reset(); // Unsubmitted replacement cancels without affecting old content.
+    auto resizeEncoder=device.CreateCommandEncoder();
+    attachment.view=resized->texture.CreateView(); attachment.clearValue={0,1,0,1};
+    auto resizePass=resizeEncoder.BeginRenderPass(&producerPass); resizePass.End();
+    auto resizeCommands=resizeEncoder.Finish();
+    auto replacement=canvasOwner->submit(std::move(*resized),resizeCommands); resized.reset();
+    if (!replacement) return finish("failed","Replacement submission failed",1);
+    auto replacementConsumer=replacement->image.begin_consumer();
+    if (!replacementConsumer) return finish("failed","Replacement consumer failed",1);
+    replacement.reset();
     submitted.reset(); canvasOwner.reset();
     produced=nullptr; attachment.view=nullptr;
     // Resolve through the real lease after canvas and scene ownership ends.
     auto retainedTexture=dawn_canvas_images::resolve(*consumer,device);
+    auto replacementTexture=dawn_canvas_images::resolve(*replacementConsumer,device);
     auto recorder=graphite->makeRecorder();
     auto backendTexture=skgpu::graphite::BackendTextures::MakeDawn(texture.Get());
     auto surface=SkSurfaces::WrapBackendTexture(recorder.get(),backendTexture,nullptr,nullptr);
@@ -162,6 +171,12 @@ int main(int argc, char** argv) {
     canvas->save(); canvas->clipRect(SkRect::MakeLTRB(2,1,8,3)); canvas->translate(1,0);
     SkPaint paint; paint.setAlphaf(0.5f);
     canvas->drawImage(image,0,0,SkSamplingOptions(),&paint); canvas->restore();
+    auto replacementImage=SkImages::WrapTexture(recorder.get(),
+        skgpu::graphite::BackendTextures::MakeDawn(replacementTexture.Get()),kPremul_SkAlphaType,nullptr,
+        skgpu::Origin::kTopLeft,SkImages::GenerateMipmapsFromBase::kNo);
+    if (!replacementImage) return finish("failed","Replacement image wrapping failed",1);
+    canvas->save(); canvas->clipRect(SkRect::MakeLTRB(10,1,15,3));
+    canvas->drawImage(replacementImage,9,0); canvas->restore();
     auto recording=recorder->snap();
     skgpu::graphite::InsertRecordingInfo insert; insert.fRecording=recording.get();
     if (!graphite->insertRecording(insert) || !graphite->submit())
@@ -194,7 +209,9 @@ int main(int argc, char** argv) {
         for (uint32_t x = 0; x < width; ++x)
             for (uint32_t c = 0; c < 4; ++c) {
                 constexpr std::array<int,4> blended{153,51,77,255};
-                const auto& wanted=(x>=2 && x<8 && y>=1 && y<3) ? blended : expected;
+                constexpr std::array<int,4> green{0,255,0,255};
+                const auto& wanted=(x>=10 && x<15 && y>=1 && y<3) ? green
+                    : (x>=2 && x<8 && y>=1 && y<3) ? blended : expected;
                 valid &= std::abs(int(pixels[y * rowBytes + x * 4 + c]) - wanted[c]) <= 1;
             }
     buffer.Unmap();
@@ -202,6 +219,8 @@ int main(int argc, char** argv) {
     // this consumer's GPU sampling is complete before its lease is retired.
     image.reset(); retainedTexture=nullptr;
     consumer->complete(); consumer.reset();
+    replacementImage.reset(); replacementTexture=nullptr;
+    replacementConsumer->complete(); replacementConsumer.reset();
     if (!valid) return finish("failed", "Readback pixels differ from clipped image composition", 1);
     std::cout << "{\"schemaVersion\":1,\"probe\":\"graphite-shared-device\",\"status\":\"passed\","
               << "\"hardwareAccelerated\":true,\"backend\":" << json(backend)
