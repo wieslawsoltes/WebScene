@@ -449,6 +449,30 @@ int main() {
         if(!stale || replacement.generation==shader.generation)throw std::runtime_error("Shader generation identity reused");
         device.release_shader_module(replacement);
     });
+    auto shader_releases=root.release_endpoint();
+    resource_handle<wgpu::ShaderModule> retired_shader,reused_shader;
+    release_ticket retired_ticket;
+    root.with_device(owned_device,[&](auto& device) {
+        wgpu::ShaderSourceWGSL source{};source.code="@compute @workgroup_size(1) fn main() {}";
+        wgpu::ShaderModuleDescriptor descriptor{};descriptor.nextInChain=&source;
+        retired_shader=device.create_shader_module(descriptor);
+        retired_ticket=shader_releases->reserve(graphics_service::deferred_shader_module_release(owned_device,retired_shader)).value();
+        device.release_shader_module(retired_shader);
+        reused_shader=device.create_shader_module(descriptor);
+    });
+    std::thread stale_shader_finalizer([&] {if(!shader_releases->publish(retired_ticket))std::terminate();});
+    stale_shader_finalizer.join();
+    root.drain_commands();
+    root.with_device(owned_device,[&](auto& device) {
+        device.with_shader_module(reused_shader,[](const auto& native) {if(!native)throw std::runtime_error("Stale finalizer released replacement shader");});
+        if(device.live_shader_modules()!=1)throw std::runtime_error("Stale shader release changed live count");
+    });
+    auto release_shader_ticket=shader_releases->reserve(graphics_service::deferred_shader_module_release(owned_device,reused_shader)).value();
+    std::thread shader_finalizer([&] {if(!shader_releases->publish(release_shader_ticket))std::terminate();});shader_finalizer.join();
+    root.with_device(owned_device,[&](auto& device) {if(device.live_shader_modules()!=1)throw std::runtime_error("Finalizer released native shader inline");});
+    root.drain_commands();
+    root.with_device(owned_device,[&](auto& device) {if(device.live_shader_modules()!=0)throw std::runtime_error("Shader finalizer did not retire handle");});
+    if(shader_releases->occupied()!=0)return 1;
     auto second_adapter=std::make_shared<result>();
     auto adapter_ticket=mailbox->reserve(19,owner).value();
     service.instance().RequestAdapter(&options,wgpu::CallbackMode::AllowProcessEvents,

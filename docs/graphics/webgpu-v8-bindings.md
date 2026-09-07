@@ -783,3 +783,14 @@ lifetime guards and actual error-scope outcomes for valid and invalid WGSL throu
 the owned-module path. Dawn event and V8 runtime CTests both pass. Native shader
 ownership is now ready for the V8 module registry; JavaScript shader descriptors,
 compilation information and rendering pipeline/command bindings remain pending.
+
+### Deferred shader-module release
+
+Graphics-service release commands now carry generation-checked device and shader
+handles without native pointers. Finalizers can publish these commands through
+the existing bounded release channel. The engine resolves and retires the native
+shader reference; stale device/module handles are ignored.
+The macOS Dawn event test publishes releases from another thread, verifies no
+inline native retirement, and verifies a stale release cannot remove a replacement
+module in a reused table slot. Release storage returns to zero after draining.
+Dawn event and V8 runtime CTests pass. V8 shader-module wrappers remain pending.
