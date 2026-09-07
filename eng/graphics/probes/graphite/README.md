@@ -279,3 +279,22 @@ Graphite contexts, recordings, canvas pools and output allocations are still
 created per submission. The probe has no device-loss recovery, throughput
 qualification, browser bindings or production WebScene presenter integration.
 This evidence closes no epic sub-issue.
+
+### Persistent Graphite context (2026-09-07)
+
+The retained Dawn runtime now also owns one Graphite context. Frame closures
+retain that context while producer work is pending. Completion polling services
+Graphite's completion queue on its owner thread and waits until
+hasUnfinishedGpuWork() is false before successful delivery. This avoids relying
+on context destruction to retire each submission.
+
+The host diagnostic now runs 64 sequential submissions and asserts one Dawn
+device and one Graphite context initialization. Local Apple M4 / Metal run exited
+0 with graphiteSubmissionsCompleted=64, graphiteContextInitializations=1,
+dawnDeviceInitializations=1, sharedTextureUpdateCompleted=true and
+visualCommitCompleted=true. The standalone IOSurface/CGL test still passed all
+68 pixels. Only the final texture is imported into Avalonia; this does not
+verify 64 displayed frames or establish a throughput/memory benchmark.
+
+Recorder, recording, canvas-pool and output-texture allocation reuse remain
+unfinished. No browser API or production presenter is added by this change.

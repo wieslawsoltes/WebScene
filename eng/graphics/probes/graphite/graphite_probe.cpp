@@ -64,7 +64,9 @@ struct DawnRuntime {
     wgpu::Instance instance;
     wgpu::Adapter adapter;
     wgpu::Device device;
+    std::shared_ptr<skgpu::graphite::Context> graphite;
     unsigned initializations=0;
+    unsigned graphiteInitializations=0;
 };
 static thread_local DawnRuntime hostRuntime;
 static thread_local unsigned hostDestinationTexture=0;
@@ -187,8 +189,12 @@ int main(int argc, char** argv) {
     skgpu::graphite::DawnBackendContext backendContext;
     backendContext.fInstance=instance; backendContext.fDevice=device;
     backendContext.fQueue=device.GetQueue();
-    auto graphite=skgpu::graphite::ContextFactory::MakeDawn(backendContext,{});
-    if (!graphite) return finish("failed","Graphite context creation failed",1);
+    if (!runtime.graphite) {
+        runtime.graphite=skgpu::graphite::ContextFactory::MakeDawn(backendContext,{});
+        if (!runtime.graphite) return finish("failed","Graphite context creation failed",1);
+        ++runtime.graphiteInitializations;
+    }
+    auto graphite=runtime.graphite;
     // Native WebGPU producer writes a separate image, then Graphite samples it
     // on the same queue. No CPU wait or pixel upload sits between the submissions.
     using namespace webscene::graphics;
@@ -286,6 +292,10 @@ int main(int argc, char** argv) {
             if (drain && completed->load(std::memory_order_acquire)==0) wait(instance,future);
             const auto status=completed->load(std::memory_order_acquire);
             if (!status) return 0;
+            // Service Graphite's completion queue on its owning thread so a
+            // persistent context can release completed command buffers/resources.
+            graphite->checkAsyncWorkCompletion();
+            if (status==1 && graphite->hasUnfinishedGpuWork()) return 0;
             bool delivered=status==1 && !error->load();
             if (delivered) delivered=check_iosurface_gl(static_cast<IOSurfaceRef>(sharedSurface.get()),
                 width,height,nullptr,rowBytes,target);
@@ -348,6 +358,9 @@ int main(int argc, char** argv) {
 #if defined(__APPLE__) && defined(WEBSCENE_GRAPHITE_HOST_PROBE)
 extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_initializations() {
     return hostRuntime.initializations;
+}
+extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_context_initializations() {
+    return hostRuntime.graphiteInitializations;
 }
 // Diagnostic bridge only: caller supplies a current CGL context and a 17x4 2D
 // texture. Defers producer delivery and GL retirement; not a production API.

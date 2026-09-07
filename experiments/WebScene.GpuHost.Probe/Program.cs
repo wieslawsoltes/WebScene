@@ -14,6 +14,8 @@ internal static class Program
     internal static extern int PollGraphite(int drain);
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_initializations")]
     internal static extern uint GraphiteInitializations();
+    [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_context_initializations")]
+    internal static extern uint GraphiteContextInitializations();
     [STAThread]
     public static int Main(string[] args) => AppBuilder.Configure<ProbeApp>()
         .UsePlatformDetect().StartWithClassicDesktopLifetime(args);
@@ -63,7 +65,7 @@ internal sealed class ProbeApp : Application
                             finally { gl.BindFramebuffer(GlConsts.GL_FRAMEBUFFER,0); gl.DeleteFramebuffer(framebuffer); }
                         }
                         if (graphiteSource) {
-                          for (int submission=0; submission<8; submission++) {
+                          for (int submission=0; submission<64; submission++) {
                             using (glContext.EnsureCurrent()) {
                                 if (Program.RenderGraphite((uint)texture.TextureId) != 0)
                                     throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
@@ -91,6 +93,8 @@ internal sealed class ProbeApp : Application
                           }
                           if (Program.GraphiteInitializations() != 1)
                               throw new InvalidOperationException("Dawn device was recreated between submissions");
+                          if (Program.GraphiteContextInitializations() != 1)
+                              throw new InvalidOperationException("Graphite context was recreated between submissions");
                         }
                         using var surface = visual.Compositor.CreateDrawingSurface();
                         await using var imported = interop.ImportImage(texture);
@@ -131,6 +135,7 @@ internal sealed class ProbeApp : Application
                         canCreateSharedOpenGlContext = sharing?.CanCreateSharedContext ?? false,
                         graphiteSource,
                         graphiteSubmissionsCompleted,
+                        graphiteContextInitializations = graphiteSource ? Program.GraphiteContextInitializations() : 0,
                         dawnDeviceInitializations = graphiteSource ? Program.GraphiteInitializations() : 0,
                         sharedTextureUpdateCompleted,
                         visualCommitCompleted,
