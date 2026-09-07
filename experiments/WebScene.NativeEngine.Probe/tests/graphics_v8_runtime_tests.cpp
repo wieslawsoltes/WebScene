@@ -10,6 +10,7 @@
 #include "graphics/v8_webgpu_devices.h"
 #include "graphics/v8_webgpu_adapters.h"
 #include "graphics/v8_webgpu_discovery.h"
+#include "graphics/webgpu_adapter_info.h"
 #include "graphics/v8_webgpu_mapped_ranges.h"
 #include "graphics/v8_webgpu_map_request.h"
 #include "graphics/image_lease_abi.h"
@@ -616,6 +617,14 @@ int main() {
                     auto feature_has=adapter_features.As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"has")).ToLocalChecked().As<v8::Function>();
                     adapter_fixture.with_adapter(adapter_handle,[&](const auto& native) {
                         verify_v8_limits(isolate,context,adapter_object,native);
+                        auto info=read_webgpu_adapter_info(native,false);
+                        wgpu::AdapterInfo native_info{};require(native.GetInfo(&native_info)==wgpu::Status::Success,"Adapter info query failed");
+                        require(info.description==webgpu_info_string(native_info.description) && !info.is_fallback_adapter,"Adapter info snapshot incorrect");
+                        require(info.subgroup_min_size==(native.HasFeature(wgpu::FeatureName::Subgroups)?native_info.subgroupMinSize:4)
+                            && info.subgroup_max_size==(native.HasFeature(wgpu::FeatureName::Subgroups)?native_info.subgroupMaxSize:128),"Adapter subgroup information incorrect");
+                        require(webgpu_info_identifier(wgpu::StringView("vendor-123"))=="vendor-123"
+                            && webgpu_info_identifier(wgpu::StringView("Vendor Name")).empty()
+                            && webgpu_info_identifier(wgpu::StringView("a--b")).empty(),"Adapter identifier normalization rules incorrect");
                         for (const auto& feature:webgpu_feature_names) {
                             v8::Local<v8::Value> name=v8::String::NewFromUtf8(isolate,feature.name.data(),v8::NewStringType::kNormal,static_cast<int>(feature.name.size())).ToLocalChecked();
                             require(feature_has->Call(context,adapter_features,1,&name).ToLocalChecked()->BooleanValue(isolate)==native.HasFeature(feature.native),"Adapter capability snapshot differs from Dawn");

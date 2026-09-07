@@ -729,3 +729,20 @@ rejection, receiver branding and the prototype tag, and reads retained limits
 after device-registry disposal. Runtime CTest passes. This provides capability
 inspection in the internal bindings; public exposure, rendering commands and
 full browser conformance remain unfinished.
+
+### Native adapter-information extraction
+
+A native adapter-information value now owns vendor, architecture, device,
+description and subgroup metadata independently of Dawn's temporary AdapterInfo
+allocation. Identifier fields must satisfy the WebGPU normalized-identifier
+pattern; malformed/unknown values become empty strings rather than exposing
+nonconforming driver names. Subgroup limits use the actual adapter when the
+subgroups feature is supported, or the specified 4/128 defaults otherwise.
+
+Fallback classification is an explicit discovery-policy input. Inspection of the
+pinned Dawn source found that Vulkan's forceFallbackAdapter filter identifies
+SwiftShader via vendor/device IDs, while Metal rejects forced fallback. CPU
+adapter type alone is therefore not used as a fallback test. The macOS runtime
+test verifies copied description, subgroup values and identifier handling against
+a real adapter; CTest passes. JavaScript info/adapterInfo wrappers and propagation
+of authoritative discovery fallback state remain unfinished.
