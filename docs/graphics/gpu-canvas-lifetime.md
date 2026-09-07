@@ -503,3 +503,17 @@ framework recovery or browser-driven GPU checkpoint publication.
 
 The native engine regression suite also passes against the rebuilt library
 (11.86 seconds) after sharing the checkpoint-reset implementation.
+
+## Retained old/new resize pixel verification
+
+The Dawn pixel fixture now publishes a 32×32 red frame with allocation generation
+2 while a consumer lease still retains the previous 64×64 blue-toned frame. It
+checks distinct allocation identities and the old immutable dimensions, then
+copies both images diagnostically into separate buffer regions before disposing
+the owner. Both consumers retire after the queue fence. Exact verification covers
+all 4,096 old pixels and 1,024 new pixels, including the new image's padded row
+layout. The focused Metal hardware test passes in 0.48 seconds.
+
+This proves old/new image content remains distinct while the old consumer lease
+is outstanding. It does not guarantee physical overlap of GPU execution, and the
+diagnostic copies remain test-only rather than a presentation implementation.

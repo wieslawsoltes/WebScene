@@ -4,7 +4,7 @@
 #include <iostream>
 using namespace webscene::graphics;
 void test_canvas_consumer_pixels(dawn_event_service& service,const wgpu::Device& device) {
-    auto pool=std::make_unique<dawn_canvas_images>(device,64*64*4);
+    auto pool=std::make_unique<dawn_canvas_images>(device,2*64*64*4);
     auto frame=pool->acquire(image_metadata{300,0,1,1,400,1,64,64});
     auto queue=device.GetQueue();
     auto encoder=device.CreateCommandEncoder();
@@ -18,11 +18,25 @@ void test_canvas_consumer_pixels(dawn_event_service& service,const wgpu::Device&
     if (!submitted) throw std::runtime_error("canvas submission unexpectedly saturated");
     auto producer_status=submitted->status;
     auto consumer=submitted->image.begin_consumer();
+    auto resized=pool->acquire(image_metadata{300,0,2,2,400,2,32,32});
+    auto resized_encoder=device.CreateCommandEncoder();
+    wgpu::RenderPassColorAttachment resized_color{};
+    resized_color.view=resized->texture.CreateView(); resized_color.loadOp=wgpu::LoadOp::Clear;
+    resized_color.storeOp=wgpu::StoreOp::Store; resized_color.clearValue={1,0,0,1};
+    wgpu::RenderPassDescriptor resized_pass{}; resized_pass.colorAttachmentCount=1; resized_pass.colorAttachments=&resized_color;
+    auto resized_render=resized_encoder.BeginRenderPass(&resized_pass); resized_render.End();
+    auto resized_commands=resized_encoder.Finish();
+    auto newer=pool->submit(std::move(*resized),resized_commands); resized.reset();
+    if (!newer || newer->image.describe().allocation==submitted->image.describe().allocation
+        || newer->image.describe().allocation_generation!=2 || consumer->describe().width!=64)
+        throw std::runtime_error("resize reused a retained image allocation");
+    auto resized_status=newer->status;
+    auto resized_consumer=newer->image.begin_consumer();
     // Submit to the same queue before processing any completion. Queue order,
     // rather than a CPU wait or a pixel upload, makes producer writes visible.
     auto source_texture=dawn_canvas_images::resolve(*consumer,device);
     wgpu::BufferDescriptor buffer_descriptor{};
-    buffer_descriptor.size=64*256;
+    buffer_descriptor.size=(64+32)*256;
     buffer_descriptor.usage=wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead;
     auto readback=device.CreateBuffer(&buffer_descriptor);
     auto copy=device.CreateCommandEncoder();
@@ -31,29 +45,40 @@ void test_canvas_consumer_pixels(dawn_event_service& service,const wgpu::Device&
     destination.layout.bytesPerRow=256; destination.layout.rowsPerImage=64;
     wgpu::Extent3D extent{64,64,1};
     copy.CopyTextureToBuffer(&source,&destination,&extent);
+    source.texture=dawn_canvas_images::resolve(*resized_consumer,device);
+    destination.layout.offset=64*256; destination.layout.rowsPerImage=32;
+    extent={32,32,1}; copy.CopyTextureToBuffer(&source,&destination,&extent);
     auto consumer_commands=copy.Finish(); queue.Submit(1,&consumer_commands);
-    submitted.reset(); pool.reset();
+    submitted.reset(); newer.reset(); pool.reset();
     bool completed=false,queue_success=false,mapped=false,map_success=false;
     queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowProcessEvents,
         [&](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
             consumer->complete(); consumer.reset();
+            resized_consumer->complete(); resized_consumer.reset();
             queue_success=status==wgpu::QueueWorkDoneStatus::Success; completed=true;
         });
-    readback.MapAsync(wgpu::MapMode::Read,0,64*256,wgpu::CallbackMode::AllowProcessEvents,
+    readback.MapAsync(wgpu::MapMode::Read,0,(64+32)*256,wgpu::CallbackMode::AllowProcessEvents,
         [&](wgpu::MapAsyncStatus status,wgpu::StringView) { map_success=status==wgpu::MapAsyncStatus::Success; mapped=true; });
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
-    while ((!completed || !mapped || producer_status->load()==dawn_canvas_images::submission_status::pending) && std::chrono::steady_clock::now()<deadline) {
+    while ((!completed || !mapped || producer_status->load()==dawn_canvas_images::submission_status::pending
+        || resized_status->load()==dawn_canvas_images::submission_status::pending) && std::chrono::steady_clock::now()<deadline) {
         service.instance().ProcessEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     if (!completed || !mapped || !queue_success || !map_success
-        || producer_status->load()!=dawn_canvas_images::submission_status::success)
+        || producer_status->load()!=dawn_canvas_images::submission_status::success
+        || resized_status->load()!=dawn_canvas_images::submission_status::success)
         throw std::runtime_error("GPU image consumer completion failed");
-    const auto* pixels=static_cast<const uint8_t*>(readback.GetConstMappedRange(0,64*256));
+    const auto* pixels=static_cast<const uint8_t*>(readback.GetConstMappedRange(0,(64+32)*256));
     if (!pixels) throw std::runtime_error("GPU image diagnostic mapping failed");
     for (size_t i=0;i<64*64;++i) {
         if (pixels[4*i]!=64 || pixels[4*i+1]!=128 || pixels[4*i+2]!=191 || pixels[4*i+3]!=255)
             throw std::runtime_error("retained GPU image pixels differ from producer clear");
+    }
+    for (size_t y=0;y<32;++y) for (size_t x=0;x<32;++x) {
+        const auto* pixel=pixels+64*256+y*256+x*4;
+        if (pixel[0]!=255 || pixel[1]!=0 || pixel[2]!=0 || pixel[3]!=255)
+            throw std::runtime_error("resized GPU image pixels differ from new producer clear");
     }
     readback.Unmap();
 }
