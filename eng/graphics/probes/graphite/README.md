@@ -162,3 +162,16 @@ the test deliberately starts CGL after the Dawn diagnostic map establishes produ
 completion, and GL also reads back for verification. Thus it proves cross-API pixel
 compatibility only, not asynchronous steady-state synchronization or Avalonia host
 integration. Rectangle-to-host-2D texture handling and completion handoff remain.
+
+## Rectangle-to-2D compatibility copy
+
+The CGL consumer now blits its IOSurface-backed rectangle texture into a separate
+GL_TEXTURE_2D framebuffer before diagnostic verification. All 68 pixels still pass
+on M4. The destination allocation uses null initial data; glBlitFramebuffer performs
+the transfer on the GPU. This is one explicit GPU-local copy, not zero-copy, and
+must be counted if the actual Avalonia host adapter uses this route.
+
+The destination is currently created by the standalone probe, not supplied by
+Avalonia's shared context. Producer readiness still uses the diagnostic completion
+wait. Host context integration, asynchronous fences and sustained performance
+qualification remain outstanding.

@@ -21,7 +21,7 @@ inline bool check_iosurface_gl(IOSurfaceRef surface,unsigned width,unsigned heig
     if (created!=kCGLNoError || !context) return false;
     auto previous=CGLGetCurrentContext();
     if (CGLSetCurrentContext(context)!=kCGLNoError) { CGLDestroyContext(context); return false; }
-    GLuint texture=0,framebuffer=0;
+    GLuint texture=0,framebuffer=0,destination=0,destinationFramebuffer=0;
     glGenTextures(1,&texture); glBindTexture(GL_TEXTURE_RECTANGLE,texture);
     const auto imported=CGLTexImageIOSurface2D(context,GL_TEXTURE_RECTANGLE,GL_RGBA8,
         width,height,GL_BGRA,GL_UNSIGNED_INT_8_8_8_8_REV,surface,0);
@@ -34,14 +34,29 @@ inline bool check_iosurface_gl(IOSurfaceRef surface,unsigned width,unsigned heig
         valid=fb==GL_FRAMEBUFFER_COMPLETE;
         if (!valid) std::fprintf(stderr,"CGL framebuffer status %u\n",fb);
         if (valid) {
+            // Avalonia's composition texture is GL_TEXTURE_2D. This explicit
+            // GPU-local copy avoids uploading pixels to adapt the texture target.
+            glGenTextures(1,&destination); glBindTexture(GL_TEXTURE_2D,destination);
+            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,width,height,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+            glGenFramebuffers(1,&destinationFramebuffer);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER,destinationFramebuffer);
+            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,destination,0);
+            valid=glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+            if (valid) {
+                glBindFramebuffer(GL_READ_FRAMEBUFFER,framebuffer);
+                glBlitFramebuffer(0,0,width,height,0,0,width,height,GL_COLOR_BUFFER_BIT,GL_NEAREST);
+                valid=glGetError()==GL_NO_ERROR;
+            }
+            glBindFramebuffer(GL_READ_FRAMEBUFFER,destinationFramebuffer);
             std::vector<uint8_t> pixels(width*height*4);
             glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
-            auto error=glGetError(); valid=error==GL_NO_ERROR;
+            auto error=glGetError(); valid &= error==GL_NO_ERROR;
             if (!valid) std::fprintf(stderr,"CGL read error %u\n",error);
             for (unsigned y=0;y<height;++y) for (unsigned x=0;x<width*4;++x)
                 valid &= std::abs(int(pixels[y*width*4+x])-int(expected[y*expected_stride+(x/4)*4+(x%4<3 ? 2-x%4 : x%4)]))<=1;
         }
     }
+    glDeleteFramebuffers(1,&destinationFramebuffer); glDeleteTextures(1,&destination);
     glDeleteFramebuffers(1,&framebuffer); glDeleteTextures(1,&texture);
     CGLSetCurrentContext(previous); CGLDestroyContext(context);
     return valid;
