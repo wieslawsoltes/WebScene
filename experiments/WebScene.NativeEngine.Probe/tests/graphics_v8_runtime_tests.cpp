@@ -46,6 +46,14 @@ int main() {
                 require(isolate!=nullptr && isolate->InContext(),"completion has no V8 context");
                 auto context=isolate->GetCurrentContext();
                 if (record.operation==1) {
+                    bool rejected=false;
+                    try { runtime.load_url("https://graphics.test/next"); }
+                    catch (const std::logic_error&) { rejected=true; }
+                    require(rejected,"completion delivery allowed destructive navigation");
+                    rejected=false;
+                    try { runtime.shutdown_graphics(); }
+                    catch (const std::logic_error&) { rejected=true; }
+                    require(rejected,"completion delivery allowed destructive shutdown");
                     wrappers=std::make_unique<v8_release_registry>(isolate,releases,1);
                     graphics_command release{[](graphics_service&,std::span<const std::byte>,const graphics_command::arguments&) noexcept { ++weak_releases; }};
                     require(wrappers->attach(v8::Object::New(isolate),release),"weak wrapper registration failed");

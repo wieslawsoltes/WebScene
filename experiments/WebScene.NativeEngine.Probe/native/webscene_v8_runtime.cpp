@@ -214,6 +214,7 @@ void prewarm_v8_process()
 struct v8_dom_runtime::implementation final {
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     bool graphics_transitioning{};
+    bool graphics_delivering{};
     bool graphics_shutdown{};
     const std::thread::id graphics_thread = std::this_thread::get_id();
     std::unique_ptr<webscene::graphics::graphics_service> graphics;
@@ -4548,8 +4549,8 @@ void v8_dom_runtime::shutdown_graphics()
 {
     if (std::this_thread::get_id()!=impl_->graphics_thread)
         throw std::logic_error("Graphics shutdown requires the runtime owner thread");
-    if (impl_->graphics_transitioning)
-        throw std::logic_error("Graphics shutdown during cancellation delivery");
+    if (impl_->graphics_transitioning || impl_->graphics_delivering)
+        throw std::logic_error("Graphics shutdown during completion delivery");
     if (impl_->graphics_shutdown) return;
     impl_->graphics_shutdown=true;
     if (!impl_->graphics) return;

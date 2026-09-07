@@ -115,6 +115,18 @@ int main() {
     require(!gc_releases->publish(registration));
     gc.close();
     require(!gc_releases->publish(abandoned) && gc_releases->occupied()==0);
+    graphics_service delivery(wake);
+    auto delivery_mailbox=delivery.dawn().completions();
+    auto delivery_ticket=delivery_mailbox->reserve(1,{delivery.engine_identity(),new_owner_token(),0}).value();
+    require(delivery_mailbox->publish(delivery_ticket,completion_status::success));
+    rejects([&] {
+        delivery.pump([&](auto) {
+            rejects([&] { delivery.close(); });
+            rejects([&] { delivery.pump([](auto) {}); });
+            throw std::runtime_error("delivery exception");
+        });
+    });
+    delivery.close(); // Exception unwinding must release the active pump guard.
     auto disposed=std::make_unique<graphics_service>(wake);
     auto late_endpoint=disposed->command_endpoint(1,0);
     disposed.reset();

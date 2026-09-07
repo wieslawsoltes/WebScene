@@ -528,7 +528,12 @@
         // queue; otherwise hot application code remains on its initial tier.
         pump_v8_platform_tasks();
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
-        if (graphics && graphics->has_ready_work()) {
+        if (graphics && !graphics_delivering && graphics->has_ready_work()) {
+            struct delivery_guard {
+                bool& active;
+                explicit delivery_guard(bool& value) : active(value) { active=true; }
+                ~delivery_guard() { active=false; }
+            } guard(graphics_delivering);
             // execute() also reaches this path after its script context scope
             // has unwound. Enter the owning context explicitly for delivery.
             auto graphics_context = context.Get(isolate);

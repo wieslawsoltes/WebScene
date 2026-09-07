@@ -1,7 +1,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     void retire_document_graphics()
     {
-        if (graphics_transitioning) throw std::logic_error("Reentrant graphics document transition");
+        if (graphics_transitioning || graphics_delivering) throw std::logic_error("Reentrant graphics document transition");
         if (!graphics) return;
         struct transition_guard {
             bool& active;
@@ -42,7 +42,7 @@
         std::vector<document_start_script> document_start_scripts)
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
-        if (graphics_transitioning) throw std::logic_error("Navigation during graphics cancellation delivery");
+        if (graphics_transitioning || graphics_delivering) throw std::logic_error("Navigation during graphics completion delivery");
 #endif
         current_document_start_scripts = std::move(document_start_scripts);
         std::string html;

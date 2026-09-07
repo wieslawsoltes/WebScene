@@ -287,3 +287,23 @@ The existing native-engine DOM activation case failed with:
 An isolated rerun of webscene_native_engine_tests passed in 11.16 seconds.
 This is an unresolved intermittent test failure, not a clean full-suite pass or
 proof that its cause is unrelated. No test expectation was weakened.
+
+## Completion-delivery reentrancy guard
+
+The graphics service now rejects recursive completion pumping and close during
+an active pump. The runtime separately guards the entire graphics delivery and
+microtask-checkpoint scope. Synchronous navigation/shutdown from a native
+completion dispatcher is rejected before moving or destroying the active service;
+nested task draining skips graphics delivery until the outer scope finishes.
+This prevents a dispatcher from deleting the service whose pump is on the stack.
+Normal later navigation/shutdown remains supported.
+
+The service test attempts recursive pump and close inside delivery, then throws
+from the dispatcher and verifies the guard unwinds so later close succeeds.
+The real V8 fixture attempts destructive navigation and shutdown from its native
+dispatcher, verifies rejection, and continues normal promise delivery. All nine
+graphics CTests passed in 1.37 seconds. This focused result does not erase the
+previously recorded intermittent non-graphics DOM activation failure.
+
+The service fixture also passed with AddressSanitizer/UndefinedBehaviorSanitizer;
+the prebuilt Dawn/ANGLE libraries remained uninstrumented.

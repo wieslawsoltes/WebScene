@@ -30,6 +30,7 @@ class graphics_service {
     size_t active_context_scopes_{};
     size_t active_device_scopes_{};
     bool executing_commands_{};
+    bool pumping_{};
     std::shared_ptr<command_channel> commands_;
     std::shared_ptr<release_channel> releases_;
     uint64_t executed_command_serial_{};
@@ -153,6 +154,12 @@ public:
     }
     template<class Deliver> size_t pump(Deliver deliver,size_t budget=64) {
         check_thread();
+        if (pumping_) throw std::logic_error("graphics completion pumping is not reentrant");
+        struct pump_guard {
+            bool& active;
+            explicit pump_guard(bool& value) : active(value) { active=true; }
+            ~pump_guard() { active=false; }
+        } scope(pumping_);
         drain_commands(budget);
         if (!dawn_) return 0;
         next_event_poll_=std::chrono::steady_clock::now()+std::chrono::milliseconds(1);
@@ -191,7 +198,7 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_context_scopes_ || active_device_scopes_ || executing_commands_)
+        if (active_context_scopes_ || active_device_scopes_ || executing_commands_ || pumping_)
             throw std::logic_error("Cannot close graphics service during native execution");
         if (releases_) releases_->close();
         if (commands_) {
