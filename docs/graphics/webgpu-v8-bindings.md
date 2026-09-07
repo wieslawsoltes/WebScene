@@ -480,3 +480,25 @@ receiver checks, mutation rejection and exception propagation, and uses a retain
 snapshot after device registry disposal. This remains an internal binding; public
 navigator.gpu, requestDevice and rendering commands are still required before a
 JavaScript WebGPU app can render.
+
+### Native requestDevice promise delivery
+
+`v8_webgpu_device_request` now connects an already-validated native device
+request to a V8 promise. The Dawn callback captures only synchronized native
+result storage and a completion ticket. The engine thread consumes that result,
+invokes the device wrapper factory, and settles the realm-owned promise. Native
+request failure rejects with an OperationError constructed through the captured
+trusted DOMException constructor; native diagnostics are not leaked to scripts.
+A released bridge abandons its result, and a late callback retains no V8 handles.
+Completions are consumed before invoking wrapper/exception factories. Duplicate
+and wrong-owner completions cannot create another wrapper, and wrong-realm
+completion does not consume the pending request.
+
+The macOS V8 runtime fixture now uses this bridge to create the actual Dawn
+device used by its buffer tests. It verifies promise fulfillment, duplicate and
+wrong-realm handling, and an actual Dawn rejection for an impossible requested
+maxBufferSize, including the OperationError rejection object. This fixture still
+uses a diagnostic result object at the promise factory boundary. Browser device
+descriptor conversion, adapter validity/consumption, public GPUAdapter wiring,
+device-loss promise integration and full teardown/admission qualification remain
+unfinished; this is not public requestDevice exposure.

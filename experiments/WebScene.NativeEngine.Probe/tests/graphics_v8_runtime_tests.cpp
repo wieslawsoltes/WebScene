@@ -4,6 +4,7 @@
 #include "graphics/engine_wake.h"
 #include "graphics/v8_release_registry.h"
 #include "graphics/v8_webgpu_adapter_request.h"
+#include "graphics/v8_webgpu_device_request.h"
 #include "graphics/v8_webgpu_buffers.h"
 #include "graphics/v8_webgpu_devices.h"
 #include "graphics/v8_webgpu_mapped_ranges.h"
@@ -264,6 +265,8 @@ int main() {
             std::array<std::unique_ptr<v8_webgpu_adapter_request>,2> failed_wrappers;
             size_t failed_wrapper_count=0;
             bool buffer_wrappers_tested=false;
+            std::unique_ptr<v8_webgpu_device_request> device_request,failed_device_request;
+            bool device_failure_seen=false;
             auto buffer_test_device=std::make_shared<wgpu::Device>();
             resource_handle<wgpu::Adapter> discovered_adapter;
             std::shared_ptr<release_channel> releases;
@@ -290,6 +293,18 @@ int main() {
                     retired_device_probe.Reset(); device_map_retired=true;
                     return;
                 }
+                if (record.operation==111) {
+                    auto* isolate=v8::Isolate::GetCurrent(); auto context=isolate->GetCurrentContext();
+                    require(record.status==completion_status::failed,"Impossible device limit unexpectedly accepted");
+                    require(failed_device_request->complete(isolate,context,record,[](wgpu::Device) -> v8::Local<v8::Value> {
+                        throw std::runtime_error("Failed device was wrapped");
+                    }),"Device failure promise did not settle");
+                    auto promise=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"failedDevicePromise")).ToLocalChecked().As<v8::Promise>();
+                    require(promise->State()==v8::Promise::kRejected,"Device failure did not reject");
+                    auto name=promise->Result().As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"name")).ToLocalChecked();
+                    require(name->StrictEquals(v8::String::NewFromUtf8Literal(isolate,"OperationError")),"Device failure has wrong exception type");
+                    failed_device_request.reset();device_failure_seen=true;return;
+                }
                 if (record.operation==110) {
                     require(record.status==completion_status::success,"Invalid browser usage did not generate native validation");
                     buffer_validation_seen=true; return;
@@ -311,6 +326,22 @@ int main() {
                 if (record.operation==104) {
                     auto* isolate=v8::Isolate::GetCurrent();
                     auto context=isolate->GetCurrentContext();
+                    bool wrong_realm=false;
+                    try { device_request->complete(isolate,v8::Context::New(isolate),record,[](wgpu::Device) -> v8::Local<v8::Value> {
+                        throw std::runtime_error("Wrong realm wrapped device");
+                    }); } catch (const std::logic_error&) { wrong_realm=true; }
+                    require(wrong_realm && device_request->pending(),"Wrong realm consumed device completion");
+                    require(device_request->complete(isolate,context,record,[&](wgpu::Device device) -> v8::Local<v8::Value> {
+                        *buffer_test_device=std::move(device);
+                        return v8::Object::New(isolate);
+                    }),"Native device promise completion failed");
+                    require(!device_request->pending(),"Native device promise remained pending");
+                    require(!device_request->complete(isolate,context,record,[](wgpu::Device) -> v8::Local<v8::Value> {
+                        throw std::runtime_error("Device was wrapped twice");
+                    }),"Duplicate device completion accepted");
+                    auto settled=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"deviceRequestPromise")).ToLocalChecked().As<v8::Promise>();
+                    require(settled->State()==v8::Promise::kFulfilled && settled->Result()->IsObject(),"Device request did not fulfill with wrapper");
+                    device_request.reset();
                     require(record.status==completion_status::success && *buffer_test_device,"Buffer wrapper fixture device failed");
                     wgpu::Adapter adapter;
                     adapter_service->with_adapter(discovered_adapter,[&](const auto& native) { adapter=native; });
@@ -576,13 +607,22 @@ int main() {
                     auto context=isolate->GetCurrentContext();
                     require(adapter_request->complete(isolate,context,record,[&](wgpu::Adapter adapter) -> v8::Local<v8::Value> {
                         auto mailbox=adapter_service->dawn().completions();
-                        auto ticket=mailbox->reserve(104,{adapter_service->engine_identity(),new_owner_token(),0}).value();
                         wgpu::DeviceDescriptor descriptor{};
-                        adapter.RequestDevice(&descriptor,wgpu::CallbackMode::AllowSpontaneous,
-                            [mailbox,ticket,buffer_test_device](wgpu::RequestDeviceStatus status,wgpu::Device device,wgpu::StringView) {
-                                *buffer_test_device=std::move(device);
-                                mailbox->publish(ticket,status==wgpu::RequestDeviceStatus::Success ? completion_status::success : completion_status::failed);
-                            });
+                        v8::Local<v8::Promise> promise;
+                        device_request=v8_webgpu_device_request::start(isolate,context,descriptor,adapter,mailbox,
+                            {adapter_service->engine_identity(),new_owner_token(),0},104,
+                            context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),promise);
+                        require(device_request && device_request->pending(),"Device promise did not start");
+                        require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"deviceRequestPromise"),promise).FromMaybe(false),"Device promise publication failed");
+                        wgpu::Limits impossible_limits{}; impossible_limits.maxBufferSize=uint64_t{1}<<63;
+                        wgpu::DeviceDescriptor impossible_descriptor{}; impossible_descriptor.requiredLimits=&impossible_limits;
+                        v8::Local<v8::Promise> failure_promise;
+                        failed_device_request=v8_webgpu_device_request::start(isolate,context,impossible_descriptor,adapter,mailbox,
+                            {adapter_service->engine_identity(),new_owner_token(),0},111,
+                            context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),failure_promise);
+                        require(failed_device_request && failed_device_request->pending(),"Failure device promise did not start");
+                        failure_promise->MarkAsHandled();
+                        require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"failedDevicePromise"),failure_promise).FromMaybe(false),"Failure promise publication failed");
                         discovered_adapter=adapter_service->adopt_adapter(std::move(adapter));
                         // Diagnostic wrapper only; the standards GPUAdapter registry is separate work.
                         return v8::Object::New(isolate);
@@ -778,7 +818,7 @@ int main() {
             }
             require(delivered,"hidden completion did not progress");
 
-            while ((!adapter_delivered || !adapter_cancelled || !buffer_wrappers_tested || !buffer_validation_seen || binding_map_completions!=5 || map_completions!=3 || failed_wrapper_count!=2 || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
+            while ((!adapter_delivered || !adapter_cancelled || !device_failure_seen || !buffer_wrappers_tested || !buffer_validation_seen || binding_map_completions!=5 || map_completions!=3 || failed_wrapper_count!=2 || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
                 if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Adapter task failed");
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
@@ -828,6 +868,7 @@ int main() {
                 if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Device map retirement task failed");
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
+            require(device_failure_seen,"Device failure completion was not observed");
             require(device_map_retired,"Device map native completion did not retire");
             require(runtime.execute("if([...retainedFeatures].length!==retainedFeatures.size)throw new Error('retained features');delete globalThis.retainedFeatures;", "retained-features"),"Feature snapshot did not survive registry disposal");
             require(runtime.execute("if(!deviceMapCancelled)throw new Error('device cancellation promise not delivered');", "device-map-cancel-check"),"Device map rejection failed");
