@@ -10,6 +10,8 @@ Dawn uses a shared `webgpu_dawn` monolith exporting only WebGPU C entry points. 
 
 `GraphicsDependencies.cmake` verifies the SDK before importing it, including revision, RID, lock, settings, complete installed file inventory and content hashes. CMake cannot silently choose another `Dawn_DIR`. A dependency roll requires rebuilding headers and libraries together. Package manifests prove integrity and provenance, not API conformance or hardware execution.
 
+Dependency checkouts explicitly set both `core.autocrlf=false` and `core.eol=lf`: upstream `text=auto` attributes otherwise permit Windows-native CRLF license bytes. The optional Dawn C++ module wrapper is disabled; WebScene uses generated C/C++ headers and does not require compiler module scanning. This avoids a hosted GCC configuration that passed the language feature test but lacked CMake import-graph discovery support.
+
 The macOS package step rewrites ANGLE's working-directory-relative install names to `@rpath`, normalizes inter-library references to `@loader_path`, and applies ad-hoc signatures after rewriting. Probes and opt-in native builds copy ANGLE libraries beside the consumer and carry relative runtime search paths. Production distribution/signing remains a later package gate.
 
 ## Build and run

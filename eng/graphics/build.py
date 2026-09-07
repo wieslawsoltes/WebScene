@@ -46,6 +46,7 @@ def checkout(name, directory):
         run(["git", "init", directory])
         run(["git", "-C", directory, "remote", "add", "origin", source["repository"]])
     run(["git", "-C", directory, "config", "core.autocrlf", "false"])
+    run(["git", "-C", directory, "config", "core.eol", "lf"])
     if capture(["git", "-C", directory, "remote", "get-url", "origin"]) != source["repository"]:
         raise ValueError(f"Wrong source remote: {directory}")
     current = subprocess.run(["git", "-C", str(directory), "rev-parse", "HEAD"], capture_output=True, text=True)

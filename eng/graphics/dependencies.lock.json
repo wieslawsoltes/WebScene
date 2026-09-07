@@ -74,7 +74,8 @@
     "DAWN_ENABLE_DESKTOP_GL": "OFF",
     "DAWN_ENABLE_OPENGLES": "OFF",
     "DAWN_ENABLE_NULL": "OFF",
-    "DAWN_ENABLE_SWIFTSHADER": "OFF"
+    "DAWN_ENABLE_SWIFTSHADER": "OFF",
+    "DAWN_SUPPORTS_CXX_MODULES": "OFF"
   },
   "angleGn": {
     "is_debug": false,
