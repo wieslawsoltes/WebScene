@@ -13,6 +13,7 @@ class graphics_service {
     resource_table<angle_context> contexts_;
     std::unique_ptr<dawn_event_service> dawn_;
     bool closed_{};
+    size_t active_context_scopes_{};
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
             throw std::logic_error("graphics service requires its engine worker");
@@ -50,11 +51,18 @@ public:
     template<class Execute> void with_angle_context(resource_handle<angle_context> handle,Execute execute) {
         check_open();
         angle_context::scope scope(contexts_.get(handle,owner_));
+        struct execution_guard {
+            size_t& count;
+            explicit execution_guard(size_t& value) : count(value) { ++count; }
+            ~execution_guard() { --count; }
+        } guard(active_context_scopes_);
         execute();
     }
     // Called by the execution thread after queued context operations have drained.
     void destroy_angle_context(resource_handle<angle_context> handle) {
-        check_open(); contexts_.destroy(handle,owner_);
+        check_open();
+        if (active_context_scopes_) throw std::logic_error("Cannot destroy ANGLE contexts during execution");
+        contexts_.destroy(handle,owner_);
     }
     template<class Deliver> size_t pump(Deliver deliver,size_t budget=64) {
         check_thread();
@@ -64,6 +72,7 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
+        if (active_context_scopes_) throw std::logic_error("Cannot close graphics service during ANGLE execution");
         closed_=true;
         if (dawn_) dawn_->close();
         contexts_.destroy_owner(owner_);

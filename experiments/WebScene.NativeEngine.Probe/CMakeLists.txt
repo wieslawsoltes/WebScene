@@ -82,6 +82,17 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
         add_test(NAME webscene_graphics_angle_context_tests COMMAND webscene_graphics_angle_context_tests 2)
         add_test(NAME webscene_graphics_angle_es3_context_tests COMMAND webscene_graphics_angle_context_tests 3)
         set_tests_properties(webscene_graphics_angle_context_tests webscene_graphics_angle_es3_context_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+        add_executable(webscene_graphics_service_tests tests/graphics_service_tests.cpp)
+        target_compile_features(webscene_graphics_service_tests PRIVATE cxx_std_20)
+        target_include_directories(webscene_graphics_service_tests PRIVATE native)
+        target_link_libraries(webscene_graphics_service_tests PRIVATE dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2 Threads::Threads)
+        add_test(NAME webscene_graphics_service_tests COMMAND webscene_graphics_service_tests)
+        set_tests_properties(webscene_graphics_service_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+        foreach(library dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2)
+            add_custom_command(TARGET webscene_graphics_service_tests POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "$<TARGET_FILE:${library}>" "$<TARGET_FILE_DIR:webscene_graphics_service_tests>")
+        endforeach()
         foreach(library EGL GLESv2)
             add_custom_command(TARGET webscene_graphics_angle_context_tests POST_BUILD
                 COMMAND "${CMAKE_COMMAND}" -E copy_if_different

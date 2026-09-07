@@ -21,6 +21,12 @@ int main() {
     rejects([&] { b.with_angle_context(first,[] {}); });
     a.with_angle_context(first,[] { glClearColor(1,0,0,1); });
     b.with_angle_context(second,[] { glClearColor(0,1,0,1); });
+    a.with_angle_context(first,[&] {
+        rejects([&] { a.destroy_angle_context(first); });
+        rejects([&] { a.close(); });
+        require(a.live_contexts()==1);
+    });
+    rejects([&] { a.with_angle_context(first,[] { throw std::runtime_error("execution failed"); }); });
     a.destroy_angle_context(first);
     rejects([&] { a.with_angle_context(first,[] {}); });
     a.close();
