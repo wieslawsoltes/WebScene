@@ -834,8 +834,10 @@ struct canvas_node_data final {
         const auto m=image->value.describe();
         if (backing.mode()==webscene::graphics::canvas_context_mode::none
             || m.canvas!=backing.identity() || m.allocation_generation!=backing.allocation_generation()
-            || m.content_serial!=backing.content_serial() || m.width!=backing.width() || m.height!=backing.height())
+            || !backing.accepts_completed_content(m.content_serial) || m.width!=backing.width() || m.height!=backing.height())
             throw std::invalid_argument("GPU image does not match canvas backing");
+        if (gpu_image && gpu_image->value.describe().content_serial>m.content_serial)
+            throw std::invalid_argument("GPU image publication cannot regress");
         gpu_image=std::move(image);
     }
     std::vector<canvas_rect_command> rects;

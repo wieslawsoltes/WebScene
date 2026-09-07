@@ -66,7 +66,7 @@ void native_document::build_gpu_canvas_images(
         // A bitmap reset invalidates the presented content. Retained scenes
         // still own the previous frame until their consumers finish.
         if (m.allocation_generation!=canvas.backing.allocation_generation()
-            || m.content_serial!=canvas.backing.content_serial()) continue;
+            || !canvas.backing.accepts_completed_content(m.content_serial)) continue;
         images.push_back(canvas.gpu_image);
     }
 }
@@ -1227,7 +1227,7 @@ void native_document::append_scene(
         ? std::optional(canvas.gpu_image->value.describe()) : std::nullopt;
     const bool paints_gpu=gpu_metadata
         && gpu_metadata->allocation_generation==canvas.backing.allocation_generation()
-        && gpu_metadata->content_serial==canvas.backing.content_serial();
+        && canvas.backing.accepts_completed_content(gpu_metadata->content_serial);
     if (paint_self && node.tag=="canvas" && paints_gpu) {
         // Native DOM output carries the node ID. Publication resolves it to the
         // scene-local image index before exposing the command to consumers.

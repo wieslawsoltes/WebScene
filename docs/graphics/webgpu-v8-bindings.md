@@ -1654,3 +1654,19 @@ image as soon as the next texture is acquired; retaining the last completed
 image until replacement needs an explicit invalidation/serial contract.
 These failures remain open; the stress mode is separate from the default demo.
 No continuous-rendering or smooth-resize acceptance is claimed.
+
+### Completed image retention (2026-09-08)
+
+Canvas backing now records the earliest content serial allowed after a bitmap
+reset. Acquiring a newer frame advances the current serial without invalidating
+an older completed image. Scene capture and painting accept completed images
+within this interval; publication rejects regressions. Configure/unconfigure
+advance the reset floor, including same-size resets, so delayed completions
+cannot resurrect invalidated content. The runtime regression verifies next-frame
+acquisition retains eligibility and unconfigure rejects the old image; the
+runtime suite passes. Image-pool and wrapper-capacity stress failures remain
+unresolved and must still be retested/fixed.
+
+Unchanged Kestrel-CAD from the supplied archive remains the application acceptance
+test. The clear/triangle/resize probes are diagnostic fixtures and must not be
+counted as Kestrel compatibility or epic completion.

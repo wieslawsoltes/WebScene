@@ -2658,7 +2658,8 @@
     void publish_ready_gpu_canvases() {
         for(auto& [key,canvas]:gpu_canvases)while(auto image=canvas.provider->take_ready()) {
             const auto metadata=image->describe();const auto& backing=canvas.node->canvas().backing;
-            if(metadata.canvas!=backing.identity()||metadata.allocation_generation!=backing.allocation_generation()||metadata.content_serial!=backing.content_serial())continue;
+            if(metadata.canvas!=backing.identity()||metadata.allocation_generation!=backing.allocation_generation()||!backing.accepts_completed_content(metadata.content_serial))continue;
+            if(canvas.node->canvas().gpu_image&&canvas.node->canvas().gpu_image->value.describe().content_serial>metadata.content_serial)continue;
             document.publish_gpu_canvas_image(*canvas.node,std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image)));
         }
     }
@@ -2698,7 +2699,7 @@
                     return metadata;
                 });
                 host.invalidate=[self,node] {
-                    auto& canvas=node->mutable_canvas();canvas.backing.publish_content();canvas.gpu_image.reset();self->document.mark_scene_changed();
+                    auto& canvas=node->mutable_canvas();canvas.backing.reset_bitmap(canvas.backing.width(),canvas.backing.height());canvas.gpu_image.reset();self->document.mark_scene_changed();
                 };
                 auto controller=std::make_unique<v8_webgpu_canvas_context>(info.GetIsolate(),context,info.This(),exception,width,height,std::move(host));
                 auto object=controller->object();

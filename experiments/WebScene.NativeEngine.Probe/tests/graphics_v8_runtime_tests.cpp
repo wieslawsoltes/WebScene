@@ -213,7 +213,15 @@ void test_runtime_webgpu_installation() {
     auto unlocked=IOSurfaceUnlock(surface,kIOSurfaceLockReadOnly,nullptr);consumer->complete();
     require(correct&&unlocked==kIOReturnSuccess,"Published DOM canvas pixel mismatch");
     require(runtime.host_animation_frame_demand()==0,"Published unchanged GPU canvas kept requesting frames");
-    require(runtime.execute("if(domGPUContext.getCurrentTexture()===publicationTexture)throw new Error('frame texture not expired');domGPUContext.unconfigure();","gpu-publication-expire"),"GPU publication expiration failed");
+    require(runtime.execute("if(domGPUContext.getCurrentTexture()===publicationTexture)throw new Error('frame texture not expired');","gpu-publication-expire"),"GPU publication expiration failed");
+    require(published_node->canvas().backing.accepts_completed_content(published->value.describe().content_serial),
+        "Acquiring the next frame invalidated completed canvas content");
+    document.publish_gpu_canvas_image(*published_node,published);
+    require(runtime.execute("domGPUContext.unconfigure();","gpu-unconfigure"),"GPU unconfigure failed");
+    bool invalidated_image_rejected=false;
+    try { document.publish_gpu_canvas_image(*published_node,published); }
+    catch(const std::invalid_argument&) { invalidated_image_rejected=true; }
+    require(invalidated_image_rejected,"Unconfigure accepted a previous completed image");
     require(!published_node->canvas().gpu_image,"Unconfigure retained the displayed GPU image");
     require(runtime.execute(R"JS(
         domGPUContext.configure({device:installedDevice,format:navigator.gpu.getPreferredCanvasFormat()});
