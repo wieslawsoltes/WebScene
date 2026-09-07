@@ -22,6 +22,7 @@ void require(bool value,const char* message) { if (!value) throw std::runtime_er
 #include "graphics_v8_webgpu_options.h"
 #include "graphics_v8_webgpu_buffer_descriptor.h"
 #include "graphics_v8_webgpu_device_descriptor.h"
+#include "graphics_v8_webgpu_shader_descriptor.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
 void test_image_lease_abi() {
@@ -925,6 +926,7 @@ int main() {
                     test_v8_webgpu_adapter_options(isolate,context);
                     test_v8_webgpu_buffer_descriptor(isolate,context);
                     test_v8_webgpu_device_descriptor(isolate,context);
+                    test_v8_webgpu_shader_descriptor(isolate,context);
                     v8::Local<v8::Promise> promise;
                     webgpu_adapter_options options;
                     adapter_request=v8_webgpu_adapter_request::start(isolate,context,options,
@@ -1033,6 +1035,16 @@ int main() {
                     require(context->Global()->Delete(context,v8::String::NewFromUtf8Literal(isolate,"shaderProbe")).FromMaybe(false),"Shader probe cleanup failed");
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {
+                            if(deviceProbe.createShaderModule.length!==1)throw new Error('shader arity');
+                            const module=deviceProbe.createShaderModule({label:'JS shader',code:'@compute @workgroup_size(1) fn main() {}',compilationHints:[{entryPoint:'main',layout:'auto'}]});
+                            if(Object.prototype.toString.call(module)!=='[object GPUShaderModule]' || module.label!=='JS shader')throw new Error('shader creation');
+                            module.label='updated shader';if(module.label!=='updated shader')throw new Error('created shader label');
+                            for(const call of [()=>deviceProbe.createShaderModule(),()=>deviceProbe.createShaderModule({}),()=>deviceProbe.createShaderModule.call({}, {code:''})]) {
+                                let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('shader invalid call');
+                            }
+                            const shaderSentinel={};let propagated=false;
+                            try{deviceProbe.createShaderModule({get code(){throw shaderSentinel}})}catch(e){propagated=e===shaderSentinel}
+                            if(!propagated)throw new Error('shader getter exception');
                             const limits=deviceProbe.limits;globalThis.retainedLimits=limits;
                             const originalLimit=limits.maxBufferSize;
                             if(Object.prototype.toString.call(limits)!=='[object GPUSupportedLimits]')throw new Error('limits tag');
@@ -1090,6 +1102,9 @@ int main() {
                     )JS");
                     v8::Local<v8::Script> device_test;
                     require(v8::Script::Compile(context,device_script).ToLocal(&device_test) && !device_test->Run(context).IsEmpty(),"JavaScript device buffer creation/destruction failed");
+                    adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
+                        require(owned.live_shader_modules()==2,"JavaScript shader creation did not adopt exactly one native module");
+                    });
                     retired_device_probe.Reset(isolate,device_object);
                     async_buffers.reset();
                     adapter_service->destroy_device(gc_buffer_device);

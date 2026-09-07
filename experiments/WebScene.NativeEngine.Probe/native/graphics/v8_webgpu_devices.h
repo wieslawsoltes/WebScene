@@ -1,5 +1,7 @@
 #pragma once
 #include "v8_webgpu_buffers.h"
+#include "v8_webgpu_shaders.h"
+#include "v8_webgpu_shader_descriptor.h"
 #include "v8_webgpu_supported_features.h"
 #include "webgpu_feature_names.h"
 #include "v8_webgpu_limits.h"
@@ -18,6 +20,7 @@ class v8_webgpu_devices {
         graphics_service* service{};
         resource_handle<dawn_device> device;
         std::unique_ptr<v8_webgpu_buffers> buffers;
+        std::unique_ptr<v8_webgpu_shaders> shaders;
         std::shared_ptr<release_channel> releases;
         release_ticket ticket;
         bool published{},destroyed{};
@@ -65,6 +68,42 @@ class v8_webgpu_devices {
         } catch (const std::length_error&) {
             isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Buffer capacity exhausted")));
         } catch (const std::exception&) { fail(isolate,"GPUDevice native ownership is unavailable"); }
+    }
+    static void create_shader(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if (!receiver(info)) return;
+        auto* isolate=info.GetIsolate(); auto context=isolate->GetCurrentContext();
+        if (!info.Length()) { fail(isolate,"createShaderModule requires a descriptor"); return; }
+        try {
+            webgpu_shader_descriptor converted;
+            // Pipeline-layout wrappers are not exposed yet. Compilation hints
+            // are converted for their observable WebIDL effects, then ignored
+            // as optional optimization hints by this backend.
+            if (!read_webgpu_shader_descriptor(isolate,context,info[0],converted,
+                [](v8::Local<v8::Value>) { return std::optional<wgpu::PipelineLayout>{}; })) return;
+            auto* item=receiver(info); if (!item) return; // Coercion can reenter.
+            wgpu::ShaderSourceWGSL source{};
+            source.code=wgpu::StringView(converted.code.data(),converted.code.size());
+            wgpu::ShaderModuleDescriptor descriptor{};
+            descriptor.nextInChain=&source;
+            descriptor.label=wgpu::StringView(converted.label.data(),converted.label.size());
+            resource_handle<wgpu::ShaderModule> shader;
+            item->service->with_device(item->device,[&](auto& owned) { shader=owned.create_shader_module(descriptor); });
+            v8::Local<v8::Object> wrapper;
+            try {
+                if (!item->shaders->wrap(context,*item->service,item->device,shader,info.This(),converted.label).ToLocal(&wrapper)) {
+                    item->service->with_device(item->device,[&](auto& owned) { owned.release_shader_module(shader); });
+                    fail(isolate,"Shader wrapper capacity exhausted"); return;
+                }
+            } catch (...) {
+                item->service->with_device(item->device,[&](auto& owned) { owned.release_shader_module(shader); });
+                throw;
+            }
+            info.GetReturnValue().Set(wrapper);
+        } catch (const std::bad_alloc&) {
+            isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Shader allocation failed")));
+        } catch (const std::length_error&) {
+            isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Shader capacity exhausted")));
+        } catch (const std::exception&) { fail(isolate,"GPUDevice native shader ownership is unavailable"); }
     }
     static void adapter_info(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info); if (!item) return;
@@ -135,6 +174,8 @@ public:
         auto prototype=v8::ObjectTemplate::New(isolate);
         auto create=v8::FunctionTemplate::New(isolate,create_buffer); create->SetLength(1);
         prototype->Set(isolate,"createBuffer",create);
+        auto shader_create=v8::FunctionTemplate::New(isolate,create_shader); shader_create->SetLength(1);
+        prototype->Set(isolate,"createShaderModule",shader_create);
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"label"),v8::FunctionTemplate::New(isolate,label),v8::FunctionTemplate::New(isolate,set_label));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"adapterInfo"),v8::FunctionTemplate::New(isolate,adapter_info));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"limits"),v8::FunctionTemplate::New(isolate,limits));
@@ -148,6 +189,7 @@ public:
         check_scope();
         for (auto& item:entries_) if (item) {
             if (!item->wrapper.IsEmpty()) item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
+            item->shaders.reset();
             item->buffers.reset(); // Invalidate first; cancellation can construct JS exceptions.
             item->wrapper.Reset();
             if (!item->published) item->releases->publish(item->ticket);
@@ -175,6 +217,7 @@ public:
         item->label=std::move(initial_label);
         item->service=&service; item->device=device; item->releases=service.release_endpoint();
         item->buffers=std::make_unique<v8_webgpu_buffers>(isolate_,context,buffer_capacity_,dom_exception_.Get(isolate_));
+        item->shaders=std::make_unique<v8_webgpu_shaders>(isolate_,context);
         item->buffer_owner_key.Reset(isolate_,v8::Private::New(isolate_));
         item->features_key.Reset(isolate_,v8::Private::New(isolate_));
         std::vector<std::string_view> names;

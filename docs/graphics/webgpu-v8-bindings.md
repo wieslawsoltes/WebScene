@@ -811,3 +811,27 @@ brand, duplicate and foreign-realm checks, and deferred rather than inline nativ
 release on disposal. Runtime CTest passes. Device createShaderModule descriptor
 conversion/dispatch and getCompilationInfo are still pending; the internal
 wrapper is not a complete exposed GPUShaderModule implementation.
+
+
+### Internal device shader creation
+
+The internal GPUDevice prototype now dispatches createShaderModule to Dawn's
+owned shader table and returns a GPUShaderModule wrapper retaining its parent
+device. The descriptor converter reads label, required WGSL code and iterable
+compilation hints in WebIDL order, preserves getter/coercion exceptions, converts
+USVStrings, and commits converted state only after success. Dispatch rechecks the
+device receiver after conversion, passes explicit string lengths to Dawn, and
+releases the native module if wrapper adoption fails.
+
+Compilation hints are converted but not forwarded as optimization hints. The
+converter has a pipeline-layout resolver hook; genuine GPUPipelineLayout wrapper
+recognition remains pending with that interface. The current internal surface
+accepts omitted/auto layouts and exposes no pipeline-layout objects. This is not
+complete public WebGPU exposure or shader compilation diagnostics support.
+
+The macOS V8 runtime test creates a module from JavaScript using real WGSL,
+checks module branding and label updates, required arguments, wrong receivers,
+getter exception identity and native module ownership count. Converter coverage
+includes iterable hints, dictionary order, invalid enums and atomic failure.
+Render pipelines, command submission and normal canvas presentation remain the
+next rendering integration work; this test does not draw an app or triangle.
