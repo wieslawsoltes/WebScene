@@ -40,3 +40,26 @@ result but still does not link Skia, verify its full build configuration, or exe
 GPU composition. The source scan found no direct `dawn::native` or Tint includes
 in that backend directory; Skia's separate developer shader tools do depend on Tint.
 Full dependency synchronization was started for the isolated build.
+
+## Isolated macOS build
+
+```sh
+python3 eng/graphics/probes/graphite/use-external-dawn.py \
+  --skia artifacts/graphics-src/skia \
+  --dawn-sdk artifacts/graphics-sdk/osx-arm64/dawn
+artifacts/graphics-src/skia/bin/gn gen out/webscene-graphite \
+  --root=artifacts/graphics-src/skia \
+  --args="$(cat eng/graphics/probes/graphite/spike-args.gn)"
+ninja -C out/webscene-graphite skia -j 8
+```
+
+The patch verifies the source pin and refuses unrelated edits. It redirects
+Dawn headers/link metadata to the existing shared SDK and removes the dependency
+on Skia's `dawn_cmake` action. The initial configuration deliberately excludes
+optional codecs, text libraries, PDF and tools; those exclusions are for the
+composition experiment and are not production capability decisions.
+
+Result: all 797 build steps completed, producing `out/webscene-graphite/libskia.a`.
+A static archive does not resolve its external symbols. Executable linkage to the
+single Dawn dylib and an actual GPU composition test are the next required checks.
+No runtime ABI, pixel correctness or host-presentation pass is claimed yet.
