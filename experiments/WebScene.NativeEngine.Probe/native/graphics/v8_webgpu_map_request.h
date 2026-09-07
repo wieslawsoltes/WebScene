@@ -31,6 +31,12 @@ class v8_webgpu_map_request {
         resolver_.Reset(); wrapper_.Reset();
         return resolver->Reject(context,exception).FromMaybe(false);
     }
+    bool reject_allocation() {
+        auto resolver=resolver_.Get(isolate_);
+        resolver_.Reset(); wrapper_.Reset();
+        return resolver->Reject(realm_.Get(isolate_),v8::Exception::RangeError(
+            v8::String::NewFromUtf8Literal(isolate_,"Buffer mapping allocation failed"))).FromMaybe(false);
+    }
 public:
     v8_webgpu_map_request(v8::Isolate* isolate,v8::Local<v8::Context> context,
         v8::Local<v8::Object> wrapper,v8::Local<v8::Function> dom_exception,
@@ -90,6 +96,8 @@ public:
         auto context=realm_.Get(isolate_);
         if (isolate_->GetCurrentContext()!=context) throw std::logic_error("Map completion belongs to another realm");
         try { attach(buffer_,wrapper_.Get(isolate_)); }
+        catch (const std::bad_alloc&) { buffer_.Unmap(); return reject_allocation(); }
+        catch (const std::length_error&) { buffer_.Unmap(); return reject_allocation(); }
         catch (const std::exception&) { buffer_.Unmap(); return reject("OperationError"); }
         auto resolver=resolver_.Get(isolate_);
         resolver_.Reset(); wrapper_.Reset();

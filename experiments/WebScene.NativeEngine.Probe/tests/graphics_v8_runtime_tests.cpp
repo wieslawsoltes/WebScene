@@ -267,14 +267,17 @@ int main() {
             resource_handle<wgpu::Adapter> discovered_adapter;
             std::shared_ptr<release_channel> releases;
             std::unique_ptr<v8_release_registry> wrappers;
-            std::unique_ptr<v8_webgpu_buffers> gc_buffers;
+            std::unique_ptr<v8_webgpu_buffers> gc_buffers,async_buffers;
+            size_t binding_map_completions=0;
             resource_handle<dawn_device> gc_buffer_device;
-            std::array<std::unique_ptr<v8_webgpu_map_request>,2> map_requests;
+            std::array<std::unique_ptr<v8_webgpu_map_request>,3> map_requests;
             size_t map_completions=0;
             auto& graphics=runtime.initialize_graphics(wake,[&](completion_record record) {
-                if (record.operation==106 || record.operation==107) {
+                if (async_buffers && async_buffers->complete(record)) { ++binding_map_completions; return; }
+                if (record.operation==106 || record.operation==107 || record.operation==108) {
                     auto& request=map_requests[record.operation-106];
                     require(request->complete(record,[&](const auto& buffer,auto) {
+                        if (record.operation==108) throw std::bad_alloc();
                         require(record.operation==106,"Canceled mapping attached native memory");
                         require(buffer.GetMapState()==wgpu::BufferMapState::Mapped && buffer.GetMappedRange(8,16),"Asynchronous subrange mapping failed");
                     }),"Map promise completion was not handled");
@@ -427,11 +430,62 @@ int main() {
                                 context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),
                                 std::move(buffer),device.owner(),106+i);
                             auto promise=map_requests[i]->start(adapter_service->dawn().completions(),wgpu::MapMode::Write,8,16).ToLocalChecked();
-                            require(context->Global()->Set(context,v8::String::NewFromUtf8(isolate,i==0 ? "asyncMapProbe" : "cancelMapProbe").ToLocalChecked(),promise).FromMaybe(false),"Map promise publication failed");
+                            require(context->Global()->Set(context,v8::String::NewFromUtf8(isolate,i==0 ? "asyncMapProbe" : i==1 ? "cancelMapProbe" : "allocationMapProbe").ToLocalChecked(),promise).FromMaybe(false),"Map promise publication failed");
                         }
                     });
-                    require(run("globalThis.asyncMapDone=false;globalThis.cancelMapDone=false;asyncMapProbe.then(v=>{if(v!==undefined)throw new Error('map result');asyncMapDone=true});cancelMapProbe.catch(e=>{if(!(e instanceof DOMException)||e.name!=='AbortError')throw e;cancelMapDone=true});"),"Map promise observers failed");
+                    require(run("globalThis.asyncMapDone=false;globalThis.cancelMapDone=false;globalThis.allocationMapDone=false;allocationMapProbe.catch(e=>{if(!(e instanceof RangeError))throw e;allocationMapDone=true});asyncMapProbe.then(v=>{if(v!==undefined)throw new Error('map result');asyncMapDone=true});cancelMapProbe.catch(e=>{if(!(e instanceof DOMException)||e.name!=='AbortError')throw e;cancelMapDone=true});"),"Map promise observers failed");
                     require(map_requests[1]->cancel() && !map_requests[1]->pending(),"Map cancellation failed");
+                    async_buffers=std::make_unique<v8_webgpu_buffers>(isolate,context,3,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>());
+                    adapter_service->with_device(device_handle,[&](auto& device) {
+                        for (const char* name:{"bindingBuffer","bindingCancelBuffer","bindingReadBuffer"}) {
+                            wgpu::BufferDescriptor descriptor{}; descriptor.size=64;
+                            descriptor.usage=wgpu::BufferUsage::MapWrite|wgpu::BufferUsage::CopySrc;
+                            const bool read=std::string_view(name)=="bindingReadBuffer";
+                            if (read) descriptor.usage=wgpu::BufferUsage::MapRead|wgpu::BufferUsage::CopyDst;
+                            auto handle=device.create_buffer(descriptor);
+                            if (read) device.with_buffer(handle,[&](const auto& buffer) {
+                                std::array<uint32_t,16> data; data.fill(0x11223344);
+                                device.native().GetQueue().WriteBuffer(buffer,0,data.data(),sizeof(data));
+                            });
+                            auto object=async_buffers->wrap(context,*adapter_service,device_handle,handle).ToLocalChecked();
+                            require(context->Global()->Set(context,v8::String::NewFromUtf8(isolate,name).ToLocalChecked(),object).FromMaybe(false),"Async binding buffer publication failed");
+                        }
+                    });
+                    require(run(R"JS(
+                        globalThis.bindingMapDone=false;globalThis.bindingCancelDone=false;globalThis.bindingRemapDone=false;globalThis.bindingConversionDone=false;globalThis.bindingReadDone=false;
+                        {
+                            if(bindingBuffer.mapAsync.length!==1)throw new Error('mapAsync length');
+                            let conversion=bindingBuffer.mapAsync(1n);
+                            if(!(conversion instanceof Promise))throw new Error('mapAsync conversion threw synchronously');
+                            conversion.catch(e=>{if(!(e instanceof TypeError))throw e;bindingConversionDone=true});
+                            let promise=bindingBuffer.mapAsync(2,8,16);
+                            if(!(promise instanceof Promise)||bindingBuffer.mapState!=='pending')throw new Error('pending map state');
+                            promise.then(()=>{
+                                if(bindingBuffer.mapState!=='mapped')throw new Error('completed map state');
+                                let view=bindingBuffer.getMappedRange(8,16);new Uint32Array(view)[0]=42;
+                                bindingBuffer.unmap();
+                                if(view.byteLength!==0||bindingBuffer.mapState!=='unmapped')throw new Error('async view detach');
+                                bindingMapDone=true;delete globalThis.bindingBuffer;
+                            });
+                            bindingReadBuffer.mapAsync(1,8,16).then(()=>{
+                                let words=new Uint32Array(bindingReadBuffer.getMappedRange(8,16));
+                                if(words[0]!==0x11223344)throw new Error('read mapping data');
+                                words[0]=0xffffffff;bindingReadBuffer.unmap();
+                                return bindingReadBuffer.mapAsync(1,8,16);
+                            }).then(()=>{
+                                if(new Uint32Array(bindingReadBuffer.getMappedRange(8,16))[0]!==0x11223344)throw new Error('READ writes reached GPU buffer');
+                                bindingReadBuffer.unmap();bindingReadDone=true;delete globalThis.bindingReadBuffer;
+                            });
+                            bindingCancelBuffer.mapAsync(2,0,16).catch(e=>{
+                                if(!(e instanceof DOMException)||e.name!=='AbortError')throw e;bindingCancelDone=true;
+                            });
+                            bindingCancelBuffer.unmap();
+                            bindingCancelBuffer.mapAsync(2,16,16).then(()=>{
+                                if(bindingCancelBuffer.getMappedRange(16,16).byteLength!==16)throw new Error('remap range');
+                                bindingCancelBuffer.unmap();bindingRemapDone=true;delete globalThis.bindingCancelBuffer;
+                            });
+                        }
+                    )JS"),"JavaScript mapAsync dispatch failed");
                     buffer_wrappers_tested=true;
                     return;
                 }
@@ -563,6 +617,7 @@ int main() {
                         require(gc_buffers->detach_device(*adapter_service,gc_buffer_device)==0,"Device detachment was not idempotent");
 
                     });
+                    async_buffers.reset();
                     adapter_service->destroy_device(gc_buffer_device);
                     gc_buffers.reset(); // Delayed wrapper releases tolerate retired native devices.
 
@@ -587,7 +642,7 @@ int main() {
             wrong.join();
             require(wrong_thread_rejected,"wrong-thread initialization accepted");
             adapter_service=&graphics;
-            releases=graphics.release_endpoint(4);
+            releases=graphics.release_endpoint(8);
             auto mailbox=graphics.dawn().completions();
             auto ticket=mailbox->reserve(1,{graphics.engine_identity(),new_owner_token(),0}).value();
             std::thread native_callback([mailbox,ticket] { mailbox->publish(ticket,completion_status::success); });
@@ -600,12 +655,12 @@ int main() {
             }
             require(delivered,"hidden completion did not progress");
 
-            while ((!adapter_delivered || !adapter_cancelled || !buffer_wrappers_tested || map_completions!=2 || failed_wrapper_count!=2 || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
+            while ((!adapter_delivered || !adapter_cancelled || !buffer_wrappers_tested || binding_map_completions!=5 || map_completions!=3 || failed_wrapper_count!=2 || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
                 if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Adapter task failed");
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
             require(adapter_delivered && discovered_adapter.table && adapter_cancelled,"Actual Dawn adapter discovery/cancellation failed");
-            require(runtime.execute("if(!asyncMapDone || !cancelMapDone || !adapterPromiseDone || !cancelledAdapterDone || wrapperFailures!==2 || rafDone!==0)throw new Error('adapter promise did not progress while hidden');", "adapter-promise-check"),"Adapter promise checkpoint failed");
+            require(runtime.execute("if(!allocationMapDone || !bindingReadDone || !bindingMapDone || !bindingCancelDone || !bindingRemapDone || !bindingConversionDone || !asyncMapDone || !cancelMapDone || !adapterPromiseDone || !cancelledAdapterDone || wrapperFailures!==2 || rafDone!==0)throw new Error('adapter promise did not progress while hidden');", "adapter-promise-check"),"Adapter promise checkpoint failed");
             adapter_service->with_adapter(discovered_adapter,[](const auto& adapter) {
                 require(static_cast<bool>(adapter),"Discovered adapter lost its native reference");
             });

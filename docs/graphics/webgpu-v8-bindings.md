@@ -350,3 +350,31 @@ argument conversion, early rejection/validation semantics, pending mapState,
 selected-range attachment, and unmap/destroy/device-loss cancellation wiring.
 Admission saturation and mapping attachment failure policies also remain internal
 behavior requiring qualification against the complete browser binding.
+
+### Internal GPUBuffer.mapAsync integration
+
+The internal buffer prototype now exposes mapAsync and routes native completion
+records through its registry. WebIDL conversion failures return rejected promises;
+pending state is tracked on the content side until the engine handles completion.
+Successful requests attach their selected range before resolving. unmap, destroy
+and the device-detachment hook cancel pending promises, while a separate request
+list keeps canceled native operations identifiable until their callbacks retire.
+An immediate remap therefore cannot be completed by the old canceled operation.
+
+WRITE views reference Dawn mapped memory directly. READ mappings copy the selected
+bytes into mutable CPU storage so JavaScript changes are discarded on unmap; a
+second read verifies the native buffer remained unchanged. This explicit buffer
+read operation does not add pixel readback to ordinary canvas composition.
+Mapping allocation failures reject RangeError and unmap native storage.
+
+The rebuilt macOS runtime test now invokes mapAsync from JavaScript and passes
+pending/mapped/unmapped state, selected WRITE range, cancel-and-immediate-remap,
+READ data and discarded writes, promise-based BigInt conversion rejection, method
+arity, and injected mapping-allocation failure checks. Native callbacks still do
+not enter V8 directly.
+
+This remains an internal factory. Public navigator/device creation, complete
+error-scope/uncaptured-error integration, loss delivery, all invalid-descriptor
+and saturation cases, trusted DOMException-construction reentrancy, and complete
+WebIDL interface exposure remain unfinished or unqualified. No app-level WebGPU
+readiness or conformance claim follows from this test.
