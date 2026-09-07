@@ -1,6 +1,7 @@
 #if defined(__APPLE__)
 #include <IOSurface/IOSurface.h>
 #include <CoreVideo/CoreVideo.h>
+#include "iosurface_gl_check.h"
 #endif
 #include "../../../../experiments/WebScene.NativeEngine.Probe/native/graphics/dawn_canvas_images.h"
 #include "include/gpu/graphite/dawn/DawnBackendContext.h"
@@ -122,8 +123,9 @@ int main(int argc, char** argv) {
     constexpr size_t bufferSize = rowBytes * height;
     wgpu::TextureDescriptor textureDescriptor{};
     textureDescriptor.size = {width, height, 1};
-    textureDescriptor.format = wgpu::TextureFormat::RGBA8Unorm;
+    textureDescriptor.format = sharedOutput ? wgpu::TextureFormat::BGRA8Unorm : wgpu::TextureFormat::RGBA8Unorm;
     textureDescriptor.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::TextureBinding;
+    std::shared_ptr<void> sharedSurface;
     wgpu::SharedTextureMemory sharedMemory;
     wgpu::Texture texture;
     if (sharedOutput) {
@@ -134,12 +136,13 @@ int main(int argc, char** argv) {
             CFDictionarySetValue(dictionary,key,number); CFRelease(number);
         };
         add(kIOSurfaceWidth,width); add(kIOSurfaceHeight,height);
-        add(kIOSurfaceBytesPerElement,4); add(kIOSurfacePixelFormat,kCVPixelFormatType_32RGBA);
+        add(kIOSurfaceBytesPerElement,4); add(kIOSurfacePixelFormat,kCVPixelFormatType_32BGRA);
         auto ioSurface=IOSurfaceCreate(dictionary); CFRelease(dictionary);
         if (!ioSurface) return finish("failed","IOSurface allocation failed",1);
         wgpu::SharedTextureMemoryIOSurfaceDescriptor io{}; io.ioSurface=ioSurface;
         wgpu::SharedTextureMemoryDescriptor descriptor{}; descriptor.nextInChain=&io;
-        sharedMemory=device.ImportSharedTextureMemory(&descriptor); CFRelease(ioSurface);
+        sharedSurface=std::shared_ptr<void>(ioSurface,[](void* value) { CFRelease(value); });
+        sharedMemory=device.ImportSharedTextureMemory(&descriptor);
         wgpu::SharedTextureMemoryProperties properties{};
         if (!sharedMemory || sharedMemory.GetProperties(&properties)!=wgpu::Status::Success)
             return finish("failed","IOSurface import failed",1);
@@ -254,8 +257,11 @@ int main(int argc, char** argv) {
                 constexpr std::array<int,4> green{0,255,0,255};
                 const auto& wanted=(x>=10 && x<15 && y>=1 && y<3) ? green
                     : (x>=2 && x<8 && y>=1 && y<3) ? blended : expected;
-                valid &= std::abs(int(pixels[y * rowBytes + x * 4 + c]) - wanted[c]) <= 1;
+                valid &= std::abs(int(pixels[y * rowBytes + x * 4 + (sharedOutput && c<3 ? 2-c : c)]) - wanted[c]) <= 1;
             }
+#if defined(__APPLE__)
+    if (sharedOutput) valid &= check_iosurface_gl(static_cast<IOSurfaceRef>(sharedSurface.get()),width,height,pixels,rowBytes);
+#endif
     buffer.Unmap();
     // The mapped readback follows Graphite submission on the same queue, proving
     // this consumer's GPU sampling is complete before its lease is retired.

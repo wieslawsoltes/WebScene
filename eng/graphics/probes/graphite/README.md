@@ -147,3 +147,18 @@ not import into CGL/OpenGL or implement host waits on the exported Metal fences.
 No IOSurface CPU mapping or pixel upload is used; final readback remains diagnostic.
 The native implementation follows the pinned Dawn IOSurface white-box test's
 allocation/import pattern. This experimental mode is not a production allocator.
+
+## CGL consumer verification
+
+The IOSurface mode now uses BGRA storage and also imports the completed surface
+into an accelerated CGL 3.2 context using a rectangle texture. Link additionally
+with `-framework OpenGL` and define `GL_SILENCE_DEPRECATION`. The initial RGBA/byte
+CGL tuple failed with error 10008; BGRA with UNSIGNED_INT_8_8_8_8_REV imports. Both
+Dawn and GL diagnostic reads verify all 68 pixels after explicit channel-order
+normalization. This supersedes the earlier RGBA output choice.
+
+Passed on M4. CGL receives the IOSurface itself, not a CPU-uploaded bitmap. However,
+the test deliberately starts CGL after the Dawn diagnostic map establishes producer
+completion, and GL also reads back for verification. Thus it proves cross-API pixel
+compatibility only, not asynchronous steady-state synchronization or Avalonia host
+integration. Rectangle-to-host-2D texture handling and completion handoff remain.
