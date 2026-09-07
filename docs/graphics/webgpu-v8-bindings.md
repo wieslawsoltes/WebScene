@@ -115,3 +115,22 @@ against actual adapter support, private-feature exclusion, null rejection, and
 the default device's enabled subset. It passes. This is the feature translation
 layer for discovery and device descriptors; GPUSupportedFeatures setlike objects,
 SameObject identity and public capability exposure still require integration.
+
+### GPUBufferDescriptor conversion
+
+`v8_webgpu_buffer_descriptor.h` converts the pinned buffer dictionary atomically.
+It reads inherited label before mappedAtCreation, size and usage, preserves
+property/coercion exceptions, replaces lone label surrogates for USVString, and
+preserves embedded NUL bytes. Required size/usage members are checked before
+native allocation. EnforceRange uses truncation followed by bounds checking:
+GPUSize64 accepts at most 2^53−1 and usage at most 2^32−1. BigInt, Symbol,
+non-finite values and out-of-range integers produce TypeError. These rules follow
+[WebIDL integer conversion](https://webidl.spec.whatwg.org/#abstract-opdef-converttoint).
+
+The V8 runtime test covers defaults, inherited properties, coercion/getter order,
+USVString encoding, both integer boundaries, invalid inputs, atomic failure and
+exception identity. It passes on the macOS enabled build. Usage combinations,
+mapped alignment and device limits are not dictionary conversion errors: those
+remain native WebGPU validation. The converter is not yet connected to a public
+GPUDevice.createBuffer binding; buffer allocation and JS resource wrappers still
+require integration.
