@@ -675,8 +675,38 @@ int main() {
                     device_registry=std::make_unique<v8_webgpu_devices>(isolate,context,context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),1,2);
                     auto device_object=device_registry->wrap(context,*adapter_service,gc_buffer_device).ToLocalChecked();
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"deviceProbe"),device_object).FromMaybe(false),"Device wrapper publication failed");
+                    auto feature_object=device_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"features")).ToLocalChecked().As<v8::Object>();
+                    auto feature_has=feature_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"has")).ToLocalChecked().As<v8::Function>();
+                    adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
+                        size_t enabled=0;
+                        for (const auto& feature:webgpu_feature_names) {
+                            v8::Local<v8::Value> argument=v8::String::NewFromUtf8(isolate,feature.name.data(),v8::NewStringType::kNormal,static_cast<int>(feature.name.size())).ToLocalChecked();
+                            const bool expected=owned.native().HasFeature(feature.native);
+                            require(feature_has->Call(context,feature_object,1,&argument).ToLocalChecked()->BooleanValue(isolate)==expected,"Device feature differs from native enabled set");
+                            enabled+=expected;
+                        }
+                        require(feature_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"size")).ToLocalChecked()->Uint32Value(context).FromJust()==enabled,"Device feature count differs from native enabled set");
+                    });
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {
+                            const features=deviceProbe.features;
+                            globalThis.retainedFeatures=features;
+                            if(features!==deviceProbe.features)throw new Error('features identity');
+                            if(Object.prototype.toString.call(features)!=='[object GPUSupportedFeatures]')throw new Error('features brand');
+                            const names=[...features];
+                            if(names.length!==features.size || new Set(names).size!==names.length)throw new Error('features size');
+                            if(features.keys!==features.values || features.values!==features[Symbol.iterator])throw new Error('features iterator identity');
+                            if(features.has('dawn-internal-usages') || features.has('shared-texture-memory-iosurface'))throw new Error('private feature exposed');
+                            for(const name of names)if(!features.has({toString(){return name}}))throw new Error('feature coercion');
+                            for(const [a,b] of features.entries())if(a!==b || !features.has(a))throw new Error('feature entries');
+                            let count=0;const thisArg={};features.forEach(function(a,b,set){if(this!==thisArg || a!==b || set!==features)throw new Error('forEach arguments');count++},thisArg);
+                            if(count!==features.size || features.add || features.delete || features.clear)throw new Error('immutable features');
+                            for(const operation of [()=>features.has(),()=>features.has(Symbol()),()=>features.has.call({},'x'),()=>features.forEach(null),()=>Set.prototype.add.call(features,'x')]) {
+                                let rejected=false;try{operation()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('features validation');
+                            }
+                            const featureFailure={};let featureThrown=false;
+                            try{features.has({toString(){throw featureFailure}})}catch(e){featureThrown=e===featureFailure}
+                            if(!featureThrown)throw new Error('feature coercion exception');
                             if(deviceProbe.label!=='')throw new Error('device label default');
                             deviceProbe.label='device\0\ud800';
                             if(deviceProbe.label!=='device\0\ufffd')throw new Error('device label conversion');
@@ -799,6 +829,7 @@ int main() {
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
             require(device_map_retired,"Device map native completion did not retire");
+            require(runtime.execute("if([...retainedFeatures].length!==retainedFeatures.size)throw new Error('retained features');delete globalThis.retainedFeatures;", "retained-features"),"Feature snapshot did not survive registry disposal");
             require(runtime.execute("if(!deviceMapCancelled)throw new Error('device cancellation promise not delivered');", "device-map-cancel-check"),"Device map rejection failed");
             require(weak_releases==2 && releases->occupied()==0,"registry disposal release did not drain");
             require(mailbox->metrics().occupied==0,"completion storage not reclaimed");

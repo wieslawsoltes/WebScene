@@ -462,3 +462,21 @@ and forward the label to Dawn. Failed conversion leaves the prior label intact.
 The rebuilt macOS V8 test passes default, surrogate/NUL, Symbol, throwing-conversion
 and post-destroy label assertions. Public discovery and remaining device/queue
 capabilities are still unfinished.
+
+### Device enabled-feature snapshot
+
+The internal device factory now exposes a SameObject `features` snapshot backed
+by a traced, inaccessible V8 Set. Only the generated standard GPUFeatureName
+mapping is admitted, and contents come from the device's enabled features rather
+than the adapter's available capabilities. The read-only setlike surface includes
+size, has, keys/values/iteration, entries and forEach. Iterators use built-ins
+captured when the factory is initialized in the trusted realm; this factory must
+be constructed before running untrusted scripts. Snapshot objects retain their
+backing data independently of native device ownership and factory lifetime.
+
+The macOS V8 runtime test compares every standard feature against the actual Dawn
+device, checks count, identity, iteration, callback arguments, DOMString coercion,
+receiver checks, mutation rejection and exception propagation, and uses a retained
+snapshot after device registry disposal. This remains an internal binding; public
+navigator.gpu, requestDevice and rendering commands are still required before a
+JavaScript WebGPU app can render.
