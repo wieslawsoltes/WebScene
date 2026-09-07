@@ -161,17 +161,13 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
                         { Completed.TrySetException(new InvalidOperationException("Probe window unavailable for detach")); return; }
                         window.Content = null;
                         DetachedBeforeRetirement = true;
-                        _ = Task.Run(() =>
+                        _ = Task.Run(async () =>
                         {
                             try
                             {
                                 if (Environment.CurrentManagedThreadId == renderingThread) throw new InvalidOperationException("Detached probe must retire on a different thread");
-                                var deadline = DateTime.UtcNow.AddSeconds(5);
-                                while (!retiring.TryCompleteWithoutVisual())
-                                {
-                                    if (DateTime.UtcNow >= deadline) throw new TimeoutException("Detached GPU retirement did not complete");
-                                    Thread.Sleep(1);
-                                }
+                                await NativeMacOSGpuRetirement.Start(retiring).WaitAsync(TimeSpan.FromSeconds(5));
+                                if (NativeMacOSGpuRetirement.RetainedCount != 0) throw new InvalidOperationException("Completed retirement retained its owner");
                                 _renderer.Reset();Completed.TrySetResult();
                             }
                             catch (Exception error) { Completed.TrySetException(error); }

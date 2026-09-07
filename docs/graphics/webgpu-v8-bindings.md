@@ -1537,3 +1537,29 @@ copies and completed GPU retirement. Evidence is
 `evidence/ganesh-host/detached-retirement.json`; probe build has zero warnings.
 Production stop must still transfer ownership to this path before normal GPU
 scene admission is enabled.
+
+### Opt-in composition-handler GPU path
+
+NativeSceneCompositionHandler now has explicit macOS GPU admission (default
+false). The admitted branch acquires ordered v3 scenes with image/ordered-canvas
+capabilities, applies transactional image bindings, prepares imports under the
+Skia lease and supplies indexed GPU drawing during retained replay. Admission
+backpressure keeps the publication edge available while rendering drains old
+retirements. GPU-only work can request full invalidation when CPU damage is empty.
+The legacy CPU acquisition path remains the default.
+
+Stop removes the handler's presenter reference and transfers exclusive ownership
+to NativeMacOSGpuRetirement. That service roots the owner independently of the
+removed visual, polls detached retirement on a worker, and removes the root only
+on completion. Failure/15-second timeout is traced and leaves resources retained
+for diagnosis rather than fabricating completion. Framework context lifetime,
+failed-owner recovery and final application shutdown coordination still require
+qualification; the service is not a claim of complete device-loss handling.
+
+The detach window probe now uses this service and verifies its retained count
+returns to zero after completion: 32 frames, two imports, eight diagnostic pixel
+checks and zero explicit transport copies. Three native ownership/application
+tests and 21 damage/mailbox policy tests pass with zero skips on macOS/net10.0;
+probe build has zero warnings. These tests do not yet drive the admitted handler
+with a normal GPU-producing engine. Desktop negotiation/engine enablement,
+ordinary full-path rendering, captures/frozen scenes and Uno remain outstanding.

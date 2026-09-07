@@ -1,0 +1,53 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+
+namespace WebScene.Backends.Avalonia.Native;
+
+// Owns detached presenters independently of their removed composition visual.
+// Failed retirement stays retained for diagnosis; timeout/loss is not completion.
+internal static class NativeMacOSGpuRetirement
+{
+    private sealed class Pending(NativeMacOSGpuScenePresenter presenter)
+    {
+        internal readonly NativeMacOSGpuScenePresenter Presenter = presenter;
+        internal readonly TaskCompletionSource Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+    private static readonly ConcurrentDictionary<long, Pending> Owners = new();
+    private static long _nextId;
+    internal static int RetainedCount => Owners.Count;
+
+    internal static Task Start(NativeMacOSGpuScenePresenter presenter)
+    {
+        ArgumentNullException.ThrowIfNull(presenter);
+        presenter.BeginShutdown();
+        if (presenter.TryDiscardUnprepared()) return Task.CompletedTask;
+        var pending = new Pending(presenter);
+        var id = Interlocked.Increment(ref _nextId);
+        if (!Owners.TryAdd(id, pending)) throw new InvalidOperationException("GPU retirement identity collision.");
+        try
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var started = Stopwatch.GetTimestamp();
+                    while (!presenter.TryCompleteWithoutVisual())
+                    {
+                        if (Stopwatch.GetElapsedTime(started) > TimeSpan.FromSeconds(15))
+                            throw new TimeoutException("GPU retirement did not complete; resources remain retained.");
+                        await Task.Delay(4).ConfigureAwait(false);
+                    }
+                    Owners.TryRemove(id, out _);
+                    pending.Completion.TrySetResult();
+                }
+                catch (Exception error)
+                {
+                    Trace.TraceError($"GPU retirement {id} failed and retains its resources: {error}");
+                    pending.Completion.TrySetException(error);
+                }
+            });
+        }
+        catch (Exception error) { pending.Completion.TrySetException(error); }
+        return pending.Completion.Task;
+    }
+}
