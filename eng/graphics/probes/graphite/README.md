@@ -1,5 +1,33 @@
 # Shared-device Graphite spike
 
+## Current build entry point
+
+After acquiring the pinned Skia checkout and its DEPS as described below, and
+building the sealed WebScene Dawn SDK:
+
+```sh
+python3 eng/graphics/probes/graphite/build-probe.py \
+  --skia artifacts/graphics-src/skia \
+  --dawn-sdk artifacts/graphics-sdk/osx-arm64/dawn \
+  --output out/webscene-graphite --jobs 8
+```
+
+This macOS arm64 diagnostic entry point validates the complete Dawn SDK inventory,
+applies only the reviewed external-Dawn patch to the pinned Skia checkout, rejects
+other tracked Skia changes, generates/builds Graphite, and links the standalone
+and Avalonia-host probe binaries. It emits `probe-build.json` with commands,
+compiler identity, input hashes and hashes of both binaries and libskia.a.
+A failed rebuild removes the previous success manifest. It does not fetch source,
+qualify hardware, audit all transitive dependency working trees or package a
+production renderer. Skia's minimal feature flags remain experimental.
+
+Validated locally using the existing Skia build cache: SDK verification (79 files),
+GN generation, Ninja and both links passed. The resulting host probe passed 64
+changing-marker checks and 64 Avalonia updates with two source textures and one
+output texture. This is not evidence of a fresh clean Graphite build.
+
+## Investigation history
+
 Experimental source pin: Skia `0f366c36621fc156664662b8ea5426d2f41cefe1`.
 WebScene Dawn SDK pin: `2ca8cbfe0f8275aa0f739e7b6b4345a16e2f0378`.
 Skia's own DEPS instead pins Dawn `f45d1eb98a88b29d2ec38171613525cd5e54c0c0`.
