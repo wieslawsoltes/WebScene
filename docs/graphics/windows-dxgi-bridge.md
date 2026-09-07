@@ -146,3 +146,21 @@ null handles and disabled features; the standalone probe builds. Positive DXGI
 import and native GPU waits are not exercised on macOS. The Windows producer and
 probe consumer, native adapter queries, fence signaling, device-loss behavior and
 hardware/copy/leak qualification remain outstanding. No Windows pass is claimed.
+
+## Native adapter identity
+
+`dxgi_device_identity.h` queries an actual D3D11 device through IDXGIDevice,
+IDXGIAdapter and its descriptor, or an actual D3D12 device through GetAdapterLuid.
+Both reject removed devices. Query failures clear identity; endpoint initialization
+also clears stale format/synchronization flags. This supplies the identity portion
+of capability negotiation but does not infer format support or sharing success.
+
+LUIDs are compared only within the current machine/boot, consistent with
+[Microsoft's GetAdapterLuid contract](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-getadapterluid).
+Do not persist them as durable GPU identities or substitute vendor/device IDs.
+
+The hosted non-GPU test target includes both overloads and null-device/stale-state
+checks. Its portable ownership tests pass locally (0.31 seconds); the Windows-only
+query code remains uncompiled and unexecuted on this macOS host. Actual producer
+and presenter devices still need to be connected to these queries and validated
+against Windows hardware manifests.
