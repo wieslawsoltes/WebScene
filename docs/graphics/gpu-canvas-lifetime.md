@@ -315,3 +315,19 @@ Skia image import, or cross-device synchronization.
 After native presenter resolution, a complete graphics-enabled rebuild and CTest
 run passed all 16 tests in 13.86 seconds. The earlier intermittent DOM activation
 failure remains an unresolved historical observation; this pass does not diagnose it.
+
+## Producer-to-consumer pixel evidence on Dawn
+
+The hardware fixture now clears a 64×64 RGBA8 texture, publishes its retained
+image, resolves it through a consumer lease, and submits a diagnostic texture-to-
+buffer copy to the same Dawn queue before processing completion events. Canvas
+owner and scene references are released while the submissions are outstanding.
+Queue completion retires both producer and consumer; MapAsync then allows exact
+verification of all 4,096 pixels as RGBA (64, 128, 191, 255). The focused Dawn
+hardware test passes in 0.48 seconds on Metal.
+
+There is no CPU completion wait between producer and consumer submission. This
+uses the ordering of the same native queue, not cross-device or cross-backend
+synchronization. The readback is deliberately diagnostic and is not a production
+presentation path or evidence of zero-copy Skia composition. Browser bindings,
+Skia import/sampling and synchronization across backend APIs remain unfinished.
