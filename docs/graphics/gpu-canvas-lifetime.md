@@ -58,3 +58,40 @@ HTML attribute parsing/getter semantics.
 The full 14-test local suite passed after the runtime wiring; the focused V8
 fixture is rerun with the separate CSS-size assertion. These remain metadata and
 2D recording checks, not proof of GPU pool allocation or zero-copy presentation.
+
+## Bounded image lease state machine
+
+`image_lease_pool` now implements the lifetime metadata for exactly three image
+slots and a fixed-capacity ticket table (128 tickets by default). Each retained
+reference and consumer GPU use receives a separate generation-bearing ticket;
+duplicate release/completion cannot decrement another consumer's ownership.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Writing: acquire writer
+    Writing --> Published: publish retained reference
+    Writing --> Idle: cancel before backend use
+    Published --> Published: retain / begin consumer / release / completion
+    Published --> Idle: producer done AND no retained references AND no consumers
+```
+
+Producer completion can arrive before CPU publication. Consumer registration can
+precede producer completion, but the backend must enqueue the appropriate GPU
+wait before sampling. No CPU wait is imposed by the metadata pool. Releasing a
+scene/reference does not finish consumer work. Close stops new writers while
+allowing existing retained images to be redrawn and their tickets completed.
+Publish/retain/consumer admission returns backpressure when ticket storage is
+full; image storage cannot grow beyond three slots.
+
+The native test checks three-slot saturation, a retained reference independent
+of the scene reference, two separate consumer tickets, cross-thread completion,
+stale writer generations, duplicate/wrong-kind completions, close with retained
+redraw, producer completion arriving last or before publication, and ticket-table
+saturation/retry. The focused CTest and Clang ThreadSanitizer run both pass.
+
+This class owns no GPU allocation and performs no pixel copy. Backend image
+objects, versioned scene acquisition, opaque lease ABI, resize metadata and
+presenter fence integration are still to be connected. Integration must keep the
+pool and its native image owner alive until every outstanding ticket has retired;
+the metadata class alone does not implement engine-detachment lifetime transfer.
