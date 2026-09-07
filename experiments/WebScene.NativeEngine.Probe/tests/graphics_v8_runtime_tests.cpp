@@ -648,7 +648,7 @@ int main() {
                         }
                     });
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"adapterWrapperProbe"),adapter_object).FromMaybe(false),"Adapter wrapper publication failed");
-                    require(run("globalThis.adapterDevicePromise=adapterWrapperProbe.requestDevice({label:'via adapter'});"),"Adapter requestDevice call failed");
+                    require(run("globalThis.adapterDevicePromise=adapterWrapperProbe.requestDevice({label:'via adapter',defaultQueue:{label:'JS queue'}});"),"Adapter requestDevice call failed");
                     auto requested_device_promise=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"adapterDevicePromise")).ToLocalChecked().As<v8::Promise>();
                     auto request_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
                     while (requested_device_promise->State()==v8::Promise::kPending && std::chrono::steady_clock::now()<request_deadline) {
@@ -667,6 +667,8 @@ int main() {
                         let infoBrand=false;try{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ai),'vendor').get.call({})}catch(e){infoBrand=e instanceof TypeError}if(!infoBrand)throw new Error('adapter info receiver');
                         globalThis.retainedAdapterInfo=ai;
                         if(adapterDeviceProbe.label!=='via adapter')throw new Error('requested device label');
+                        if(adapterDeviceProbe.queue!==adapterDeviceProbe.queue||adapterDeviceProbe.queue.label!=='JS queue'||Object.prototype.toString.call(adapterDeviceProbe.queue)!=='[object GPUQueue]')throw new Error('device queue identity');
+                        adapterDeviceProbe.queue.label='updated queue';if(adapterDeviceProbe.queue.label!=='updated queue')throw new Error('queue label');
                         {const encoder=adapterDeviceProbe.createCommandEncoder({label:'JS encoder'});
                          if(Object.prototype.toString.call(encoder)!=='[object GPUCommandEncoder]'||encoder.label!=='JS encoder'||encoder.finish.length!==0)throw new Error('encoder wrapper');
                          const sentinel={};let propagated=false;try{encoder.finish({get label(){throw sentinel}})}catch(e){propagated=e===sentinel}if(!propagated)throw new Error('finish exception');
@@ -678,8 +680,8 @@ int main() {
                          }
                          const empty=adapterDeviceProbe.createCommandEncoder().finish();if(empty.label!=='')throw new Error('encoder defaults');}
 
-                        {const texture=adapterDeviceProbe.createTexture({label:'JS texture',size:[4,2],format:'rgba8unorm',usage:16});
-                         if(texture.width!==4||texture.height!==2||texture.depthOrArrayLayers!==1||texture.mipLevelCount!==1||texture.sampleCount!==1||texture.dimension!=='2d'||texture.format!=='rgba8unorm'||texture.usage!==16)throw new Error('texture metadata');
+                        {const texture=adapterDeviceProbe.createTexture({label:'JS texture',size:[4,2],format:'rgba8unorm',usage:17});
+                         if(texture.width!==4||texture.height!==2||texture.depthOrArrayLayers!==1||texture.mipLevelCount!==1||texture.sampleCount!==1||texture.dimension!=='2d'||texture.format!=='rgba8unorm'||texture.usage!==17)throw new Error('texture metadata');
                          if(Object.prototype.toString.call(texture)!=='[object GPUTexture]'||texture.label!=='JS texture')throw new Error('texture wrapper');
                          const view=texture.createView({label:'JS view'});
                          if(Object.prototype.toString.call(view)!=='[object GPUTextureView]'||view.label!=='JS view')throw new Error('view wrapper');
@@ -700,7 +702,16 @@ int main() {
                          pass.setPipeline(pipeline);pass.draw(3);pass.end();
                          const drawCommands=drawEncoder.finish({label:'triangle commands'});
                          if(drawCommands.label!=='triangle commands')throw new Error('recorded draw commands');
-                         texture.destroy();texture.destroy();
+                         for(const call of [()=>adapterDeviceProbe.queue.submit(),()=>adapterDeviceProbe.queue.submit([{}]),()=>adapterDeviceProbe.queue.submit.call({},[])]) {
+                             let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid queue call');
+                         }
+                         const queueSentinel={};let queueException=false;
+                         try{adapterDeviceProbe.queue.submit({[Symbol.iterator](){throw queueSentinel}})}catch(e){queueException=e===queueSentinel}
+                         if(!queueException)throw new Error('queue iterator exception');
+                         adapterDeviceProbe.queue.submit(new Set([drawCommands]));
+                         globalThis.triangleTextureProbe=texture;
+
+                         // Keep the submitted texture alive for diagnostic pixel verification.
                          if(texture.width!==4||texture.label!=='updated texture'||view.label!=='updated view')throw new Error('destroyed texture metadata');}
 
                         {let b=adapterDeviceProbe.createBuffer({size:16,usage:8,mappedAtCreation:true});
@@ -711,6 +722,25 @@ int main() {
                         globalThis.badAdapterReceiverPromise=adapterWrapperProbe.requestDevice.call({});
                         badAdapterReceiverPromise.catch(()=>{});
                     )JS"),"Adapter device resource operations failed");
+                    {
+                        auto native_device=v8_webgpu_devices::native_reference(requested_device_promise->Result());
+                        auto native_texture=v8_webgpu_textures::native_reference(context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"triangleTextureProbe")).ToLocalChecked());
+                        wgpu::BufferDescriptor descriptor{};descriptor.size=512;descriptor.usage=wgpu::BufferUsage::CopyDst|wgpu::BufferUsage::MapRead;
+                        auto readback=native_device.CreateBuffer(&descriptor);auto copy=native_device.CreateCommandEncoder();
+                        wgpu::TexelCopyTextureInfo source{};source.texture=native_texture;
+                        wgpu::TexelCopyBufferInfo destination{};destination.buffer=readback;destination.layout.bytesPerRow=256;destination.layout.rowsPerImage=2;
+                        wgpu::Extent3D extent{4,2,1};copy.CopyTextureToBuffer(&source,&destination,&extent);
+                        auto commands=copy.Finish();native_device.GetQueue().Submit(1,&commands);
+                        auto map_status=std::make_shared<std::atomic<int>>(0);
+                        readback.MapAsync(wgpu::MapMode::Read,0,512,wgpu::CallbackMode::AllowSpontaneous,[map_status](wgpu::MapAsyncStatus status,wgpu::StringView){map_status->store(status==wgpu::MapAsyncStatus::Success?1:-1);});
+                        auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                        while(map_status->load()==0&&std::chrono::steady_clock::now()<deadline){adapter_fixture.pump([](auto){});std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+                        require(map_status->load()==1,"Triangle diagnostic readback did not complete");
+                        const auto* pixels=static_cast<const uint8_t*>(readback.GetConstMappedRange(0,512));require(pixels!=nullptr,"Triangle readback mapping missing");
+                        for(size_t y=0;y<2;++y)for(size_t x=0;x<4;++x){const auto* pixel=pixels+y*256+x*4;require(pixel[0]==255&&pixel[1]==0&&pixel[2]==0&&pixel[3]==255,"JavaScript triangle pixel mismatch");}
+                        readback.Unmap();readback.Destroy();
+                        require(run("triangleTextureProbe.destroy();triangleTextureProbe.destroy();if(triangleTextureProbe.width!==4)throw new Error('destroyed texture metadata');delete globalThis.triangleTextureProbe;"),"Triangle texture cleanup failed");
+                    }
                     for(const char* name:{"consumedAdapterPromise","badAdapterReceiverPromise"}) {
                         auto rejected=context->Global()->Get(context,v8::String::NewFromUtf8(isolate,name).ToLocalChecked()).ToLocalChecked().As<v8::Promise>();
                         require(rejected->State()==v8::Promise::kRejected,"Invalid adapter request did not reject");

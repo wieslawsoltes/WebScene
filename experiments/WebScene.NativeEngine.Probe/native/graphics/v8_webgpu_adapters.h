@@ -174,7 +174,7 @@ public:
                 auto handle=item->service->adopt_device(std::move(adapter),std::move(native));
                 try {
                     v8::Local<v8::Object> wrapper;
-                    if (devices_.wrap(context,*item->service,handle,request->bridge->label()).ToLocal(&wrapper)) return wrapper;
+                    if (devices_.wrap(context,*item->service,handle,request->bridge->label(),request->bridge->queue_label()).ToLocal(&wrapper)) return wrapper;
                 } catch (...) { item->service->destroy_device(handle); throw; }
                 item->service->destroy_device(handle); return {};
             })) continue;

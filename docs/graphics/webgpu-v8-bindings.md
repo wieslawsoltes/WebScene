@@ -1105,3 +1105,31 @@ labels/brands persist. Descriptor tests cover color conversion, dictionary order
 nullable attachments, native storage and atomic failure. Runtime and generator
 checks pass. The recorded command buffer is not submitted in this test: queue
 submission, pixel verification and ordinary canvas presentation remain pending.
+
+
+### First verified JavaScript WebGPU pixels (macOS)
+
+The internal device now exposes a SameObject GPUQueue with label and submit.
+Queue submission converts an iterable of genuine command-buffer wrappers before
+calling Dawn, retaining native references through conversion and rechecking the
+queue afterward. The traced queue/device relationship preserves lifetime without
+an independent GPU reference in GC callbacks. Default-queue labels survive
+asynchronous requestDevice completion. Internal device-reference conversion is
+branded and scoped through the owning graphics service.
+
+The macOS V8 runtime test creates a 4x2 RGBA8 texture, WGSL shader module,
+auto-layout render pipeline, command encoder and render pass entirely through
+JavaScript wrappers. It records a full-target red triangle, ends and finishes,
+then submits through device.queue.submit(new Set([commands])). Native diagnostic
+code subsequently copies the target to a mapped readback buffer and checks all
+eight pixels equal RGBA [255,0,0,255]. The mapping must complete successfully
+within five seconds; missing completion or any pixel mismatch fails. This proves
+actual offscreen JavaScript-driven GPU rendering, not only wrapper construction.
+
+The runtime test passes on this macOS host. It also checks queue identity,
+default/mutable labels, invalid receivers/buffers and iterator exception identity.
+Diagnostic texture readback is used only to assert pixels; it is not introduced
+into the composition path. navigator.gpu installation, GPUCanvasContext,
+ordinary scene image consumption and window presentation are still pending.
+Queue completion promises, writes and other APIs also remain incomplete. This
+result does not establish Kestrel readiness or cross-platform qualification.

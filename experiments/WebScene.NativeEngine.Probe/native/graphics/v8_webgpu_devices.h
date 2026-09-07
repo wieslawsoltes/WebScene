@@ -4,6 +4,7 @@
 #include "v8_webgpu_render_pipelines.h"
 #include "v8_webgpu_textures.h"
 #include "v8_webgpu_command_encoders.h"
+#include "v8_webgpu_queue.h"
 #include "v8_webgpu_render_descriptor.h"
 #include "v8_webgpu_shader_descriptor.h"
 #include "v8_webgpu_supported_features.h"
@@ -21,6 +22,8 @@ class v8_webgpu_devices {
         v8::Global<v8::Private> features_key;
         v8::Global<v8::Private> limits_key;
         v8::Global<v8::Private> info_key;
+        v8::Global<v8::Private> queue_key;
+        std::unique_ptr<v8_webgpu_queue> queue;
         graphics_service* service{};
         resource_handle<dawn_device> device;
         std::unique_ptr<v8_webgpu_buffers> buffers;
@@ -192,6 +195,10 @@ class v8_webgpu_devices {
             info.GetReturnValue().Set(wrapper);
         }catch(const std::exception&){fail(isolate,"Command encoder creation failed");}
     }
+    static void queue(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* item=receiver(info);if(!item)return;v8::Local<v8::Value> value;
+        if(info.This()->GetPrivate(info.GetIsolate()->GetCurrentContext(),item->queue_key.Get(info.GetIsolate())).ToLocal(&value))info.GetReturnValue().Set(value);
+    }
     static void adapter_info(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info); if (!item) return;
         v8::Local<v8::Value> value;
@@ -273,6 +280,7 @@ public:
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"adapterInfo"),v8::FunctionTemplate::New(isolate,adapter_info));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"limits"),v8::FunctionTemplate::New(isolate,limits));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"features"),v8::FunctionTemplate::New(isolate,features));
+        prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"queue"),v8::FunctionTemplate::New(isolate,queue));
         prototype->Set(isolate,"destroy",v8::FunctionTemplate::New(isolate,destroy));
         prototype_.Reset(isolate,prototype->NewInstance(context).ToLocalChecked());
     }
@@ -282,6 +290,7 @@ public:
         check_scope();
         for (auto& item:entries_) if (item) {
             if (!item->wrapper.IsEmpty()) item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
+            item->queue.reset();
             item->encoders.reset();
             item->textures.reset();
             item->pipelines.reset();
@@ -296,8 +305,16 @@ public:
         for (auto& item:entries_) if (item && item->buffers->complete(record)) return true;
         return false;
     }
+    static wgpu::Device native_reference(v8::Local<v8::Value> value) {
+        if(!value->IsObject())throw std::invalid_argument("GPUDevice object required");auto object=value.As<v8::Object>();
+        if(object->InternalFieldCount()!=2||!object->GetInternalField(0)->IsValue()||!object->GetInternalField(0).As<v8::Value>()->IsExternal()
+            ||object->GetInternalField(0).As<v8::External>()->Value(v8::kExternalPointerTypeTagDefault)!=&brand_)throw std::invalid_argument("Incorrect GPUDevice interface");
+        auto* item=static_cast<entry*>(object->GetAlignedPointerFromInternalField(1,v8::kEmbedderDataTypeTagDefault));
+        if(!item)throw std::invalid_argument("GPUDevice realm has been released");
+        wgpu::Device device;item->service->with_device(item->device,[&](auto& owned){device=owned.native();});return device;
+    }
     // Caller retains ownership until a non-empty wrapper is returned.
-    v8::MaybeLocal<v8::Object> wrap(v8::Local<v8::Context> context,graphics_service& service,resource_handle<dawn_device> device,std::string initial_label={}) {
+    v8::MaybeLocal<v8::Object> wrap(v8::Local<v8::Context> context,graphics_service& service,resource_handle<dawn_device> device,std::string initial_label={},std::string queue_label={}) {
         check_scope();
         if (realm_.Get(isolate_)!=context) throw std::logic_error("GPUDevice belongs to another realm");
         service.with_device(device,[](auto&) {});
@@ -335,6 +352,10 @@ public:
         v8::Local<v8::Object> info_object;
         if(!info_factory_.create(context,metadata).ToLocal(&info_object)
             || !wrapper->SetPrivate(context,item->info_key.Get(isolate_),info_object).FromMaybe(false))return {};
+        item->queue_key.Reset(isolate_,v8::Private::New(isolate_));
+        item->queue=std::make_unique<v8_webgpu_queue>(isolate_,service,device,std::move(queue_label));
+        v8::Local<v8::Object> queue_object;
+        if(!item->queue->create(context,wrapper).ToLocal(&queue_object)||!wrapper->SetPrivate(context,item->queue_key.Get(isolate_),queue_object).FromMaybe(false))return {};
         auto ticket=item->releases->reserve(graphics_service::deferred_device_release(device));
         if (!ticket) return {};
         item->ticket=*ticket;
