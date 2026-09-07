@@ -69,8 +69,17 @@ int main() {
     require(b.recommended_idle_wait(std::chrono::milliseconds(100))==std::chrono::milliseconds(100));
     auto mailbox=b.dawn().completions();
     resource_owner owner{b.engine_identity(),new_owner_token(),0};
+    auto cancelled_ticket=mailbox->reserve(2,owner).value();
+    mailbox->cancel_owner(owner);
+    require(b.pump([](auto record) { require(record.status==completion_status::cancelled); })==1);
+    require(!mailbox->has_ready() && mailbox->has_pending());
+    require(b.recommended_idle_wait(std::chrono::milliseconds(100))<=std::chrono::milliseconds(1));
+    require(!mailbox->publish(cancelled_ticket,completion_status::success));
+    require(!b.has_ready_work());
+    require(b.recommended_idle_wait(std::chrono::milliseconds(100))==std::chrono::milliseconds(100));
     auto ticket=mailbox->reserve(1,owner).value();
-    require(b.has_ready_work());
+    require(mailbox->has_pending());
+    require(b.recommended_idle_wait(std::chrono::milliseconds(100))<=std::chrono::milliseconds(1));
     b.pump([](auto) {});
     require(b.recommended_idle_wait(std::chrono::milliseconds(100))<=std::chrono::milliseconds(1));
     require(endpoint->enqueue(command,std::as_bytes(std::span(upload)))==enqueue_result::accepted);

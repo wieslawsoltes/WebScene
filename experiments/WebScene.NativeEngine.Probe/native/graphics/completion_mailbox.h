@@ -20,7 +20,7 @@ struct completion_wake {
     virtual void signal() noexcept = 0;
 };
 struct completion_metrics {
-    size_t pending{},ready{},high_water{};
+    size_t pending{},ready{},high_water{},native_pending{},occupied{};
     uint64_t admitted{},delivered{},rejected_publications{},saturated_reservations{};
     uint64_t latency_samples{},total_latency_ns{},max_latency_ns{};
 };
@@ -29,6 +29,7 @@ class completion_mailbox {
     struct slot {
         state phase{state::free};
         uint64_t generation{};
+        bool native_pending{};
         completion_record record{};
         std::chrono::steady_clock::time_point admitted_at{};
     };
@@ -40,6 +41,8 @@ class completion_mailbox {
     size_t head_{};
     size_t count_{};
     size_t pending_{};
+    size_t native_pending_{};
+    size_t occupied_{};
     bool closed_{};
     const bool measure_latency_;
     completion_metrics metrics_{};
@@ -70,12 +73,15 @@ public:
         if (closed_) return {};
         for (size_t i = 0; i < slots_.size(); ++i) {
             auto& item = slots_[i];
-            if (item.phase == state::free && item.generation != UINT64_MAX) {
+            if (item.phase == state::free && !item.native_pending && item.generation != UINT64_MAX) {
                 ++item.generation;
                 item.phase = state::pending;
                 ++pending_;
+                item.native_pending=true;
+                ++native_pending_;
+                ++occupied_;
                 ++metrics_.admitted;
-                metrics_.high_water=std::max(metrics_.high_water,pending_+count_);
+                metrics_.high_water=std::max(metrics_.high_water,occupied_);
                 if (measure_latency_) item.admitted_at=std::chrono::steady_clock::now();
                 item.record = {operation, owner, completion_status::success};
                 return completion_ticket{identity_, item.generation, i};
@@ -84,23 +90,33 @@ public:
         ++metrics_.saturated_reservations;
         return {};
     }
+    // Called exactly once by the operation's native completion, even after
+    // logical cancellation. Retirement frees a cancelled slot for safe reuse.
     bool publish(completion_ticket ticket, completion_status status) {
         std::shared_ptr<completion_wake> wake;
+        bool accepted=false;
         {
             std::lock_guard lock(mutex_);
-            if (closed_ || ticket.mailbox != identity_ || ticket.slot >= slots_.size()) {
+            if (ticket.mailbox != identity_ || ticket.slot >= slots_.size()) {
                 ++metrics_.rejected_publications; return false;
             }
             auto& item = slots_[ticket.slot];
-            if (item.generation != ticket.generation || item.phase != state::pending) {
+            if (item.generation != ticket.generation || !item.native_pending) {
                 ++metrics_.rejected_publications; return false;
             }
-            item.record.status = status;
-            make_ready(ticket.slot);
-            wake = wake_;
+            item.native_pending=false;
+            --native_pending_;
+            if (item.phase==state::free) --occupied_;
+            if (!closed_ && item.phase==state::pending) {
+                item.record.status=status;
+                make_ready(ticket.slot);
+                accepted=true;
+            } else ++metrics_.rejected_publications;
+            // Also wake capacity waiters when a cancelled operation retires.
+            wake=wake_;
         }
         if (wake) wake->signal();
-        return true;
+        return accepted;
     }
     void cancel_owner(resource_owner owner, completion_status status = completion_status::cancelled) {
         check_engine();
@@ -128,9 +144,10 @@ public:
         std::lock_guard lock(mutex_);
         auto result=metrics_;
         result.pending=pending_; result.ready=count_;
+        result.native_pending=native_pending_; result.occupied=occupied_;
         return result;
     }
-    bool has_pending() const { std::lock_guard lock(mutex_); return pending_ != 0; }
+    bool has_pending() const { std::lock_guard lock(mutex_); return pending_ != 0 || native_pending_ != 0; }
     bool has_ready() const { std::lock_guard lock(mutex_); return count_ != 0; }
     template<class Deliver> bool drain_one(Deliver deliver) {
         check_engine();
@@ -149,6 +166,7 @@ public:
                 metrics_.max_latency_ns=std::max(metrics_.max_latency_ns,elapsed);
             }
             item.phase = state::free;
+            if (!item.native_pending) --occupied_;
             head_ = (head_ + 1) % ready_.size();
             --count_;
         }

@@ -124,3 +124,30 @@ memory. Full queues require caller retention/retry, including finalizer releases
 actual V8 finalizer registration and that retry policy remain outstanding. The
 command arena is lazy and fixed-capacity once created. GPU completion fences
 still govern submitted resource lifetimes independently of command consumption.
+
+## Cancellation versus native callback retirement
+
+Logical cancellation no longer makes a completion slot immediately reusable.
+Each reservation also tracks its one outstanding native publication. A cancelled
+record can be delivered to the engine while its slot remains occupied until the
+actual callback calls publish. That call retires the native operation, rejects
+duplicate logical delivery and wakes capacity waiters. Generations cannot advance
+while an old native operation still owns the slot. Metrics now expose native
+pending and total occupied counts separately from logical pending/ready counts.
+
+The open graphics service keeps its ProcessEvents polling demand while these
+native callbacks are outstanding, even after all cancellation records are
+consumed. Once the last native callback retires, idle polling stops. Reservation
+callers must publish exactly once for native completion (or synchronous failure
+before issuing the operation); cancellation is not a substitute for retirement.
+Full-service shutdown still closes publication and destroys the native instance;
+this change does not claim completed navigation/promise shutdown integration.
+
+A capacity-one test cancels and drains a record, proves another reservation is
+rejected until a delayed callback retires it on another thread, then reuses the
+slot with a new generation and rejects the old callback. The service test checks
+continued bounded polling followed by return to its normal idle wait. The real
+pending-map destruction test uses service readiness/idle recommendations while
+waiting for native retirement. All 12 local tests passed in 13.56 seconds; after
+adding the scheduling assertions, all eight graphics tests passed in 0.43 seconds.
+The completion test also passed with Clang ThreadSanitizer.

@@ -190,7 +190,7 @@ int main() {
     auto independent_owner=second_owner;
     auto independent=mailbox->reserve(15,independent_owner).value();
     root.destroy_device(owned_device);
-    if (root.live_devices()!=1 || mailbox->publish(pending_device,completion_status::success)) return 1;
+    if (root.live_devices()!=1) return 1;
     bool stale_rejected=false;
     try { root.with_device(owned_device,[](auto&) {}); }
     catch (const std::invalid_argument&) { stale_rejected=true; }
@@ -203,8 +203,10 @@ int main() {
     });
     const auto cancellation_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
     while (!cancelled_map->called && std::chrono::steady_clock::now()<cancellation_deadline) {
-        service.pump([](auto) { throw std::runtime_error("duplicate device cancellation"); });
-        if (!cancelled_map->called) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+        if (root.has_ready_work())
+            root.pump([](auto) { throw std::runtime_error("duplicate device cancellation"); });
+        if (!cancelled_map->called) wake->wait_for(
+            root.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
     }
     if (device_records!=2 || !cancelled_map->called || cancelled_map->accepted) return 1;
     // The surviving native device must still execute an upload and map after

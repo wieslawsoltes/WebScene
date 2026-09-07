@@ -21,7 +21,7 @@ int main() {
     }); callback.join();
     require(rejected_thread && wake->count==1 && box.has_pending());
     box.cancel_owner(a);
-    require(!box.has_pending());
+    require(box.has_pending());
     require(!box.publish(first,completion_status::success));
     require(box.drain_one([](auto record) { require(record.operation==2 && record.status==completion_status::success); }));
     require(box.drain_one([](auto record) { require(record.operation==1 && record.status==completion_status::cancelled); }));
@@ -29,7 +29,7 @@ int main() {
     require(!box.publish(first,completion_status::success));
     require(box.has_pending());
     box.close();
-    require(!box.has_pending());
+    require(box.has_pending());
     require(!box.publish(reused,completion_status::success) && !box.reserve(4,b));
     require(box.drain_one([](auto record) { require(record.operation==3 && record.status==completion_status::cancelled); }));
     require(!box.has_ready());
@@ -37,6 +37,20 @@ int main() {
     require(counters.pending==0 && counters.ready==0 && counters.high_water==2);
     require(counters.admitted==3 && counters.delivered==3 && counters.saturated_reservations==1);
     require(counters.rejected_publications==4 && counters.latency_samples==0);
+    completion_mailbox delayed(1,wake);
+    auto cancelled=delayed.reserve(1,a).value();
+    delayed.cancel_owner(a);
+    require(delayed.drain_one([](auto record) { require(record.status==completion_status::cancelled); }));
+    require(delayed.has_pending() && !delayed.reserve(2,a));
+    require(delayed.metrics().occupied==1 && delayed.metrics().native_pending==1);
+    std::thread late([&] { require(!delayed.publish(cancelled,completion_status::success)); });
+    late.join();
+    require(!delayed.has_pending() && delayed.metrics().occupied==0);
+    auto next=delayed.reserve(2,a).value();
+    require(next.generation!=cancelled.generation);
+    require(!delayed.publish(cancelled,completion_status::success));
+    require(delayed.publish(next,completion_status::success));
+    require(delayed.drain_one([](auto) {}));
     completion_mailbox timed(1,wake,true);
     auto measured=timed.reserve(1,a).value();
     require(timed.publish(measured,completion_status::success));
