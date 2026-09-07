@@ -92,3 +92,22 @@ blue composition surface and white remaining background. See
 visible output for the shared-OpenGL host route. It is not exact color validation;
 window capture/display color management differs from raw texture verification.
 The Dawn/Metal-to-host allocation bridge remains unimplemented and unverified.
+
+### Production-source IOSurface import operation
+
+NativeMacOSGpuImageImport now imports a checked native consumer's BGRA8 IOSurface
+into a rectangle texture already bound in the host's current CGL context. GL
+texture/state creation remains with the host; this operation uses only Apple's
+CGL/IOSurface entrypoints, avoiding ambiguous GL symbol lookup alongside ANGLE.
+It borrows through NativeGpuImageConsumerV3 and does not complete the consumer,
+wait on producer work or enable GPU scene acquisition.
+
+The separate native fixture creates an accelerated CGL 3.2 context and rectangle
+texture. The managed test imports a native IOSurface lease and checks its GL
+level dimensions (17x4), then deletes GL references before completing the lease.
+All six NativeGpuSceneInteropTests passed without skips on net8.0 and net10.0.
+
+This verifies the managed-to-native storage import operation. It submits no
+draws and proves no rendered pixels, adapter pairing, producer synchronization
+or final Avalonia presentation. The retained renderer still needs the complete
+import/cache/completion path before it can advertise GPU scene capability.
