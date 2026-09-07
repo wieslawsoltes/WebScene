@@ -16,6 +16,7 @@ using namespace webscene::graphics;
 void require(bool value,const char* message) { if (!value) throw std::runtime_error(message); }
 #include "graphics_v8_webgpu_options.h"
 #include "graphics_v8_webgpu_buffer_descriptor.h"
+#include "graphics_v8_webgpu_device_descriptor.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
 void test_image_lease_abi() {
@@ -650,6 +651,7 @@ int main() {
                 if (record.operation==1) {
                     test_v8_webgpu_adapter_options(isolate,context);
                     test_v8_webgpu_buffer_descriptor(isolate,context);
+                    test_v8_webgpu_device_descriptor(isolate,context);
                     v8::Local<v8::Promise> promise;
                     webgpu_adapter_options options;
                     adapter_request=v8_webgpu_adapter_request::start(isolate,context,options,

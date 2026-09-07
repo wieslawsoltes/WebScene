@@ -6,7 +6,9 @@
   "source": "https://gpuweb.github.io/gpuweb/",
   "implementedConverters": [
     "GPURequestAdapterOptions",
-    "GPUBufferDescriptor"
+    "GPUBufferDescriptor",
+    "GPUDeviceDescriptor",
+    "GPUQueueDescriptor"
   ],
   "browserExposureEnabled": false
 }

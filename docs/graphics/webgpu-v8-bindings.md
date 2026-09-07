@@ -502,3 +502,25 @@ uses a diagnostic result object at the promise factory boundary. Browser device
 descriptor conversion, adapter validity/consumption, public GPUAdapter wiring,
 device-loss promise integration and full teardown/admission qualification remain
 unfinished; this is not public requestDevice exposure.
+
+### Device descriptor WebIDL conversion
+
+The pinned GPUDeviceDescriptor converter now reads inherited label, defaultQueue,
+requiredFeatures and requiredLimits in WebIDL dictionary order. Device and queue
+labels use USVString conversion. Feature sequences accept iterable objects,
+cache the iterator's next method, convert every item through the standard feature
+enum, and retain duplicate entries for subsequent validation. Private native
+feature names are rejected. Required-limit records snapshot all own keys and
+then inspect each property's descriptor before reading its value; getters can
+change later properties. DOMString keys preserve unpaired UTF-16 surrogates,
+undefined values remain distinct from zero, and GPUSize64 uses EnforceRange.
+Conversion commits the output only after all members succeed.
+
+These behaviors follow the WebIDL [sequence conversion](https://webidl.spec.whatwg.org/#es-sequence)
+and [record conversion](https://webidl.spec.whatwg.org/#es-record) algorithms.
+The macOS V8 runtime tests verify defaults, getter/proxy order, mutation during
+record conversion, inherited/non-enumerable exclusions, feature iteration and
+coercion, USVString versus DOMString, integer boundaries, exception identity, and
+no partially committed output after failure. The converter does not yet map
+required limits to Dawn or enforce adapter capabilities. Those validation steps
+and the public requestDevice entry point remain required.
