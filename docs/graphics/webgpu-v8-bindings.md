@@ -985,3 +985,21 @@ native validation succeeds. Capacity, stale handles, borrowed-scope guards and
 repeated destroy preserving handles are covered. Dawn event and V8 runtime tests
 pass. JavaScript texture/view descriptor conversion and wrappers remain pending;
 these tests do not establish JavaScript rendering or pixel correctness.
+
+
+### Texture descriptor conversion
+
+GPUTextureDescriptor conversion now handles required extent/format/usage,
+dimension, mip/sample counts, optional binding view dimension and iterable view
+formats in WebIDL order. Extent union conversion retrieves the iterator method
+once; dictionary extents preserve width requirements and height/layer defaults.
+Sequence shape validity is recorded after consuming the sequence, allowing the
+remaining dictionary conversion to finish before native use rejects invalid
+shapes. Native views retain label, format arrays and the binding-dimension chain
+through a scoped call. Unknown browser usage bits become invalid native usage,
+preventing accidental exposure of host-only flags.
+
+MacOS runtime tests cover extent defaults, single iterator acquisition, exact
+property order, binding/view-format storage, late shape validation, range errors
+and atomic failure. Runtime and generator checks pass. Texture/view wrappers and
+createTexture dispatch remain pending.

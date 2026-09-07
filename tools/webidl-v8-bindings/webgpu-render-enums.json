@@ -214,5 +214,18 @@
   "VertexStepMode": {
     "vertex": "Vertex",
     "instance": "Instance"
+  },
+  "TextureDimension": {
+    "1d": "e1D",
+    "2d": "e2D",
+    "3d": "e3D"
+  },
+  "TextureViewDimension": {
+    "1d": "e1D",
+    "2d": "e2D",
+    "2d-array": "e2DArray",
+    "cube": "Cube",
+    "cube-array": "CubeArray",
+    "3d": "e3D"
   }
 }

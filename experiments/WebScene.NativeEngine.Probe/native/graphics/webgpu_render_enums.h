@@ -245,4 +245,21 @@ template<> struct webgpu_enum_names<wgpu::VertexStepMode> {
         {"instance",wgpu::VertexStepMode::Instance},
     }};
 };
+template<> struct webgpu_enum_names<wgpu::TextureDimension> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::TextureDimension>,3> values{{
+        {"1d",wgpu::TextureDimension::e1D},
+        {"2d",wgpu::TextureDimension::e2D},
+        {"3d",wgpu::TextureDimension::e3D},
+    }};
+};
+template<> struct webgpu_enum_names<wgpu::TextureViewDimension> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::TextureViewDimension>,6> values{{
+        {"1d",wgpu::TextureViewDimension::e1D},
+        {"2d",wgpu::TextureViewDimension::e2D},
+        {"2d-array",wgpu::TextureViewDimension::e2DArray},
+        {"cube",wgpu::TextureViewDimension::Cube},
+        {"cube-array",wgpu::TextureViewDimension::CubeArray},
+        {"3d",wgpu::TextureViewDimension::e3D},
+    }};
+};
 } // namespace webscene::graphics

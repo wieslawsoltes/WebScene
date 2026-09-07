@@ -4,11 +4,12 @@
 namespace webscene::graphics {
 // WebIDL sequence conversion caches next once and reads each result's done
 // before value. The caller owns transactional output storage.
-template<class Convert> bool read_webgpu_sequence(v8::Isolate* isolate,v8::Local<v8::Context> context,v8::Local<v8::Value> input,Convert convert) {
+template<class Convert> bool read_webgpu_sequence(v8::Isolate* isolate,v8::Local<v8::Context> context,v8::Local<v8::Value> input,Convert convert,v8::Local<v8::Value> iterator_method={}) {
     webgpu_state_reader errors(isolate,context,input);
     if(!input->IsObject())return errors.fail("WebGPU sequence must be an iterable object");
     v8::Local<v8::Value> method,iterator,next;
-    if(!input.As<v8::Object>()->Get(context,v8::Symbol::GetIterator(isolate)).ToLocal(&method))return false;
+    if(!iterator_method.IsEmpty())method=iterator_method;
+    else if(!input.As<v8::Object>()->Get(context,v8::Symbol::GetIterator(isolate)).ToLocal(&method))return false;
     if(!method->IsFunction())return errors.fail("WebGPU sequence is not iterable");
     if(!method.As<v8::Function>()->Call(context,input,0,nullptr).ToLocal(&iterator))return false;
     if(!iterator->IsObject())return errors.fail("Iterator must return an object");
