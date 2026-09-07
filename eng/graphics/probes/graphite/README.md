@@ -351,3 +351,24 @@ The marker tests changing content at the native-to-host texture boundary. It
 does not read Avalonia's final compositor output or prove physical presentation.
 The previous claim that all host submissions use identical content is superseded.
 The diagnostic export/signature is private to this probe, not the native engine ABI.
+
+### Reuse the source canvas pool (2026-09-07)
+
+The host runtime now retains its bounded dawn_canvas_images pool. Submissions
+advance allocation-generation/content metadata, retain the old 17x4 image while
+producing its 9x4 replacement, and complete both consumers before reuse.
+Delivery additionally waits for both producer callback statuses, avoiding a
+race between aggregate queue completion and individual producer retirement.
+Standalone mode still destroys the canvas owner before resolving the consumers,
+preserving that separate ownership test.
+
+Apple M4 host runs with and without --verify-markers both passed 64 native and
+64 Avalonia updates with exactly two source allocations and one output allocation.
+The final pool busy count was asserted zero. Marker mode verified all 64 changing
+markers and rejected all deliberately wrong expectations; normal mode performed
+no marker readbacks. Standalone IOSurface/CGL verification passed all 68 pixels.
+
+This removes source-pool recreation from this serialized diagnostic workload.
+Recorders, command/recording objects and CGL imports remain per-submission.
+It does not qualify production scheduling, resize of the host target, memory
+pressure, device loss or actual browser APIs.

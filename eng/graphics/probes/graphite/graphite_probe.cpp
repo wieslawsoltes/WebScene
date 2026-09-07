@@ -68,6 +68,7 @@ struct DawnRuntime {
     std::shared_ptr<void> outputSurface;
     wgpu::SharedTextureMemory outputMemory;
     wgpu::Texture outputTexture;
+    std::shared_ptr<webscene::graphics::dawn_canvas_images> canvasPool;
     unsigned outputAllocations=0;
     unsigned initializations=0;
     unsigned graphiteInitializations=0;
@@ -215,8 +216,12 @@ int main(int argc, char** argv) {
     // Native WebGPU producer writes a separate image, then Graphite samples it
     // on the same queue. No CPU wait or pixel upload sits between the submissions.
     using namespace webscene::graphics;
-    auto canvasOwner=std::make_unique<dawn_canvas_images>(device,3*width*height*4);
-    auto frame=canvasOwner->acquire(image_metadata{700,0,1,1,701,1,width,height});
+    if (hostDestinationTexture && !runtime.canvasPool)
+        runtime.canvasPool=std::make_shared<dawn_canvas_images>(device,3*width*height*4);
+    auto canvasOwner=hostDestinationTexture ? runtime.canvasPool :
+        std::make_shared<dawn_canvas_images>(device,3*width*height*4);
+    const uint64_t generation=hostDestinationTexture ? uint64_t(hostFrameSerial)*2+1 : 1;
+    auto frame=canvasOwner->acquire(image_metadata{700,0,generation,generation,701,generation,width,height});
     if (!frame) return finish("failed","Canvas allocation failed",1);
     auto produced=frame->texture;
     auto producerEncoder=device.CreateCommandEncoder();
@@ -231,7 +236,7 @@ int main(int argc, char** argv) {
     if (!submitted) return finish("failed","Canvas submission backpressure",1);
     auto consumer=submitted->image.begin_consumer();
     if (!consumer) return finish("failed","Canvas consumer backpressure",1);
-    auto resized=canvasOwner->acquire(image_metadata{700,0,2,2,701,2,9,height});
+    auto resized=canvasOwner->acquire(image_metadata{700,0,generation+1,generation+1,701,generation+1,9,height});
     if (!resized || resized->metadata.allocation==consumer->describe().allocation
         || consumer->describe().width!=width)
         return finish("failed","Resize changed the retained allocation",1);
@@ -243,10 +248,11 @@ int main(int argc, char** argv) {
     if (!replacement) return finish("failed","Replacement submission failed",1);
     auto replacementConsumer=replacement->image.begin_consumer();
     if (!replacementConsumer) return finish("failed","Replacement consumer failed",1);
+    auto producerStatus=submitted->status, replacementStatus=replacement->status;
     replacement.reset();
     submitted.reset(); canvasOwner.reset();
     produced=nullptr; attachment.view=nullptr;
-    // Resolve through the real lease after canvas and scene ownership ends.
+    // Resolve after scene ownership ends; standalone also destroys the canvas owner.
     auto retainedTexture=dawn_canvas_images::resolve(*consumer,device);
     auto replacementTexture=dawn_canvas_images::resolve(*replacementConsumer,device);
     auto recorder=graphite->makeRecorder();
@@ -303,7 +309,7 @@ int main(int argc, char** argv) {
             });
         // Keep every source lease and Graphite object alive while native GPU
         // work is outstanding. Delivery runs later on the host's CGL thread.
-        auto deliver=[completed,future,instance,device,error,sharedSurface,sharedMemory,
+        auto deliver=[completed,future,instance,device,error,sharedSurface,sharedMemory,producerStatus,replacementStatus,
             target=hostDestinationTexture,context=CGLGetCurrentContext(),
             graphite=std::move(graphite),recorder=std::move(recorder),recording=std::move(recording),
             surface=std::move(surface),texture=std::move(texture),image=std::move(image),
@@ -314,11 +320,15 @@ int main(int argc, char** argv) {
             if (drain && completed->load(std::memory_order_acquire)==0) wait(instance,future);
             const auto status=completed->load(std::memory_order_acquire);
             if (!status) return 0;
+            if (producerStatus->load(std::memory_order_acquire)==dawn_canvas_images::submission_status::pending ||
+                replacementStatus->load(std::memory_order_acquire)==dawn_canvas_images::submission_status::pending) return 0;
             // Service Graphite's completion queue on its owning thread so a
             // persistent context can release completed command buffers/resources.
             graphite->checkAsyncWorkCompletion();
             if (status==1 && graphite->hasUnfinishedGpuWork()) return 0;
-            bool delivered=status==1 && !error->load();
+            bool delivered=status==1 && !error->load() &&
+                producerStatus->load()==dawn_canvas_images::submission_status::success &&
+                replacementStatus->load()==dawn_canvas_images::submission_status::success;
             if (delivered) delivered=check_iosurface_gl(static_cast<IOSurfaceRef>(sharedSurface.get()),
                 width,height,nullptr,rowBytes,target);
             consumer->complete(); consumer.reset();
@@ -386,6 +396,12 @@ extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_hos
 }
 extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_output_allocations() {
     return hostRuntime.outputAllocations;
+}
+extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_canvas_allocations() {
+    return hostRuntime.canvasPool ? static_cast<unsigned>(hostRuntime.canvasPool->created_images()) : 0;
+}
+extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_canvas_busy() {
+    return hostRuntime.canvasPool ? static_cast<unsigned>(hostRuntime.canvasPool->busy_images()) : 0;
 }
 // Explicit diagnostic readback, never called by normal presentation.
 extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_verify_marker(unsigned texture,unsigned serial) {

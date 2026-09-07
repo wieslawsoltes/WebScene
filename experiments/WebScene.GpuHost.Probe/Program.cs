@@ -20,6 +20,10 @@ internal static class Program
     internal static extern uint GraphiteOutputAllocations();
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_verify_marker")]
     internal static extern int VerifyGraphiteMarker(uint texture, uint serial);
+    [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_canvas_allocations")]
+    internal static extern uint GraphiteCanvasAllocations();
+    [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_canvas_busy")]
+    internal static extern uint GraphiteCanvasBusy();
     [STAThread]
     public static int Main(string[] args) => AppBuilder.Configure<ProbeApp>()
         .UsePlatformDetect().StartWithClassicDesktopLifetime(args);
@@ -126,6 +130,8 @@ internal sealed class ProbeApp : Application
                                   throw new InvalidOperationException("Graphite context was recreated between submissions");
                               if (Program.GraphiteOutputAllocations() != 1)
                                   throw new InvalidOperationException("Output texture was recreated between submissions");
+                              if (Program.GraphiteCanvasAllocations() != 2 || Program.GraphiteCanvasBusy() != 0)
+                                  throw new InvalidOperationException("Canvas pool did not reuse and retire its two source textures");
                             }
                             if (!graphiteSource) {
                                 await surface.UpdateAsync(imported).WaitAsync(TimeSpan.FromSeconds(30));
@@ -162,6 +168,7 @@ internal sealed class ProbeApp : Application
                         graphiteSubmissionsCompleted,
                         hostUpdatesCompleted,
                         diagnosticMarkersVerified,
+                        canvasTextureAllocations = graphiteSource ? Program.GraphiteCanvasAllocations() : 0,
                         outputTextureAllocations = graphiteSource ? Program.GraphiteOutputAllocations() : 0,
                         graphiteContextInitializations = graphiteSource ? Program.GraphiteContextInitializations() : 0,
                         dawnDeviceInitializations = graphiteSource ? Program.GraphiteInitializations() : 0,
