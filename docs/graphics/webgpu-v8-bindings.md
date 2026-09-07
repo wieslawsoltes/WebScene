@@ -835,3 +835,21 @@ getter exception identity and native module ownership count. Converter coverage
 includes iterable hints, dictionary order, invalid enums and atomic failure.
 Render pipelines, command submission and normal canvas presentation remain the
 next rendering integration work; this test does not draw an app or triangle.
+
+
+### Owned native render pipelines
+
+Dawn devices now own render pipelines in a separately bounded, generational
+resource table. Creation checks capacity before calling Dawn, borrowed pipeline
+scopes prevent release/device close, and close retires the table. A value-only
+deferred release command carries both device and pipeline generations for future
+V8 wrapper collection.
+
+The macOS Dawn event test compiles vertex/fragment WGSL, creates an owned render
+pipeline, encodes a triangle into an offscreen 4x4 RGBA8 texture, releases the
+table's pipeline reference, and submits the retained command buffer. A completed
+native validation error scope reports no error. It also verifies capacity,
+borrowed-scope guards and stale-handle rejection. Dawn event and V8 runtime tests
+pass. This is native command/lifetime validation, not a pixel assertion, physical
+presentation check or JavaScript render-pipeline implementation. Those remain
+required before claiming app rendering.

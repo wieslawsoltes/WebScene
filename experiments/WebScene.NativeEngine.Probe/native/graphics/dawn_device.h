@@ -34,15 +34,17 @@ class dawn_device {
     size_t active_buffer_scopes_{};
     resource_table<wgpu::ShaderModule> shaders_;
     size_t active_shader_scopes_{};
+    resource_table<wgpu::RenderPipeline> render_pipelines_;
+    size_t active_render_pipeline_scopes_{};
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
             throw std::logic_error("Dawn device requires its engine thread");
     }
 public:
     dawn_device(uint64_t engine,std::shared_ptr<completion_mailbox> mailbox,
-                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024)
+                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024)
         : owner_{engine,new_owner_token(),0},mailbox_(std::move(mailbox)),
-          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_) {
+          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_),render_pipelines_(render_pipeline_capacity,owner_) {
         if (!engine || !mailbox_ || !adapter_ || !device_)
             throw std::invalid_argument("Dawn device requires native ownership");
     }
@@ -110,6 +112,25 @@ public:
         shaders_.destroy(handle,owner_);
     }
     size_t live_shader_modules() const {check_thread();return shaders_.resident_count();}
+    resource_handle<wgpu::RenderPipeline> create_render_pipeline(const wgpu::RenderPipelineDescriptor& descriptor) {
+        const auto& device=native();
+        if(!render_pipelines_.can_insert())throw std::length_error("Graphics render-pipeline capacity exhausted");
+        auto pipeline=device.CreateRenderPipeline(&descriptor);
+        if(!pipeline)throw std::runtime_error("Dawn did not return a render pipeline");
+        return render_pipelines_.insert(owner_,std::make_unique<wgpu::RenderPipeline>(std::move(pipeline)));
+    }
+    template<class Execute> void with_render_pipeline(resource_handle<wgpu::RenderPipeline> handle,Execute execute) {
+        check_thread();
+        const auto& pipeline=render_pipelines_.get(handle,owner_);
+        struct guard { size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;} } scope(active_render_pipeline_scopes_);
+        execute(pipeline);
+    }
+    void release_render_pipeline(resource_handle<wgpu::RenderPipeline> handle) {
+        check_thread();
+        if(active_render_pipeline_scopes_)throw std::logic_error("Cannot release render pipeline during execution");
+        render_pipelines_.destroy(handle,owner_);
+    }
+    size_t live_render_pipelines() const {check_thread();return render_pipelines_.resident_count();}
     bool loss_pending() const {
         check_thread();
         return !closed_ && !lost_ && loss_ && loss_->lost.load(std::memory_order_acquire);
@@ -123,7 +144,7 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_buffer_scopes_ || active_shader_scopes_) throw std::logic_error("Cannot close device during resource execution");
+        if (active_buffer_scopes_ || active_shader_scopes_ || active_render_pipeline_scopes_) throw std::logic_error("Cannot close device during resource execution");
         process_loss();
         closed_=true;
         // Logical cancellation is independent of physical GPU completion.
@@ -133,6 +154,7 @@ public:
         device_.Destroy();
         buffers_.destroy_owner(owner_);
         shaders_.destroy_owner(owner_);
+        render_pipelines_.destroy_owner(owner_);
     }
 };
 } // namespace webscene::graphics

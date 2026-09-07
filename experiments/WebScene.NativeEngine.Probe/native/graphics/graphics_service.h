@@ -87,10 +87,10 @@ public:
     size_t live_adapters() const { check_thread(); return adapters_.resident_count(); }
     // Internal request-device completion hook: pass a freshly created device
     // from this service's instance exactly once, with its originating adapter.
-    resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024) {
+    resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024) {
         check_open();
         return devices_.insert(owner_,std::make_unique<dawn_device>(
-            owner_.engine,dawn().completions(),std::move(adapter),std::move(device),std::move(loss),buffer_capacity,shader_capacity));
+            owner_.engine,dawn().completions(),std::move(adapter),std::move(device),std::move(loss),buffer_capacity,shader_capacity,render_pipeline_capacity));
     }
     template<class Execute> void with_device(resource_handle<dawn_device> handle,Execute execute) {
         check_open();
@@ -153,6 +153,15 @@ public:
                 });
             } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
         },{device.table,device.generation,device.slot,shader.table,shader.generation,shader.slot}};
+    }
+    static graphics_command deferred_render_pipeline_release(resource_handle<dawn_device> device,resource_handle<wgpu::RenderPipeline> pipeline) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try {
+                service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
+                    owner.release_render_pipeline({args[3],args[4],static_cast<uint32_t>(args[5])});
+                });
+            } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
+        },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
     }
     static graphics_command deferred_adapter_release(resource_handle<wgpu::Adapter> handle) noexcept {
         return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {

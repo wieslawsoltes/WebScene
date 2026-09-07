@@ -426,7 +426,7 @@ int main() {
     invalid_handles[0]=reinterpret_cast<void*>(uintptr_t{1});
     if (import_dxgi_fences(native_device->device,invalid_handles,wait_values,imported)
         !=dxgi_fence_status::missing_device_feature || !imported.fences.empty()) return 1;
-    auto owned_device=root.adopt_device(state->adapter,native_device->device,{},1,1);
+    auto owned_device=root.adopt_device(state->adapter,native_device->device,{},1,1,1);
     if (root.live_devices()!=1) return 1;
     root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
     root.with_device(owned_device,[&](auto& device) {
@@ -449,6 +449,64 @@ int main() {
         if(!stale || replacement.generation==shader.generation)throw std::runtime_error("Shader generation identity reused");
         device.release_shader_module(replacement);
     });
+    // An owned render pipeline must remain usable by an encoded command after
+    // its table reference and source shader have been released.
+    native_device->device.PushErrorScope(wgpu::ErrorFilter::Validation);
+    root.with_device(owned_device,[&](auto& device) {
+        wgpu::ShaderSourceWGSL source{};
+        source.code=R"WGSL(
+            @vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {
+                let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));
+                return vec4f(p[i],0,1);
+            }
+            @fragment fn fs()->@location(0) vec4f {return vec4f(1,0,0,1);}
+        )WGSL";
+        wgpu::ShaderModuleDescriptor shader_desc{};shader_desc.nextInChain=&source;
+        auto shader=device.create_shader_module(shader_desc);
+        wgpu::RenderPipelineDescriptor descriptor{};
+        wgpu::ColorTargetState target{};target.format=wgpu::TextureFormat::RGBA8Unorm;
+        wgpu::FragmentState fragment{};fragment.entryPoint="fs";fragment.targetCount=1;fragment.targets=&target;
+        descriptor.fragment=&fragment;descriptor.vertex.entryPoint="vs";
+        resource_handle<wgpu::RenderPipeline> pipeline;
+        device.with_shader_module(shader,[&](const auto& module) {
+            descriptor.vertex.module=module;fragment.module=module;
+            pipeline=device.create_render_pipeline(descriptor);
+            bool full=false;try{device.create_render_pipeline(descriptor);}catch(const std::length_error&){full=true;}
+            if(!full || device.live_render_pipelines()!=1)throw std::runtime_error("Render pipeline capacity failed");
+        });
+        device.release_shader_module(shader);
+        wgpu::TextureDescriptor texture_desc{};texture_desc.size={4,4,1};texture_desc.format=target.format;
+        texture_desc.usage=wgpu::TextureUsage::RenderAttachment;
+        auto texture=device.native().CreateTexture(&texture_desc);auto view=texture.CreateView();
+        wgpu::RenderPassColorAttachment attachment{};attachment.view=view;
+        attachment.loadOp=wgpu::LoadOp::Clear;attachment.storeOp=wgpu::StoreOp::Store;
+        wgpu::RenderPassDescriptor pass_desc{};pass_desc.colorAttachmentCount=1;pass_desc.colorAttachments=&attachment;
+        auto encoder=device.native().CreateCommandEncoder();auto pass=encoder.BeginRenderPass(&pass_desc);
+        device.with_render_pipeline(pipeline,[&](const auto& native) {
+            bool guarded=false;try{device.release_render_pipeline(pipeline);}catch(const std::logic_error&){guarded=true;}
+            bool close_guarded=false;try{device.close();}catch(const std::logic_error&){close_guarded=true;}
+            if(!guarded || !close_guarded)throw std::runtime_error("Borrowed render pipeline lifetime unguarded");
+            pass.SetPipeline(native);pass.Draw(3);
+        });
+        pass.End();auto command=encoder.Finish();
+        device.release_render_pipeline(pipeline);
+        bool stale=false;try{device.with_render_pipeline(pipeline,[](const auto&){});}catch(const std::invalid_argument&){stale=true;}
+        if(!stale || device.live_render_pipelines()!=0)throw std::runtime_error("Render pipeline stale handle accepted");
+        device.native().GetQueue().Submit(1,&command);
+    });
+    bool render_checked=false;
+    native_device->device.PopErrorScope(wgpu::CallbackMode::AllowProcessEvents,
+        [&](wgpu::PopErrorScopeStatus status,wgpu::ErrorType type,wgpu::StringView) {
+            if(status!=wgpu::PopErrorScopeStatus::Success || type!=wgpu::ErrorType::NoError)
+                throw std::runtime_error("Owned render pipeline draw failed validation");
+            render_checked=true;
+        });
+    const auto render_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+    while(!render_checked && std::chrono::steady_clock::now()<render_deadline) {
+        root.pump([](auto) {});
+        if(!render_checked)wake->wait_for(std::chrono::milliseconds(1),[]{return false;});
+    }
+    if(!render_checked)throw std::runtime_error("Render pipeline validation did not complete");
     auto shader_releases=root.release_endpoint();
     resource_handle<wgpu::ShaderModule> retired_shader,reused_shader;
     release_ticket retired_ticket;
