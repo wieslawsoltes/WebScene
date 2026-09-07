@@ -151,3 +151,24 @@ checks size/usage/map state and mapped range, then unmaps and destroys it. It al
 checks all 32 individual usage bits and unknown-bit combinations. Both the Dawn
 hardware and V8 runtime CTests pass on macOS. This does not yet connect JavaScript
 createBuffer to native allocation or qualify the public validation-error path.
+
+### Device-owned buffer handles
+
+Each native Dawn device now owns a bounded generational buffer table (default
+capacity 1024). Internal native-descriptor creation returns a typed handle; scoped
+access rejects a foreign device's table and stale generations. This is an internal
+entry point, not the public createBuffer binding or its error-object policy.
+
+`destroy_buffer` invokes Dawn Destroy while preserving the wrapper handle and
+metadata; repeated destruction remains valid. `release_buffer` removes only the
+wrapper's native reference. The service supplies a value-only deferred release
+command for the existing finalizer release channel. Queued/native users retain
+independent Dawn references; wrapper release does not destroy their buffer and
+does not imply GPU completion. Device teardown clears its remaining buffer table.
+
+The macOS hardware test verifies cross-device rejection, stale/reused handles,
+borrowed-access destruction/release/close guards, asynchronous finalizer delivery,
+mapped-buffer survival after wrapper release, and metadata after repeated Destroy.
+The Dawn hardware and V8 runtime CTests pass. Public buffer wrappers, mapping
+ArrayBuffer detachment, device-loss browser semantics and error scopes still need
+integration and qualification.

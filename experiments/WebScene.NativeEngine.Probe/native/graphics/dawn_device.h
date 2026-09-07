@@ -1,5 +1,6 @@
 #pragma once
 #include "completion_mailbox.h"
+#include "resource_table.h"
 #include <webgpu/webgpu_cpp.h>
 
 namespace webscene::graphics {
@@ -29,15 +30,17 @@ class dawn_device {
     bool closed_{};
     bool lost_{};
     std::shared_ptr<device_loss_signal> loss_;
+    resource_table<wgpu::Buffer> buffers_;
+    size_t active_buffer_scopes_{};
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
             throw std::logic_error("Dawn device requires its engine thread");
     }
 public:
     dawn_device(uint64_t engine,std::shared_ptr<completion_mailbox> mailbox,
-                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={})
+                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024)
         : owner_{engine,new_owner_token(),0},mailbox_(std::move(mailbox)),
-          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)) {
+          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_) {
         if (!engine || !mailbox_ || !adapter_ || !device_)
             throw std::invalid_argument("Dawn device requires native ownership");
     }
@@ -51,6 +54,38 @@ public:
             throw std::logic_error("Dawn device is closed or lost");
         return device_;
     }
+    // Internal native descriptor entry point. Browser descriptor validation and
+    // error-object handling must precede this call in the JavaScript binding.
+    resource_handle<wgpu::Buffer> create_buffer(const wgpu::BufferDescriptor& descriptor) {
+        auto buffer=native().CreateBuffer(&descriptor);
+        if (!buffer) throw std::runtime_error("Dawn did not return a buffer");
+        return buffers_.insert(owner_,std::make_unique<wgpu::Buffer>(std::move(buffer)));
+    }
+    template<class Execute> void with_buffer(resource_handle<wgpu::Buffer> handle,Execute execute) {
+        check_thread();
+        const auto& buffer=buffers_.get(handle,owner_);
+        struct guard {
+            size_t& count;
+            explicit guard(size_t& value) : count(value) { ++count; }
+            ~guard() { --count; }
+        } scope(active_buffer_scopes_);
+        execute(buffer);
+    }
+    // WebGPU destroy invalidates the native allocation, but the wrapper remains
+    // valid for metadata and repeated destroy calls until it is itself released.
+    void destroy_buffer(resource_handle<wgpu::Buffer> handle) {
+        check_thread();
+        if (active_buffer_scopes_) throw std::logic_error("Cannot destroy buffers during execution");
+        buffers_.get(handle,owner_).Destroy();
+    }
+    // Wrapper collection releases only this reference. Dawn/queued operations
+    // retain their own native references; collection must never call Destroy.
+    void release_buffer(resource_handle<wgpu::Buffer> handle) {
+        check_thread();
+        if (active_buffer_scopes_) throw std::logic_error("Cannot release buffers during execution");
+        buffers_.destroy(handle,owner_);
+    }
+    size_t live_buffers() const { check_thread(); return buffers_.resident_count(); }
     bool loss_pending() const {
         check_thread();
         return !closed_ && !lost_ && loss_ && loss_->lost.load(std::memory_order_acquire);
@@ -64,6 +99,7 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
+        if (active_buffer_scopes_) throw std::logic_error("Cannot close device during buffer execution");
         process_loss();
         closed_=true;
         // Logical cancellation is independent of physical GPU completion.
@@ -71,6 +107,7 @@ public:
         // higher-level submission tables still require their completion fences.
         if (!lost_) mailbox_->cancel_owner(owner_);
         device_.Destroy();
+        buffers_.destroy_owner(owner_);
     }
 };
 } // namespace webscene::graphics

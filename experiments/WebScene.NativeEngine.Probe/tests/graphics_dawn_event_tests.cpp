@@ -474,6 +474,55 @@ int main() {
     resource_owner second_owner{};
     root.with_device(second_owned,[&](auto& device) { second_owner=device.owner(); });
     if (root.live_devices()!=2 || owner==second_owner) return 1;
+    resource_handle<wgpu::Buffer> managed_buffer;
+    wgpu::Buffer borrowed_buffer_reference;
+    root.with_device(owned_device,[&](auto& device) {
+        browser_buffer.usage=0x6;
+        auto descriptor=make_dawn_buffer_descriptor(browser_buffer);
+        managed_buffer=device.create_buffer(*descriptor);
+        device.with_buffer(managed_buffer,[&](const auto& buffer) {
+            borrowed_buffer_reference=buffer;
+            bool destroy_guard=false,release_guard=false,close_guard=false;
+            try { device.destroy_buffer(managed_buffer); } catch (const std::logic_error&) { destroy_guard=true; }
+            try { device.release_buffer(managed_buffer); } catch (const std::logic_error&) { release_guard=true; }
+            try { device.close(); } catch (const std::logic_error&) { close_guard=true; }
+            if (!destroy_guard || !release_guard || !close_guard) throw std::runtime_error("Buffer execution guards failed");
+        });
+    });
+    bool foreign_buffer=false;
+    root.with_device(second_owned,[&](auto& device) {
+        try { device.with_buffer(managed_buffer,[](const auto&) {}); }
+        catch (const std::invalid_argument&) { foreign_buffer=true; }
+    });
+    if (!foreign_buffer) return 1;
+    auto buffer_release=root.release_endpoint();
+    const auto buffer_release_ticket=buffer_release->reserve(graphics_service::deferred_buffer_release(owned_device,managed_buffer));
+    if (!buffer_release_ticket) return 1;
+    std::thread buffer_finalizer([&] {
+        if (!buffer_release->publish(*buffer_release_ticket)) std::terminate();
+    });
+    buffer_finalizer.join();
+    root.drain_commands();
+    root.with_device(owned_device,[&](auto& device) {
+        bool stale=false;
+        try { device.with_buffer(managed_buffer,[](const auto&) {}); }
+        catch (const std::invalid_argument&) { stale=true; }
+        if (!stale || device.live_buffers()!=0 || borrowed_buffer_reference.GetMapState()!=wgpu::BufferMapState::Mapped
+            || !borrowed_buffer_reference.GetMappedRange(0,64)) throw std::runtime_error("Wrapper release destroyed native buffer");
+        auto descriptor=make_dawn_buffer_descriptor(browser_buffer);
+        auto replacement=device.create_buffer(*descriptor);
+        if (replacement.slot!=managed_buffer.slot || replacement.generation==managed_buffer.generation)
+            throw std::runtime_error("Buffer slot generation was not advanced");
+        device.destroy_buffer(replacement);
+        device.destroy_buffer(replacement);
+        device.with_buffer(replacement,[](const auto& buffer) {
+            if (buffer.GetSize()!=64 || buffer.GetMapState()!=wgpu::BufferMapState::Unmapped)
+                throw std::runtime_error("Destroyed buffer wrapper lost metadata");
+        });
+        device.release_buffer(replacement);
+    });
+    borrowed_buffer_reference.Unmap();
+    borrowed_buffer_reference=nullptr;
     test_canvas_storage(service,native_device->device,second_native->device);
     test_canvas_consumer_pixels(service,native_device->device);
     bool foreign_rejected=false;

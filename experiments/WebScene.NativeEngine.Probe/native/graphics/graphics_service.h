@@ -136,6 +136,15 @@ public:
     }
     // Finalizers enqueue these value-only records through a retained endpoint.
     // A full queue requires retry/retention by the caller; it is not a release.
+    static graphics_command deferred_buffer_release(resource_handle<dawn_device> device,resource_handle<wgpu::Buffer> buffer) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try {
+                service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
+                    owner.release_buffer({args[3],args[4],static_cast<uint32_t>(args[5])});
+                });
+            } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
+        },{device.table,device.generation,device.slot,buffer.table,buffer.generation,buffer.slot}};
+    }
     static graphics_command deferred_adapter_release(resource_handle<wgpu::Adapter> handle) noexcept {
         return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
             try { service.destroy_adapter({args[0],args[1],static_cast<uint32_t>(args[2])}); }
