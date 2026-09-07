@@ -191,7 +191,10 @@ def angle(args):
     suffixes = {"win": [".dll", ".lib"], "osx": [".dylib"], "linux": [".so"]}[args.rid.split("-")[0]]
     for library in ["libEGL", "libGLESv2"]:
         for suffix in suffixes:
-            shutil.copy2(output / (library + suffix), sdk / "lib" / (library + suffix))
+            # Chromium GN names Windows import libraries *.dll.lib. Normalize
+            # the staged SDK name to the stable *.lib consumer contract.
+            source_suffix = ".dll.lib" if suffix == ".lib" else suffix
+            shutil.copy2(output / (library + source_suffix), sdk / "lib" / (library + suffix))
     if args.rid.startswith("osx-"):
         # GN emits ./lib*.dylib IDs. Those resolve against process cwd rather than SDK location.
         # Normalize only packaged copies and sign after modification; source/build outputs stay intact.
