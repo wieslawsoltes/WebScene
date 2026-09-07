@@ -607,7 +607,7 @@ texture access. It records work synchronously, submits without waiting, ends
 shared access, and keeps the producer, imported texture, device and optional
 callback-state anchor alive through `OnSubmittedWorkDone`. An optional wake only
 signals the engine task queue. A private retained image cannot be transferred
-through `take_ready()` until successful queue completion and EndAccess; transfer
+through `take_ready()` until successful queue completion, validation and EndAccess; transfer
 is permitted once. Queue failure discards publication. Empty/throwing recorders
 end access and release the unsubmitted slot.
 
@@ -615,9 +615,14 @@ The macOS fixture now uses this component for its Dawn clear instead of publishi
 an unrelated logical producer after a standalone GPU wait. Its explicit timed
 wait is diagnostic only. The .NET 8/10 interop tests exercise actual producer
 submission, one-time image transfer, failed recording cleanup, native leases,
-CGL import, GPU copy and consumer fence retirement. Command validation remains
-the device owner's error-scope responsibility; queue success alone cannot prove
-valid rendering.
+CGL import, GPU copy and consumer fence retirement. A scoped validation result
+and queue completion jointly gate publication. The completion wake is signaled
+once, after both callbacks have arrived, outside the submission mutex. Invalid
+recording (a buffer with no usage flags) is explicitly tested: no scene image is
+published, the pool slot is released, and the failure wake occurs once. The valid
+pixel path also verifies one wake. Empty/throwing recorders balance their scope.
+Queue success alone cannot prove valid rendering. The device owner still handles
+out-of-memory/internal errors and device loss; this scope covers validation.
 
 This component is not yet connected to the JavaScript canvas or retained renderer.
 It currently imports on each submission; import caching by allocation/device and

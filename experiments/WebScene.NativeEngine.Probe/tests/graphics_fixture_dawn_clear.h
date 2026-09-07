@@ -58,6 +58,24 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
     } catch (const std::runtime_error&) { caught=true; }
     throwing.reset();
     if (!caught || rejected.busy_images()!=0) return {};
+    struct counted_wake final : completion_wake {
+        std::atomic<unsigned> count{0};
+        void signal() noexcept override { ++count; }
+    };
+    auto invalid_frame=rejected.acquire(frame.metadata);
+    if (!invalid_frame) return {};
+    auto invalid_wake=std::make_shared<counted_wake>();
+    auto invalid=dawn_iosurface_submission::submit(std::move(*invalid_frame),*device,
+        [&](const wgpu::Texture&) {
+            wgpu::BufferDescriptor bad{}; bad.size=4; bad.usage=wgpu::BufferUsage::None;
+            auto invalid_buffer=device->CreateBuffer(&bad);
+            return device->CreateCommandEncoder().Finish();
+        },storage,invalid_wake);
+    invalid_frame.reset();
+    if (!invalid || !wait(invalid->completion_future()) || !wait(invalid->validation_future()) ||
+        invalid->state()!=dawn_iosurface_submission::status::failed || invalid->take_ready() ||
+        invalid_wake->count.load()!=1 || rejected.busy_images()!=0) return {};
+    auto ready_wake=std::make_shared<counted_wake>();
     auto submitted=webscene::graphics::dawn_iosurface_submission::submit(std::move(frame),*device,
         [&](const wgpu::Texture& texture) {
             auto encoder=device->CreateCommandEncoder();
@@ -68,8 +86,9 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
             wgpu::RenderPassDescriptor pass{}; pass.colorAttachmentCount=1; pass.colorAttachments=&color;
             auto recording=encoder.BeginRenderPass(&pass); recording.End();
             return encoder.Finish();
-        },storage);
-    if (!submitted || !wait(submitted->completion_future()) || error->load()) return {};
+        },storage,ready_wake);
+    if (!submitted || !wait(submitted->completion_future()) || !wait(submitted->validation_future()) ||
+        ready_wake->count.load()!=1 || error->load()) return {};
     auto image=submitted->take_ready();
     if (submitted->take_ready()) return {}; // A publication transfers once.
     return image;

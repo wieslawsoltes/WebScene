@@ -13,7 +13,22 @@ private:
     mutable std::mutex mutex_;
     status status_=status::pending;
     std::optional<owned_image_pool::retained> image_;
-    wgpu::Future future_{};
+    wgpu::Future future_{}, validation_future_{};
+    bool queue_done_=false, validation_done_=false, valid_=true;
+    void finish(bool queue,bool valid,const std::shared_ptr<completion_wake>& wake) {
+        bool notify=false;
+        {
+            std::lock_guard lock(mutex_);
+            (queue ? queue_done_ : validation_done_)=true;
+            valid_ &= valid;
+            if (queue_done_ && validation_done_) {
+                status_=valid_ ? status::ready : status::failed;
+                if (!valid_) image_.reset();
+                notify=true;
+            }
+        }
+        if (notify && wake) wake->signal();
+    }
 public:
     status state() const { std::lock_guard lock(mutex_); return status_; }
     std::optional<owned_image_pool::retained> take_ready() {
@@ -24,9 +39,10 @@ public:
     }
     // Exposed for diagnostic waits only. Ordinary callers poll state or use wake.
     wgpu::Future completion_future() const noexcept { return future_; }
+    wgpu::Future validation_future() const noexcept { return validation_future_; }
     // Invoke on the device/producer owner thread. The recorder may only encode;
-    // it must not submit or let the borrowed texture escape. Callers retain their
-    // device error-scope contract: queue completion does not certify validation.
+    // it must not submit, alter error scopes, or let the borrowed texture escape.
+    // Validation and queue completion must both succeed before publication.
     using recorder=std::function<wgpu::CommandBuffer(const wgpu::Texture&)>;
     static std::shared_ptr<dawn_iosurface_submission> submit(
         iosurface_canvas_images::frame&& frame,const wgpu::Device& device,
@@ -34,6 +50,18 @@ public:
         std::shared_ptr<completion_wake> wake={}) {
         if (!device || !record || !frame.color)
             throw std::invalid_argument("Dawn IOSurface submission requires device, frame and recorder");
+        // Balance the validation scope even when import/recording rejects work.
+        struct validation_scope {
+            wgpu::Device device;
+            bool popped=false;
+            explicit validation_scope(wgpu::Device value):device(std::move(value)) {
+                device.PushErrorScope(wgpu::ErrorFilter::Validation);
+            }
+            ~validation_scope() {
+                if (!popped) device.PopErrorScope(wgpu::CallbackMode::AllowSpontaneous,
+                    [](wgpu::PopErrorScopeStatus,wgpu::ErrorType,wgpu::StringView) {});
+            }
+        } scope(device);
         auto pending=std::make_shared<iosurface_canvas_images::frame>(std::move(frame));
         auto surface=pending->color->borrowed_handle();
         std::shared_ptr<void> owner(const_cast<void*>(CFRetain(surface)),[](void* p) { CFRelease(p); });
@@ -70,13 +98,14 @@ public:
             [result,pending,shared,device,device_lifetime,wake,ended]
             (wgpu::QueueWorkDoneStatus completed,wgpu::StringView) {
                 pending->producer.complete();
-                {
-                    std::lock_guard lock(result->mutex_);
-                    result->status_=ended && completed==wgpu::QueueWorkDoneStatus::Success
-                        ? status::ready : status::failed;
-                    if (result->status_==status::failed) result->image_.reset();
-                }
-                if (wake) wake->signal();
+                result->finish(true,ended && completed==wgpu::QueueWorkDoneStatus::Success,wake);
+            });
+        scope.popped=true;
+        result->validation_future_=device.PopErrorScope(wgpu::CallbackMode::AllowSpontaneous,
+            [result,device,device_lifetime,wake](wgpu::PopErrorScopeStatus completed,
+                wgpu::ErrorType error,wgpu::StringView) {
+                result->finish(false,completed==wgpu::PopErrorScopeStatus::Success &&
+                    error==wgpu::ErrorType::NoError,wake);
             });
         return result;
     }
