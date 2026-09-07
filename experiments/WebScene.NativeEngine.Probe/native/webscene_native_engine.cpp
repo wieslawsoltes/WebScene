@@ -3,6 +3,7 @@
 #include "webscene_v8_runtime.h"
 #include "webscene_runtime_diagnostics.h"
 #include "graphics/engine_wake.h"
+#include "graphics/image_lease_abi.h"
 
 #include <algorithm>
 #include <array>
@@ -139,6 +140,7 @@ struct canvas_layer_version final {
 struct scene final {
     webscene_scene_header header{};
     uint64_t required_capabilities{};
+    std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> gpu_images;
     std::vector<webscene_scene_command> commands;
     std::vector<webscene_canvas_layer> canvas_layers;
     std::vector<webscene_canvas_command> canvas_commands;
@@ -150,9 +152,15 @@ struct scene final {
     uint64_t published_timestamp_nanoseconds{0};
 };
 
+uint64_t scene_capabilities(const scene& value)
+{
+    return value.required_capabilities | (value.gpu_images.empty() ? 0 : WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES);
+}
+
 uint64_t retained_scene_bytes(const scene& value)
 {
     return sizeof(scene)
+        + value.gpu_images.capacity() * sizeof(decltype(value.gpu_images)::value_type)
         + value.commands.capacity() * sizeof(webscene_scene_command)
         + value.canvas_layers.capacity() * sizeof(webscene_canvas_layer)
         + value.canvas_commands.capacity() * sizeof(webscene_canvas_command)
@@ -1236,7 +1244,7 @@ struct scene_lease_v3 {
     webscene_scene_view_v3 view;
     scene_lease_v3(std::shared_ptr<const scene> value,std::shared_ptr<acknowledgement_state> acknowledgement)
         : cpu(std::move(value),std::move(acknowledgement)),
-          view{sizeof(webscene_scene_view_v3),WEBSCENE_SCENE_VIEW_VERSION_3,cpu.value->required_capabilities,&cpu.view,this} {}
+          view{sizeof(webscene_scene_view_v3),WEBSCENE_SCENE_VIEW_VERSION_3,scene_capabilities(*cpu.value),&cpu.view,this} {}
 };
 webscene_scene_acquire_status acquire_scene_v3(webscene_engine* engine,
     const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result,bool ordered)
@@ -1248,7 +1256,7 @@ webscene_scene_acquire_status acquire_scene_v3(webscene_engine* engine,
     try {
         auto value=ordered ? engine->acquire_next() : engine->acquire_latest();
         if (!value) return WEBSCENE_SCENE_ACQUIRE_EMPTY;
-        if (value->required_capabilities & ~options->consumer_capabilities)
+        if (scene_capabilities(*value) & ~options->consumer_capabilities)
             return WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES;
         auto* lease=new scene_lease_v3(std::move(value),engine->acknowledgement_state_handle());
         *result=&lease->view;
@@ -1276,6 +1284,71 @@ void webscene_scene_release_v3(const webscene_scene_view_v3* view)
     delete static_cast<const scene_lease_v3*>(view->lease_token);
 }
 
+uint32_t webscene_scene_gpu_image_count_v3(const webscene_scene_view_v3* view)
+{
+    if (!view || view->struct_size < sizeof(*view) || view->scene_version!=3 || !view->lease_token) return 0;
+    return static_cast<const scene_lease_v3*>(view->lease_token)->cpu.value->gpu_images.size();
+}
+webscene_scene_acquire_status webscene_gpu_image_retain_v3(
+    const webscene_gpu_image_lease_v3* image,webscene_gpu_image_lease_v3** result)
+{
+    if (!result) return WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT;
+    *result=nullptr;
+    if (!image) return WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT;
+    try {
+        auto retained=image->value.retain();
+        if (!retained) return WEBSCENE_SCENE_ACQUIRE_BACKPRESSURE;
+        *result=new webscene_gpu_image_lease_v3(std::move(*retained));
+        return WEBSCENE_SCENE_ACQUIRE_SUCCESS;
+    } catch (const std::bad_alloc&) { return WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY; }
+      catch (...) { return WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR; }
+}
+webscene_scene_acquire_status webscene_scene_retain_gpu_image_v3(
+    const webscene_scene_view_v3* view,uint32_t index,webscene_gpu_image_lease_v3** result)
+{
+    if (!result) return WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT;
+    *result=nullptr;
+    if (index>=webscene_scene_gpu_image_count_v3(view)) return WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT;
+    return webscene_gpu_image_retain_v3(
+        static_cast<const scene_lease_v3*>(view->lease_token)->cpu.value->gpu_images[index].get(),result);
+}
+uint8_t webscene_gpu_image_describe_v3(const webscene_gpu_image_lease_v3* image,webscene_gpu_image_info_v3* result)
+{
+    if (!image || !result || result->struct_size<sizeof(*result) || result->version!=3) return 0;
+    try {
+        const auto m=image->value.describe();
+        *result={sizeof(*result),3,m.canvas,m.allocation,m.allocation_generation,m.content_serial,
+            m.producer_timeline,m.producer_value,m.width,m.height,static_cast<uint32_t>(m.format),
+            static_cast<uint32_t>(m.alpha),static_cast<uint32_t>(m.color_space),static_cast<uint32_t>(m.orientation)};
+        return 1;
+    } catch (...) { return 0; }
+}
+void webscene_gpu_image_release_v3(webscene_gpu_image_lease_v3* image) { delete image; }
+webscene_scene_acquire_status webscene_gpu_image_begin_consumer_v3(
+    const webscene_gpu_image_lease_v3* image,webscene_gpu_image_consumer_v3** result)
+{
+    if (!result) return WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT;
+    *result=nullptr;
+    if (!image) return WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT;
+    try {
+        // Allocate the wrapper before registering GPU use: OOM must not abandon
+        // a consumer ticket whose destructor correctly requires completion.
+        void* storage=::operator new(sizeof(webscene_gpu_image_consumer_v3));
+        try {
+            auto consumer=image->value.begin_consumer();
+            if (!consumer) { ::operator delete(storage); return WEBSCENE_SCENE_ACQUIRE_BACKPRESSURE; }
+            *result=new (storage) webscene_gpu_image_consumer_v3(std::move(*consumer));
+        } catch (...) { ::operator delete(storage); throw; }
+        return WEBSCENE_SCENE_ACQUIRE_SUCCESS;
+    } catch (const std::bad_alloc&) { return WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY; }
+      catch (...) { return WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR; }
+}
+void webscene_gpu_image_complete_consumer_v3(webscene_gpu_image_consumer_v3* consumer)
+{
+    if (!consumer) return;
+    consumer->value.complete(); delete consumer;
+}
+
 const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine* engine)
 {
     if (engine == nullptr) {
@@ -1283,7 +1356,7 @@ const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine*
     }
 
     auto scene_value = engine->acquire_latest();
-    if (!scene_value || scene_value->required_capabilities) {
+    if (!scene_value || scene_capabilities(*scene_value)) {
         return nullptr;
     }
 
@@ -1304,7 +1377,7 @@ const webscene_scene_view* webscene_engine_acquire_next_scene(webscene_engine* e
     }
 
     auto scene_value = engine->acquire_next();
-    if (!scene_value || scene_value->required_capabilities) {
+    if (!scene_value || scene_capabilities(*scene_value)) {
         return nullptr;
     }
 

@@ -3,11 +3,37 @@
 #include "graphics/graphics_service.h"
 #include "graphics/engine_wake.h"
 #include "graphics/v8_release_registry.h"
+#include "graphics/image_lease_abi.h"
 #include <v8.h>
 #include <iostream>
 using namespace webscene::graphics;
 void require(bool value,const char* message) { if (!value) throw std::runtime_error(message); }
 int weak_releases=0;
+void test_image_lease_abi() {
+    struct provider final : image_provider_lifetime {};
+    auto native=std::make_shared<provider>();
+    std::weak_ptr<provider> alive=native;
+    auto pool=std::make_unique<owned_image_pool>(native,3); native.reset();
+    auto writer=pool->acquire();
+    writer->set_metadata({1,2,3,4,5,6,640,480}); writer->begin();
+    auto frame=writer->publish();
+    auto* original=new webscene_gpu_image_lease_v3(std::move(*frame)); frame.reset();
+    webscene_gpu_image_lease_v3* retained=nullptr;
+    require(webscene_gpu_image_retain_v3(original,&retained)==WEBSCENE_SCENE_ACQUIRE_SUCCESS,"ABI retain failed");
+    webscene_gpu_image_consumer_v3* consumer=nullptr;
+    require(webscene_gpu_image_begin_consumer_v3(retained,&consumer)==WEBSCENE_SCENE_ACQUIRE_SUCCESS,"ABI consumer failed");
+    webscene_gpu_image_lease_v3* saturated=nullptr;
+    require(webscene_gpu_image_retain_v3(retained,&saturated)==WEBSCENE_SCENE_ACQUIRE_BACKPRESSURE && !saturated,"ABI backpressure failed");
+    pool.reset(); writer->complete(); writer.reset();
+    webscene_gpu_image_release_v3(original);
+    webscene_gpu_image_info_v3 info{}; info.struct_size=sizeof(info); info.version=3;
+    require(webscene_gpu_image_describe_v3(retained,&info) && info.width==640 && info.allocation_generation==3,"ABI metadata failed");
+    info.version=99; require(!webscene_gpu_image_describe_v3(retained,&info),"ABI metadata version accepted");
+    webscene_gpu_image_release_v3(retained);
+    require(!alive.expired(),"ABI released pending GPU provider");
+    std::thread completion([&] { webscene_gpu_image_complete_consumer_v3(consumer); }); completion.join();
+    require(alive.expired(),"ABI completion leaked provider");
+}
 void test_scene_acquisition_v3() {
     std::unique_ptr<webscene_engine,decltype(&webscene_engine_destroy)> engine(webscene_engine_create(64),webscene_engine_destroy);
     require(engine!=nullptr,"scene ABI engine creation failed");
@@ -208,6 +234,7 @@ int main() {
         catch (const std::exception& error) { std::cerr << error.what() << '\n'; }
         return 1;
     }
+    test_image_lease_abi();
     test_scene_acquisition_v3();
     std::cout << "Hidden V8 graphics completion, context affinity and promise checkpoint passed without RAF\n";
 }

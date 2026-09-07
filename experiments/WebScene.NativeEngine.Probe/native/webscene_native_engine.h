@@ -493,7 +493,8 @@ typedef enum webscene_scene_acquire_status {
     WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_VERSION = 3,
     WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES = 4,
     WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY = 5,
-    WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR = 6
+    WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR = 6,
+    WEBSCENE_SCENE_ACQUIRE_BACKPRESSURE = 7
 } webscene_scene_acquire_status;
 typedef struct webscene_scene_view_v3 {
     uint32_t struct_size;
@@ -509,6 +510,37 @@ WEBSCENE_API webscene_scene_acquire_status webscene_engine_acquire_next_scene_v3
     webscene_engine* engine,const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result);
 WEBSCENE_API uint8_t webscene_scene_acknowledge_v3(const webscene_scene_view_v3* scene);
 WEBSCENE_API void webscene_scene_release_v3(const webscene_scene_view_v3* scene);
+
+/* Opaque native image leases. A retained lease can outlive its scene/engine.
+ * Release ends CPU retention only. Complete a consumer only after its GPU fence.
+ * Calls on the same handle must be externally serialized; released handles are invalid.
+ */
+typedef struct webscene_gpu_image_lease_v3 webscene_gpu_image_lease_v3;
+typedef struct webscene_gpu_image_consumer_v3 webscene_gpu_image_consumer_v3;
+typedef struct webscene_gpu_image_info_v3 {
+    uint32_t struct_size, version;
+    uint64_t canvas, allocation, allocation_generation, content_serial;
+    uint64_t producer_timeline, producer_value;
+    uint32_t width, height;
+    /* format: 1 RGBA8 unorm, 2 BGRA8 unorm, 3 RGBA16 float,
+     *         4 RGBA8 sRGB, 5 BGRA8 sRGB.
+     * alpha: 1 opaque, 2 premultiplied, 3 straight.
+     * color_space: 1 sRGB, 2 Display P3. orientation: 1 top-left, 2 bottom-left.
+     * Timeline/allocation IDs require native provider resolution, never casts.
+     */
+    uint32_t format, alpha, color_space, orientation;
+} webscene_gpu_image_info_v3;
+WEBSCENE_API uint32_t webscene_scene_gpu_image_count_v3(const webscene_scene_view_v3* scene);
+WEBSCENE_API webscene_scene_acquire_status webscene_scene_retain_gpu_image_v3(
+    const webscene_scene_view_v3* scene,uint32_t index,webscene_gpu_image_lease_v3** result);
+WEBSCENE_API webscene_scene_acquire_status webscene_gpu_image_retain_v3(
+    const webscene_gpu_image_lease_v3* image,webscene_gpu_image_lease_v3** result);
+WEBSCENE_API uint8_t webscene_gpu_image_describe_v3(
+    const webscene_gpu_image_lease_v3* image,webscene_gpu_image_info_v3* result);
+WEBSCENE_API void webscene_gpu_image_release_v3(webscene_gpu_image_lease_v3* image);
+WEBSCENE_API webscene_scene_acquire_status webscene_gpu_image_begin_consumer_v3(
+    const webscene_gpu_image_lease_v3* image,webscene_gpu_image_consumer_v3** result);
+WEBSCENE_API void webscene_gpu_image_complete_consumer_v3(webscene_gpu_image_consumer_v3* consumer);
 
 typedef enum webscene_resource_kind {
     WEBSCENE_RESOURCE_DOCUMENT = 0,

@@ -1,7 +1,7 @@
 # GPU canvas lifetime implementation (G03 / issue #25)
 
-Status: in progress. No GPU scene/lease ABI or production GPU presentation is
-available yet. G01/G02 qualification and integration gaps remain open.
+Status: in progress. A native image lease ABI is implemented, but GPU canvas
+publication and production GPU presentation are not available yet. G01/G02 qualification and integration gaps remain open.
 
 ## Backing state
 
@@ -200,3 +200,30 @@ another thread, and verifies the provider is destroyed exactly once, only after
 completion. It also checks unsubmitted cancellation and ticket backpressure.
 Focused CTest and Clang ThreadSanitizer runs pass. Concrete GPU allocations,
 provider resolution, scene attachment and the exported lease ABI remain pending.
+
+## Exported native image lease operations
+
+The v3 C API now exposes scene image count/indexed retain, independent image
+retain/release, fixed-layout metadata lookup, and begin/complete consumer.
+Retaining an image allocates a CPU handle and bounded ticket; it neither allocates
+nor copies pixel storage. Ticket exhaustion returns explicit backpressure. The
+consumer wrapper is allocated before registering use so allocation failure cannot
+abandon a live GPU ticket. Completion consumes the consumer handle. Calls on the
+same handle must be serialized, and freed pointers cannot be reused.
+
+Scene storage now retains shared image references; capability computation includes
+the GPU bit whenever that collection is nonempty. The old view layout remains
+unchanged, and v3 callers access images separately by index. CPU scene memory
+accounting includes the image-reference vector, not provider GPU allocations.
+
+The runtime fixture exercises the exported retain/describe/consumer operations
+with the native lifetime fixture, including backpressure, version rejection, owner
+disposal and final completion on another thread. All three focused runtime, pool
+and C ABI layout tests pass (0.86 seconds). The C fixture checks the 80-byte image
+metadata layout, and `nm -gU` confirms all seven new macOS exports.
+
+No canvas producer populates the scene image collection yet. End-to-end GPU scene
+capability rejection, paint placement, provider lookup, real allocation/fence
+integration, managed consumers and Windows/Linux ABI verification remain open.
+The fixture provider owns no texture; these results prove lease ownership through
+the exported operations, not native GPU presentation or its copy budget.
