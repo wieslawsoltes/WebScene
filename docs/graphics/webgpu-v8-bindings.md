@@ -1315,3 +1315,30 @@ image to the Ganesh window probe. The probe passes with 32 frames, one import,
 completed GPU retirement, zero explicit transport copies and four diagnostic
 readbacks, including presentation after provider destruction. Ordinary V8 canvas
 host callbacks and scene scheduling still need to be connected to this provider.
+
+### V8 canvas to IOSurface provider bridge
+
+`make_iosurface_webgpu_canvas_host` connects the V8 canvas controller's validate,
+acquire and retire callbacks to the native IOSurface provider. The document
+supplies canvas/generation/content and producer timeline identities; the bridge
+adds bitmap dimensions, alpha mode, color space and orientation. Current
+negotiation is BGRA8, sRGB and standard tone mapping, with native IOSurface and
+MTLSharedEvent capabilities required on the device. Acquisition uses the original
+canvas texture descriptor and retirement hands already-submitted work to the
+provider without resubmission or pixel transport.
+
+A new macOS V8 runtime test requests a fresh Metal adapter/device with those
+private native features, wraps the device, configures the internal canvas and
+clears its current texture from JavaScript through GPUQueue.submit. The resulting
+retained IOSurface image preserves canvas 123, generation 7, content serial 1 and
+4x2 bitmap dimensions. After producer completion, explicit diagnostic IOSurface
+inspection verifies all eight opaque red pixels; this CPU inspection is test-only.
+The private sharing feature names remain absent from the JavaScript feature set.
+Unconfigure/consumer completion leave the provider idle with no occupied image.
+Runtime CTest passes after rebuilding the target.
+
+The test deliberately provisions private device features internally. Ordinary
+requestDevice still needs host capability provisioning, and HTMLCanvasElement
+getContext, automatic frame expiration and normal scene publication remain
+unconnected. This evidence is a JavaScript-to-shared-image milestone, not a
+normal WebScene application or Kestrel pass.

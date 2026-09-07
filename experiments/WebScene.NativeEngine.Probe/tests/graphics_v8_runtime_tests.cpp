@@ -31,6 +31,7 @@ void require(bool value,const char* message) { if (!value) throw std::runtime_er
 #include "graphics_v8_webgpu_texture_descriptor.h"
 #include "graphics_v8_webgpu_render_pass_descriptor.h"
 #include "graphics_v8_webgpu_canvas_configuration.h"
+#include "graphics_v8_iosurface_canvas_host.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
 void test_image_lease_abi() {
@@ -782,6 +783,10 @@ int main() {
                     require(canvas_acquisitions==2&&canvas_retirements==2,"Canvas texture replacement lifetime failed");
                     canvas_context.reset();
                     require(run("let releasedCanvas=false;try{canvasContextProbe.getCurrentTexture()}catch(e){releasedCanvas=e instanceof TypeError}if(!releasedCanvas)throw new Error('released canvas receiver');delete globalThis.canvasContextProbe;"),"Released canvas wrapper remained callable");
+#if defined(__APPLE__)
+                    test_v8_iosurface_canvas_host(isolate,context,adapter_fixture,run);
+                    adapter_fixture.drain_commands();
+#endif
                     for(const char* name:{"consumedAdapterPromise","badAdapterReceiverPromise"}) {
                         auto rejected=context->Global()->Get(context,v8::String::NewFromUtf8(isolate,name).ToLocalChecked()).ToLocalChecked().As<v8::Promise>();
                         require(rejected->State()==v8::Promise::kRejected,"Invalid adapter request did not reject");
