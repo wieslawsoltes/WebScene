@@ -11,6 +11,8 @@ internal static class NativeMacOSGpuImageImport
     private const string OpenGL = "/System/Library/Frameworks/OpenGL.framework/OpenGL";
     private const string IOSurface = "/System/Library/Frameworks/IOSurface.framework/IOSurface";
 
+    internal static IntPtr CurrentContext => OperatingSystem.IsMacOS() ? CGLGetCurrentContext() : IntPtr.Zero;
+
     internal static bool TryBindCurrentRectangleTexture(NativeGpuImageConsumerV3 consumer)
     {
         ArgumentNullException.ThrowIfNull(consumer);

@@ -50,6 +50,7 @@ thread_local GLuint fixture_texture=0;
 extern "C" __attribute__((visibility("default"))) void webscene_test_end_cgl() {
     if (!fixture_context) return;
     CGLSetCurrentContext(fixture_context);
+    glFinish(); // Diagnostic failure cleanup only.
     if (fixture_texture) glDeleteTextures(1,&fixture_texture);
     CGLSetCurrentContext(previous_context);
     CGLReleaseContext(fixture_context);

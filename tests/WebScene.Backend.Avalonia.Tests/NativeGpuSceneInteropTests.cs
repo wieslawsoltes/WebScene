@@ -50,17 +50,26 @@ public sealed class NativeGpuSceneInteropTests
         Assert.Equal(NativeSceneAcquireStatus.Success, NativeGpuImageConsumerV3.Acquire(image, out var consumer));
         image.Dispose();
         Assert.NotNull(consumer);
+        var completed = false;
         try
         {
             Assert.Equal(1, begin());
             Assert.True(NativeMacOSGpuImageImport.TryBindCurrentRectangleTexture(consumer));
             Assert.Equal(1, bound());
             Assert.Equal(1, pixels());
+            var openGl = NativeLibrary.Load("/System/Library/Frameworks/OpenGL.framework/OpenGL");
+            var fence = NativeMacOSGpuConsumerFence.Create(name => NativeLibrary.GetExport(openGl, name), consumer);
+            Assert.Throws<InvalidOperationException>(() => Task.Run(fence.TryComplete).GetAwaiter().GetResult());
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (!(completed = fence.TryComplete()) && DateTime.UtcNow < deadline) Thread.Sleep(1);
+            Assert.True(completed);
+            Assert.True(fence.TryComplete()); // Retired polling is idempotent.
+            Assert.Throws<InvalidOperationException>(consumer.Complete);
         }
         finally
         {
             end(); // Delete GL references before completing the native image consumer.
-            consumer.Complete(); // Diagnostic readback has completed the GL read.
+            if (!completed) consumer.Complete(); // Fixture cleanup drained GL before release.
         }
     }
 

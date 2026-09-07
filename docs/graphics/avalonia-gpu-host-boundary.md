@@ -129,3 +129,20 @@ The fixture's waits and GL readback are explicit diagnostics, not an ordinary
 presentation implementation. Constant-color output does not verify orientation,
 transparent edges or compositing. Asynchronous production readiness, GL fences,
 host texture conversion and retained scene rendering still need integration.
+
+### GL fence retirement component
+
+NativeMacOSGpuConsumerFence obtains GL procedures from a caller-supplied host
+resolver (intended to be GlInterface.GetProcAddress), inserts a GPU completion
+fence and flushes. TryComplete uses glClientWaitSync with zero timeout. It retains
+the consumer on pending/failed results, requires the original thread/current CGL
+context, deletes a signaled fence and completes the native consumer once.
+Retired polling is idempotent. The host must retain and poll this component;
+there is no GC-based completion or automatic render scheduling.
+
+The real CGL import test now exercises this path, including wrong-thread polling
+rejection and duplicate consumer completion rejection. All six interop tests
+passed on net8.0 and net10.0. The fixture still performs diagnostic pixel readback
+before fence insertion, so this is not a forced-delayed-GPU stress test.
+Fixture-only failure cleanup drains GL before releasing native image ownership.
+Production context-loss cleanup and renderer scheduling remain unfinished.
