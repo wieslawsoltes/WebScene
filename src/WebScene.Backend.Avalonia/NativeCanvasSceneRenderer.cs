@@ -151,10 +151,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     {
         var header = view->Header;
         var checkpoint = (header.Flags & SceneCheckpoint) != 0;
-        // The opt-in path requires explicit image slots. Legacy Canvas2D layers
-        // have no ordered paint marker yet, so reject that combination explicitly.
-        if (orderedGpuImages && (header.CanvasLayerCount != 0 || (!checkpoint && s_layers.Count != 0)
-            || !ValidateOrderedGpuState(view))) return false;
+        if (orderedGpuImages && (!ValidateOrderedGpuState(view) ||
+            !ValidateOrderedCanvasPlacements(view, checkpoint))) return false;
         if (!checkpoint
             && header.Revision != s_revision
             && header.BaseRevision != s_revision)
@@ -392,25 +390,27 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             {
                 continue;
             }
-            var save = canvas.Save();
-            canvas.ClipRect(new SKRect(layer.X, layer.Y, layer.X + layer.Width, layer.Y + layer.Height));
-            if (layer.RequiresIsolation)
-            {
-                // Browser canvases are independent transparent bitmaps. A
-                // destructive operation must affect this canvas only, then the
-                // result is source-over composited with lower siblings.
-                canvas.SaveLayer();
-            }
-            canvas.Translate(layer.X, layer.Y);
-            canvas.Scale(layer.Width / layer.BitmapWidth, layer.Height / layer.BitmapHeight);
-            canvas.DrawPicture(layer.Picture);
-            canvas.RestoreToCount(save);
+            DrawRetainedCanvasLayer(canvas, layer);
         }
         if (s_domOverlayPicture is not null
             && (intersects is null || intersects(new SKRect(0, 0, viewportWidth, viewportHeight))))
         {
             canvas.DrawPicture(s_domOverlayPicture);
         }
+    }
+
+    private static void DrawRetainedCanvasLayer(SKCanvas canvas, RetainedLayer layer)
+    {
+        var save = canvas.Save();
+        try
+        {
+            canvas.ClipRect(new SKRect(layer.X, layer.Y, layer.X + layer.Width, layer.Y + layer.Height));
+            if (layer.RequiresIsolation) canvas.SaveLayer();
+            canvas.Translate(layer.X, layer.Y);
+            canvas.Scale(layer.Width / layer.BitmapWidth, layer.Height / layer.BitmapHeight);
+            canvas.DrawPicture(layer.Picture);
+        }
+        finally { canvas.RestoreToCount(save); }
     }
 
     internal byte[]? CaptureCanvasPng(uint nodeId)
@@ -3470,6 +3470,36 @@ internal sealed unsafe class NativeCanvasSceneRenderer
 
     private sealed record OrderedGpuPaint(SceneCommand Command, DomCornerRadii Radii, SKPicture? Picture);
 
+    private bool ValidateOrderedCanvasPlacements(NativeSceneView* view, bool checkpoint)
+    {
+        if (view->Header.CanvasLayerCount != 0 && view->CanvasLayers == null) return false;
+        var visible = new HashSet<uint>();
+        if (!checkpoint) foreach (var layer in s_layers.Values)
+            if (!layer.IsOffscreen) visible.Add(layer.NodeId);
+        foreach (var layer in new ReadOnlySpan<NativeCanvasLayer>(view->CanvasLayers,
+            checked((int)view->Header.CanvasLayerCount)))
+        {
+            if ((layer.Flags & LayerRemove) != 0 || (layer.Reserved & OffscreenCanvasLayer) != 0)
+                visible.Remove(layer.NodeId);
+            else visible.Add(layer.NodeId);
+        }
+        var placed = new HashSet<uint>();
+        if ((view->Header.Flags & SceneDomReplacement) != 0)
+        {
+            foreach (var command in new ReadOnlySpan<SceneCommand>(view->Commands,
+                checked((int)view->Header.CommandCount)))
+                if (command.Kind == 257 && (!visible.Contains(command.NodeId) || !placed.Add(command.NodeId)))
+                    return false;
+        }
+        else if (_orderedGpuPaint is not null && !checkpoint)
+        {
+            foreach (var entry in _orderedGpuPaint)
+                if (entry.Command.Kind == 257 && (!visible.Contains(entry.Command.NodeId) || !placed.Add(entry.Command.NodeId)))
+                    return false;
+        }
+        return placed.SetEquals(visible);
+    }
+
     private static bool ValidateOrderedGpuState(NativeSceneView* view)
     {
         var stack = new Stack<uint>();
@@ -3493,7 +3523,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         {
             for (var index = 0; index <= commands.Length; ++index)
             {
-                if (index != commands.Length && commands[index].Kind is not (12 or 13 or 15 or 16 or 19 or 20 or 30 or 31 or 256))
+                if (index != commands.Length && commands[index].Kind is not (12 or 13 or 15 or 16 or 19 or 20 or 30 or 31 or 256 or 257))
                     continue;
                 if (start < index)
                 {
@@ -3539,6 +3569,11 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         // Never allow an invalid stream to pop the host's state.
                         if (canvas.SaveCount <= save + 1) throw new InvalidOperationException("Unbalanced GPU scene state.");
                         canvas.Restore(); break;
+                    case 257:
+                        if (!s_layers.TryGetValue(command.NodeId, out var layer) || layer.IsOffscreen)
+                            throw new InvalidOperationException("Ordered canvas layer is unavailable.");
+                        DrawRetainedCanvasLayer(canvas, layer);
+                        break;
                     case 256:
                         drawGpuImage(command.Rgba, new SKRect(command.X, command.Y,
                             command.X + command.Width, command.Y + command.Height)); break;

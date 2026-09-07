@@ -267,3 +267,32 @@ placement marker yet, so this mode rejects scenes with those layers instead of
 silently painting them in the old global split. Full mixed Canvas2D/SVG/GPU DOM
 coverage, transformed bounds/culling qualification, and generation cache updates
 remain required before advertising the GPU scene capability in production.
+
+### Explicit retained Canvas2D placements in mixed scenes
+
+The ordered path now recognizes command 257 as a Canvas2D layer placement, using
+node_id to resolve the current retained layer and its layout/bitmap dimensions.
+Its native contract requires the separate ORDERED_CANVAS capability bit (2);
+ordinary callers still advertise neither ordered-canvas nor GPU-image capability.
+Static DOM pictures, GPU slots and Canvas2D slots replay in command order under
+the same clip/transform/opacity state. Canvas isolation uses the existing layer
+semantics, shared with the legacy renderer.
+
+Before applying a diff, the renderer checks that every visible Canvas2D layer has
+exactly one placement and that every placement names a visible retained layer.
+Offscreen source canvases do not require a paint placement. Layer-only layout
+updates preserve the compiled paint list; removing a layer without updating its
+placement is rejected before changing live state. This supersedes the earlier
+blanket rejection of all Canvas2D layers in the opt-in path.
+
+Tests cover GPU→Canvas2D→GPU→DOM interleaving, layer-only reposition/scale and stale
+placement rejection. Four ordered-renderer tests pass on net8.0/net10.0; all 271
+Avalonia net10.0 tests pass without skips, and Uno builds without warnings/errors.
+The real window now includes a retained Canvas2D layer and verifies four host
+pixels across the mixed scene, with one GPU import across 32 draws and fence
+retirement (`evidence/ganesh-host/mixed-canvas-pixels.json`).
+
+Native DOM generation does not yet emit these placements or acquire GPU images
+through the ordinary scene path. The window continues to construct its diagnostic
+scene. Full SVG/text/destructive Canvas2D fixtures, transform bounds, native slot
+binding and production lifecycle handling remain required for epic completion.

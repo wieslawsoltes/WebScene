@@ -57,6 +57,8 @@ public static unsafe partial class NativeWebSceneApi
     // These declarations do not opt the existing renderer into GPU scenes.
     internal const ulong GpuImageCapability = 1;
     internal const uint GpuImagePaintCommand = 256;
+    internal const ulong OrderedCanvasCapability = 2;
+    internal const uint OrderedCanvasPaintCommand = 257;
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_acquire_latest_scene_v3", CallingConvention = CallingConvention.Cdecl)]
     internal static extern NativeSceneAcquireStatus AcquireLatestSceneV3(IntPtr engine, in NativeSceneAcquireOptionsV3 options, out IntPtr scene);

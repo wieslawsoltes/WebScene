@@ -68,10 +68,16 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
             new() { Kind = 30, Rgba = 192 },
             new() { Kind = 256, X = 10, Y = 10, Width = 360, Height = 175, Rgba = 0 },
             new() { Kind = 31 }, new() { Kind = 13 },
+            new() { Kind = 257, NodeId = 7 },
             new() { Kind = 9, X = 310, Y = 140, Width = 30, Height = 10, Rgba = 0xffff00ff }
         };
-        var scene = new NativeSceneView { Commands = commands,
-            Header = new SceneHeader { Revision = 1, Flags = 3, CommandCount = 7, ViewportWidth = 400, ViewportHeight = 220 } };
+        var canvasCommand = new NativeCanvasCommand { Kind = 22, V2 = 20, V3 = 20 };
+        var layer = new NativeCanvasLayer { NodeId = 7, Flags = 1, CommandCount = 1,
+            X = 250, Y = 100, Width = 20, Height = 20, BitmapWidth = 20, BitmapHeight = 20, Generation = 1 };
+        var scene = new NativeSceneView { Commands = commands, CanvasLayers = &layer,
+            CanvasCommands = &canvasCommand, CanvasCommandCount = 1,
+            Header = new SceneHeader { Revision = 1, Flags = 3, CommandCount = 8,
+                CanvasLayerCount = 1, ViewportWidth = 400, ViewportHeight = 220 } };
         if (!_renderer.ApplyDiff(&scene, orderedGpuImages: true)) throw new InvalidOperationException("Ordered scene rejected");
     }
     public override void Render(DrawingContext context) => context.Custom(this);
@@ -110,11 +116,12 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
             if (_verifyPixels && Frames == 0)
             {
                 var surface = lease.SkSurface ?? throw new NotSupportedException("Host has no diagnostic surface");
-                // Read three destination pixels, solely when explicitly requested.
+                // Read four destination pixels, solely when explicitly requested.
                 using var pixel = new SKBitmap(new SKImageInfo(1, 1, SKColorType.Rgba8888, SKAlphaType.Premul));
                 foreach (var sample in new[] { (X: 60f, Y: 50f, R: 45, G: 83, B: 143),
                     (X: 15f, Y: 15f, R: 25, G: 25, B: 112),
-                    (X: 320f, Y: 145f, R: 255, G: 255, B: 0) })
+                    (X: 320f, Y: 145f, R: 255, G: 255, B: 0),
+                    (X: 255f, Y: 105f, R: 0, G: 0, B: 0) })
                 {
                     var point = canvas.TotalMatrix.MapPoint(sample.X, sample.Y);
                     if (!surface.ReadPixels(pixel.Info, pixel.GetPixels(), pixel.RowBytes, (int)point.X, (int)point.Y))
