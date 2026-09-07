@@ -9,6 +9,7 @@
 #include "graphics/v8_webgpu_buffers.h"
 #include "graphics/v8_webgpu_devices.h"
 #include "graphics/v8_webgpu_shaders.h"
+#include "graphics/webgpu_compilation_info.h"
 #include "graphics/v8_webgpu_render_pipelines.h"
 #include "graphics/v8_webgpu_texture_views.h"
 #include "graphics/v8_webgpu_adapters.h"
@@ -34,6 +35,25 @@ void require(bool value,const char* message) { if (!value) throw std::runtime_er
 #include "graphics_v8_iosurface_canvas_host.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
+void test_compilation_info_snapshot() {
+    std::string text="diagnostic";
+    wgpu::CompilationMessage message{};
+    message.message=wgpu::StringView(text.data(),text.size());
+    message.type=wgpu::CompilationMessageType::Error;
+    message.lineNum=2;message.linePos=3;message.offset=4;message.length=5;
+    wgpu::CompilationInfo info{};info.messageCount=1;info.messages=&message;
+    auto snapshot=webgpu_compilation_info::copy(info);
+    text[0]='X';
+    require(snapshot.messages.size()==1&&snapshot.messages[0].message=="diagnostic"
+        &&snapshot.messages[0].offset==4&&snapshot.messages[0].length==5,
+        "Compilation diagnostics did not retain callback data");
+    bool bounded=false;try{webgpu_compilation_info::copy(info,1,2);}catch(const std::length_error&){bounded=true;}
+    require(bounded,"Compilation diagnostic byte budget ignored");
+    bounded=false;try{webgpu_compilation_info::copy(info,0);}catch(const std::length_error&){bounded=true;}
+    require(bounded,"Compilation diagnostic count budget ignored");
+    message.message=wgpu::StringView("terminated");
+    require(webgpu_compilation_info::copy(info).messages[0].message=="terminated","NUL-terminated diagnostic copy failed");
+}
 void test_image_lease_abi() {
     struct provider final : image_provider_lifetime {};
     auto native=std::make_shared<provider>();
@@ -271,6 +291,7 @@ int main() {
     std::exception_ptr failure;
     std::thread worker([&] {
         try {
+            test_compilation_info_snapshot();
             test_inline_canvas_intrinsic_layout();
             test_runtime_webgpu_document_policy();
             test_runtime_webgpu_installation();
@@ -1392,6 +1413,31 @@ int main() {
                             std::this_thread::sleep_for(std::chrono::milliseconds(1));
                         }
                         require(captured->load()==1,"JavaScript scope did not capture Dawn validation error");
+                        native.PushErrorScope(wgpu::ErrorFilter::Validation);
+                        wgpu::ShaderSourceWGSL invalid_source{};invalid_source.code="this is invalid WGSL";
+                        wgpu::ShaderModuleDescriptor invalid_descriptor{};invalid_descriptor.nextInChain=&invalid_source;
+                        auto invalid_shader=native.CreateShaderModule(&invalid_descriptor);
+                        native.PopErrorScope(wgpu::CallbackMode::AllowSpontaneous,
+                            [](wgpu::PopErrorScopeStatus,wgpu::ErrorType,wgpu::StringView){});
+                        auto diagnostics=std::make_shared<std::atomic<int>>(0);
+                        invalid_shader.GetCompilationInfo(wgpu::CallbackMode::AllowSpontaneous,
+                            [diagnostics](wgpu::CompilationInfoRequestStatus status,const wgpu::CompilationInfo* info){
+                                try{
+                                    if(status!=wgpu::CompilationInfoRequestStatus::Success||!info){diagnostics->store(-1);return;}
+                                    auto snapshot=webgpu_compilation_info::copy(*info);
+                                    bool error=false;
+                                    for(const auto& message:snapshot.messages)
+                                        error|=message.type==wgpu::CompilationMessageType::Error&&!message.message.empty();
+                                    diagnostics->store(error?1:-1);
+                                }catch(...){diagnostics->store(-1);}
+                            });
+                        until=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                        while(diagnostics->load()==0&&std::chrono::steady_clock::now()<until){
+                            adapter_service->pump([](auto){});
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        }
+                        require(diagnostics->load()==1,"Invalid WGSL did not produce owned Dawn diagnostics");
+
                     }
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {

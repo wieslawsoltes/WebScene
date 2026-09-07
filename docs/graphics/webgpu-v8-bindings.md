@@ -1736,3 +1736,17 @@ remain unimplemented; this is not complete error-scope support.
 Unchanged Kestrel startup was rerun and still returned exit 1, now reporting
 "shader.getCompilationInfo is not a function" as its Canvas 2D fallback reason.
 The original document hash is unchanged. This is the next observed startup gap.
+
+### Owned shader diagnostic snapshots (2026-09-08)
+
+webgpu_compilation_info copies Dawn callback messages and source positions into
+owned storage with message-count and aggregate-text budgets. It rejects excess
+data instead of silently reporting an incomplete successful result. Tests verify
+copy independence, explicit-length and NUL-terminated text, both budgets, and
+a real invalid WGSL module delivering an error through Dawn GetCompilationInfo.
+The native runtime suite passes.
+
+This is the native data-lifetime component for getCompilationInfo, not the
+JavaScript API. Promise/mailbox routing, cancellation/realm teardown,
+GPUCompilationInfo/GPUCompilationMessage objects, and UTF-16 position mapping
+remain required. Kestrel's missing getCompilationInfo failure remains open.
