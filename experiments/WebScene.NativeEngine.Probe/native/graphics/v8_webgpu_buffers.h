@@ -52,6 +52,18 @@ class v8_webgpu_buffers {
             info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(info.GetIsolate(),static_cast<uint32_t>(buffer.GetUsage())));
         }); });
     }
+    static void map_state(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        access(info,[&](auto& device,auto handle) { device.with_buffer(handle,[&](const auto& buffer) {
+            const char* state=nullptr;
+            switch (buffer.GetMapState()) {
+                case wgpu::BufferMapState::Unmapped: state="unmapped"; break;
+                case wgpu::BufferMapState::Pending: state="pending"; break;
+                case wgpu::BufferMapState::Mapped: state="mapped"; break;
+                default: throw std::logic_error("Unknown Dawn buffer map state");
+            }
+            info.GetReturnValue().Set(v8::String::NewFromUtf8(info.GetIsolate(),state).ToLocalChecked());
+        }); });
+    }
     static void destroy(const v8::FunctionCallbackInfo<v8::Value>& info) {
         access(info,[&](auto& device,auto handle) { device.destroy_buffer(handle); });
     }
@@ -76,6 +88,7 @@ public:
         auto prototype=v8::ObjectTemplate::New(isolate);
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"size"),v8::FunctionTemplate::New(isolate,size));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"usage"),v8::FunctionTemplate::New(isolate,usage));
+        prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"mapState"),v8::FunctionTemplate::New(isolate,map_state));
         prototype->Set(isolate,"destroy",v8::FunctionTemplate::New(isolate,destroy));
         prototype_.Reset(isolate,prototype->NewInstance(context).ToLocalChecked());
     }

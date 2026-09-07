@@ -216,3 +216,14 @@ constructor. Label, mapState, mapAsync/getMappedRange/unmap, mapping detachment,
 public createBuffer/error-object integration and complete WebIDL prototypes remain
 unfinished. Existing fixtures exercise explicit registry teardown; GC reclamation
 and full navigation lifecycle for this specific registry still need qualification.
+
+### Live buffer mapState
+
+The internal buffer prototype now has a branded read-only mapState getter backed
+by Dawn GetMapState. It translates Unmapped, Pending and Mapped to the pinned
+browser strings and rejects unknown native states. The V8 hardware fixture creates
+a mapped-at-creation buffer, observes `mapped` in JavaScript, destroys it and
+observes `unmapped` while size remains available. Wrong-receiver checks include
+this getter. The rebuilt macOS runtime CTest passes. Pending-state behavior still
+needs end-to-end qualification when mapAsync is connected; mapped-range exposure
+and ArrayBuffer detachment remain unfinished.

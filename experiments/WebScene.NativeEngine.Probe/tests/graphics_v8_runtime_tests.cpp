@@ -277,6 +277,7 @@ int main() {
                     adapter_service->with_device(device_handle,[&](auto& device) {
                         wgpu::BufferDescriptor descriptor{};
                         descriptor.size=64; descriptor.usage=wgpu::BufferUsage::CopyDst;
+                        descriptor.mappedAtCreation=true;
                         buffer_handle=device.create_buffer(descriptor);
                     });
                     auto buffer_registry=std::make_unique<v8_webgpu_buffers>(isolate,context,1);
@@ -294,7 +295,7 @@ int main() {
                         return v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocal(&script)
                             && !script->Run(context).IsEmpty();
                     };
-                    require(run("if(bufferProbe.size!==64||bufferProbe.usage!==8)throw new Error('buffer metadata'); let p=Object.getPrototypeOf(bufferProbe); for(let f of [p.destroy,Object.getOwnPropertyDescriptor(p,'size').get,Object.getOwnPropertyDescriptor(p,'usage').get]){let ok=false;try{f.call({})}catch(e){ok=e instanceof TypeError}if(!ok)throw new Error('buffer brand')} bufferProbe.destroy();bufferProbe.destroy();if(bufferProbe.size!==64)throw new Error('destroy removed metadata');"),"Native buffer wrapper behavior failed");
+                    require(run("if(bufferProbe.size!==64||bufferProbe.usage!==8||bufferProbe.mapState!=='mapped')throw new Error('buffer metadata'); let p=Object.getPrototypeOf(bufferProbe); for(let f of [p.destroy,Object.getOwnPropertyDescriptor(p,'size').get,Object.getOwnPropertyDescriptor(p,'usage').get,Object.getOwnPropertyDescriptor(p,'mapState').get]){let ok=false;try{f.call({})}catch(e){ok=e instanceof TypeError}if(!ok)throw new Error('buffer brand')} bufferProbe.destroy();bufferProbe.destroy();if(bufferProbe.size!==64||bufferProbe.mapState!=='unmapped')throw new Error('destroy metadata/state');"),"Native buffer wrapper behavior failed");
                     buffer_registry.reset();
                     require(run("let stale=false;try{bufferProbe.destroy()}catch(e){stale=e instanceof TypeError}if(!stale)throw new Error('stale buffer realm');delete globalThis.bufferProbe;"),"Buffer wrapper teardown left native access");
                     // Teardown releases through the service queue; native device
