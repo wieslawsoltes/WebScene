@@ -29,3 +29,11 @@ The matching-SDK graphics-enabled test subsequently reported `binary invocation 
 At merge commit `2de32f0` (upstream `96088f6`), the matching-SDK graphics-disabled build passes all four CTest suites, including the native runtime suite (12.52 seconds). The graphics-enabled configuration still reports an incomplete binary invocation and reaches the explicit 60-second CTest timeout. Both logs are retained. This comparison narrows the remaining failure to the graphics-enabled configuration; the earlier stale-SDK and old-runtime failures must not be conflated with it.
 
 Both Dawn and V8 archives define Abseil spin-lock symbols without an inline version namespace. Their implementations differ. A shared-Dawn experiment is in progress to test symbol isolation; this is a hypothesis, not a confirmed fix or a qualified dependency change.
+
+## Isolated shared-Dawn experiment
+
+The disposable build was relinked against a shared Dawn monolith exporting only `_wgpu*`, retaining ANGLE and the same native sources/V8 SDK. All four native suites passed; the native runtime suite took 11.82 seconds. The preceding static-Dawn build timed out and the no-graphics control passed. This intervention supports a dependency symbol collision: Dawn and V8 bundle different unversioned Abseil implementations, and linking them into one image permits one library's implementation to satisfy the other's references.
+
+This is an experiment, not the committed SDK configuration. Dawn's existing build directory was reconfigured with `DAWN_BUILD_MONOLITHIC_LIBRARY=SHARED` and `CMAKE_SHARED_LINKER_FLAGS=-Wl,-exported_symbols_list,<file>` where the file contains `_wgpu*`. In the disposable native `build.ninja`, only the installed Dawn archive path was replaced by that shared candidate path, and the candidate library was copied alongside the native engine. After the run the original Ninja file was restored. The installed, manifest-verified static SDK was not changed. The native binary in that disposable directory remains the experimental shared build until rebuilt.
+
+The selected fix must now be integrated into the SDK builder and verified for exported-symbol isolation, native linkage, hardware probes and relocation. Windows/Linux qualification and production package changes remain outstanding. No CPU pixel presentation path is involved in this change.
