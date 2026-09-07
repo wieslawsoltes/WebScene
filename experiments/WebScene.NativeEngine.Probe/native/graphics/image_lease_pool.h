@@ -1,5 +1,6 @@
 #pragma once
 #include "resource_table.h"
+#include "image_metadata.h"
 #include <array>
 #include <mutex>
 #include <optional>
@@ -17,6 +18,8 @@ class image_lease_pool {
         uint64_t generation{};
         size_t retained{},consumers{};
         bool producer_done{};
+        bool metadata_set{};
+        image_metadata metadata{};
     };
     struct lease_slot {
         lease_kind kind{};
@@ -65,17 +68,39 @@ public:
         for (uint32_t i=0;i<images_.size();++i) {
             auto& item=images_[i];
             if (item.state==phase::idle && item.generation!=UINT64_MAX) {
-                ++item.generation; item.state=phase::writing; item.producer_done=false;
+                ++item.generation; item.state=phase::writing; item.producer_done=false; item.metadata_set=false;
                 return image_write_token{identity_,item.generation,i};
             }
         }
         return {};
+    }
+    void set_metadata(image_write_token writer,const image_metadata& metadata) {
+        std::lock_guard lock(mutex_);
+        auto& item=image(writer);
+        if (item.state!=phase::writing) throw std::invalid_argument("published image metadata is immutable");
+        if (!metadata.canvas || !metadata.allocation || !metadata.allocation_generation
+            || !metadata.width || !metadata.height || !metadata.producer_timeline
+            || static_cast<uint32_t>(metadata.format)<1 || static_cast<uint32_t>(metadata.format)>5
+            || static_cast<uint32_t>(metadata.alpha)<1 || static_cast<uint32_t>(metadata.alpha)>3
+            || static_cast<uint32_t>(metadata.color_space)<1 || static_cast<uint32_t>(metadata.color_space)>2
+            || static_cast<uint32_t>(metadata.orientation)<1 || static_cast<uint32_t>(metadata.orientation)>2)
+            throw std::invalid_argument("invalid portable image metadata");
+        item.metadata=metadata; item.metadata_set=true;
+    }
+    image_metadata describe(image_lease_token token) const {
+        std::lock_guard lock(mutex_);
+        if (token.pool!=identity_ || token.index>=leases_.size()) throw std::invalid_argument("foreign image lease");
+        const auto& owned=leases_[token.index];
+        if (owned.kind==lease_kind::free || owned.generation!=token.generation)
+            throw std::invalid_argument("stale image lease");
+        return images_[owned.image].metadata;
     }
     // On capacity exhaustion the writer stays reserved; the caller retries.
     std::optional<image_lease_token> publish(image_write_token writer) {
         std::lock_guard lock(mutex_);
         auto& item=image(writer);
         if (item.state!=phase::writing) throw std::invalid_argument("image already published");
+        if (!item.metadata_set) throw std::invalid_argument("image publication requires metadata");
         auto token=allocate(writer.slot,lease_kind::retained);
         if (!token) return {};
         item.state=phase::published; item.retained=1;

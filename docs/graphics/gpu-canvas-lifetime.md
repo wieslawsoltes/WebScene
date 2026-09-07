@@ -95,3 +95,23 @@ objects, versioned scene acquisition, opaque lease ABI, resize metadata and
 presenter fence integration are still to be connected. Integration must keep the
 pool and its native image owner alive until every outstanding ticket has retired;
 the metadata class alone does not implement engine-detachment lifetime transfer.
+
+## Immutable image metadata bound to leases
+
+Each writer now supplies portable image metadata before publication: canvas and
+allocation identities, allocation generation, content serial, dimensions, format,
+alpha mode, color space, orientation and producer timeline/value. Invalid or
+missing metadata is rejected. Publication freezes it for that image use; retained
+and consumer lease tickets resolve the same metadata until released. A consumer
+can still resolve its image after all scene references have been released.
+
+The pool test keeps old-size and resized frames live concurrently, verifies each
+lease retains its own dimensions/generation, and rejects mutation after publication,
+foreign/stale lease lookup, zero dimensions and unknown formats. It passes under
+ThreadSanitizer. These descriptors contain values only; native texture/Skia
+pointers must remain in the backend provider's allocation registry. No native
+image allocation or pixel copy is performed by descriptor publication/lookup.
+
+This is the internal descriptor/lease association. C ABI versioning, native image
+provider lookup, scene acquisition and actual resize allocation/fence integration
+remain outstanding; no physical resize or zero-copy presentation pass is claimed.
