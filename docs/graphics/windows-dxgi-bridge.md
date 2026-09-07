@@ -164,3 +164,18 @@ checks. Its portable ownership tests pass locally (0.31 seconds); the Windows-on
 query code remains uncompiled and unexecuted on this macOS host. Actual producer
 and presenter devices still need to be connected to these queries and validated
 against Windows hardware manifests.
+
+## Native format capability queries
+
+Endpoint identification now also queries the five portable color formats through
+[D3D11 CheckFormatSupport](https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-id3d11device-checkformatsupport)
+or [D3D12 format support](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_feature_data_format_support).
+A candidate requires 2D texture, render-target and shader-sampling support. The
+query publishes its bitmask only after all calls and the device-removal check
+succeed; failures clear the result and invalidate endpoint identity. Alpha and
+synchronization fields remain unset until their separate qualification.
+
+This is a conservative candidate filter, not proof of shared allocation/import or
+sRGB view compatibility. Windows test branches cover format mapping and clearing
+stale masks on invalid input. The portable test target passes locally (0.20 seconds),
+but those Windows branches and real format queries remain unverified on this host.

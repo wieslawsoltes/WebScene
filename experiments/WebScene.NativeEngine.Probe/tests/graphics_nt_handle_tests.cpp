@@ -42,6 +42,16 @@ int main() {
     require(test_ops::live.contains(borrowed) && test_ops::live.size()==1);
     test_ops::close(borrowed); require(test_ops::live.empty());
 #if defined(_WIN32)
+    require(dxgi_color_format(image_format::rgba8_unorm)==DXGI_FORMAT_R8G8B8A8_UNORM
+        && dxgi_color_format(image_format::bgra8_unorm)==DXGI_FORMAT_B8G8R8A8_UNORM
+        && dxgi_color_format(image_format::rgba16_float)==DXGI_FORMAT_R16G16B16A16_FLOAT
+        && dxgi_color_format(image_format::rgba8_srgb)==DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+        && dxgi_color_format(image_format::bgra8_srgb)==DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
+        && dxgi_color_format(static_cast<image_format>(0))==DXGI_FORMAT_UNKNOWN);
+    uint32_t formats=31;
+    require(query_dxgi_color_formats(static_cast<ID3D11Device*>(nullptr),formats)==E_INVALIDARG && formats==0);
+    formats=31;
+    require(query_dxgi_color_formats(static_cast<ID3D12Device*>(nullptr),formats)==E_INVALIDARG && formats==0);
     adapter_luid identity{1,2,true};
     require(query_adapter_luid(static_cast<ID3D11Device*>(nullptr),identity)==E_INVALIDARG && !identity.valid);
     identity={1,2,true};
