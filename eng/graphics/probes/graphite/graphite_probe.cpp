@@ -57,6 +57,7 @@ bool wait(const wgpu::Instance& instance, wgpu::Future future) {
 }
 } // namespace
 
+static thread_local unsigned hostDestinationTexture=0;
 int main(int argc, char** argv) {
     if (argc < 2 || argc > 3) return finish("failed", "Specify d3d12, metal or vulkan", 1);
     const std::string backend = argv[1];
@@ -260,7 +261,7 @@ int main(int argc, char** argv) {
                 valid &= std::abs(int(pixels[y * rowBytes + x * 4 + (sharedOutput && c<3 ? 2-c : c)]) - wanted[c]) <= 1;
             }
 #if defined(__APPLE__)
-    if (sharedOutput) valid &= check_iosurface_gl(static_cast<IOSurfaceRef>(sharedSurface.get()),width,height,pixels,rowBytes);
+    if (sharedOutput) valid &= check_iosurface_gl(static_cast<IOSurfaceRef>(sharedSurface.get()),width,height,pixels,rowBytes,hostDestinationTexture);
 #endif
     buffer.Unmap();
     // The mapped readback follows Graphite submission on the same queue, proving
@@ -281,3 +282,18 @@ int main(int argc, char** argv) {
               << ",\"backgroundRGBA\":[51,102,153,255],\"compositedRGBA\":[153,51,77,255],\"tolerance\":1,\"diagnosticReadback\":true}\n";
     return 0;
 }
+
+#if defined(__APPLE__) && defined(WEBSCENE_GRAPHITE_HOST_PROBE)
+// Diagnostic bridge only: caller supplies a current CGL context and a 17x4 2D
+// texture. Runs readback-based verification; not a production submission API.
+extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_probe(unsigned texture) {
+    if (!texture || hostDestinationTexture) return 1;
+    hostDestinationTexture=texture;
+    char name[]="graphite-probe",backend[]="metal",mode[]="iosurface";
+    char* args[]={name,backend,mode};
+    int result=1;
+    try { result=main(3,args); } catch (...) { result=1; }
+    hostDestinationTexture=0;
+    return result;
+}
+#endif

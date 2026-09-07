@@ -175,3 +175,29 @@ The destination is currently created by the standalone probe, not supplied by
 Avalonia's shared context. Producer readiness still uses the diagnostic completion
 wait. Host context integration, asynchronous fences and sustained performance
 qualification remain outstanding.
+
+## Connected Avalonia diagnostic host
+
+Build the same source as a dylib by adding `-dynamiclib
+-DWEBSCENE_GRAPHITE_HOST_PROBE -Dmain=graphite_probe_main` to the executable build
+command and outputting `out/webscene-graphite/libwebscene_graphite_host_probe.dylib`.
+Include all frameworks above. Run:
+
+```sh
+DYLD_LIBRARY_PATH="$PWD/out/webscene-graphite:$PWD/artifacts/graphics-sdk/osx-arm64/dawn/lib" \
+  dotnet run --project experiments/WebScene.GpuHost.Probe -- --graphite --inspect
+```
+
+The managed host creates a 17x4 composition texture and calls the diagnostic native
+entry point with that texture current in its shared CGL context. Native Dawn/Graphite
+renders the retained generations into IOSurface; CGL blits into the host-owned 2D
+texture and checks its pixels. Avalonia imports and displays it. The window capture
+`docs/graphics/evidence/avalonia-host/dawn-graphite-window.png` shows the blended red
+and green regions on blue background. Filtering of the enlarged tiny texture is
+expected. This connects the previously separate probes on M4.
+
+This remains diagnostic: native work blocks for map/readback verification, GPU
+copies occur, resources are recreated per call, and there are no JS WebGPU bindings.
+Do not use the exported probe entry point as a production API. Async readiness,
+lease retirement through host completion, pooling and actual WebScene scene updates
+remain required. No Kestrel or end-to-end WebScene WebGPU pass is claimed.

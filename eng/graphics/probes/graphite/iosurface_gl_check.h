@@ -11,16 +11,20 @@
 #include <cstdio>
 // Diagnostic-only CPU readback. Caller must establish producer GPU completion.
 inline bool check_iosurface_gl(IOSurfaceRef surface,unsigned width,unsigned height,
-    const uint8_t* expected,unsigned expected_stride) {
+    const uint8_t* expected,unsigned expected_stride,GLuint hostTexture=0) {
+    auto previous=CGLGetCurrentContext();
+    CGLContextObj context=previous;
+    if (!hostTexture) {
     CGLPixelFormatAttribute attributes[]={kCGLPFAAccelerated,kCGLPFAOpenGLProfile,
         static_cast<CGLPixelFormatAttribute>(kCGLOGLPVersion_3_2_Core),static_cast<CGLPixelFormatAttribute>(0)};
     CGLPixelFormatObj format=nullptr; GLint count=0;
     if (CGLChoosePixelFormat(attributes,&format,&count)!=kCGLNoError || !format) return false;
-    CGLContextObj context=nullptr;
+    context=nullptr;
     const auto created=CGLCreateContext(format,nullptr,&context); CGLDestroyPixelFormat(format);
     if (created!=kCGLNoError || !context) return false;
-    auto previous=CGLGetCurrentContext();
-    if (CGLSetCurrentContext(context)!=kCGLNoError) { CGLDestroyContext(context); return false; }
+    }
+    if (!context) return false;
+    if (CGLSetCurrentContext(context)!=kCGLNoError) { if (!hostTexture) CGLDestroyContext(context); return false; }
     GLuint texture=0,framebuffer=0,destination=0,destinationFramebuffer=0;
     glGenTextures(1,&texture); glBindTexture(GL_TEXTURE_RECTANGLE,texture);
     const auto imported=CGLTexImageIOSurface2D(context,GL_TEXTURE_RECTANGLE,GL_RGBA8,
@@ -36,8 +40,11 @@ inline bool check_iosurface_gl(IOSurfaceRef surface,unsigned width,unsigned heig
         if (valid) {
             // Avalonia's composition texture is GL_TEXTURE_2D. This explicit
             // GPU-local copy avoids uploading pixels to adapt the texture target.
-            glGenTextures(1,&destination); glBindTexture(GL_TEXTURE_2D,destination);
-            glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,width,height,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+            destination=hostTexture;
+            if (!destination) {
+                glGenTextures(1,&destination); glBindTexture(GL_TEXTURE_2D,destination);
+                glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,width,height,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+            }
             glGenFramebuffers(1,&destinationFramebuffer);
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER,destinationFramebuffer);
             glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,destination,0);
@@ -56,9 +63,9 @@ inline bool check_iosurface_gl(IOSurfaceRef surface,unsigned width,unsigned heig
                 valid &= std::abs(int(pixels[y*width*4+x])-int(expected[y*expected_stride+(x/4)*4+(x%4<3 ? 2-x%4 : x%4)]))<=1;
         }
     }
-    glDeleteFramebuffers(1,&destinationFramebuffer); glDeleteTextures(1,&destination);
+    glDeleteFramebuffers(1,&destinationFramebuffer); if (!hostTexture) glDeleteTextures(1,&destination);
     glDeleteFramebuffers(1,&framebuffer); glDeleteTextures(1,&texture);
-    CGLSetCurrentContext(previous); CGLDestroyContext(context);
+    CGLSetCurrentContext(previous); if (!hostTexture) CGLDestroyContext(context);
     return valid;
 }
 #endif

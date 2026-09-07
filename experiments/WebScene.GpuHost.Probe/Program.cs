@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.OpenGL;
@@ -7,6 +8,8 @@ using Avalonia.Rendering.Composition;
 
 internal static class Program
 {
+    [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_probe")]
+    internal static extern int RenderGraphite(uint texture);
     [STAThread]
     public static int Main(string[] args) => AppBuilder.Configure<ProbeApp>()
         .UsePlatformDetect().StartWithClassicDesktopLifetime(args);
@@ -29,13 +32,14 @@ internal sealed class ProbeApp : Application
                     var interop = await visual.Compositor.TryGetCompositionGpuInterop().AsTask().WaitAsync(TimeSpan.FromSeconds(30));
                     var sharing = await visual.Compositor.TryGetRenderInterfaceFeature(typeof(IOpenGlTextureSharingRenderInterfaceContextFeature))
                         as IOpenGlTextureSharingRenderInterfaceContextFeature;
+                    bool graphiteSource = Environment.GetCommandLineArgs().Contains("--graphite");
                     bool sharedTextureUpdateCompleted = false;
                     bool visualCommitCompleted = false;
                     if (interop is not null && sharing?.CanCreateSharedContext == true)
                     {
                         using var glContext = sharing.CreateSharedContext()
                             ?? throw new InvalidOperationException("Shared context creation failed");
-                        using var texture = sharing.CreateSharedTextureForComposition(glContext, new PixelSize(32,32));
+                        using var texture = sharing.CreateSharedTextureForComposition(glContext, graphiteSource ? new PixelSize(17,4) : new PixelSize(32,32));
                         using (glContext.EnsureCurrent())
                         {
                             var gl = glContext.GlInterface;
@@ -52,6 +56,8 @@ internal sealed class ProbeApp : Application
                                 gl.Clear(GlConsts.GL_COLOR_BUFFER_BIT); gl.Flush();
                             }
                             finally { gl.BindFramebuffer(GlConsts.GL_FRAMEBUFFER,0); gl.DeleteFramebuffer(framebuffer); }
+                            if (graphiteSource && Program.RenderGraphite((uint)texture.TextureId) != 0)
+                                throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
                         }
                         using var surface = visual.Compositor.CreateDrawingSurface();
                         await using var imported = interop.ImportImage(texture);
@@ -90,6 +96,7 @@ internal sealed class ProbeApp : Application
                         semaphoreTypes = interop?.SupportedSemaphoreTypes.ToArray(),
                         isLost = interop?.IsLost,
                         canCreateSharedOpenGlContext = sharing?.CanCreateSharedContext ?? false,
+                        graphiteSource,
                         sharedTextureUpdateCompleted,
                         visualCommitCompleted,
                         presentationVerified = false
