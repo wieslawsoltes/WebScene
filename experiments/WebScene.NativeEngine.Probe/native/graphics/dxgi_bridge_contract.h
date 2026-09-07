@@ -10,7 +10,7 @@ enum class dxgi_api { d3d11,d3d12 };
 enum class dxgi_sync { none,shared_fence,keyed_mutex };
 enum class dxgi_bridge_status {
     supported,unknown_adapter,cross_adapter,unsupported_format,unsupported_alpha,
-    needs_resolve,unsupported_synchronization,invalid_dimensions
+    needs_resolve,unsupported_synchronization,invalid_dimensions,unsupported_api
 };
 struct dxgi_endpoint {
     adapter_luid adapter;
@@ -24,6 +24,9 @@ struct dxgi_bridge_choice { dxgi_bridge_status status; dxgi_sync synchronization
 // queries; this function does not claim an import or a synchronization pass.
 inline dxgi_bridge_choice choose_dxgi_bridge(const dxgi_endpoint& producer,const dxgi_endpoint& consumer,
     const image_metadata& image,uint32_t samples=1) noexcept {
+    if ((producer.api!=dxgi_api::d3d11 && producer.api!=dxgi_api::d3d12)
+        || (consumer.api!=dxgi_api::d3d11 && consumer.api!=dxgi_api::d3d12))
+        return {dxgi_bridge_status::unsupported_api};
     if (!producer.adapter.valid || !consumer.adapter.valid) return {dxgi_bridge_status::unknown_adapter};
     if (!(producer.adapter==consumer.adapter)) return {dxgi_bridge_status::cross_adapter};
     if (!image.width || !image.height) return {dxgi_bridge_status::invalid_dimensions};

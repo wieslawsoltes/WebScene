@@ -20,6 +20,9 @@ int main() {
     require(choose_dxgi_bridge(producer,consumer,image).status==dxgi_bridge_status::unsupported_synchronization);
     producer.api=consumer.api=dxgi_api::d3d11;
     require(choose_dxgi_bridge(producer,consumer,image).synchronization==dxgi_sync::keyed_mutex);
+    consumer.api=static_cast<dxgi_api>(99);
+    require(choose_dxgi_bridge(producer,consumer,image).status==dxgi_bridge_status::unsupported_api);
+    consumer.api=dxgi_api::d3d11;
     image.format=static_cast<image_format>(UINT32_MAX);
     require(choose_dxgi_bridge(producer,consumer,image).status==dxgi_bridge_status::unsupported_format);
     image.format=image_format::rgba8_unorm; image.width=0;

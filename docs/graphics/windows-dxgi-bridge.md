@@ -63,3 +63,23 @@ through the duplicate. That native branch has not run on this macOS host.
 The SDK probe build now includes this test, and the hosted SDK workflow runs it
 as a non-GPU test. Pending hosted execution is not a Windows handle test pass,
 and neither event-handle tests nor compilation prove DXGI texture/fence sharing.
+
+## Dawn DXGI import implementation
+
+`dawn_dxgi_image` now implements the Windows import path: reject unsupported
+endpoint pairings, require enabled Dawn DXGI texture/fence features, duplicate the
+borrowed NT handle, import SharedTextureMemory and validate dimensions, format,
+array depth and requested usage. The duplicate outlives the imported texture and
+memory objects. Failures return explicit statuses and unwind owned references.
+No texture accessor is exposed for GPU use yet; BeginAccess/EndAccess remains
+outstanding. Adapter capabilities are currently supplied by native callers; real
+LUID/format queries still need to be wired in. Unknown API values are rejected by
+the capability contract.
+
+The common Dawn descriptor/property code compiles with the pinned SDK on macOS,
+the explicit non-Windows rejection test passes within the hardware suite (0.48
+seconds), and the policy test passes (0.30 seconds). The SDK Dawn probe includes
+the importer header so hosted Windows builds compile its Windows branch. A fresh
+local Dawn probe build also passes. None of these results proves Windows import:
+the Windows branch, duplicated DXGI resource handles, property-failure paths and
+GPU access require Windows compilation and hardware execution still outstanding.

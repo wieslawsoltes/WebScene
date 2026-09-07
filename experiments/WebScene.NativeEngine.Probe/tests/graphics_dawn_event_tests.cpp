@@ -1,6 +1,7 @@
 #include "graphics/graphics_service.h"
 #include "graphics/engine_wake.h"
 #include "graphics/dawn_canvas_images.h"
+#include "graphics/dawn_dxgi_image.h"
 #include <iostream>
 using namespace webscene::graphics;
 void test_canvas_consumer_pixels(dawn_event_service& service,const wgpu::Device& device) {
@@ -227,6 +228,11 @@ int main() {
     if (state->adapter.GetInfo(&info)!=wgpu::Status::Success) return 1;
     if (info.adapterType!=wgpu::AdapterType::IntegratedGPU && info.adapterType!=wgpu::AdapterType::DiscreteGPU) return 77;
     struct device_result { wgpu::Device device; };
+#if !defined(_WIN32)
+    std::unique_ptr<dawn_dxgi_image> unsupported;
+    if (dawn_dxgi_image::import({},nullptr,{},{},{},wgpu::TextureUsage::TextureBinding,unsupported)
+        !=dxgi_import_status::unsupported_platform || unsupported) return 1;
+#endif
     auto native_device=std::make_shared<device_result>();
     auto device_ticket=mailbox->reserve(10,owner).value();
     wgpu::DeviceDescriptor device_descriptor{};

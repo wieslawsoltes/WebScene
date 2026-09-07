@@ -1,3 +1,4 @@
+#include "../../../experiments/WebScene.NativeEngine.Probe/native/graphics/dawn_dxgi_image.h"
 // Diagnostic readback only. This executable is not a canvas presentation path.
 #include <webgpu/webgpu_cpp.h>
 
