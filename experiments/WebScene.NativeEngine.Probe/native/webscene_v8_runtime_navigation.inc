@@ -14,6 +14,11 @@
             webgpu_navigator.Get(isolate)->Delete(context.Get(isolate),js_string(isolate,"gpu")).FromMaybe(false);
             webgpu_navigator.Reset();
         }
+#if defined(__APPLE__)
+        gpu_canvases.clear();
+#endif
+        webgpu_dom_exception.Reset();
+        webgpu_wake.reset();
         webgpu.reset();
         auto previous=std::move(graphics);
         auto deliver=std::move(graphics_deliver);

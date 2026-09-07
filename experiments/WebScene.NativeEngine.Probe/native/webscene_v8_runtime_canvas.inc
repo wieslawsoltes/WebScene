@@ -2660,6 +2660,36 @@
         const auto requested = info.Length() > 0
             ? to_utf8(info.GetIsolate(), info[0])
             : std::string{};
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+        if(requested=="webgpu"&&self->webgpu&&self->webgpu_interop==webscene::graphics::webgpu_canvas_interop::iosurface&&!self->in_frame_context()) {
+            using namespace webscene::graphics;
+            auto& backing=node->mutable_canvas().backing;
+            if(backing.mode()!=canvas_context_mode::none&&backing.mode()!=canvas_context_mode::webgpu) {
+                info.GetReturnValue().SetNull();return;
+            }
+            const auto key=self->wrapper_key(*node);
+            const auto known=self->gpu_canvases.find(key);
+            if(known!=self->gpu_canvases.end()){info.GetReturnValue().Set(known->second.context->object());return;}
+            try {
+                auto context=info.GetIsolate()->GetCurrentContext();
+                auto exception=self->webgpu_dom_exception.Get(info.GetIsolate());
+                auto width=canvas_bitmap_dimension(*node,"width",300),height=canvas_bitmap_dimension(*node,"height",150);
+                if(backing.width()!=width||backing.height()!=height)backing.reset_bitmap(width,height);
+                auto provider=std::make_shared<dawn_iosurface_canvas_host>(64ULL*1024*1024,self->webgpu_wake);
+                auto host=make_iosurface_webgpu_canvas_host(provider,[self,node] {
+                    auto& backing=node->mutable_canvas().backing;backing.publish_content();
+                    image_metadata metadata;metadata.canvas=backing.identity();metadata.allocation_generation=backing.allocation_generation();
+                    metadata.content_serial=backing.content_serial();metadata.producer_timeline=self->gpu_canvas_timeline;metadata.producer_value=metadata.content_serial;
+                    return metadata;
+                });
+                auto controller=std::make_unique<v8_webgpu_canvas_context>(info.GetIsolate(),context,info.This(),exception,width,height,std::move(host));
+                auto object=controller->object();
+                self->gpu_canvases.emplace(key,gpu_canvas_entry{node,std::move(provider),std::move(controller)});
+                backing.claim_context(canvas_context_mode::webgpu);
+                info.GetReturnValue().Set(object);return;
+            }catch(const std::exception&){info.GetIsolate()->ThrowException(v8::Exception::Error(js_string(info.GetIsolate(),"WebGPU canvas initialization failed")));return;}
+        }
+#endif
         if (requested != "2d") {
             self->record_feature(
                 "canvas",

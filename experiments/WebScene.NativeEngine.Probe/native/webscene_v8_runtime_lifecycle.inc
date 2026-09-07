@@ -57,8 +57,13 @@
             v8::Isolate::Scope isolate_scope(isolate);
             v8::HandleScope handle_scope(isolate);
             v8::Context::Scope context_scope(context.Get(isolate));
+#if defined(__APPLE__)
+            gpu_canvases.clear();
+#endif
             webgpu.reset();
         }
+        webgpu_dom_exception.Reset();
+        webgpu_wake.reset();
         webgpu_navigator.Reset();
         graphics.reset();
         graphics_deliver = {};

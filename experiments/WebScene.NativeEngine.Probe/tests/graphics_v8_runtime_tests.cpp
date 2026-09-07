@@ -109,7 +109,12 @@ void test_runtime_webgpu_installation() {
     auto wake=std::make_shared<engine_wake>();
     require(!runtime.install_webgpu(wake,false,webgpu_canvas_interop::none),"Insecure WebGPU installation accepted");
     require(runtime.execute("if('gpu' in navigator)throw new Error('insecure GPU exposure');","denied-gpu"),"Denied GPU exposure failed");
-    require(runtime.install_webgpu(wake,true,webgpu_canvas_interop::none),"Secure WebGPU installation failed");
+#if defined(__APPLE__)
+    constexpr auto runtime_interop=webgpu_canvas_interop::iosurface;
+#else
+    constexpr auto runtime_interop=webgpu_canvas_interop::none;
+#endif
+    require(runtime.install_webgpu(wake,true,runtime_interop),"Secure WebGPU installation failed");
     require(runtime.execute(R"JS(
         if(navigator.gpu!==navigator.gpu)throw new Error('GPU identity');
         navigator.gpu.requestAdapter().then(adapter=>{
@@ -125,6 +130,21 @@ void test_runtime_webgpu_installation() {
         require(runtime.pump_task(),"Installed GPU completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     require(document.find_by_id("gpu-installed-ready")!=nullptr,"Installed GPU did not create a device");
+#if defined(__APPLE__)
+    require(runtime.execute(R"JS(
+        globalThis.domGPUCanvas=document.createElement('canvas');domGPUCanvas.width=4;domGPUCanvas.height=2;document.body.appendChild(domGPUCanvas);
+        globalThis.domGPUContext=domGPUCanvas.getContext('webgpu');
+        if(!domGPUContext||domGPUContext!==domGPUCanvas.getContext('webgpu')||domGPUContext.canvas!==domGPUCanvas||domGPUCanvas.getContext('2d')!==null)throw new Error('DOM GPU context ownership');
+        const twoD=document.createElement('canvas');twoD.getContext('2d');if(twoD.getContext('webgpu')!==null)throw new Error('2D ownership lost');
+        domGPUContext.configure({device:installedDevice,format:navigator.gpu.getPreferredCanvasFormat()});
+        const initialTexture=domGPUContext.getCurrentTexture();if(initialTexture.width!==4||initialTexture.height!==2)throw new Error('DOM bitmap dimensions');
+        const domEncoder=installedDevice.createCommandEncoder();const domPass=domEncoder.beginRenderPass({colorAttachments:[{view:initialTexture.createView(),loadOp:'clear',storeOp:'store',clearValue:[1,0,0,1]}]});
+        domPass.end();installedDevice.queue.submit([domEncoder.finish()]);
+        domGPUCanvas.width=8;
+        const resizedTexture=domGPUContext.getCurrentTexture();if(resizedTexture===initialTexture||resizedTexture.width!==8)throw new Error('DOM GPU resize');
+        domGPUContext.unconfigure();if(domGPUCanvas.getContext('2d')!==null)throw new Error('unconfigure released canvas mode');
+    )JS","dom-gpu-canvas"),"DOM WebGPU canvas integration failed");
+#endif
     require(runtime.load_url("https://graphics.test/webgpu-next"),"WebGPU navigation failed");
     require(runtime.execute("if('gpu' in navigator)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");
     require(runtime.install_webgpu(wake,true,webgpu_canvas_interop::none),"Navigated GPU reinstall failed");

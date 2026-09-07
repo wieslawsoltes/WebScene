@@ -2,6 +2,9 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
 #include "graphics/graphics_service.h"
 #include "graphics/v8_webgpu_realm.h"
+#if defined(__APPLE__)
+#include "graphics/v8_webgpu_iosurface_canvas_host.h"
+#endif
 #endif
 #include "webscene_runtime_diagnostics.h"
 #include "webscene_embed_fallback.h"
@@ -221,6 +224,18 @@ struct v8_dom_runtime::implementation final {
     std::unique_ptr<webscene::graphics::graphics_service> graphics;
     std::unique_ptr<webscene::graphics::v8_webgpu_realm> webgpu;
     v8::Global<v8::Object> webgpu_navigator;
+    v8::Global<v8::Function> webgpu_dom_exception;
+    webscene::graphics::webgpu_canvas_interop webgpu_interop=webscene::graphics::webgpu_canvas_interop::none;
+    std::shared_ptr<webscene::graphics::completion_wake> webgpu_wake;
+#if defined(__APPLE__)
+    struct gpu_canvas_entry {
+        dom_node* node;
+        std::shared_ptr<webscene::graphics::dawn_iosurface_canvas_host> provider;
+        std::unique_ptr<webscene::graphics::v8_webgpu_canvas_context> context;
+    };
+    std::unordered_map<uint64_t,gpu_canvas_entry> gpu_canvases;
+    uint64_t gpu_canvas_timeline=webscene::graphics::new_owner_token();
+#endif
     std::function<void(webscene::graphics::completion_record)> graphics_deliver;
 #endif
 #include "webscene_v8_runtime_state_types.inc"
@@ -4581,7 +4596,7 @@ bool v8_dom_runtime::install_webgpu(std::shared_ptr<webscene::graphics::completi
     v8::HandleScope handle_scope(impl_->isolate);
     auto context=impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(context);
-    auto& service=initialize_graphics(std::move(wake),[self=impl_.get()](auto record) {
+    auto& service=initialize_graphics(wake,[self=impl_.get()](auto record) {
         if(self->webgpu)self->webgpu->complete(record);
     });
     try {
@@ -4596,6 +4611,8 @@ bool v8_dom_runtime::install_webgpu(std::shared_ptr<webscene::graphics::completi
         },impl_->webgpu->object()).ToLocalChecked();
         navigator.As<v8::Object>()->SetAccessorProperty(js_string(impl_->isolate,"gpu"),getter);
         impl_->webgpu_navigator.Reset(impl_->isolate,navigator.As<v8::Object>());
+        impl_->webgpu_dom_exception.Reset(impl_->isolate,exception.As<v8::Function>());
+        impl_->webgpu_interop=interop;impl_->webgpu_wake=std::move(wake);
         return true;
     } catch(...) {
         impl_->webgpu.reset();impl_->graphics.reset();impl_->graphics_deliver={};throw;

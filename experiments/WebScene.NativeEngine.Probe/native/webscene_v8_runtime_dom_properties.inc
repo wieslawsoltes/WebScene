@@ -1512,6 +1512,10 @@
         canvas.lines.clear();
         canvas.backing.reset_bitmap(canvas_bitmap_dimension(node,"width",300),canvas_bitmap_dimension(node,"height",150));
         canvas.gpu_image.reset();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+        const auto gpu=self.gpu_canvases.find(self.wrapper_key(node));
+        if(gpu!=self.gpu_canvases.end())gpu->second.context->resize(canvas.backing.width(),canvas.backing.height());
+#endif
         advance_canvas_generation(node,false);
         canvas.commands.clear();
         canvas.strings.clear();

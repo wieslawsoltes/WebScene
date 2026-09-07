@@ -1400,3 +1400,27 @@ The host's origin/secure-context computation and full Navigator/WebIDL semantics
 still need qualification. HTMLCanvasElement.getContext, automatic GPU frame
 expiration and normal scene presentation are still pending; installing discovery
 alone does not make Kestrel runnable.
+
+### DOM WebGPU canvas binding on the opted-in macOS path
+
+HTMLCanvasElement.getContext("webgpu") now creates the shared IOSurface context
+when the main runtime realm has WebGPU installed with IOSurface interop. It
+returns the same context for repeated calls, preserves the canvas object, and
+locks canvas mode against Canvas 2D. Unconfigure does not release that mode.
+Bitmap dimension setters/attribute resets resize the context and retire its
+current texture, including already-submitted work. The bridge uses the document
+canvas identity/generation/content serial and a runtime producer timeline.
+The trusted DOMException constructor is retained at installation rather than
+looked up again during application calls.
+
+The runtime test obtains a normal DOM canvas, configures it with the device from
+navigator.gpu, submits a clear, then resizes and verifies a replacement texture's
+dimensions. It checks both directions of 2D/WebGPU exclusion and mode retention
+after unconfigure. Rebuilt runtime CTest passes. Canvas controllers retire before
+the realm during navigation and destruction.
+
+This initial integration retains canvas controllers until document retirement
+and uses a 64 MiB per-canvas pool cap. Detached-canvas collection, aggregate
+resource budgeting, subframe exposure and failure semantics remain qualification
+work. Automatic frame expiration/scene publication and normal presenter
+consumption are not connected yet, so this is not a visible application pass.
