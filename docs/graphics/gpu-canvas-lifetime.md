@@ -470,3 +470,20 @@ tickets without leaving a producer busy or generating a retry wake, and reclaim
 the successful frame after completion. Focused Dawn CTest passes in 0.47 seconds.
 Browser promise/error delivery, lost-device publication policy and cross-backend
 presenter synchronization remain to be integrated.
+
+## GPU paint scopes and default canvas dimensions
+
+The runtime fixture now applies rounded overflow clipping, scale, rotation and
+group opacity to a retained GPU canvas. It checks each scope is active at the GPU
+sampling operation, checks the clip radius/transform/opacity values, verifies
+balanced scope exits and confirms CSS effects preserve bitmap content serial.
+
+This exposed a real intrinsic-layout gap: a canvas with no height attribute had
+a zero-height layout despite its default 150-pixel bitmap height. Canvas intrinsic
+size now supplies the 300/150 defaults when the respective attribute is absent.
+The scope fixture passes after that fix. This is not a full rewrite of replaced-
+element aspect-ratio sizing or invalid dimension parsing. Rendered Skia clipping,
+blending and transform comparisons remain outstanding.
+
+The complete rebuilt native CTest suite passes all 16 tests in 13.21 seconds
+after the intrinsic-size fix and GPU paint-scope assertions.

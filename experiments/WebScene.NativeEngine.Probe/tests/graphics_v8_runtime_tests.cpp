@@ -148,6 +148,31 @@ int main() {
             const auto after_paint=std::find_if(paint.begin(),paint.end(),[&](const auto& c) { return (c.kind==1 || c.kind==9) && c.node_id==after_id; });
             require(before_paint<gpu_paint && after_paint!=paint.end() && gpu_paint<after_paint,
                 "GPU canvas did not interleave with sibling backgrounds");
+            const auto before_effects=backing.content_serial();
+            require(runtime.execute("canvasProbe.style.transform='scale(0.75) rotate(15deg)'; canvasProbe.style.opacity='0.5'; canvasProbe.style.overflow='hidden'; canvasProbe.style.borderRadius='8px';","gpu-paint-effects"),"GPU paint effects setup failed");
+            document.layout(640,480); document.build_scene(paint,paint_strings,paint_bytes);
+            int clips=0,scales=0,rotations=0,opacity_groups=0,gpu_draws=0;
+            for (const auto& command:paint) {
+                if (command.node_id!=canvas_node->id) continue;
+                switch (command.kind) {
+                    case 12: ++clips; if (command.radius_top_left!=8) throw std::runtime_error("GPU clip radius="+std::to_string(command.radius_top_left)+" bounds="+std::to_string(command.width)+"x"+std::to_string(command.height)); break;
+                    case 13: --clips; break;
+                    case 15: ++scales; require(command.width==0.75F,"GPU scale missing"); break;
+                    case 16: --scales; break;
+                    case 19: ++rotations; require(command.stroke_width==15,"GPU rotation missing"); break;
+                    case 20: --rotations; break;
+                    case 30: ++opacity_groups; require(command.rgba==128,"GPU group opacity missing"); break;
+                    case 31: --opacity_groups; break;
+                    case WEBSCENE_SCENE_COMMAND_GPU_IMAGE:
+                        ++gpu_draws;
+                        require(clips==1 && scales==1 && rotations==1 && opacity_groups==1,
+                            "GPU sampling escaped its paint scopes"); break;
+                }
+                require(clips>=0 && scales>=0 && rotations>=0 && opacity_groups>=0,"GPU paint scope underflow");
+            }
+            require(gpu_draws==1 && clips==0 && scales==0 && rotations==0 && opacity_groups==0,
+                "GPU paint scopes did not balance");
+            require(backing.content_serial()==before_effects,"CSS paint effects changed GPU bitmap content");
             require(runtime.execute("canvasProbe.remove();","gpu-remove"),"canvas removal failed");
             std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> detached;
             document.build_gpu_canvas_images(detached);

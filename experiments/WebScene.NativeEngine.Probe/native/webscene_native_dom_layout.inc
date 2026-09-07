@@ -4068,6 +4068,9 @@ float native_document::compute_intrinsic_size(
         ++intrinsic_size_branch_counts_for_benchmark[5];
 #endif
         const auto attribute = node.attributes.find(horizontal ? "width" : "height");
+        if (node.tag == "canvas" && attribute == node.attributes.end()) {
+            return constrain((horizontal ? 300.0F : 150.0F) + padding);
+        }
         if (attribute != node.attributes.end()) {
             const auto intrinsic = parse_number(attribute->second, 0);
             if (intrinsic > 0) return constrain(intrinsic + padding);
