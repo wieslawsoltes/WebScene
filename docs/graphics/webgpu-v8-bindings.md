@@ -1360,3 +1360,20 @@ without consuming the adapter. The subsequent normal request renders the shared
 canvas and all eight diagnostic pixels pass. Runtime CTest passes after rebuild.
 The ordinary runtime still needs to install the registry with the negotiated host
 policy together with navigator.gpu, getContext and scene/frame scheduling.
+
+### Realm ownership and completion routing
+
+`v8_webgpu_realm` owns discovery, adapter and device registries in dependency
+order, routes completion records to the owning registry, and destroys them in
+reverse dependency order. It carries host interop/backend/preferred-format
+selection into the registries. It does not install globals or decide secure
+context exposure; canvas controllers must retire before this owner is destroyed,
+and the graphics service must outlive it.
+
+The IOSurface runtime fixture now begins with JavaScript GPU.requestAdapter(),
+then adapter.requestDevice(), and uses getPreferredCanvasFormat() to configure
+its internal canvas. No raw native adapter/device request remains in this test.
+It verifies the shared-image pixels and checks that a retained discovery wrapper
+rejects calls after realm destruction. Rebuilt runtime CTest passes. This provides
+the ownership and dispatch unit for runtime installation; navigator exposure and
+normal DOM canvas/frame scheduling are still outstanding.

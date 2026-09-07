@@ -1,30 +1,22 @@
 #pragma once
 #include "graphics/v8_webgpu_iosurface_canvas_host.h"
-#include "graphics/v8_webgpu_adapters.h"
+#include "graphics/v8_webgpu_realm.h"
 #if defined(__APPLE__)
 template<class Run>
 void test_v8_iosurface_canvas_host(v8::Isolate* isolate,v8::Local<v8::Context> context,
     graphics_service& service,Run run) {
-    struct adapter_state {wgpu::Adapter adapter;std::atomic<bool> ready=false;};
-    auto discovered=std::make_shared<adapter_state>();
-    wgpu::RequestAdapterOptions options{};options.backendType=wgpu::BackendType::Metal;
-    service.dawn().instance().RequestAdapter(&options,wgpu::CallbackMode::AllowSpontaneous,
-        [discovered](wgpu::RequestAdapterStatus status,wgpu::Adapter adapter,wgpu::StringView){
-            if(status==wgpu::RequestAdapterStatus::Success)discovered->adapter=std::move(adapter);
-            discovered->ready.store(true);
-        });
-    auto adapter_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
-    while(!discovered->ready.load()&&std::chrono::steady_clock::now()<adapter_deadline){service.dawn().instance().ProcessEvents();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    require(discovered->ready.load()&&discovered->adapter,"Shared canvas Metal adapter unavailable");
-    auto adapter=discovered->adapter;
-    const wgpu::FeatureName private_features[]={wgpu::FeatureName::SharedTextureMemoryIOSurface,wgpu::FeatureName::SharedFenceMTLSharedEvent};
-    for(auto feature:private_features)require(adapter.HasFeature(feature),"Metal shared canvas capability unavailable");
     auto exception=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>();
-    v8_webgpu_devices devices(isolate,context,exception,1,2);
-    v8_webgpu_adapters adapters(isolate,context,devices,exception,1,webgpu_canvas_interop::iosurface);
-    auto adapter_handle=service.adopt_adapter(adapter);
-    auto adapter_object=adapters.wrap(context,service,adapter_handle).ToLocalChecked();
-    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvasAdapter"),adapter_object).FromMaybe(false),"Shared adapter publication failed");
+    auto realm=std::make_unique<v8_webgpu_realm>(isolate,context,service,exception,webgpu_canvas_interop::iosurface,wgpu::BackendType::Metal);
+    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvasGPU"),realm->object()).FromMaybe(false),"Shared discovery publication failed");
+    require(run("globalThis.sharedCanvasAdapterPromise=sharedCanvasGPU.requestAdapter();"),"Shared canvas adapter request failed");
+    auto adapter_promise=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvasAdapterPromise")).ToLocalChecked().As<v8::Promise>();
+    auto adapter_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(adapter_promise->State()==v8::Promise::kPending&&std::chrono::steady_clock::now()<adapter_deadline){
+        service.pump([&](auto completion){require(realm->complete(completion),"Shared adapter completion not routed");});
+        if(adapter_promise->State()==v8::Promise::kPending)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(adapter_promise->State()==v8::Promise::kFulfilled&&adapter_promise->Result()->IsObject(),"Shared canvas Metal adapter unavailable");
+    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvasAdapter"),adapter_promise->Result()).FromMaybe(false),"Shared adapter publication failed");
     require(run("globalThis.privateCanvasFeaturePromise=sharedCanvasAdapter.requestDevice({requiredFeatures:['shared-texture-memory-iosurface']});"),"Private feature rejection dispatch failed");
     auto rejected=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"privateCanvasFeaturePromise")).ToLocalChecked().As<v8::Promise>();
     rejected->MarkAsHandled();
@@ -33,13 +25,13 @@ void test_v8_iosurface_canvas_host(v8::Isolate* isolate,v8::Local<v8::Context> c
     auto promise=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvasDevicePromise")).ToLocalChecked().As<v8::Promise>();
     auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
     while(promise->State()==v8::Promise::kPending&&std::chrono::steady_clock::now()<deadline){
-        service.pump([&](auto completion){require(adapters.complete(completion),"Shared device completion not routed");});
+        service.pump([&](auto completion){require(realm->complete(completion),"Shared device completion not routed");});
         if(promise->State()==v8::Promise::kPending)std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     require(promise->State()==v8::Promise::kFulfilled,"Shared canvas device promise failed");
     auto device=promise->Result().As<v8::Object>();
     auto native=v8_webgpu_devices::native_reference(device);
-    for(auto feature:private_features)require(native.HasFeature(feature),"Host sharing feature was not provisioned");
+    for(auto feature:{wgpu::FeatureName::SharedTextureMemoryIOSurface,wgpu::FeatureName::SharedFenceMTLSharedEvent})require(native.HasFeature(feature),"Host sharing feature was not provisioned");
     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"sharedCanvasDevice"),device).FromMaybe(false),"Shared device publication failed");
     auto provider=std::make_shared<dawn_iosurface_canvas_host>(1024*1024);
     uint64_t serial=0;
@@ -49,7 +41,7 @@ void test_v8_iosurface_canvas_host(v8::Isolate* isolate,v8::Local<v8::Context> c
     require(run(R"JS(
         (()=>{
             if(sharedCanvasDevice.features.has('shared-texture-memory-iosurface')||sharedCanvasDevice.features.has('shared-fence-mtl-shared-event'))throw new Error('private feature exposed');
-            sharedCanvas.configure({device:sharedCanvasDevice,format:'bgra8unorm'});
+            sharedCanvas.configure({device:sharedCanvasDevice,format:sharedCanvasGPU.getPreferredCanvasFormat()});
             const texture=sharedCanvas.getCurrentTexture();
             if(texture!==sharedCanvas.getCurrentTexture())throw new Error('shared texture identity');
             const encoder=sharedCanvasDevice.createCommandEncoder();
@@ -75,7 +67,9 @@ void test_v8_iosurface_canvas_host(v8::Isolate* isolate,v8::Local<v8::Context> c
     if(pixels)for(size_t y=0;y<2;++y)for(size_t x=0;x<4;++x){auto pixel=pixels+y*stride+x*4;correct&=pixel[0]==0&&pixel[1]==0&&pixel[2]==255&&pixel[3]==255;}
     auto unlocked=IOSurfaceUnlock(surface,kIOSurfaceLockReadOnly,nullptr);consumer->complete();image.reset();
     require(correct&&unlocked==kIOReturnSuccess,"JavaScript IOSurface canvas pixel mismatch");
-    require(run("sharedCanvas.unconfigure();delete globalThis.sharedCanvas;delete globalThis.sharedCanvasDevice;delete globalThis.sharedCanvasAdapter;delete globalThis.sharedCanvasDevicePromise;delete globalThis.privateCanvasFeaturePromise;"),"Shared canvas cleanup failed");
+    require(run("sharedCanvas.unconfigure();delete globalThis.sharedCanvas;delete globalThis.sharedCanvasDevice;delete globalThis.sharedCanvasAdapter;delete globalThis.sharedCanvasDevicePromise;delete globalThis.privateCanvasFeaturePromise;delete globalThis.sharedCanvasAdapterPromise;"),"Shared canvas cleanup failed");
     canvas.reset();require(provider->idle()&&provider->busy_images()==0,"Shared canvas provider retained completed frame");
+    realm.reset();
+    require(run("(()=>{let expired=false;try{sharedCanvasGPU.getPreferredCanvasFormat()}catch(e){expired=e instanceof TypeError}if(!expired)throw new Error('retired GPU realm callable');delete globalThis.sharedCanvasGPU;})();"),"GPU realm teardown left live discovery receiver");
 }
 #endif
