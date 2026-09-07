@@ -9,7 +9,7 @@ using Avalonia.Rendering.Composition;
 internal static class Program
 {
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_probe")]
-    internal static extern int RenderGraphite(uint texture);
+    internal static extern int RenderGraphite(uint texture, uint serial);
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_poll")]
     internal static extern int PollGraphite(int drain);
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_initializations")]
@@ -18,6 +18,8 @@ internal static class Program
     internal static extern uint GraphiteContextInitializations();
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_output_allocations")]
     internal static extern uint GraphiteOutputAllocations();
+    [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_verify_marker")]
+    internal static extern int VerifyGraphiteMarker(uint texture, uint serial);
     [STAThread]
     public static int Main(string[] args) => AppBuilder.Configure<ProbeApp>()
         .UsePlatformDetect().StartWithClassicDesktopLifetime(args);
@@ -45,6 +47,8 @@ internal sealed class ProbeApp : Application
                     bool visualCommitCompleted = false;
                     int graphiteSubmissionsCompleted = 0;
                     int hostUpdatesCompleted = 0;
+                    int diagnosticMarkersVerified = 0;
+                    bool verifyMarkers = Environment.GetCommandLineArgs().Contains("--verify-markers");
                     if (interop is not null && sharing?.CanCreateSharedContext == true)
                     {
                         using var glContext = sharing.CreateSharedContext()
@@ -79,9 +83,9 @@ internal sealed class ProbeApp : Application
                             if (graphiteSource) {
                               for (int submission=0; submission<64; submission++) {
                                 using (glContext.EnsureCurrent()) {
-                                    if (Program.RenderGraphite((uint)texture.TextureId) != 0)
+                                    if (Program.RenderGraphite((uint)texture.TextureId,(uint)submission+1) != 0)
                                         throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
-                                    if (Program.RenderGraphite((uint)texture.TextureId) == 0)
+                                    if (Program.RenderGraphite((uint)texture.TextureId,(uint)submission+1) == 0)
                                         throw new InvalidOperationException("Overlapping host submission was accepted");
                                 }
                                 var deadline = DateTime.UtcNow.AddSeconds(30);
@@ -101,6 +105,15 @@ internal sealed class ProbeApp : Application
                                         throw new InvalidOperationException("GL completion failed or timed out");
                                     }
                                     await Task.Delay(1);
+                                }
+                                if (verifyMarkers) {
+                                    using (glContext.EnsureCurrent()) {
+                                        if (Program.VerifyGraphiteMarker((uint)texture.TextureId,(uint)submission+1) != 0)
+                                            throw new InvalidOperationException("Stale or incorrect host texture marker");
+                                        if (Program.VerifyGraphiteMarker((uint)texture.TextureId,(uint)submission+2) == 0)
+                                            throw new InvalidOperationException("Incorrect expected marker was accepted");
+                                    }
+                                    diagnosticMarkersVerified++;
                                 }
                                 // Await host consumption before overwriting the borrowed GL texture.
                                 await surface.UpdateAsync(imported).WaitAsync(TimeSpan.FromSeconds(30));
@@ -148,6 +161,7 @@ internal sealed class ProbeApp : Application
                         graphiteSource,
                         graphiteSubmissionsCompleted,
                         hostUpdatesCompleted,
+                        diagnosticMarkersVerified,
                         outputTextureAllocations = graphiteSource ? Program.GraphiteOutputAllocations() : 0,
                         graphiteContextInitializations = graphiteSource ? Program.GraphiteContextInitializations() : 0,
                         dawnDeviceInitializations = graphiteSource ? Program.GraphiteInitializations() : 0,

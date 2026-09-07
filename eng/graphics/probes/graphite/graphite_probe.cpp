@@ -74,6 +74,7 @@ struct DawnRuntime {
 };
 static thread_local DawnRuntime hostRuntime;
 static thread_local unsigned hostDestinationTexture=0;
+static thread_local unsigned hostFrameSerial=0;
 static thread_local std::function<int(bool)> pendingProducer;
 int main(int argc, char** argv) {
     if (argc < 2 || argc > 3) return finish("failed", "Specify d3d12, metal or vulkan", 1);
@@ -267,6 +268,11 @@ int main(int argc, char** argv) {
     if (!replacementImage) return finish("failed","Replacement image wrapping failed",1);
     canvas->save(); canvas->clipRect(SkRect::MakeLTRB(10,1,15,3));
     canvas->drawImage(replacementImage,9,0); canvas->restore();
+    if (hostDestinationTexture) {
+        SkPaint marker;
+        marker.setColor(SkColorSetARGB(255,hostFrameSerial & 255,(hostFrameSerial >> 8) & 255,0));
+        canvas->drawRect(SkRect::MakeLTRB(16,0,17,1),marker);
+    }
     auto recording=recorder->snap();
     skgpu::graphite::InsertRecordingInfo insert; insert.fRecording=recording.get();
     if (!graphite->insertRecording(insert) || !graphite->submit())
@@ -381,6 +387,30 @@ extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_hos
 extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_output_allocations() {
     return hostRuntime.outputAllocations;
 }
+// Explicit diagnostic readback, never called by normal presentation.
+extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_verify_marker(unsigned texture,unsigned serial) {
+    if (!CGLGetCurrentContext() || pendingProducer || host_blit.fence) return 1;
+    GLint previous=0,packBuffer=0,pack[5]{};
+    const GLenum names[]={GL_PACK_ALIGNMENT,GL_PACK_ROW_LENGTH,GL_PACK_SKIP_PIXELS,GL_PACK_SKIP_ROWS,GL_PACK_SWAP_BYTES};
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&previous);
+    glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING,&packBuffer);
+    for (int i=0;i<5;++i) glGetIntegerv(names[i],&pack[i]);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER,0);
+    for (int i=0;i<5;++i) glPixelStorei(names[i],i==0 ? 1 : 0);
+    GLuint framebuffer=0; glGenFramebuffers(1,&framebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER,framebuffer);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,texture,0);
+    std::array<unsigned char,4> pixel{};
+    bool valid=glCheckFramebufferStatus(GL_READ_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+    if (valid) glReadPixels(16,0,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel.data());
+    valid=valid && glGetError()==GL_NO_ERROR && pixel[0]==(serial & 255) &&
+        pixel[1]==((serial >> 8) & 255) && pixel[2]==0 && pixel[3]==255;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER,previous);
+    glDeleteFramebuffers(1,&framebuffer);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER,packBuffer);
+    for (int i=0;i<5;++i) glPixelStorei(names[i],pack[i]);
+    return valid ? 0 : 1;
+}
 // Diagnostic bridge only: caller supplies a current CGL context and a 17x4 2D
 // texture. Defers producer delivery and GL retirement; not a production API.
 extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_poll(int drain) {
@@ -392,9 +422,10 @@ extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_pol
     }
     return poll_host_blit(drain!=0);
 }
-extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_probe(unsigned texture) {
+extern "C" __attribute__((visibility("default"))) int webscene_graphite_host_probe(unsigned texture,unsigned serial) {
     if (!texture || hostDestinationTexture || pendingProducer || host_blit.fence || !CGLGetCurrentContext()) return 1;
     hostDestinationTexture=texture;
+    hostFrameSerial=serial;
     char name[]="graphite-probe",backend[]="metal",mode[]="iosurface";
     char* args[]={name,backend,mode};
     int result=1;

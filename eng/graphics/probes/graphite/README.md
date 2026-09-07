@@ -332,3 +332,22 @@ allocated per submission. No CPU pixel transfer was introduced.
 
 The prerequisite review still leaves #23 open: the latest hosted CI was pending
 at this check, and required cross-platform hardware evidence remains incomplete.
+
+### Detect stale output during reuse (2026-09-07)
+
+Host submissions now paint their caller-supplied frame serial into the otherwise
+unused pixel at (16,0). The optional --verify-markers host argument calls a
+diagnostic CGL readback after native completion and before Avalonia consumption.
+It checks that pixel against the independently supplied expected serial and also
+requires an intentionally wrong expected serial to fail. The verifier preserves
+read-framebuffer and pixel-pack state. Normal --graphite runs never call it.
+
+Apple M4 validation passed both modes:
+- --graphite --verify-markers: 64 matching markers, 64 wrong-marker rejections,
+  64 host updates, one output allocation, one device and one Graphite context.
+- --graphite: 64 host updates with diagnosticMarkersVerified=0.
+
+The marker tests changing content at the native-to-host texture boundary. It
+does not read Avalonia's final compositor output or prove physical presentation.
+The previous claim that all host submissions use identical content is superseded.
+The diagnostic export/signature is private to this probe, not the native engine ABI.
