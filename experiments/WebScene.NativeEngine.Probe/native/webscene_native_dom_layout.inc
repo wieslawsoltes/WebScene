@@ -1290,6 +1290,12 @@ void native_document::layout_children(dom_node& parent)
             // BR is inline-level but forces a line break. The flattened text-run
             // path has no sentinel for forced breaks, so retain it as an item.
             if (node.tag == "br") return false;
+            // Replaced inline elements contribute their intrinsic box, even
+            // without CSS width/height. Flattening them into text runs loses
+            // the box entirely (canvas fallback children are not its contents).
+            if (node.tag == "canvas" || node.tag == "img" || node.tag == "svg"
+                || node.tag == "input" || node.tag == "select" || node.tag == "textarea")
+                return false;
             // Inline-block and inline-table descendants are atomic inline
             // boxes. Flattening their text into the surrounding line discards
             // their own padding, background, and border geometry.

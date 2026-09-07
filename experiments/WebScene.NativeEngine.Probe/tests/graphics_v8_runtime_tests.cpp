@@ -101,6 +101,21 @@ void test_scene_acquisition_v3() {
     require(view->cpu_view->header.revision==revision,"retained scene did not survive engine disposal");
     webscene_scene_release_v3(view);
 }
+void test_inline_canvas_intrinsic_layout() {
+    webscene_native::native_document document;
+    webscene_native::v8_dom_runtime runtime(document,
+        []{return webscene_native::v8_dom_runtime::viewport_metrics{640,480,1,0};});
+    require(runtime.initialize(),"Inline canvas runtime failed");
+    require(runtime.execute(R"JS(
+        document.body.innerHTML='<span><canvas id="intrinsic" width="256" height="128">fallback</canvas></span>';
+    )JS","inline-canvas"),"Inline canvas setup failed");
+    document.layout(640,480);
+    auto* canvas=document.find_by_id("intrinsic");
+    require(canvas&&canvas->layout.width==256&&canvas->layout.height==128,"Inline canvas lost intrinsic dimensions");
+    require(runtime.execute("document.getElementById('intrinsic').removeAttribute('width');document.getElementById('intrinsic').removeAttribute('height');","default-canvas"),"Canvas dimension removal failed");
+    document.layout(640,480);
+    require(canvas->layout.width==300&&canvas->layout.height==150,"Inline canvas defaults lost");
+}
 void test_runtime_webgpu_document_policy() {
 #if defined(__APPLE__)
     webscene_native::native_document document;
@@ -227,6 +242,7 @@ int main() {
     std::exception_ptr failure;
     std::thread worker([&] {
         try {
+            test_inline_canvas_intrinsic_layout();
             test_runtime_webgpu_document_policy();
             test_runtime_webgpu_installation();
             webscene_native::native_document document;

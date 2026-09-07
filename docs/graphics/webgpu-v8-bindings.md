@@ -1612,3 +1612,13 @@ still an open defect. This screenshot proves a clear pass in the ordinary view,
 not Kestrel, full WebGPU support, calibrated color correctness, or lifecycle
 qualification. The demo's admission callback approves only its generated local
 document; it is an explicit trusted test host.
+
+Follow-up: the zero-sized inline canvas defect is fixed. The flattened text-run
+layout path now rejects replaced elements, preserving their intrinsic boxes
+through general inline layout. A regression verifies a canvas nested in a span,
+256x128 attribute dimensions, and 300x150 defaults after removing attributes.
+The native runtime suite passes. The demo no longer supplies CSS dimensions
+or display:block; the window again visibly renders the green canvas, captured
+in evidence/webgpu-document/macos-intrinsic-canvas.png. The managed probe builds
+with zero warnings/errors. Broader replaced-element layout conformance remains
+separate from these focused canvas checks.

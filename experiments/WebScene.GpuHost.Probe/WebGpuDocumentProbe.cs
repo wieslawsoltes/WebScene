@@ -13,7 +13,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
             var path = Path.Combine(Path.GetTempPath(), $"webscene-webgpu-{Guid.NewGuid():N}.html");
             File.WriteAllText(path, """
                 <!doctype html><html><body style="margin:0;background:white">
-                <canvas id="gpu" width="256" height="128" style="display:block;width:256px;height:128px"></canvas>
+                <canvas id="gpu" width="256" height="128"></canvas>
                 <script>
                 (async()=>{
                   const adapter=await navigator.gpu.requestAdapter();
