@@ -53,6 +53,22 @@ public:
     v8_webgpu_device_request& operator=(const v8_webgpu_device_request&)=delete;
     const std::string& label() const { check_thread(); return label_; }
     bool pending() const { check_thread(); return !resolver_.IsEmpty(); }
+    // Host teardown cancellation. The native callback still owns its mailbox
+    // ticket and retires independently; cancellation never pretends GPU work
+    // completed and never permits a later completion to wrap the device.
+    bool cancel(v8::Local<v8::Context> context) {
+        check_thread();
+        if (resolver_.IsEmpty()) return false;
+        if (v8::Isolate::GetCurrent()!=isolate_ || realm_.Get(isolate_)!=context)
+            throw std::logic_error("Device cancellation belongs to another realm");
+        auto resolver=resolver_.Get(isolate_);
+        resolver_.Reset(); realm_.Reset();
+        {
+            std::lock_guard lock(native_->mutex);
+            native_->abandoned=true; native_->device=nullptr;
+        }
+        return reject(context,resolver);
+    }
     // ResolveAdapter rechecks native ownership and consumed state after all
     // user-controlled descriptor getters/coercions have run. It returns
     // pair<Adapter,bool>; callbacks must not hold a borrowed registry entry

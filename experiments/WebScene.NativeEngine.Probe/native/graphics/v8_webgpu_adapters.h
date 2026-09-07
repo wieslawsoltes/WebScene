@@ -128,9 +128,13 @@ public:
     v8_webgpu_adapters& operator=(const v8_webgpu_adapters&)=delete;
     ~v8_webgpu_adapters() {
         check_scope();
+        // Invalidate every receiver before cancellation can construct exceptions
+        // or invoke user code through a host-supplied exception constructor.
+        for (auto& item:entries_) if (item && !item->wrapper.IsEmpty())
+            item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
+        for (auto& request:requests_) if (request->bridge) request->bridge->cancel(realm_.Get(isolate_));
         requests_.clear();
         for (auto& item:entries_) if (item) {
-            if (!item->wrapper.IsEmpty()) item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
             item->wrapper.Reset();
             if (!item->published) item->releases->publish(item->ticket);
         }

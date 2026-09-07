@@ -637,3 +637,20 @@ qualification remain unfinished. The registry currently consumes an adapter at
 native request admission; resource-failure/lost-device behavior needs the full
 adapter state machine before public exposure. No WebGPU rendering sample is yet
 claimed to work.
+
+### Pending device-request cancellation
+
+The request bridge now supports explicit owner-realm cancellation. It clears its
+resolver before constructing the rejection, abandons any native result, and
+leaves the native callback responsible for retiring its completion ticket. Late
+completion cannot invoke a device wrapper factory. Adapter registry teardown
+invalidates every receiver before cancelling outstanding requests, then releases
+its request keep-alives and queues native adapter release.
+
+The macOS runtime test cancels an admitted native request with an impossible
+limit, verifies wrong-realm rejection and idempotence, observes a rejected promise,
+and waits for the real native callback to retire without wrapping. Runtime CTest
+passes. This tests cancellation of the native failure path; successful native
+creation racing registry teardown still needs targeted qualification. The host
+teardown policy currently rejects OperationError, while full browser expired/
+lost-device behavior remains separate and unfinished.

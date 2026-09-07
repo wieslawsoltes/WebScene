@@ -268,7 +268,8 @@ int main() {
             std::array<std::unique_ptr<v8_webgpu_adapter_request>,2> failed_wrappers;
             size_t failed_wrapper_count=0;
             bool buffer_wrappers_tested=false;
-            std::unique_ptr<v8_webgpu_device_request> device_request,failed_device_request;
+            std::unique_ptr<v8_webgpu_device_request> device_request,failed_device_request,cancelled_device_request;
+            bool cancelled_device_retired=false;
             bool device_failure_seen=false;
             auto buffer_test_device=std::make_shared<wgpu::Device>();
             resource_handle<wgpu::Adapter> discovered_adapter;
@@ -295,6 +296,14 @@ int main() {
                     }
                     retired_device_probe.Reset(); device_map_retired=true;
                     return;
+                }
+                if (record.operation==113) {
+                    auto* isolate=v8::Isolate::GetCurrent();
+                    require(!cancelled_device_request->pending(),"Cancelled device request remained pending");
+                    require(!cancelled_device_request->complete(isolate,isolate->GetCurrentContext(),record,[](wgpu::Device) -> v8::Local<v8::Value> {
+                        throw std::runtime_error("Cancelled device wrapped after native callback");
+                    }),"Cancelled device completion was consumed twice");
+                    cancelled_device_request.reset(); cancelled_device_retired=true; return;
                 }
                 if (record.operation==111) {
                     auto* isolate=v8::Isolate::GetCurrent(); auto context=isolate->GetCurrentContext();
@@ -752,6 +761,17 @@ int main() {
                         require(failed_device_request && failed_device_request->pending(),"Failure device promise did not start");
                         failure_promise->MarkAsHandled();
                         require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"failedDevicePromise"),failure_promise).FromMaybe(false),"Failure promise publication failed");
+                        v8::Local<v8::Promise> cancelled_promise;
+                        cancelled_device_request=v8_webgpu_device_request::start(isolate,context,impossible_descriptor,adapter,mailbox,
+                            {adapter_service->engine_identity(),new_owner_token(),0},113,
+                            context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),cancelled_promise);
+                        require(cancelled_device_request && cancelled_device_request->pending(),"Cancellable device request did not start");
+                        bool wrong_cancel_realm=false;
+                        try { cancelled_device_request->cancel(v8::Context::New(isolate)); } catch (const std::logic_error&) { wrong_cancel_realm=true; }
+                        require(wrong_cancel_realm && cancelled_device_request->pending(),"Foreign cancellation consumed request");
+                        require(cancelled_device_request->cancel(context) && !cancelled_device_request->cancel(context),"Device cancellation was not idempotent");
+                        require(cancelled_promise->State()==v8::Promise::kRejected,"Cancellation left an unresolved device promise");
+                        cancelled_promise->MarkAsHandled();
                         discovered_adapter=adapter_service->adopt_adapter(std::move(adapter));
                         // Diagnostic wrapper only; the standards GPUAdapter registry is separate work.
                         return v8::Object::New(isolate);
@@ -948,7 +968,7 @@ int main() {
             }
             require(delivered,"hidden completion did not progress");
 
-            while ((!adapter_delivered || !adapter_cancelled || !device_failure_seen || !buffer_wrappers_tested || !buffer_validation_seen || binding_map_completions!=5 || map_completions!=3 || failed_wrapper_count!=2 || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
+            while ((!adapter_delivered || !adapter_cancelled || !cancelled_device_retired || !device_failure_seen || !buffer_wrappers_tested || !buffer_validation_seen || binding_map_completions!=5 || map_completions!=3 || failed_wrapper_count!=2 || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
                 if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Adapter task failed");
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
@@ -998,6 +1018,7 @@ int main() {
                 if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Device map retirement task failed");
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
+            require(cancelled_device_retired,"Cancelled native device callback did not retire");
             require(device_failure_seen,"Device failure completion was not observed");
             require(device_map_retired,"Device map native completion did not retire");
             require(runtime.execute("if([...retainedFeatures].length!==retainedFeatures.size)throw new Error('retained features');delete globalThis.retainedFeatures;", "retained-features"),"Feature snapshot did not survive registry disposal");
