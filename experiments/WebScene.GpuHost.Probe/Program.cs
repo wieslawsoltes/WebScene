@@ -42,6 +42,7 @@ internal sealed class ProbeApp : Application
                     bool sharedTextureUpdateCompleted = false;
                     bool visualCommitCompleted = false;
                     int graphiteSubmissionsCompleted = 0;
+                    int hostUpdatesCompleted = 0;
                     if (interop is not null && sharing?.CanCreateSharedContext == true)
                     {
                         using var glContext = sharing.CreateSharedContext()
@@ -64,49 +65,56 @@ internal sealed class ProbeApp : Application
                             }
                             finally { gl.BindFramebuffer(GlConsts.GL_FRAMEBUFFER,0); gl.DeleteFramebuffer(framebuffer); }
                         }
-                        if (graphiteSource) {
-                          for (int submission=0; submission<64; submission++) {
-                            using (glContext.EnsureCurrent()) {
-                                if (Program.RenderGraphite((uint)texture.TextureId) != 0)
-                                    throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
-                                if (Program.RenderGraphite((uint)texture.TextureId) == 0)
-                                    throw new InvalidOperationException("Overlapping host submission was accepted");
-                            }
-                            var deadline = DateTime.UtcNow.AddSeconds(30);
-                            while (true) {
-                                int completion;
-                                using (glContext.EnsureCurrent()) completion = Program.PollGraphite(0);
-                                if (completion == 1) {
-                                    using (glContext.EnsureCurrent()) {
-                                        if (Program.PollGraphite(0) != -1)
-                                            throw new InvalidOperationException("Duplicate completion was accepted");
-                                    }
-                                    graphiteSubmissionsCompleted++;
-                                    break;
-                                }
-                                if (completion < 0 || DateTime.UtcNow >= deadline) {
-                                    using (glContext.EnsureCurrent()) Program.PollGraphite(1);
-                                    throw new InvalidOperationException("GL completion failed or timed out");
-                                }
-                                await Task.Delay(1);
-                            }
-                          }
-                          if (Program.GraphiteInitializations() != 1)
-                              throw new InvalidOperationException("Dawn device was recreated between submissions");
-                          if (Program.GraphiteContextInitializations() != 1)
-                              throw new InvalidOperationException("Graphite context was recreated between submissions");
-                        }
                         using var surface = visual.Compositor.CreateDrawingSurface();
                         await using var imported = interop.ImportImage(texture);
                         await imported.ImportCompleted.WaitAsync(TimeSpan.FromSeconds(30));
-                        await surface.UpdateAsync(imported).WaitAsync(TimeSpan.FromSeconds(30));
-                        sharedTextureUpdateCompleted = true;
                         var surfaceVisual = visual.Compositor.CreateSurfaceVisual();
                         surfaceVisual.Size = new System.Numerics.Vector2(128,128);
                         surfaceVisual.Surface = surface;
                         ElementComposition.SetElementChildVisual(window, surfaceVisual);
                         try
                         {
+                            if (graphiteSource) {
+                              for (int submission=0; submission<64; submission++) {
+                                using (glContext.EnsureCurrent()) {
+                                    if (Program.RenderGraphite((uint)texture.TextureId) != 0)
+                                        throw new InvalidOperationException("Dawn/Graphite host texture verification failed");
+                                    if (Program.RenderGraphite((uint)texture.TextureId) == 0)
+                                        throw new InvalidOperationException("Overlapping host submission was accepted");
+                                }
+                                var deadline = DateTime.UtcNow.AddSeconds(30);
+                                while (true) {
+                                    int completion;
+                                    using (glContext.EnsureCurrent()) completion = Program.PollGraphite(0);
+                                    if (completion == 1) {
+                                        using (glContext.EnsureCurrent()) {
+                                            if (Program.PollGraphite(0) != -1)
+                                                throw new InvalidOperationException("Duplicate completion was accepted");
+                                        }
+                                        graphiteSubmissionsCompleted++;
+                                        break;
+                                    }
+                                    if (completion < 0 || DateTime.UtcNow >= deadline) {
+                                        using (glContext.EnsureCurrent()) Program.PollGraphite(1);
+                                        throw new InvalidOperationException("GL completion failed or timed out");
+                                    }
+                                    await Task.Delay(1);
+                                }
+                                // Await host consumption before overwriting the borrowed GL texture.
+                                await surface.UpdateAsync(imported).WaitAsync(TimeSpan.FromSeconds(30));
+                                hostUpdatesCompleted++;
+                                await visual.Compositor.RequestCommitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+                              }
+                              if (Program.GraphiteInitializations() != 1)
+                                  throw new InvalidOperationException("Dawn device was recreated between submissions");
+                              if (Program.GraphiteContextInitializations() != 1)
+                                  throw new InvalidOperationException("Graphite context was recreated between submissions");
+                            }
+                            if (!graphiteSource) {
+                                await surface.UpdateAsync(imported).WaitAsync(TimeSpan.FromSeconds(30));
+                                hostUpdatesCompleted++;
+                            }
+                            sharedTextureUpdateCompleted = hostUpdatesCompleted == (graphiteSource ? 64 : 1);
                             await visual.Compositor.RequestCommitAsync().WaitAsync(TimeSpan.FromSeconds(30));
                             visualCommitCompleted = true;
                             if (Environment.GetCommandLineArgs().Contains("--inspect"))
@@ -135,6 +143,7 @@ internal sealed class ProbeApp : Application
                         canCreateSharedOpenGlContext = sharing?.CanCreateSharedContext ?? false,
                         graphiteSource,
                         graphiteSubmissionsCompleted,
+                        hostUpdatesCompleted,
                         graphiteContextInitializations = graphiteSource ? Program.GraphiteContextInitializations() : 0,
                         dawnDeviceInitializations = graphiteSource ? Program.GraphiteInitializations() : 0,
                         sharedTextureUpdateCompleted,

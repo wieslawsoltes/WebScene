@@ -298,3 +298,19 @@ verify 64 displayed frames or establish a throughput/memory benchmark.
 
 Recorder, recording, canvas-pool and output-texture allocation reuse remain
 unfinished. No browser API or production presenter is added by this change.
+
+### Repeated Avalonia handoffs (2026-09-07)
+
+The host diagnostic now imports the shared GL texture once and attaches its
+drawing surface before the submission loop. Each of the 64 native submissions
+awaits producer/GL completion, awaits CompositionDrawingSurface.UpdateAsync,
+and awaits a compositor commit before the next write. The imported image and
+surface remain alive throughout; detach/commit occurs before disposal.
+
+On Apple M4 the run exited 0 with graphiteSubmissionsCompleted=64 and
+hostUpdatesCompleted=64, one Dawn device and one Graphite context. The plain GL
+baseline also exited 0 with one host update and zero native initializations.
+This supersedes the earlier final-texture-only handoff test. The image content
+is unchanged across submissions, so this tests repeated consumption/lifetime
+and API completion, not detection of stale frames or a count of physical
+display presentations. No pixel readback was added to the host path.
