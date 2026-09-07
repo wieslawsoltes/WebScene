@@ -15,6 +15,7 @@ struct graphics_metrics {
     completion_metrics completions{};
     queue_metrics commands{};
     size_t release_registrations{};
+    size_t live_adapters{};
 };
 class graphics_service {
     const std::thread::id thread_ = std::this_thread::get_id();
@@ -24,11 +25,13 @@ class graphics_service {
     const bool measure_latency_;
     resource_table<angle_context> contexts_;
     resource_table<dawn_device> devices_;
+    resource_table<wgpu::Adapter> adapters_;
     std::unique_ptr<dawn_event_service> dawn_;
     bool closed_{};
     std::chrono::steady_clock::time_point next_event_poll_{};
     size_t active_context_scopes_{};
     size_t active_device_scopes_{};
+    size_t active_adapter_scopes_{};
     bool executing_commands_{};
     bool pumping_{};
     std::shared_ptr<command_channel> commands_;
@@ -44,7 +47,7 @@ class graphics_service {
     }
 public:
     graphics_service(std::shared_ptr<completion_wake> wake,size_t context_capacity=64,size_t completion_capacity=256,bool measure_latency=false)
-        : wake_(std::move(wake)),completion_capacity_(completion_capacity),measure_latency_(measure_latency),contexts_(context_capacity,owner_),devices_(context_capacity,owner_) {}
+        : wake_(std::move(wake)),completion_capacity_(completion_capacity),measure_latency_(measure_latency),contexts_(context_capacity,owner_),devices_(context_capacity,owner_),adapters_(context_capacity,owner_) {}
     graphics_service(const graphics_service&)=delete;
     graphics_service& operator=(const graphics_service&)=delete;
     ~graphics_service() {
@@ -58,6 +61,30 @@ public:
         if (!dawn_) dawn_=std::make_unique<dawn_event_service>(completion_capacity_,wake_,measure_latency_);
         return *dawn_;
     }
+    // Internal discovery completion hook. Only adapters discovered through this
+    // engine's Dawn instance may be adopted. Async device requests must copy the
+    // native reference during with_adapter, never retain its borrowed address.
+    resource_handle<wgpu::Adapter> adopt_adapter(wgpu::Adapter adapter) {
+        check_open();
+        if (!adapter) throw std::invalid_argument("Cannot adopt a null adapter");
+        return adapters_.insert(owner_,std::make_unique<wgpu::Adapter>(std::move(adapter)));
+    }
+    template<class Execute> void with_adapter(resource_handle<wgpu::Adapter> handle,Execute execute) {
+        check_open();
+        const auto& adapter=adapters_.get(handle,owner_);
+        struct guard {
+            size_t& count;
+            explicit guard(size_t& value) : count(value) { ++count; }
+            ~guard() { --count; }
+        } scope(active_adapter_scopes_);
+        execute(adapter);
+    }
+    void destroy_adapter(resource_handle<wgpu::Adapter> handle) {
+        check_open();
+        if (active_adapter_scopes_) throw std::logic_error("Cannot destroy adapters during execution");
+        adapters_.destroy(handle,owner_);
+    }
+    size_t live_adapters() const { check_thread(); return adapters_.resident_count(); }
     // Internal request-device completion hook: pass a freshly created device
     // from this service's instance exactly once, with its originating adapter.
     resource_handle<dawn_device> adopt_device(wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={}) {
@@ -109,6 +136,12 @@ public:
     }
     // Finalizers enqueue these value-only records through a retained endpoint.
     // A full queue requires retry/retention by the caller; it is not a release.
+    static graphics_command deferred_adapter_release(resource_handle<wgpu::Adapter> handle) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try { service.destroy_adapter({args[0],args[1],static_cast<uint32_t>(args[2])}); }
+            catch (const std::invalid_argument&) { /* Already explicitly destroyed. */ }
+        },{handle.table,handle.generation,handle.slot}};
+    }
     static graphics_command deferred_device_release(resource_handle<dawn_device> handle) noexcept {
         return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
             try { service.destroy_device({args[0],args[1],static_cast<uint32_t>(args[2])}); }
@@ -195,13 +228,13 @@ public:
         return {devices_.resident_count(),contexts_.resident_count(),
             dawn_ ? dawn_->completions()->metrics() : completion_metrics{},
             commands_ ? commands_->metrics() : queue_metrics{},
-            releases_ ? releases_->occupied() : 0};
+            releases_ ? releases_->occupied() : 0,adapters_.resident_count()};
     }
     size_t live_contexts() const { check_thread(); return contexts_.resident_count(); }
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_context_scopes_ || active_device_scopes_ || executing_commands_ || pumping_)
+        if (active_context_scopes_ || active_device_scopes_ || active_adapter_scopes_ || executing_commands_ || pumping_)
             throw std::logic_error("Cannot close graphics service during native execution");
         if (releases_) releases_->close();
         if (commands_) {
@@ -210,6 +243,7 @@ public:
         }
         closed_=true;
         devices_.destroy_owner(owner_);
+        adapters_.destroy_owner(owner_);
         if (dawn_) dawn_->close();
         contexts_.destroy_owner(owner_);
     }

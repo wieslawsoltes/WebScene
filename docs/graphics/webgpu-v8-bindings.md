@@ -69,3 +69,19 @@ adapter. The standards GPUAdapter object/prototype/feature/limit registry and
 secure-origin navigator integration still need implementation. Navigation-wide
 binding teardown must route through the existing cancellation lifecycle before
 releasing the realm; that full integration remains unqualified.
+
+### Service-owned adapters
+
+Discovery completion now adopts the native adapter into the graphics service's
+bounded, typed generational table. The V8 fixture retains a service handle, not
+an untracked native adapter. Borrowed adapter access is confined to an engine
+execution scope; an asynchronous device request must take its own native
+reference within that scope. Releasing a wrapper handle therefore does not
+invalidate a native reference already retained by an in-flight request.
+
+Adapter destruction and service closure are rejected during borrowed access.
+Finalizers can enqueue value-only adapter release commands, with stale duplicate
+releases harmless. Service closure releases adapters before closing Dawn's event
+service. Hardware tests exercise foreign/stale handles, slot reuse, scope guards,
+null rejection, capacity exhaustion, deferred release and reference survival.
+This remains internal ownership plumbing; public GPUAdapter bindings are pending.

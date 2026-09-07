@@ -256,7 +256,7 @@ int main() {
             bool delivered=false, adapter_delivered=false, adapter_cancelled=false;
             graphics_service* adapter_service=nullptr;
             std::unique_ptr<v8_webgpu_adapter_request> adapter_request, cancelled_adapter;
-            wgpu::Adapter discovered_adapter;
+            resource_handle<wgpu::Adapter> discovered_adapter;
             std::shared_ptr<release_channel> releases;
             std::unique_ptr<v8_release_registry> wrappers;
             auto& graphics=runtime.initialize_graphics(wake,[&](completion_record record) {
@@ -273,7 +273,7 @@ int main() {
                     auto* isolate=v8::Isolate::GetCurrent();
                     auto context=isolate->GetCurrentContext();
                     require(adapter_request->complete(isolate,context,record,[&](wgpu::Adapter adapter) -> v8::Local<v8::Value> {
-                        discovered_adapter=std::move(adapter);
+                        discovered_adapter=adapter_service->adopt_adapter(std::move(adapter));
                         // Diagnostic wrapper only; the standards GPUAdapter registry is separate work.
                         return v8::Object::New(isolate);
                     }), "Adapter promise completion failed");
@@ -368,9 +368,13 @@ int main() {
                 if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Adapter task failed");
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }
-            require(adapter_delivered && discovered_adapter && adapter_cancelled,"Actual Dawn adapter discovery/cancellation failed");
+            require(adapter_delivered && discovered_adapter.table && adapter_cancelled,"Actual Dawn adapter discovery/cancellation failed");
             require(runtime.execute("if(!adapterPromiseDone || !cancelledAdapterDone || rafDone!==0)throw new Error('adapter promise did not progress while hidden');", "adapter-promise-check"),"Adapter promise checkpoint failed");
-            adapter_request.reset(); cancelled_adapter.reset(); discovered_adapter=nullptr;
+            adapter_service->with_adapter(discovered_adapter,[](const auto& adapter) {
+                require(static_cast<bool>(adapter),"Discovered adapter lost its native reference");
+            });
+            adapter_service->destroy_adapter(discovered_adapter);
+            adapter_request.reset(); cancelled_adapter.reset();
             runtime.notify_low_memory();
             require(weak_releases==0,"GC callback executed a native graphics release");
             require(runtime.has_pending_tasks(),"GC did not enqueue release work");

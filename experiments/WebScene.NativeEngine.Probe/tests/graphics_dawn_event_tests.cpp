@@ -283,6 +283,46 @@ int main() {
     wgpu::AdapterInfo info{};
     if (state->adapter.GetInfo(&info)!=wgpu::Status::Success) return 1;
     if (info.adapterType!=wgpu::AdapterType::IntegratedGPU && info.adapterType!=wgpu::AdapterType::DiscreteGPU) return 77;
+    auto adapter_handle=root.adopt_adapter(state->adapter);
+    bool foreign_adapter=false,active_destroy=false,active_close=false,stale_adapter=false;
+    try { other_root.with_adapter(adapter_handle,[](const auto&) {}); }
+    catch (const std::invalid_argument&) { foreign_adapter=true; }
+    wgpu::Adapter retained_adapter;
+    root.with_adapter(adapter_handle,[&](const auto& adapter) {
+        retained_adapter=adapter; // In-flight requests own a reference independent of the wrapper.
+        try { root.destroy_adapter(adapter_handle); }
+        catch (const std::logic_error&) { active_destroy=true; }
+        try { root.close(); }
+        catch (const std::logic_error&) { active_close=true; }
+    });
+    root.destroy_adapter(adapter_handle);
+    auto replacement_adapter=root.adopt_adapter(retained_adapter);
+    try { root.with_adapter(adapter_handle,[](const auto&) {}); }
+    catch (const std::invalid_argument&) { stale_adapter=true; }
+    if (!foreign_adapter || !active_destroy || !active_close || !stale_adapter
+        || replacement_adapter.slot!=adapter_handle.slot
+        || replacement_adapter.generation==adapter_handle.generation
+        || root.metrics().live_adapters!=1) return 1;
+    auto adapter_release=graphics_service::deferred_adapter_release(replacement_adapter);
+    auto adapter_commands=root.command_endpoint(2,0);
+    std::thread adapter_finalizer([&] {
+        if (adapter_commands->enqueue(adapter_release)!=enqueue_result::accepted
+            || adapter_commands->enqueue(adapter_release)!=enqueue_result::accepted) std::terminate();
+    });
+    adapter_finalizer.join();
+    root.drain_commands();
+    if (root.live_adapters()!=0 || retained_adapter.GetInfo(&info)!=wgpu::Status::Success) return 1;
+    bool null_adapter=false,adapter_limit=false;
+    try { root.adopt_adapter({}); }
+    catch (const std::invalid_argument&) { null_adapter=true; }
+    std::vector<resource_handle<wgpu::Adapter>> bounded_adapters;
+    for (size_t i=0;i<64;++i) bounded_adapters.push_back(root.adopt_adapter(retained_adapter));
+    try { root.adopt_adapter(retained_adapter); }
+    catch (const std::length_error&) { adapter_limit=true; }
+    if (!null_adapter || !adapter_limit || root.live_adapters()!=64) return 1;
+    for (auto handle:bounded_adapters) root.destroy_adapter(handle);
+    if (root.live_adapters()!=0) return 1;
+    retained_adapter=nullptr;
     struct device_result { wgpu::Device device; };
 #if !defined(_WIN32)
     dawn_dxgi_image unopened;
