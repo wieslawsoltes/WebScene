@@ -1,11 +1,14 @@
 #pragma once
 #include "graphics_service.h"
+#include "v8_webgpu_devices.h"
+#include "v8_webgpu_device_request.h"
+#include <list>
 #include "v8_webgpu_supported_features.h"
 #include "webgpu_feature_names.h"
 
 namespace webscene::graphics {
-// Realm-owned adapter identity and feature snapshots. Public discovery and
-// requestDevice dispatch are integrated separately; no global is installed here.
+// Realm-owned adapters and asynchronous device requests. No global is installed
+// here; secure discovery, expired adapters and loss integration remain separate.
 class v8_webgpu_adapters {
     struct entry {
         v8::Global<v8::Object> wrapper;
@@ -14,8 +17,17 @@ class v8_webgpu_adapters {
         resource_handle<wgpu::Adapter> adapter;
         std::shared_ptr<release_channel> releases;
         release_ticket ticket;
-        bool published{};
+        bool published{},consumed{};
+        v8_webgpu_adapters* registry{};
     };
+    struct pending_request {
+        entry* adapter{};
+        v8::Global<v8::Object> keep_alive;
+        std::unique_ptr<v8_webgpu_device_request> bridge;
+    };
+    std::list<std::unique_ptr<pending_request>> requests_;
+    v8_webgpu_devices& devices_;
+    v8::Global<v8::Function> dom_exception_;
     alignas(void*) static inline char brand_{};
     v8::Isolate* isolate_;
     const std::thread::id thread_=std::this_thread::get_id();
@@ -38,6 +50,50 @@ class v8_webgpu_adapters {
         if (!item) fail(info.GetIsolate(),"GPUAdapter realm has been released");
         return item;
     }
+    static void request_device(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* isolate=info.GetIsolate(); auto context=isolate->GetCurrentContext();
+        v8::Local<v8::Value> failure;
+        v8::Local<v8::Promise> promise;
+        {
+            v8::TryCatch caught(isolate);
+            try {
+                if (auto* item=receiver(info)) {
+                    auto* registry=item->registry;
+                    auto operation=std::make_unique<pending_request>();
+                    auto* current=operation.get(); current->adapter=item;
+                    current->keep_alive.Reset(isolate,info.This());
+                    registry->requests_.push_back(std::move(operation));
+                    try {
+                        current->bridge=v8_webgpu_device_request::start_checked(isolate,context,info[0],[&] {
+                            auto* refreshed=receiver(info);
+                            if (!refreshed) return std::pair{wgpu::Adapter{},true};
+                            wgpu::Adapter adapter;
+                            refreshed->service->with_adapter(refreshed->adapter,[&](const auto& native) { adapter=native; });
+                            return std::pair{std::move(adapter),refreshed->consumed};
+                        },item->service->dawn().completions(),{item->service->engine_identity(),new_owner_token(),0},new_owner_token(),
+                            registry->dom_exception_.Get(isolate),promise);
+                        if (current->bridge && current->bridge->pending()) item->consumed=true;
+                    } catch (...) {
+                        registry->requests_.remove_if([&](const auto& value) { return value.get()==current; });
+                        throw;
+                    }
+                    if (!current->bridge || !current->bridge->pending())
+                        registry->requests_.remove_if([&](const auto& value) { return value.get()==current; });
+                }
+            } catch (const std::exception&) {
+                failure=v8::Exception::Error(v8::String::NewFromUtf8Literal(isolate,"GPUAdapter device request failed"));
+            }
+            if (caught.HasTerminated()) return;
+            if (caught.HasCaught()) failure=caught.Exception();
+        }
+        if (!failure.IsEmpty()) {
+            v8::Local<v8::Promise::Resolver> resolver;
+            if (!v8::Promise::Resolver::New(context).ToLocal(&resolver)) return;
+            if (!resolver->Reject(context,failure).FromMaybe(false)) return;
+            promise=resolver->GetPromise();
+        }
+        if (!promise.IsEmpty()) info.GetReturnValue().Set(promise);
+    }
     static void features(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info); if (!item) return;
         v8::Local<v8::Value> value;
@@ -56,12 +112,15 @@ class v8_webgpu_adapters {
     }
 public:
     v8_webgpu_adapters(v8::Isolate* isolate,v8::Local<v8::Context> context,
-        size_t capacity=64)
-        :isolate_(isolate),features_factory_(isolate,context),entries_(capacity) {
+        v8_webgpu_devices& devices,v8::Local<v8::Function> dom_exception,size_t capacity=64)
+        :devices_(devices),isolate_(isolate),features_factory_(isolate,context),entries_(capacity) {
         check_scope();
+        if (dom_exception.IsEmpty()) throw std::invalid_argument("Trusted DOMException is required");
+        dom_exception_.Reset(isolate,dom_exception);
         realm_.Reset(isolate,context);
         auto instance=v8::ObjectTemplate::New(isolate); instance->SetInternalFieldCount(2); instance_.Reset(isolate,instance);
         auto prototype=v8::ObjectTemplate::New(isolate);
+        prototype->Set(isolate,"requestDevice",v8::FunctionTemplate::New(isolate,request_device));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"features"),v8::FunctionTemplate::New(isolate,features));
         prototype_.Reset(isolate,prototype->NewInstance(context).ToLocalChecked());
     }
@@ -69,11 +128,35 @@ public:
     v8_webgpu_adapters& operator=(const v8_webgpu_adapters&)=delete;
     ~v8_webgpu_adapters() {
         check_scope();
+        requests_.clear();
         for (auto& item:entries_) if (item) {
             if (!item->wrapper.IsEmpty()) item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
             item->wrapper.Reset();
             if (!item->published) item->releases->publish(item->ticket);
         }
+    }
+    // Device registry must outlive this adapter registry. Completed devices have
+    // independent ownership and do not retain their originating adapter wrapper.
+    bool complete(completion_record record) {
+        check_scope();
+        auto context=realm_.Get(isolate_);
+        for (auto it=requests_.begin();it!=requests_.end();++it) {
+            auto* request=it->get();
+            if (!request->bridge) continue;
+            if (!request->bridge->complete(isolate_,context,record,[&](wgpu::Device native) -> v8::MaybeLocal<v8::Value> {
+                auto* item=request->adapter;
+                wgpu::Adapter adapter;
+                item->service->with_adapter(item->adapter,[&](const auto& value) { adapter=value; });
+                auto handle=item->service->adopt_device(std::move(adapter),std::move(native));
+                try {
+                    v8::Local<v8::Object> wrapper;
+                    if (devices_.wrap(context,*item->service,handle,request->bridge->label()).ToLocal(&wrapper)) return wrapper;
+                } catch (...) { item->service->destroy_device(handle); throw; }
+                item->service->destroy_device(handle); return {};
+            })) continue;
+            requests_.erase(it); return true;
+        }
+        return false;
     }
     // Caller retains ownership until a non-empty wrapper is returned.
     v8::MaybeLocal<v8::Object> wrap(v8::Local<v8::Context> context,graphics_service& service,resource_handle<wgpu::Adapter> adapter) {
@@ -89,6 +172,7 @@ public:
         if (!instance_.Get(isolate_)->NewInstance(context).ToLocal(&wrapper)
             || !wrapper->SetPrototype(context,prototype_.Get(isolate_)).FromMaybe(false)) return {};
         auto item=std::make_unique<entry>();
+        item->registry=this;
         item->service=&service; item->adapter=adapter; item->releases=service.release_endpoint();
         item->features_key.Reset(isolate_,v8::Private::New(isolate_));
         std::vector<std::string_view> names;

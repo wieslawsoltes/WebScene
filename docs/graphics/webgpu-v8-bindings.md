@@ -611,3 +611,29 @@ native-handle reclamation. It uses an independent graphics-service fixture
 because the existing buffer test deliberately occupies every release slot.
 Runtime CTest passes. This registry does not yet dispatch requestDevice or install
 navigator.gpu; those remain necessary for public discovery.
+
+### Adapter requestDevice dispatch
+
+Internal adapter wrappers now expose requestDevice with optional-descriptor
+arity. The callback delegates conversion and preparation to the checked request
+bridge, reacquires adapter ownership after user-controlled conversion, and retains
+the adapter wrapper while native completion is pending. Successful completion
+adopts the native device into the graphics service and creates a device wrapper
+through a caller-owned device registry. That registry must outlive the adapter
+registry. Device wrapper registration failure rolls back the adopted handle.
+The original device label survives asynchronous completion. Wrong receivers
+reject with TypeError; a repeated request after admission rejects OperationError.
+
+The macOS runtime fixture discovers a fresh adapter, calls requestDevice from
+JavaScript, waits for its actual native completion, and uses the returned device
+to create, map, write, unmap and destroy a buffer. It checks the label, method
+arity, repeated-request/wrong-receiver rejection types and deferred reclamation
+of both adapter and device handles. Runtime CTest passes. A previously consumed
+native adapter is not reused to simulate fresh discovery.
+
+This is still an internal registry. navigator.gpu exposure, unified prototypes,
+limits/adapterInfo, expired/lost-device semantics and pending-request teardown
+qualification remain unfinished. The registry currently consumes an adapter at
+native request admission; resource-failure/lost-device behavior needs the full
+adapter state machine before public exposure. No WebGPU rendering sample is yet
+claimed to work.

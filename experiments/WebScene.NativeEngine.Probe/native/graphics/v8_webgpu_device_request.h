@@ -19,6 +19,7 @@ class v8_webgpu_device_request final {
     v8::Isolate* const isolate_;
     const resource_owner owner_;
     const uint64_t operation_;
+    std::string label_;
     v8::Global<v8::Context> realm_;
     v8::Global<v8::Promise::Resolver> resolver_;
     v8::Global<v8::Function> dom_exception_;
@@ -50,6 +51,7 @@ public:
     }
     v8_webgpu_device_request(const v8_webgpu_device_request&)=delete;
     v8_webgpu_device_request& operator=(const v8_webgpu_device_request&)=delete;
+    const std::string& label() const { check_thread(); return label_; }
     bool pending() const { check_thread(); return !resolver_.IsEmpty(); }
     // ResolveAdapter rechecks native ownership and consumed state after all
     // user-controlled descriptor getters/coercions have run. It returns
@@ -67,11 +69,13 @@ public:
         v8::Local<v8::Value> failure;
         std::unique_ptr<webgpu_prepared_device_descriptor> prepared;
         wgpu::Adapter adapter;
+        std::string label;
         {
             v8::TryCatch caught(isolate);
             try {
                 webgpu_device_descriptor converted;
                 if (read_webgpu_device_descriptor(isolate,context,input,converted)) {
+                    label=converted.label;
                     auto state=resolve_adapter(); adapter=std::move(state.first);
                     webgpu_device_request_error error;
                     prepared=webgpu_prepared_device_descriptor::prepare(converted,adapter,state.second,error);
@@ -86,7 +90,9 @@ public:
         }
         if (prepared && failure.IsEmpty()) {
             auto descriptor=prepared->native();
-            return start(isolate,context,descriptor,adapter,std::move(mailbox),owner,operation,dom_exception,promise);
+            auto result=start(isolate,context,descriptor,adapter,std::move(mailbox),owner,operation,dom_exception,promise);
+            if (result) result->label_=std::move(label);
+            return result;
         }
         v8::Local<v8::Promise::Resolver> resolver;
         if (!v8::Promise::Resolver::New(context).ToLocal(&resolver)) return {};

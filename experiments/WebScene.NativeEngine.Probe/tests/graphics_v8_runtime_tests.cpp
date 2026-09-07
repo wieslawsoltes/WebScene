@@ -575,11 +575,27 @@ int main() {
                             });
                         }
                     )JS"),"JavaScript mapAsync dispatch failed");
-                    wgpu::Adapter adapter_copy;
-                    adapter_service->with_adapter(discovered_adapter,[&](const auto& native) { adapter_copy=native; });
                     graphics_service adapter_fixture(wake,2);
-                    auto adapter_handle=adapter_fixture.adopt_adapter(std::move(adapter_copy));
-                    auto adapter_registry=std::make_unique<v8_webgpu_adapters>(isolate,context,1);
+                    auto fresh_adapter=std::make_shared<wgpu::Adapter>();
+                    auto fixture_mailbox=adapter_fixture.dawn().completions();
+                    auto adapter_ticket=fixture_mailbox->reserve(new_owner_token(),{adapter_fixture.engine_identity(),new_owner_token(),0}).value();
+                    auto adapter_options=make_dawn_adapter_options(webgpu_adapter_options{},wgpu::BackendType::Undefined).value();
+                    adapter_fixture.dawn().instance().RequestAdapter(&adapter_options,wgpu::CallbackMode::AllowSpontaneous,
+                        [fresh_adapter,fixture_mailbox,adapter_ticket](wgpu::RequestAdapterStatus status,wgpu::Adapter adapter,wgpu::StringView) {
+                            *fresh_adapter=std::move(adapter);
+                            fixture_mailbox->publish(adapter_ticket,status==wgpu::RequestAdapterStatus::Success?completion_status::success:completion_status::failed);
+                        });
+                    bool fresh_adapter_ready=false;
+                    auto fresh_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                    while(!fresh_adapter_ready && std::chrono::steady_clock::now()<fresh_deadline) {
+                        adapter_fixture.pump([&](auto completion) { require(completion.status==completion_status::success,"Fresh adapter request failed");fresh_adapter_ready=true; });
+                        if(!fresh_adapter_ready)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                    require(fresh_adapter_ready && *fresh_adapter,"Fresh adapter unavailable");
+                    auto adapter_handle=adapter_fixture.adopt_adapter(std::move(*fresh_adapter));
+                    auto exception_constructor=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>();
+                    auto adapter_devices=std::make_unique<v8_webgpu_devices>(isolate,context,exception_constructor,2,4);
+                    auto adapter_registry=std::make_unique<v8_webgpu_adapters>(isolate,context,*adapter_devices,exception_constructor,1);
                     auto adapter_object=adapter_registry->wrap(context,adapter_fixture,adapter_handle).ToLocalChecked();
                     bool duplicate_adapter=false,foreign_realm=false;
                     try { adapter_registry->wrap(context,adapter_fixture,adapter_handle); } catch (const std::invalid_argument&) { duplicate_adapter=true; }
@@ -594,14 +610,44 @@ int main() {
                             require(feature_has->Call(context,adapter_features,1,&name).ToLocalChecked()->BooleanValue(isolate)==native.HasFeature(feature.native),"Adapter capability snapshot differs from Dawn");
                         }
                     });
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"adapterWrapperProbe"),adapter_object).FromMaybe(false),"Adapter wrapper publication failed");
+                    require(run("globalThis.adapterDevicePromise=adapterWrapperProbe.requestDevice({label:'via adapter'});"),"Adapter requestDevice call failed");
+                    auto requested_device_promise=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"adapterDevicePromise")).ToLocalChecked().As<v8::Promise>();
+                    auto request_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+                    while (requested_device_promise->State()==v8::Promise::kPending && std::chrono::steady_clock::now()<request_deadline) {
+                        adapter_fixture.pump([&](auto completion) { require(adapter_registry->complete(completion),"Adapter request completion not routed"); });
+                        if (requested_device_promise->State()==v8::Promise::kPending) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    }
+                    require(requested_device_promise->State()==v8::Promise::kFulfilled,"Adapter request did not produce a native device wrapper");
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"adapterDeviceProbe"),requested_device_promise->Result()).FromMaybe(false),"Adapter device publication failed");
+                    require(run(R"JS(
+                        if(adapterWrapperProbe.requestDevice.length!==0)throw new Error('requestDevice arity');
+                        if(adapterDeviceProbe.label!=='via adapter')throw new Error('requested device label');
+                        {let b=adapterDeviceProbe.createBuffer({size:16,usage:8,mappedAtCreation:true});
+                         let range=b.getMappedRange();new Uint32Array(range)[0]=123;b.unmap();
+                         if(range.byteLength!==0 || b.size!==16)throw new Error('adapter device buffer');b.destroy();}
+                        globalThis.consumedAdapterPromise=adapterWrapperProbe.requestDevice();
+                        consumedAdapterPromise.catch(()=>{});
+                        globalThis.badAdapterReceiverPromise=adapterWrapperProbe.requestDevice.call({});
+                        badAdapterReceiverPromise.catch(()=>{});
+                    )JS"),"Adapter device resource operations failed");
+                    for(const char* name:{"consumedAdapterPromise","badAdapterReceiverPromise"}) {
+                        auto rejected=context->Global()->Get(context,v8::String::NewFromUtf8(isolate,name).ToLocalChecked()).ToLocalChecked().As<v8::Promise>();
+                        require(rejected->State()==v8::Promise::kRejected,"Invalid adapter request did not reject");
+                        auto error_name=rejected->Result().As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"name")).ToLocalChecked();
+                        const char* expected=std::string_view(name)=="consumedAdapterPromise"?"OperationError":"TypeError";
+                        require(error_name->StrictEquals(v8::String::NewFromUtf8(isolate,expected).ToLocalChecked()),"Adapter rejection type incorrect");
+                    }
                     adapter_registry.reset();
                     { v8::TryCatch caught(isolate);
                         require(adapter_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"features")).IsEmpty() && caught.HasCaught(),"Retired adapter retained native access");
                     }
                     require(adapter_features.As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"size")).ToLocalChecked()->IsUint32(),"Retained adapter features lost after disposal");
+                    adapter_devices.reset();
+                    require(run("delete globalThis.adapterWrapperProbe;delete globalThis.adapterDeviceProbe;delete globalThis.adapterDevicePromise;delete globalThis.consumedAdapterPromise;delete globalThis.badAdapterReceiverPromise;"),"Adapter probe cleanup failed");
                     require(adapter_fixture.live_adapters()==1,"Adapter disposal bypassed deferred release");
                     adapter_fixture.pump([](completion_record) {});
-                    require(adapter_fixture.live_adapters()==0,"Adapter deferred release leaked native handle");
+                    require(adapter_fixture.live_adapters()==0 && adapter_fixture.live_devices()==0,"Adapter/device deferred release leaked native handles");
                     buffer_wrappers_tested=true;
                     return;
                 }
