@@ -63,3 +63,29 @@ Result: all 797 build steps completed, producing `out/webscene-graphite/libskia.
 A static archive does not resolve its external symbols. Executable linkage to the
 single Dawn dylib and an actual GPU composition test are the next required checks.
 No runtime ABI, pixel correctness or host-presentation pass is claimed yet.
+
+## Shared-device rendering probe
+
+```sh
+clang++ -std=c++20 -O2 -DSK_GRAPHITE -DSK_DAWN \
+  -I artifacts/graphics-src/skia -I artifacts/graphics-sdk/osx-arm64/dawn/include \
+  eng/graphics/probes/graphite/graphite_probe.cpp out/webscene-graphite/libskia.a \
+  -L artifacts/graphics-sdk/osx-arm64/dawn/lib -lwebgpu_dawn \
+  -framework CoreFoundation -framework CoreGraphics -framework CoreText \
+  -framework Foundation -framework ImageIO -framework Metal -framework QuartzCore \
+  -o out/webscene-graphite/graphite_probe
+DYLD_LIBRARY_PATH="$PWD/artifacts/graphics-sdk/osx-arm64/dawn/lib" \
+  out/webscene-graphite/graphite_probe metal
+otool -L out/webscene-graphite/graphite_probe
+```
+
+Passed on Apple M4 / Metal, macOS 26.6.2 (25G83): Graphite wraps a Dawn-created
+17x4 texture using the same device/queue, records a SkCanvas clear and submits it.
+A subsequent Dawn diagnostic copy/map verifies all 68 pixels as RGBA 51,102,153,255
+(tolerance 1). The executable links the existing `libwebgpu_dawn.dylib`; no second
+Dawn library is linked. Readback is confined to this diagnostic executable.
+
+This proves context creation, texture wrapping, submission and pixel correctness
+for this clear operation. It does not yet prove sampling a retained canvas image,
+clip/opacity/transform composition, resize lifetime, JavaScript WebGPU, or the
+Avalonia/Uno host presentation boundary. Those remain the next integration tests.
