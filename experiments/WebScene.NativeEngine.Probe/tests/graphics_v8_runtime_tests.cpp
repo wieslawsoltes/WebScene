@@ -677,6 +677,14 @@ int main() {
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"deviceProbe"),device_object).FromMaybe(false),"Device wrapper publication failed");
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {
+                            if(deviceProbe.label!=='')throw new Error('device label default');
+                            deviceProbe.label='device\0\ud800';
+                            if(deviceProbe.label!=='device\0\ufffd')throw new Error('device label conversion');
+                            let labelFailure={};
+                            try{deviceProbe.label={toString(){throw labelFailure}}}catch(e){if(e!==labelFailure)throw e}
+                            if(deviceProbe.label!=='device\0\ufffd')throw new Error('failed device label changed value');
+                            let symbolRejected=false;try{deviceProbe.label=Symbol()}catch(e){symbolRejected=e instanceof TypeError}
+                            if(!symbolRejected)throw new Error('device Symbol label accepted');
                             if(deviceProbe.createBuffer.length!==1)throw new Error('createBuffer arity');
                             for(let operation of [()=>deviceProbe.createBuffer(),()=>deviceProbe.createBuffer.call({},{}),()=>deviceProbe.destroy.call({})]) {
                                 let rejected=false;try{operation()}catch(e){rejected=e instanceof TypeError}
@@ -690,6 +698,8 @@ int main() {
                             pending.mapAsync(2).catch(e=>{if(!(e instanceof DOMException)||e.name!=='AbortError')throw e;deviceMapCancelled=true});
                             if(pending.mapState!=='pending')throw new Error('device map did not become pending');
                             deviceProbe.destroy();deviceProbe.destroy();
+                            deviceProbe.label='destroyed device';
+                            if(deviceProbe.label!=='destroyed device')throw new Error('destroyed device label');
                             if(pending.mapState!=='unmapped')throw new Error('device destroy did not cancel map');
                             if(range.byteLength!==0||words.length!==0||buffer.mapState!=='unmapped'||buffer.size!==32)throw new Error('device destroy mapping lifetime');
                             let rejected=false;try{buffer.getMappedRange()}catch(e){rejected=e instanceof DOMException&&e.name==='OperationError'}

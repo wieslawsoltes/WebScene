@@ -14,6 +14,7 @@ class v8_webgpu_devices {
         std::shared_ptr<release_channel> releases;
         release_ticket ticket;
         bool published{},destroyed{};
+        std::string label;
     };
     alignas(void*) static inline char brand_{};
     v8::Isolate* isolate_;
@@ -55,6 +56,28 @@ class v8_webgpu_devices {
             isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Buffer capacity exhausted")));
         } catch (const std::exception&) { fail(isolate,"GPUDevice native ownership is unavailable"); }
     }
+    static void label(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* item=receiver(info); if (!item) return;
+        v8::Local<v8::String> value;
+        if (v8::String::NewFromUtf8(info.GetIsolate(),item->label.data(),v8::NewStringType::kNormal,
+            static_cast<int>(item->label.size())).ToLocal(&value)) info.GetReturnValue().Set(value);
+    }
+    static void set_label(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if (!receiver(info)) return;
+        auto* isolate=info.GetIsolate();
+        v8::Local<v8::String> value;
+        if (!info[0]->ToString(isolate->GetCurrentContext()).ToLocal(&value)) return;
+        v8::String::Utf8Value bytes(isolate,value);
+        if (!*bytes) return;
+        auto* item=receiver(info); if (!item) return;
+        try {
+            std::string converted(*bytes,bytes.length());
+            item->service->with_device(item->device,[&](auto& device) {
+                device.native().SetLabel(wgpu::StringView(converted.data(),converted.size()));
+            });
+            item->label=std::move(converted);
+        } catch (const std::exception&) { fail(isolate,"GPUDevice label update failed"); }
+    }
     static void destroy(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info); if (!item || item->destroyed) return;
         try {
@@ -84,6 +107,7 @@ public:
         auto prototype=v8::ObjectTemplate::New(isolate);
         auto create=v8::FunctionTemplate::New(isolate,create_buffer); create->SetLength(1);
         prototype->Set(isolate,"createBuffer",create);
+        prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"label"),v8::FunctionTemplate::New(isolate,label),v8::FunctionTemplate::New(isolate,set_label));
         prototype->Set(isolate,"destroy",v8::FunctionTemplate::New(isolate,destroy));
         prototype_.Reset(isolate,prototype->NewInstance(context).ToLocalChecked());
     }
@@ -104,7 +128,7 @@ public:
         return false;
     }
     // Caller retains ownership until a non-empty wrapper is returned.
-    v8::MaybeLocal<v8::Object> wrap(v8::Local<v8::Context> context,graphics_service& service,resource_handle<dawn_device> device) {
+    v8::MaybeLocal<v8::Object> wrap(v8::Local<v8::Context> context,graphics_service& service,resource_handle<dawn_device> device,std::string initial_label={}) {
         check_scope();
         if (realm_.Get(isolate_)!=context) throw std::logic_error("GPUDevice belongs to another realm");
         service.with_device(device,[](auto&) {});
@@ -117,6 +141,7 @@ public:
         if (!instance_.Get(isolate_)->NewInstance(context).ToLocal(&wrapper)
             || !wrapper->SetPrototype(context,prototype_.Get(isolate_)).FromMaybe(false)) return {};
         auto item=std::make_unique<entry>();
+        item->label=std::move(initial_label);
         item->service=&service; item->device=device; item->releases=service.release_endpoint();
         item->buffers=std::make_unique<v8_webgpu_buffers>(isolate_,context,buffer_capacity_,dom_exception_.Get(isolate_));
         item->buffer_owner_key.Reset(isolate_,v8::Private::New(isolate_));

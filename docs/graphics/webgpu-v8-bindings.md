@@ -452,3 +452,13 @@ completion.
 This qualifies the tested device-destroy path. Physical device loss, parent-device
 GC retention, public adapter discovery and complete device/queue capabilities remain
 unfinished or require dedicated verification.
+
+### Device labels
+
+Internal device wrappers now retain an initial converted descriptor label and
+implement the label getter/setter. Writes use USVString conversion, preserve
+embedded NUL via explicit byte lengths, recheck the receiver after user coercion,
+and forward the label to Dawn. Failed conversion leaves the prior label intact.
+The rebuilt macOS V8 test passes default, surrogate/NUL, Symbol, throwing-conversion
+and post-destroy label assertions. Public discovery and remaining device/queue
+capabilities are still unfinished.
