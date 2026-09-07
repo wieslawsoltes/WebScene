@@ -84,8 +84,31 @@ int main() {
             require(!mailbox->publish(pending,completion_status::success),"old document callback delivered after navigation");
             graphics_command no_op{[](graphics_service&,std::span<const std::byte>,const graphics_command::arguments&) noexcept {}};
             require(endpoint->enqueue(no_op)==enqueue_result::closed,"old document command endpoint remained open");
-            auto& next_graphics=runtime.initialize_graphics(wake,[](auto) {});
+            bool disposed=false;
+            require(runtime.execute("globalThis.disposeDone=0; new Promise(r=>globalThis.disposeResolve=r).then(()=>globalThis.disposeDone=1);","dispose-setup"),"disposal promise setup failed");
+            auto& next_graphics=runtime.initialize_graphics(wake,[&](auto record) {
+                require(record.operation==4 && record.status==completion_status::cancelled,"disposal cancellation missing");
+                require(std::this_thread::get_id()==owner_thread,"disposal left engine thread");
+                auto* isolate=v8::Isolate::GetCurrent();
+                require(isolate && isolate->InContext(),"disposal has no context");
+                auto context=isolate->GetCurrentContext();
+                auto key=v8::String::NewFromUtf8Literal(isolate,"disposeResolve");
+                auto resolve=context->Global()->Get(context,key).ToLocalChecked().As<v8::Function>();
+                require(!resolve->Call(context,context->Global(),0,nullptr).IsEmpty(),"disposal resolution failed");
+                disposed=true;
+            });
             require(next_graphics.engine_identity()!=old_identity,"navigation reused graphics identity");
+            auto final_mailbox=next_graphics.dawn().completions();
+            auto final_ticket=final_mailbox->reserve(4,{next_graphics.engine_identity(),new_owner_token(),0}).value();
+            runtime.shutdown_graphics();
+            runtime.shutdown_graphics();
+            require(disposed,"shutdown did not deliver cancellation");
+            require(runtime.execute("if(disposeDone!==1) throw new Error('disposal checkpoint missing');","dispose-check"),"disposal checkpoint failed");
+            require(!final_mailbox->publish(final_ticket,completion_status::success),"late disposal callback delivered");
+            bool restart_rejected=false;
+            try { runtime.initialize_graphics(wake,[](auto) {}); }
+            catch (const std::logic_error&) { restart_rejected=true; }
+            require(restart_rejected,"disposed graphics runtime restarted");
         } catch (...) { failure=std::current_exception(); }
     });
     worker.join();

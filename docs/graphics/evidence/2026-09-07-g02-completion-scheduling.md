@@ -202,3 +202,21 @@ Iframe-specific ownership, JavaScript WebGPU promise/error types and explicit
 engine-disposal promise sequencing remain separate outstanding work. The runtime
 still reuses its existing top-level V8 context as before; this change retires its
 graphics lifetime and does not claim a general navigation-context redesign.
+
+## Normal engine disposal sequencing
+
+The runtime exposes an engine-thread-only shutdown_graphics operation, called
+by the worker's normal shutdown path before runtime reset. It permanently closes
+graphics initialization, enters the owning isolate/context and reuses document
+graphics retirement to deliver cancellation records and run a microtask
+checkpoint before releasing the service. Repeated shutdown is harmless. A
+transition guard rejects shutdown during cancellation delivery.
+
+The V8 fixture creates another pending promise after navigation, calls shutdown,
+verifies its cancellation dispatcher runs in the owning V8 context/thread, and
+checks the continuation has run before context disposal. A late native
+publication is rejected, and graphics reinitialization after shutdown fails.
+The raw destructor remains a no-JS fallback for bootstrap/terminal-failure cleanup;
+this does not claim graceful promise delivery after an unrecoverable runtime
+failure. Actual WebGPU binding promise types and iframe resource ownership are
+still outstanding.

@@ -214,6 +214,7 @@ void prewarm_v8_process()
 struct v8_dom_runtime::implementation final {
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     bool graphics_transitioning{};
+    bool graphics_shutdown{};
     const std::thread::id graphics_thread = std::this_thread::get_id();
     std::unique_ptr<webscene::graphics::graphics_service> graphics;
     std::function<void(webscene::graphics::completion_record)> graphics_deliver;
@@ -4543,12 +4544,35 @@ uint8_t v8_dom_runtime::host_animation_frame_demand() const noexcept
 }
 
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+void v8_dom_runtime::shutdown_graphics()
+{
+    if (std::this_thread::get_id()!=impl_->graphics_thread)
+        throw std::logic_error("Graphics shutdown requires the runtime owner thread");
+    if (impl_->graphics_transitioning)
+        throw std::logic_error("Graphics shutdown during cancellation delivery");
+    if (impl_->graphics_shutdown) return;
+    impl_->graphics_shutdown=true;
+    if (!impl_->graphics) return;
+    if (!impl_->isolate || impl_->context.IsEmpty()) {
+        impl_->graphics.reset();
+        impl_->graphics_deliver={};
+        return;
+    }
+    auto isolate_locker=impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto context=impl_->context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(context);
+    impl_->retire_document_graphics();
+}
+
 webscene::graphics::graphics_service& v8_dom_runtime::initialize_graphics(
     std::shared_ptr<webscene::graphics::completion_wake> wake,
     std::function<void(webscene::graphics::completion_record)> deliver)
 {
     if (std::this_thread::get_id() != impl_->graphics_thread)
         throw std::logic_error("Graphics initialization requires the runtime owner thread");
+    if (impl_->graphics_shutdown) throw std::logic_error("Graphics runtime is shut down");
     if (impl_->graphics_transitioning) throw std::logic_error("Graphics document transition is in progress");
     if (impl_->graphics) throw std::logic_error("Graphics dispatcher already initialized");
     if (!deliver || !wake) throw std::invalid_argument("Graphics requires completion delivery and a safe wake signal");

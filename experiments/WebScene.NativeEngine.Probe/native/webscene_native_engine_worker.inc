@@ -1188,6 +1188,9 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         inspector_runtime_.store(nullptr, std::memory_order_release);
 #endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        if (runtime_) runtime_->shutdown_graphics();
+#endif
         runtime_.reset();
 #endif
     }

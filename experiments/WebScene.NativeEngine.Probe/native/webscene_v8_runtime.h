@@ -283,6 +283,8 @@ public:
     // Native binding initialization, on the owning runtime thread. Install the
     // completion dispatcher before issuing backend operations. No JS API is
     // exposed merely by creating this service.
+    // Normal engine disposal: terminate records before releasing the context.
+    void shutdown_graphics();
     webscene::graphics::graphics_service& initialize_graphics(
         std::shared_ptr<webscene::graphics::completion_wake> wake,
         std::function<void(webscene::graphics::completion_record)> deliver);
