@@ -1,0 +1,18 @@
+{
+  "courtyard-dpr1-dark-run1-trace.json.gz": {
+    "sha256": "b6cf1707bf3bdf8a5329e890a009e0a5d715b65679e1aea5ee8dd78a80f46608",
+    "bytes": 1834293
+  },
+  "reference.json.gz": {
+    "sha256": "2fc4c7bf48d96c9cf5569b550dff0c52d1abec8af638657ecae55775721886ab",
+    "bytes": 248569
+  },
+  "fixture-dpr1-dark-run1-before.png": {
+    "sha256": "d169cdfbf2717a168b6db504032dd92ac06bbccab08061e4caa9a6f797dd4d15",
+    "bytes": 336025
+  },
+  "lines-100000-dpr2-light-run1-before.png": {
+    "sha256": "de652a6c5e0b9db1b6533237d4c84d1ee46a7146908fd2869ddc866fcda2b900",
+    "bytes": 1723103
+  }
+}

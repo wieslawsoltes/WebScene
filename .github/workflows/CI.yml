@@ -35,6 +35,8 @@ jobs:
       run: python tests/GraphicsCompatibility/prepare-kestrel.py
     - name: Graphics evidence boundary checks
       run: python -m unittest discover -s eng/graphics/tests -v
+    - name: Graphics reference workload and trace checks
+      run: node --test tests/GraphicsCompatibility/reference-tests.mjs
     - name: Build Release
       run: dotnet build WebScene.sln -c Release --no-restore
     - name: Portable Core contracts
