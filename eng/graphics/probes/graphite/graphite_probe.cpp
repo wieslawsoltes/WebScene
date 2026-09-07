@@ -65,6 +65,10 @@ struct DawnRuntime {
     wgpu::Adapter adapter;
     wgpu::Device device;
     std::shared_ptr<skgpu::graphite::Context> graphite;
+    std::shared_ptr<void> outputSurface;
+    wgpu::SharedTextureMemory outputMemory;
+    wgpu::Texture outputTexture;
+    unsigned outputAllocations=0;
     unsigned initializations=0;
     unsigned graphiteInitializations=0;
 };
@@ -156,23 +160,35 @@ int main(int argc, char** argv) {
     wgpu::Texture texture;
     if (sharedOutput) {
 #if defined(__APPLE__)
-        auto dictionary=CFDictionaryCreateMutable(nullptr,0,&kCFTypeDictionaryKeyCallBacks,&kCFTypeDictionaryValueCallBacks);
-        auto add=[&](CFStringRef key,int32_t value) {
-            auto number=CFNumberCreate(nullptr,kCFNumberSInt32Type,&value);
-            CFDictionarySetValue(dictionary,key,number); CFRelease(number);
-        };
-        add(kIOSurfaceWidth,width); add(kIOSurfaceHeight,height);
-        add(kIOSurfaceBytesPerElement,4); add(kIOSurfacePixelFormat,kCVPixelFormatType_32BGRA);
-        auto ioSurface=IOSurfaceCreate(dictionary); CFRelease(dictionary);
-        if (!ioSurface) return finish("failed","IOSurface allocation failed",1);
-        wgpu::SharedTextureMemoryIOSurfaceDescriptor io{}; io.ioSurface=ioSurface;
-        wgpu::SharedTextureMemoryDescriptor descriptor{}; descriptor.nextInChain=&io;
-        sharedSurface=std::shared_ptr<void>(ioSurface,[](void* value) { CFRelease(value); });
-        sharedMemory=device.ImportSharedTextureMemory(&descriptor);
-        wgpu::SharedTextureMemoryProperties properties{};
-        if (!sharedMemory || sharedMemory.GetProperties(&properties)!=wgpu::Status::Success)
-            return finish("failed","IOSurface import failed",1);
-        texture=sharedMemory.CreateTexture(&textureDescriptor);
+        if (runtime.outputTexture) {
+            sharedSurface=runtime.outputSurface;
+            sharedMemory=runtime.outputMemory;
+            texture=runtime.outputTexture;
+        } else {
+            auto dictionary=CFDictionaryCreateMutable(nullptr,0,&kCFTypeDictionaryKeyCallBacks,&kCFTypeDictionaryValueCallBacks);
+            auto add=[&](CFStringRef key,int32_t value) {
+                auto number=CFNumberCreate(nullptr,kCFNumberSInt32Type,&value);
+                CFDictionarySetValue(dictionary,key,number); CFRelease(number);
+            };
+            add(kIOSurfaceWidth,width); add(kIOSurfaceHeight,height);
+            add(kIOSurfaceBytesPerElement,4); add(kIOSurfacePixelFormat,kCVPixelFormatType_32BGRA);
+            auto ioSurface=IOSurfaceCreate(dictionary); CFRelease(dictionary);
+            if (!ioSurface) return finish("failed","IOSurface allocation failed",1);
+            wgpu::SharedTextureMemoryIOSurfaceDescriptor io{}; io.ioSurface=ioSurface;
+            wgpu::SharedTextureMemoryDescriptor descriptor{}; descriptor.nextInChain=&io;
+            sharedSurface=std::shared_ptr<void>(ioSurface,[](void* value) { CFRelease(value); });
+            sharedMemory=device.ImportSharedTextureMemory(&descriptor);
+            wgpu::SharedTextureMemoryProperties properties{};
+            if (!sharedMemory || sharedMemory.GetProperties(&properties)!=wgpu::Status::Success)
+                return finish("failed","IOSurface import failed",1);
+            texture=sharedMemory.CreateTexture(&textureDescriptor);
+            runtime.outputSurface=sharedSurface;
+            runtime.outputMemory=sharedMemory;
+            runtime.outputTexture=texture;
+            ++runtime.outputAllocations;
+        }
+        // The host entry point rejects reuse until producer and CGL work retire.
+        // Every submission fully clears the output, so prior contents are discarded.
         wgpu::SharedTextureMemoryBeginAccessDescriptor access{}; access.initialized=false;
         if (sharedMemory.BeginAccess(texture,&access)!=wgpu::Status::Success)
             return finish("failed","IOSurface BeginAccess failed",1);
@@ -361,6 +377,9 @@ extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_hos
 }
 extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_context_initializations() {
     return hostRuntime.graphiteInitializations;
+}
+extern "C" __attribute__((visibility("default"))) unsigned webscene_graphite_host_output_allocations() {
+    return hostRuntime.outputAllocations;
 }
 // Diagnostic bridge only: caller supplies a current CGL context and a 17x4 2D
 // texture. Defers producer delivery and GL retirement; not a production API.

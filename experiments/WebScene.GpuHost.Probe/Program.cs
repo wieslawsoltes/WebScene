@@ -16,6 +16,8 @@ internal static class Program
     internal static extern uint GraphiteInitializations();
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_context_initializations")]
     internal static extern uint GraphiteContextInitializations();
+    [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_output_allocations")]
+    internal static extern uint GraphiteOutputAllocations();
     [STAThread]
     public static int Main(string[] args) => AppBuilder.Configure<ProbeApp>()
         .UsePlatformDetect().StartWithClassicDesktopLifetime(args);
@@ -109,6 +111,8 @@ internal sealed class ProbeApp : Application
                                   throw new InvalidOperationException("Dawn device was recreated between submissions");
                               if (Program.GraphiteContextInitializations() != 1)
                                   throw new InvalidOperationException("Graphite context was recreated between submissions");
+                              if (Program.GraphiteOutputAllocations() != 1)
+                                  throw new InvalidOperationException("Output texture was recreated between submissions");
                             }
                             if (!graphiteSource) {
                                 await surface.UpdateAsync(imported).WaitAsync(TimeSpan.FromSeconds(30));
@@ -144,6 +148,7 @@ internal sealed class ProbeApp : Application
                         graphiteSource,
                         graphiteSubmissionsCompleted,
                         hostUpdatesCompleted,
+                        outputTextureAllocations = graphiteSource ? Program.GraphiteOutputAllocations() : 0,
                         graphiteContextInitializations = graphiteSource ? Program.GraphiteContextInitializations() : 0,
                         dawnDeviceInitializations = graphiteSource ? Program.GraphiteInitializations() : 0,
                         sharedTextureUpdateCompleted,

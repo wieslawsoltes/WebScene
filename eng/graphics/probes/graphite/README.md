@@ -314,3 +314,21 @@ This supersedes the earlier final-texture-only handoff test. The image content
 is unchanged across submissions, so this tests repeated consumption/lifetime
 and API completion, not detection of stale frames or a count of physical
 display presentations. No pixel readback was added to the host path.
+
+### Reuse the fixed-size output allocation (2026-09-07)
+
+The diagnostic runtime retains its 17x4 IOSurface, Dawn shared-memory import and
+output texture. Each submission begins a new access interval and clears the
+whole output; EndAccess and existing producer/CGL completion checks still gate
+the next submission. The managed test also waits for Avalonia consumption before
+overwriting its separate borrowed GL destination.
+
+Apple M4 validation exited 0 with 64 native submissions, 64 host updates and
+outputTextureAllocations=1 (also one device and one Graphite context).
+Standalone diagnostic verification passed all 68 pixels. This is fixed-size,
+serialized reuse; it does not qualify resizing, device loss or overlapping
+presentation. Canvas source pools, recorders and CGL import objects are still
+allocated per submission. No CPU pixel transfer was introduced.
+
+The prerequisite review still leaves #23 open: the latest hosted CI was pending
+at this check, and required cross-platform hardware evidence remains incomplete.
