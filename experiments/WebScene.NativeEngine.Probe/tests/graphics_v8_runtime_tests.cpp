@@ -4,6 +4,7 @@
 #include "graphics/engine_wake.h"
 #include "graphics/v8_release_registry.h"
 #include "graphics/v8_webgpu_adapter_request.h"
+#include "graphics/v8_webgpu_buffers.h"
 #include "graphics/image_lease_abi.h"
 #include <v8.h>
 #include <iostream>
@@ -259,10 +260,49 @@ int main() {
             std::unique_ptr<v8_webgpu_adapter_request> adapter_request, cancelled_adapter;
             std::array<std::unique_ptr<v8_webgpu_adapter_request>,2> failed_wrappers;
             size_t failed_wrapper_count=0;
+            bool buffer_wrappers_tested=false;
+            auto buffer_test_device=std::make_shared<wgpu::Device>();
             resource_handle<wgpu::Adapter> discovered_adapter;
             std::shared_ptr<release_channel> releases;
             std::unique_ptr<v8_release_registry> wrappers;
             auto& graphics=runtime.initialize_graphics(wake,[&](completion_record record) {
+                if (record.operation==104) {
+                    auto* isolate=v8::Isolate::GetCurrent();
+                    auto context=isolate->GetCurrentContext();
+                    require(record.status==completion_status::success && *buffer_test_device,"Buffer wrapper fixture device failed");
+                    wgpu::Adapter adapter;
+                    adapter_service->with_adapter(discovered_adapter,[&](const auto& native) { adapter=native; });
+                    auto device_handle=adapter_service->adopt_device(std::move(adapter),std::move(*buffer_test_device));
+                    resource_handle<wgpu::Buffer> buffer_handle;
+                    adapter_service->with_device(device_handle,[&](auto& device) {
+                        wgpu::BufferDescriptor descriptor{};
+                        descriptor.size=64; descriptor.usage=wgpu::BufferUsage::CopyDst;
+                        buffer_handle=device.create_buffer(descriptor);
+                    });
+                    auto buffer_registry=std::make_unique<v8_webgpu_buffers>(isolate,context,1);
+                    auto object=buffer_registry->wrap(context,*adapter_service,device_handle,buffer_handle).ToLocalChecked();
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"bufferProbe"),object).FromMaybe(false),"Buffer wrapper publication failed");
+                    bool duplicate_rejected=false,realm_rejected=false;
+                    try { buffer_registry->wrap(context,*adapter_service,device_handle,buffer_handle); }
+                    catch (const std::invalid_argument&) { duplicate_rejected=true; }
+                    try { buffer_registry->wrap(v8::Context::New(isolate),*adapter_service,device_handle,buffer_handle); }
+                    catch (const std::logic_error&) { realm_rejected=true; }
+                    require(duplicate_rejected && realm_rejected,"Buffer ownership or realm identity was duplicated");
+
+                    auto run=[&](const char* source) {
+                        v8::Local<v8::Script> script;
+                        return v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocal(&script)
+                            && !script->Run(context).IsEmpty();
+                    };
+                    require(run("if(bufferProbe.size!==64||bufferProbe.usage!==8)throw new Error('buffer metadata'); let p=Object.getPrototypeOf(bufferProbe); for(let f of [p.destroy,Object.getOwnPropertyDescriptor(p,'size').get,Object.getOwnPropertyDescriptor(p,'usage').get]){let ok=false;try{f.call({})}catch(e){ok=e instanceof TypeError}if(!ok)throw new Error('buffer brand')} bufferProbe.destroy();bufferProbe.destroy();if(bufferProbe.size!==64)throw new Error('destroy removed metadata');"),"Native buffer wrapper behavior failed");
+                    buffer_registry.reset();
+                    require(run("let stale=false;try{bufferProbe.destroy()}catch(e){stale=e instanceof TypeError}if(!stale)throw new Error('stale buffer realm');delete globalThis.bufferProbe;"),"Buffer wrapper teardown left native access");
+                    // Teardown releases through the service queue; native device
+                    // retirement also makes a delayed wrapper release harmless.
+                    adapter_service->destroy_device(device_handle);
+                    buffer_wrappers_tested=true;
+                    return;
+                }
                 if (record.operation==102 || record.operation==103) {
                     auto* isolate=v8::Isolate::GetCurrent();
                     auto context=isolate->GetCurrentContext();
@@ -294,6 +334,14 @@ int main() {
                     auto* isolate=v8::Isolate::GetCurrent();
                     auto context=isolate->GetCurrentContext();
                     require(adapter_request->complete(isolate,context,record,[&](wgpu::Adapter adapter) -> v8::Local<v8::Value> {
+                        auto mailbox=adapter_service->dawn().completions();
+                        auto ticket=mailbox->reserve(104,{adapter_service->engine_identity(),new_owner_token(),0}).value();
+                        wgpu::DeviceDescriptor descriptor{};
+                        adapter.RequestDevice(&descriptor,wgpu::CallbackMode::AllowSpontaneous,
+                            [mailbox,ticket,buffer_test_device](wgpu::RequestDeviceStatus status,wgpu::Device device,wgpu::StringView) {
+                                *buffer_test_device=std::move(device);
+                                mailbox->publish(ticket,status==wgpu::RequestDeviceStatus::Success ? completion_status::success : completion_status::failed);
+                            });
                         discovered_adapter=adapter_service->adopt_adapter(std::move(adapter));
                         // Diagnostic wrapper only; the standards GPUAdapter registry is separate work.
                         return v8::Object::New(isolate);
@@ -389,7 +437,7 @@ int main() {
             wrong.join();
             require(wrong_thread_rejected,"wrong-thread initialization accepted");
             adapter_service=&graphics;
-            releases=graphics.release_endpoint(1);
+            releases=graphics.release_endpoint(4);
             auto mailbox=graphics.dawn().completions();
             auto ticket=mailbox->reserve(1,{graphics.engine_identity(),new_owner_token(),0}).value();
             std::thread native_callback([mailbox,ticket] { mailbox->publish(ticket,completion_status::success); });
@@ -402,7 +450,7 @@ int main() {
             }
             require(delivered,"hidden completion did not progress");
 
-            while ((!adapter_delivered || !adapter_cancelled || failed_wrapper_count!=2 || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
+            while ((!adapter_delivered || !adapter_cancelled || !buffer_wrappers_tested || failed_wrapper_count!=2 || mailbox->metrics().native_pending!=0) && std::chrono::steady_clock::now()<deadline) {
                 if (runtime.has_pending_tasks()) require(runtime.pump_task(),"Adapter task failed");
                 else wake->wait_for(runtime.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
             }

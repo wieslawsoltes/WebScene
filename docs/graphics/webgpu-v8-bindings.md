@@ -194,3 +194,25 @@ Before this admission change, rebuilding the enabled graphics targets and runnin
 `ctest --test-dir artifacts/graphics-build/native-v8-enabled -L graphics --output-on-failure`
 also passed all five tests, including ANGLE ES2 and ES3 on macOS. These are native
 regression results, not evidence of running an unchanged WebGPU application.
+
+### First native-backed V8 buffer objects
+
+`v8_webgpu_buffers.h` provides an internal realm-owned wrapper factory with native
+size/usage getters and destroy callbacks. Its bounded registry reserves finalizer
+release capacity before exposing a wrapper. Receiver branding, device/buffer
+handles and realm identity are checked; duplicate wrapping of a handle is rejected.
+Registry teardown invalidates live objects before dropping their native entry,
+so retained JavaScript references cannot dereference freed binding state. GC
+callbacks only publish value-only release tickets.
+
+The V8 runtime fixture now requests a real Dawn device asynchronously, creates a
+buffer on the engine, wraps it, and runs JavaScript metadata/brand/repeated-destroy
+assertions. It also checks duplicate ownership, wrong-realm wrapping and retained
+object calls after registry teardown, followed by device retirement before the
+queued wrapper release. The rebuilt macOS runtime CTest passes.
+
+This internal factory is deliberately not installed as a public GPUBuffer
+constructor. Label, mapState, mapAsync/getMappedRange/unmap, mapping detachment,
+public createBuffer/error-object integration and complete WebIDL prototypes remain
+unfinished. Existing fixtures exercise explicit registry teardown; GC reclamation
+and full navigation lifecycle for this specific registry still need qualification.
