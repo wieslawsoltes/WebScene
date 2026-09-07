@@ -35,6 +35,62 @@ int main() {
     wgpu::AdapterInfo info{};
     if (state->adapter.GetInfo(&info)!=wgpu::Status::Success) return 1;
     if (info.adapterType!=wgpu::AdapterType::IntegratedGPU && info.adapterType!=wgpu::AdapterType::DiscreteGPU) return 77;
+    struct device_result { wgpu::Device device; };
+    auto native_device=std::make_shared<device_result>();
+    auto device_ticket=mailbox->reserve(10,owner).value();
+    wgpu::DeviceDescriptor device_descriptor{};
+    state->adapter.RequestDevice(&device_descriptor,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,device_ticket,native_device](wgpu::RequestDeviceStatus status,wgpu::Device device,wgpu::StringView) {
+            native_device->device=std::move(device);
+            mailbox->publish(device_ticket,status==wgpu::RequestDeviceStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
+    const auto device_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    bool device_done=false;
+    while (!device_done && std::chrono::steady_clock::now()<device_deadline) {
+        service.pump([&](auto record) {
+            if (record.operation!=10 || record.status!=completion_status::success)
+                throw std::runtime_error("native device request failed");
+            device_done=true;
+        });
+        if (!device_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    }
+    if (!device_done || !native_device->device) return 1;
+    // Resource-table destruction is logical until this device's GPU queue has
+    // completed. Exercise a real command buffer, rather than a synthetic serial.
+    resource_table<wgpu::Buffer> buffers(2,owner);
+    wgpu::BufferDescriptor buffer_descriptor{};
+    buffer_descriptor.size=4096;
+    buffer_descriptor.usage=wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc;
+    auto buffer=buffers.insert(owner,std::make_unique<wgpu::Buffer>(
+        native_device->device.CreateBuffer(&buffer_descriptor)));
+    auto encoder=native_device->device.CreateCommandEncoder();
+    encoder.ClearBuffer(buffers.get(buffer,owner),0,4096);
+    auto commands=encoder.Finish();
+    auto submitted=mailbox->reserve(11,owner).value();
+    buffers.mark_used(buffer,owner,1);
+    auto queue=native_device->device.GetQueue();
+    queue.Submit(1,&commands);
+    queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,submitted](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
+            mailbox->publish(submitted,status==wgpu::QueueWorkDoneStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
+    buffers.destroy(buffer,owner);
+    if (buffers.resident_count()!=1 || buffers.deferred_count()!=1) return 1;
+    bool submission_done=false;
+    const auto submission_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    while (!submission_done && std::chrono::steady_clock::now()<submission_deadline) {
+        service.pump([&](auto record) {
+            if (record.operation!=11 || record.status!=completion_status::success)
+                throw std::runtime_error("native queue completion failed");
+            buffers.complete(1);
+            submission_done=true;
+        });
+        if (!submission_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    }
+    if (!submission_done || buffers.resident_count()!=0 || buffers.deferred_count()!=0) return 1;
+    native_device->device.Destroy();
     service.close();
     bool rejected=false;
     try { service.instance(); } catch (const std::logic_error&) { rejected=true; }
@@ -59,5 +115,5 @@ int main() {
     cancelled.reset();
     if (terminated!=1 || *late_accepted || retained->has_ready()
         || retained->publish(pending,completion_status::success)) return 1;
-    std::cout << "Native Dawn hardware adapter completion delivered without RAF/UI\n";
+    std::cout << "Native Dawn adapter/device/submission completion and deferred buffer release passed without RAF/UI\n";
 }
