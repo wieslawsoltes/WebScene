@@ -9,6 +9,7 @@
 #include "graphics/v8_webgpu_buffers.h"
 #include "graphics/v8_webgpu_devices.h"
 #include "graphics/v8_webgpu_shaders.h"
+#include "graphics/v8_webgpu_render_pipelines.h"
 #include "graphics/v8_webgpu_adapters.h"
 #include "graphics/v8_webgpu_discovery.h"
 #include "graphics/webgpu_adapter_info.h"
@@ -1009,7 +1010,7 @@ int main() {
                     });
                     resource_handle<wgpu::ShaderModule> shader_handle;
                     adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
-                        wgpu::ShaderSourceWGSL source{};source.code="@compute @workgroup_size(1) fn main() {}";
+                        wgpu::ShaderSourceWGSL source{};source.code="@vertex fn vs()->@builtin(position) vec4f {return vec4f(0,0,0,1);}@fragment fn fs()->@location(0) vec4f {return vec4f(1,0,0,1);}";
                         wgpu::ShaderModuleDescriptor descriptor{};descriptor.nextInChain=&source;
                         shader_handle=owned.create_shader_module(descriptor);
                     });
@@ -1029,6 +1030,39 @@ int main() {
                         let brand=false;try{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(shaderProbe),'label').get.call({})}catch(e){brand=e instanceof TypeError}if(!brand)throw new Error('shader receiver');}
                     )JS");
                     require(!v8::Script::Compile(context,shader_script).ToLocalChecked()->Run(context).IsEmpty(),"Shader wrapper label behavior failed");
+                    auto retained_shader=v8_webgpu_shaders::native_reference(shader_object);
+                    resource_handle<wgpu::RenderPipeline> pipeline_handle;
+                    adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
+                        owned.with_shader_module(shader_handle,[&](const auto& native) {require(native.Get()==retained_shader.Get(),"Shader conversion changed native identity");});
+                        wgpu::ColorTargetState target{};target.format=wgpu::TextureFormat::RGBA8Unorm;
+                        wgpu::FragmentState fragment{};fragment.module=retained_shader;fragment.entryPoint="fs";fragment.targetCount=1;fragment.targets=&target;
+                        wgpu::RenderPipelineDescriptor descriptor{};descriptor.vertex.module=retained_shader;descriptor.vertex.entryPoint="vs";descriptor.fragment=&fragment;
+                        pipeline_handle=owned.create_render_pipeline(descriptor);
+                    });
+                    auto pipelines=std::make_unique<v8_webgpu_render_pipelines>(isolate,context,1);
+                    auto pipeline_object=pipelines->wrap(context,*adapter_service,gc_buffer_device,pipeline_handle,device_object,"render pipeline").ToLocalChecked();
+                    auto retained_pipeline=v8_webgpu_render_pipelines::native_reference(pipeline_object);
+                    adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
+                        owned.with_render_pipeline(pipeline_handle,[&](const auto& native) {require(native.Get()==retained_pipeline.Get(),"Pipeline conversion changed native identity");});
+                    });
+                    bool wrong_shader=false,wrong_pipeline=false,forged_pipeline=false;
+                    try{v8_webgpu_shaders::native_reference(pipeline_object);}catch(const std::invalid_argument&){wrong_shader=true;}
+                    try{v8_webgpu_render_pipelines::native_reference(shader_object);}catch(const std::invalid_argument&){wrong_pipeline=true;}
+                    try{v8_webgpu_render_pipelines::native_reference(v8::Object::New(isolate));}catch(const std::invalid_argument&){forged_pipeline=true;}
+                    require(wrong_shader && wrong_pipeline && forged_pipeline,"GPU resource native conversion accepted wrong brand");
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"pipelineProbe"),pipeline_object).FromMaybe(false),"Pipeline publication failed");
+                    auto pipeline_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
+                        {if(Object.prototype.toString.call(pipelineProbe)!=='[object GPURenderPipeline]' || pipelineProbe.label!=='render pipeline')throw new Error('pipeline metadata');
+                        pipelineProbe.label='pipeline\0\ud800';if(pipelineProbe.label!=='pipeline\0\ufffd')throw new Error('pipeline label');
+                        let wrong=false;try{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(pipelineProbe),'label').get.call(shaderProbe)}catch(e){wrong=e instanceof TypeError}if(!wrong)throw new Error('cross resource getter');}
+                    )JS");
+                    require(!v8::Script::Compile(context,pipeline_script).ToLocalChecked()->Run(context).IsEmpty(),"Pipeline wrapper behavior failed");
+                    pipelines.reset();
+                    bool retired_pipeline=false;
+                    try{v8_webgpu_render_pipelines::native_reference(pipeline_object);}catch(const std::invalid_argument&){retired_pipeline=true;}
+                    require(retired_pipeline && retained_pipeline,"Disposed pipeline conversion remained available");
+                    adapter_service->with_device(gc_buffer_device,[&](auto& owned) {require(owned.live_render_pipelines()==1,"Pipeline disposal released native resources inline");});
+                    require(context->Global()->Delete(context,v8::String::NewFromUtf8Literal(isolate,"pipelineProbe")).FromMaybe(false),"Pipeline cleanup failed");
                     shaders.reset();
                     {v8::TryCatch caught(isolate);require(shader_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"label")).IsEmpty()&&caught.HasCaught(),"Disposed shader retained native access");}
                     adapter_service->with_device(gc_buffer_device,[&](auto& owned) {require(owned.live_shader_modules()==1,"Shader registry released native module inline");});

@@ -853,3 +853,24 @@ borrowed-scope guards and stale-handle rejection. Dawn event and V8 runtime test
 pass. This is native command/lifetime validation, not a pixel assertion, physical
 presentation check or JavaScript render-pipeline implementation. Those remain
 required before claiming app rendering.
+
+
+### Internal render-pipeline wrappers and native interface conversion
+
+Shader modules and render pipelines now share a typed labeled-resource registry.
+Each specialization has a distinct V8 brand and prototype, bounded wrapper
+storage, private parent-device reachability, and deferred generational release.
+The render-pipeline specialization wraps owned Dawn pipeline handles. Checked
+native-reference conversion invokes no JavaScript and retains the native object
+through later descriptor conversion; wrong-interface and forged objects are
+rejected before native access. Native cross-device compatibility remains Dawn's
+validation responsibility.
+
+The macOS V8 runtime test constructs a real render pipeline using a shader
+reference obtained from its wrapper, verifies exact native identity, rejects
+shader/pipeline cross-brand conversion and a plain forged object, checks labels
+and prototype tags, and verifies disposal invalidates wrapper access without
+inline GPU release. Existing JavaScript shader-creation tests still pass through
+the shared implementation. Public createRenderPipeline descriptor dispatch,
+getBindGroupLayout, async pipeline creation and rendering from JavaScript are
+still pending; this internal wrapper is not a complete GPURenderPipeline API.
