@@ -14,8 +14,8 @@ class owned_image_pool {
     struct state {
         std::shared_ptr<image_provider_lifetime> provider;
         image_lease_pool pool;
-        state(std::shared_ptr<image_provider_lifetime> p,size_t capacity)
-            : provider(std::move(p)),pool(capacity) {
+        state(std::shared_ptr<image_provider_lifetime> p,size_t capacity,std::shared_ptr<completion_wake> wake)
+            : provider(std::move(p)),pool(capacity,std::move(wake)) {
             if (!provider) throw std::invalid_argument("image provider required");
         }
     };
@@ -111,8 +111,9 @@ public:
             state_->pool.finish_producer(token_); completed_=true;
         }
     };
-    explicit owned_image_pool(std::shared_ptr<image_provider_lifetime> provider,size_t capacity=128)
-        : state_(std::make_shared<state>(std::move(provider),capacity)) {}
+    explicit owned_image_pool(std::shared_ptr<image_provider_lifetime> provider,size_t capacity=128,
+        std::shared_ptr<completion_wake> wake={})
+        : state_(std::make_shared<state>(std::move(provider),capacity,std::move(wake))) {}
     owned_image_pool(const owned_image_pool&)=delete;
     owned_image_pool& operator=(const owned_image_pool&)=delete;
     ~owned_image_pool() { close(); }

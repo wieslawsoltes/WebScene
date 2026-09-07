@@ -370,3 +370,21 @@ need separate verification; these changes address backing lifetime invalidation.
 The complete graphics-enabled rebuild and CTest run after attribute reset wiring
 passed all 16 tests in 13.07 seconds. SDK CI was checked once between work and
 remained pending; no hosted or cross-platform qualification pass is inferred.
+
+## Capacity wakeups
+
+Image pools accept the shared engine wake sink. Releasing a retained/consumer
+ticket, cancelling a writer, or completing the last producer that makes an image
+idle signals after unlocking the pool. A producer completion that leaves all
+capacity occupied does not signal. The owned pool and Dawn allocator carry this
+sink through their constructors so future binding admission can retry on engine
+wake instead of polling. The sink contains no engine pointer and remains safe
+when retained by a detached image owner.
+
+The fixture exhausts ticket capacity, releases on another thread, and verifies
+that a late-starting wait observes the latched wake. Its sink reenters the pool's
+read-only occupancy method, verifying notification is outside the mutex. Producer-
+last completion and abandoned writer cancellation are covered. Pool and Dawn
+hardware CTests pass (0.72 seconds), and the pool fixture passes ThreadSanitizer.
+Browser binding admission/retry still needs to supply this sink and preserve its
+pending operation; this change does not create that browser binding.

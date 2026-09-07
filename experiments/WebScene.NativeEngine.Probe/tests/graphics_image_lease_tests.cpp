@@ -1,5 +1,6 @@
 #include "graphics/image_lease_pool.h"
 #include "graphics/owned_image_pool.h"
+#include "graphics/engine_wake.h"
 #include <atomic>
 #include <iostream>
 using namespace webscene::graphics;
@@ -15,6 +16,31 @@ image_write_token write(image_lease_pool& pool) {
 std::optional<image_lease_token> submit(image_lease_pool& pool,image_write_token writer) {
     pool.begin_producer(writer);
     return pool.publish(writer);
+}
+void test_capacity_wake() {
+    struct capacity_wake final : completion_wake {
+        image_lease_pool* pool{};
+        engine_wake latched;
+        size_t signals{},last_busy{};
+        void signal() noexcept override {
+            last_busy=pool->busy_images(); // Must run outside the pool mutex.
+            ++signals; latched.signal();
+        }
+    };
+    auto wake=std::make_shared<capacity_wake>();
+    image_lease_pool pool(1,wake); wake->pool=&pool;
+    auto writer=write(pool); auto retained=submit(pool,writer).value();
+    require(!pool.retain(retained) && !pool.begin_consumer(retained));
+    pool.finish_producer(writer); require(wake->signals==0); // No new capacity yet.
+    std::thread release([&] { pool.release(retained); }); release.join();
+    require(wake->signals==1 && wake->last_busy==0);
+    require(wake->latched.wait_for(std::chrono::milliseconds(0),[] { return false; }));
+    auto abandoned=write(pool); pool.cancel_write(abandoned);
+    require(wake->signals==2);
+    writer=write(pool); retained=submit(pool,writer).value();
+    pool.release(retained); require(wake->signals==3 && wake->last_busy==1);
+    pool.finish_producer(writer); require(wake->signals==4 && wake->last_busy==0);
+    rejects([&] { pool.finish_producer(writer); }); require(wake->signals==4);
 }
 void test_owned_lifetime() {
     struct provider final : image_provider_lifetime {
@@ -62,6 +88,7 @@ void test_owned_lifetime() {
     bounded.reset(); require(destroyed==2);
 }
 int main() {
+    test_capacity_wake();
     test_owned_lifetime();
     image_lease_pool pool;
     auto a=write(pool),b=write(pool),c=write(pool);

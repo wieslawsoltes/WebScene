@@ -27,8 +27,8 @@ public:
         wgpu::Texture texture;
         image_metadata metadata;
     };
-    dawn_canvas_images(wgpu::Device device,uint64_t byte_limit,size_t tickets=128)
-        :storage_(std::make_shared<storage>(std::move(device))),pool_(storage_,tickets),byte_limit_(byte_limit) {
+    dawn_canvas_images(wgpu::Device device,uint64_t byte_limit,size_t tickets=128,std::shared_ptr<completion_wake> wake={})
+        :storage_(std::make_shared<storage>(std::move(device))),pool_(storage_,tickets,std::move(wake)),byte_limit_(byte_limit) {
         if (!storage_->device || !byte_limit) throw std::invalid_argument("Dawn image storage requires device and budget");
     }
     std::optional<frame> acquire(image_metadata metadata) {

@@ -1,6 +1,7 @@
 #pragma once
 #include "resource_table.h"
 #include "image_metadata.h"
+#include "completion_mailbox.h"
 #include <array>
 #include <mutex>
 #include <optional>
@@ -32,6 +33,7 @@ class image_lease_pool {
     std::array<image_slot,3> images_{};
     std::vector<lease_slot> leases_;
     bool closed_{};
+    std::shared_ptr<completion_wake> wake_;
     image_slot& image(image_write_token token) {
         if (token.pool!=identity_ || token.slot>=images_.size()) throw std::invalid_argument("foreign image writer");
         auto& item=images_[token.slot];
@@ -54,12 +56,15 @@ class image_lease_pool {
         }
         return {};
     }
-    void recycle(image_slot& item) {
-        if (item.state==phase::published && item.producer_done && !item.retained && !item.consumers)
-            item.state=phase::idle;
+    bool recycle(image_slot& item) {
+        if (item.state==phase::published && item.producer_done && !item.retained && !item.consumers) {
+            item.state=phase::idle; return true;
+        }
+        return false;
     }
+    void signal_capacity() noexcept { if (wake_) wake_->signal(); }
 public:
-    explicit image_lease_pool(size_t lease_capacity=128) {
+    explicit image_lease_pool(size_t lease_capacity=128,std::shared_ptr<completion_wake> wake={}) : wake_(std::move(wake)) {
         if (!lease_capacity || lease_capacity>UINT32_MAX) throw std::invalid_argument("invalid image lease capacity");
         leases_.resize(lease_capacity);
     }
@@ -124,11 +129,12 @@ public:
     }
     // Cancel before submission, or after an abandoned producer has completed.
     void cancel_write(image_write_token writer) {
-        std::lock_guard lock(mutex_);
+        std::unique_lock lock(mutex_);
         auto& item=image(writer);
         if (item.state!=phase::writing) throw std::invalid_argument("cannot cancel published image");
         if (item.producer_started && !item.producer_done) throw std::invalid_argument("producer still uses cancelled image");
         item.state=phase::idle;
+        lock.unlock(); signal_capacity();
     }
     std::optional<image_lease_token> retain(image_lease_token source) {
         std::lock_guard lock(mutex_);
@@ -147,22 +153,27 @@ public:
         return result;
     }
     void release(image_lease_token token) {
-        std::lock_guard lock(mutex_);
+        std::unique_lock lock(mutex_);
         auto& owned=lease(token,lease_kind::retained);
         auto& item=images_[owned.image];
         owned.kind=lease_kind::free; --item.retained; recycle(item);
+        lock.unlock(); signal_capacity(); // A ticket is available even if the image remains busy.
     }
     void finish_consumer(image_lease_token token) {
-        std::lock_guard lock(mutex_);
+        std::unique_lock lock(mutex_);
         auto& owned=lease(token,lease_kind::consumer);
         auto& item=images_[owned.image];
         owned.kind=lease_kind::free; --item.consumers; recycle(item);
+        lock.unlock(); signal_capacity();
     }
     void finish_producer(image_write_token writer) {
-        std::lock_guard lock(mutex_);
+        std::unique_lock lock(mutex_);
         auto& item=image(writer);
         if (!item.producer_started || item.producer_done) throw std::invalid_argument("invalid producer completion");
-        item.producer_done=true; recycle(item);
+        item.producer_done=true;
+        const bool available=recycle(item);
+        lock.unlock();
+        if (available) signal_capacity();
     }
     // Stop new frames. Existing retained scenes can still be redrawn/released.
     void close() { std::lock_guard lock(mutex_); closed_=true; }
