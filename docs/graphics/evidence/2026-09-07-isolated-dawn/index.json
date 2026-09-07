@@ -1,0 +1,16 @@
+{
+  "implementationCommit": "793fa5840d8377c325abfc177c3e8b03cec8e5b1",
+  "status": "partial G01; macOS isolated dependency verification passed",
+  "files": {
+    "isolated-probes-configure.log.gz": "73f070cbefeeb088acde47fd787858eb7fcd674133f44f6a3c39444a382c5888",
+    "isolated-probes-build.log.gz": "4189c683ed1b962c56a780a6dbeec5314a68d981f5fff67a4cd098c5abc36d43",
+    "dawn-exports.json": "446eb6bc52e710f44e800f9fc14801b848a77e04c9d1a1880cb13530ea913ac8",
+    "sdk-integrity.json.gz": "460c9817c2bdbb65d5d6fc48cb8a82de4d1038bbff9abc245e358566ee911bdf",
+    "angle-isolated-final-build.log.gz": "8b88d2c1cba6b8d40153736d218034649e233d4c282abb6d78ca36d25de4cbd9",
+    "isolated-native-tests.log.gz": "4ec463543da6ca53f7321e6d4d14e7aff67ba3eb8931c6e6b37645ff0b5779d8",
+    "relocation.json.gz": "52303be7193473f27a9d3f42ee7c75854ceff9ce67a543a7d57b4324fea7e25e",
+    "dawn-isolated-sdk-verified-build.log.gz": "b1c9d34a3beb46601572a0e84657fbb21a6d6ed0651f8bd308f0bd585ec06a58",
+    "isolated-native-build.log.gz": "1784671b3c6858c2eee1c64445f09c52322009649186991ea7451af859fe7b11",
+    "native-probes.json.gz": "b43cda5c93eacdff363f2ef842206a2694b7dfe15ba689619ac3d5034164b43a"
+  }
+}
