@@ -23,9 +23,17 @@ inline std::string webgpu_info_identifier(wgpu::StringView value) {
     }
     return segment?text:std::string{};
 }
-// Fallback state is supplied by discovery policy. CPU type alone does not match
-// Dawn's fallback classification (the pinned Vulkan backend identifies SwiftShader).
-inline webgpu_adapter_info read_webgpu_adapter_info(const wgpu::Adapter& adapter,bool fallback) {
+// Mirrors the pinned Dawn Vulkan fallback filter and gpu_info.json. Other
+// shipping backends reject forceFallbackAdapter. Do not equate CPU with fallback.
+inline bool webgpu_adapter_is_fallback(wgpu::BackendType backend,uint32_t vendor,uint32_t device) {
+    switch(backend) {
+        case wgpu::BackendType::Vulkan:return vendor==0x1ae0 && device==0xc0de;
+        case wgpu::BackendType::Metal:case wgpu::BackendType::D3D11:case wgpu::BackendType::D3D12:
+        case wgpu::BackendType::OpenGL:case wgpu::BackendType::OpenGLES:case wgpu::BackendType::Null:return false;
+        default:throw std::invalid_argument("Adapter backend has no qualified fallback classification");
+    }
+}
+inline webgpu_adapter_info read_webgpu_adapter_info(const wgpu::Adapter& adapter) {
     if(!adapter)throw std::invalid_argument("Adapter information requires a native adapter");
     wgpu::AdapterInfo native{};
     if(adapter.GetInfo(&native)!=wgpu::Status::Success)throw std::runtime_error("Native adapter information unavailable");
@@ -34,7 +42,7 @@ inline webgpu_adapter_info read_webgpu_adapter_info(const wgpu::Adapter& adapter
     result.architecture=webgpu_info_identifier(native.architecture);
     result.device=webgpu_info_identifier(native.device);
     result.description=webgpu_info_string(native.description);
-    result.is_fallback_adapter=fallback;
+    result.is_fallback_adapter=webgpu_adapter_is_fallback(native.backendType,native.vendorID,native.deviceID);
     if(adapter.HasFeature(wgpu::FeatureName::Subgroups)) {
         if(!native.subgroupMinSize || native.subgroupMaxSize<native.subgroupMinSize)throw std::runtime_error("Native subgroup information unavailable");
         result.subgroup_min_size=native.subgroupMinSize;result.subgroup_max_size=native.subgroupMaxSize;

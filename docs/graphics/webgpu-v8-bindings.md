@@ -746,3 +746,25 @@ adapter type alone is therefore not used as a fallback test. The macOS runtime
 test verifies copied description, subgroup values and identifier handling against
 a real adapter; CTest passes. JavaScript info/adapterInfo wrappers and propagation
 of authoritative discovery fallback state remain unfinished.
+
+### JavaScript adapter information
+
+Internal adapters now expose SameObject info and devices expose SameObject
+adapterInfo. Both use the originating adapter's metadata, including subgroup
+support, so disabling optional device features does not change adapter information.
+Read-only prototype getters access traced snapshot data that survives registry
+teardown. Private backend type and numeric vendor/device IDs are not exposed.
+
+Fallback classification now mirrors the pinned Dawn source: Vulkan recognizes
+Google SwiftShader (vendor 0x1ae0, device 0xc0de), matching BackendVk.cpp and
+src/dawn/gpu_info.json; Metal, D3D, GL and Null backends reject forced fallback.
+Unknown backend classifications fail explicitly. This supersedes the earlier
+caller-supplied fallback flag. Updating Dawn requires rechecking this mapping.
+
+The macOS runtime test verifies native strings, adapter/device agreement across
+all seven fields, stable identity, read-only/brand behavior, private-field
+exclusion, fallback classification cases and retained information after teardown.
+The expanded allocations also exposed an existing GC test's unrooted probe being
+collected before its explicit GC step; that probe is now rooted until the test
+intentionally drops it. Runtime CTest passed. Hardware Windows/Linux fallback
+qualification, public exposure and rendering remain unfinished.

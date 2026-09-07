@@ -617,7 +617,16 @@ int main() {
                     auto feature_has=adapter_features.As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"has")).ToLocalChecked().As<v8::Function>();
                     adapter_fixture.with_adapter(adapter_handle,[&](const auto& native) {
                         verify_v8_limits(isolate,context,adapter_object,native);
-                        auto info=read_webgpu_adapter_info(native,false);
+                        auto info=read_webgpu_adapter_info(native);
+                        require(webgpu_adapter_is_fallback(wgpu::BackendType::Vulkan,0x1ae0,0xc0de)
+                            && !webgpu_adapter_is_fallback(wgpu::BackendType::Vulkan,0x1ae0,0)
+                            && !webgpu_adapter_is_fallback(wgpu::BackendType::Metal,0x1ae0,0xc0de),"Fallback classification differs from pinned Dawn");
+                        auto exposed_info=adapter_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"info")).ToLocalChecked().As<v8::Object>();
+                        for(const auto& field:std::array<std::pair<const char*,const std::string*>,4>{{{"vendor",&info.vendor},{"architecture",&info.architecture},{"device",&info.device},{"description",&info.description}}}) {
+                            auto value=exposed_info->Get(context,v8::String::NewFromUtf8(isolate,field.first).ToLocalChecked()).ToLocalChecked();
+                            v8::String::Utf8Value text(isolate,value);
+                            require(*text && std::string(*text,text.length())==*field.second,"Adapter info string differs from native snapshot");
+                        }
                         wgpu::AdapterInfo native_info{};require(native.GetInfo(&native_info)==wgpu::Status::Success,"Adapter info query failed");
                         require(info.description==webgpu_info_string(native_info.description) && !info.is_fallback_adapter,"Adapter info snapshot incorrect");
                         require(info.subgroup_min_size==(native.HasFeature(wgpu::FeatureName::Subgroups)?native_info.subgroupMinSize:4)
@@ -642,6 +651,13 @@ int main() {
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"adapterDeviceProbe"),requested_device_promise->Result()).FromMaybe(false),"Adapter device publication failed");
                     require(run(R"JS(
                         if(adapterWrapperProbe.requestDevice.length!==0)throw new Error('requestDevice arity');
+                        const ai=adapterWrapperProbe.info,di=adapterDeviceProbe.adapterInfo;
+                        if(ai!==adapterWrapperProbe.info||di!==adapterDeviceProbe.adapterInfo||Object.prototype.toString.call(ai)!=='[object GPUAdapterInfo]')throw new Error('adapter info identity');
+                        for(const key of ['vendor','architecture','device','description','subgroupMinSize','subgroupMaxSize','isFallbackAdapter'])if(ai[key]!==di[key])throw new Error('device adapter info mismatch');
+                        const savedVendor=ai.vendor;let infoReadOnly=false;try{(()=>{'use strict';ai.vendor='changed'})()}catch(e){infoReadOnly=e instanceof TypeError}
+                        if(!infoReadOnly||ai.vendor!==savedVendor||'backendType' in ai||'vendorID' in ai)throw new Error('adapter info mutation or private fields');
+                        let infoBrand=false;try{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ai),'vendor').get.call({})}catch(e){infoBrand=e instanceof TypeError}if(!infoBrand)throw new Error('adapter info receiver');
+                        globalThis.retainedAdapterInfo=ai;
                         if(adapterDeviceProbe.label!=='via adapter')throw new Error('requested device label');
                         {let b=adapterDeviceProbe.createBuffer({size:16,usage:8,mappedAtCreation:true});
                          let range=b.getMappedRange();new Uint32Array(range)[0]=123;b.unmap();
@@ -703,6 +719,7 @@ int main() {
                     }
                     require(adapter_features.As<v8::Object>()->Get(context,v8::String::NewFromUtf8Literal(isolate,"size")).ToLocalChecked()->IsUint32(),"Retained adapter features lost after disposal");
                     adapter_devices.reset();
+                    require(run("if(typeof retainedAdapterInfo.vendor!=='string')throw new Error('retained adapter info');delete globalThis.retainedAdapterInfo;"),"Adapter info did not survive teardown");
                     require(run("delete globalThis.adapterWrapperProbe;delete globalThis.adapterDeviceProbe;delete globalThis.adapterDevicePromise;delete globalThis.consumedAdapterPromise;delete globalThis.badAdapterReceiverPromise;"),"Adapter probe cleanup failed");
                     require(adapter_fixture.live_adapters()==1,"Adapter disposal bypassed deferred release");
                     adapter_fixture.pump([](completion_record) {});
@@ -950,7 +967,9 @@ int main() {
                     require(rejected,"completion delivery allowed destructive shutdown");
                     wrappers=std::make_unique<v8_release_registry>(isolate,releases,1);
                     graphics_command release{[](graphics_service&,std::span<const std::byte>,const graphics_command::arguments&) noexcept { ++weak_releases; }};
-                    require(wrappers->attach(v8::Object::New(isolate),release),"weak wrapper registration failed");
+                    auto weak_probe=v8::Object::New(isolate);
+                    require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"weakReleaseProbe"),weak_probe).FromMaybe(false),"Weak probe root failed");
+                    require(wrappers->attach(weak_probe,release),"weak wrapper registration failed");
                     require(!wrappers->attach(v8::Object::New(isolate),release),"weak wrapper capacity was not bounded");
                 }
                 if (record.operation==2) {
@@ -1096,7 +1115,7 @@ int main() {
             adapter_service->destroy_adapter(discovered_adapter);
             adapter_request.reset(); cancelled_adapter.reset();
             for (auto& request:failed_wrappers) request.reset();
-            require(runtime.execute("delete globalThis.gcBufferProbe;", "buffer-drop-reference"),"Buffer reference removal failed");
+            require(runtime.execute("delete globalThis.gcBufferProbe;delete globalThis.weakReleaseProbe;", "buffer-drop-reference"),"Buffer reference removal failed");
             size_t buffers_before_gc=0;
             adapter_service->with_device(gc_buffer_device,[&](auto& device) { buffers_before_gc=device.live_buffers(); });
             require(buffers_before_gc>=1,"Collectible buffer disappeared before GC");

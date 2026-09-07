@@ -48,6 +48,7 @@ public:
     dawn_device& operator=(const dawn_device&)=delete;
     ~dawn_device() { if (std::this_thread::get_id()!=thread_) std::terminate(); close(); }
     resource_owner owner() const { check_thread(); return owner_; }
+    const wgpu::Adapter& adapter() const { check_thread(); return adapter_; }
     const wgpu::Device& native() const {
         check_thread();
         if (closed_ || lost_ || (loss_ && loss_->lost.load(std::memory_order_acquire)))
