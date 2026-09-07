@@ -125,3 +125,24 @@ array sizes. They run inside the Dawn test (0.30 seconds, passed); the standalon
 Dawn probe builds too. These synthetic exports do not establish Windows handle or
 GPU synchronization behavior. Windows compilation and hardware execution remain
 mandatory outstanding evidence.
+
+## Incoming fence import
+
+`import_dxgi_fences` now imports a complete borrowed NT-handle/value array before
+publishing it to the caller. It checks matching counts, invalid handle sentinels,
+the enabled Dawn DXGI fence feature and the imported fence's exported native type
+(non-null Dawn error objects do not count as success). Partial imports unwind and
+leave empty output. Signal values retain their full 64-bit precision.
+
+`begin_shared_fences` connects the imported set to the image's BeginAccess call.
+Pinned Dawn D3D11/D3D12 SharedFence::Create duplicates/opens incoming handles, and
+SharedResourceMemory::BeginAccess stores references to its pending fences. Thus
+callers retain their borrowed handles through import, while the temporary import
+vectors may be released after BeginAccess. Native BeginAccess failure now makes
+the wrapper terminal: Dawn may change its access state before backend setup fails.
+
+The Dawn test passes (0.37 seconds), covering invalid device, mismatched arrays,
+null handles and disabled features; the standalone probe builds. Positive DXGI
+import and native GPU waits are not exercised on macOS. The Windows producer and
+probe consumer, native adapter queries, fence signaling, device-loss behavior and
+hardware/copy/leak qualification remain outstanding. No Windows pass is claimed.

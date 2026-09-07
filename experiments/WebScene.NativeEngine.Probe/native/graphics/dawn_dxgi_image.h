@@ -12,7 +12,7 @@ enum class dxgi_import_status {
     success,unsupported_platform,invalid_argument,unsupported_pairing,
     missing_device_feature,handle_failure,import_failure,property_mismatch,out_of_memory
 };
-enum class dxgi_access_status { success,invalid_state,invalid_fences,native_failure,device_lost,fence_export_failure };
+enum class dxgi_access_status { success,invalid_state,invalid_fences,native_failure,device_lost,fence_export_failure,fence_import_failure };
 // Thread-confined import/access owner. EndAccess is a fence handoff, not CPU/GPU
 // completion; the external consumer must wait on every returned fence/value.
 class dawn_dxgi_image {
@@ -24,6 +24,7 @@ class dawn_dxgi_image {
     };
 #endif
     std::shared_ptr<handle_anchor> handle_; // Last destroyed, after Dawn objects.
+    wgpu::Device device_;
     wgpu::SharedTextureMemory memory_;
     wgpu::Texture texture_;
     wgpu::SharedTextureMemoryProperties properties_{};
@@ -44,6 +45,7 @@ class dawn_dxgi_image {
     }
     dxgi_import_status initialize(const wgpu::Device& device,void* handle,const image_metadata& image,
         dxgi_sync synchronization,wgpu::TextureUsage usage) {
+        device_=device;
         wgpu::SharedTextureMemoryDXGISharedHandleDescriptor dxgi{};
         dxgi.handle=handle; dxgi.useKeyedMutex=synchronization==dxgi_sync::keyed_mutex;
         wgpu::SharedTextureMemoryDescriptor descriptor{}; descriptor.nextInChain=&dxgi;
@@ -76,9 +78,25 @@ public:
         descriptor.initialized=initialized;
         descriptor.fenceCount=fences.size(); descriptor.fences=fences.data();
         descriptor.signaledValueCount=values.size(); descriptor.signaledValues=values.data();
-        if (memory_.BeginAccess(texture_,&descriptor)!=wgpu::Status::Success)
-            return dxgi_access_status::native_failure;
+        if (memory_.BeginAccess(texture_,&descriptor)!=wgpu::Status::Success) {
+            // Native access state can change before backend setup fails. Reject
+            // reuse of an ambiguous allocation rather than retrying its access.
+            failed_=true; return dxgi_access_status::native_failure;
+        }
         active_=true; return dxgi_access_status::success;
+    }
+    dxgi_access_status begin_shared_fences(bool initialized,std::span<void* const> handles,
+        std::span<const uint64_t> values) {
+        check_thread();
+        if (!memory_ || !texture_ || active_ || failed_) return dxgi_access_status::invalid_state;
+        if (handles.size()!=values.size()) return dxgi_access_status::invalid_fences;
+        if (handles.empty()) return begin(initialized);
+        imported_dxgi_fences waits;
+        if (import_dxgi_fences(device_,handles,values,waits)!=dxgi_fence_status::success)
+            return dxgi_access_status::fence_import_failure;
+        // BeginAccess retains the imported fences for the native texture access.
+        // The temporary vectors do not need to survive the interval.
+        return begin(initialized,waits.fences,waits.values);
     }
     const wgpu::Texture& texture() const {
         check_thread();

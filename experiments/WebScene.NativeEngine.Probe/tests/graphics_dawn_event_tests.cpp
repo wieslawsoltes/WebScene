@@ -297,6 +297,21 @@ int main() {
         if (!device_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
     }
     if (!device_done || !native_device->device) return 1;
+    imported_dxgi_fences imported;
+    imported.values.push_back(99);
+    if (import_dxgi_fences({}, {}, {}, imported)!=dxgi_fence_status::invalid_argument
+        || !imported.values.empty() || !imported.fences.empty()) return 1;
+    std::array<void*,1> invalid_handles{nullptr};
+    std::array<uint64_t,1> wait_values{5};
+    if (import_dxgi_fences(native_device->device,invalid_handles,wait_values,imported)
+        !=dxgi_fence_status::invalid_argument) return 1;
+    if (import_dxgi_fences(native_device->device,invalid_handles,{},imported)
+        !=dxgi_fence_status::invalid_argument) return 1;
+    // The test device has no optional DXGI fence feature enabled. Refuse before
+    // calling ImportSharedFence, even if a caller supplies a non-null handle.
+    invalid_handles[0]=reinterpret_cast<void*>(uintptr_t{1});
+    if (import_dxgi_fences(native_device->device,invalid_handles,wait_values,imported)
+        !=dxgi_fence_status::missing_device_feature || !imported.fences.empty()) return 1;
     auto owned_device=root.adopt_device(state->adapter,native_device->device);
     if (root.live_devices()!=1) return 1;
     root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
