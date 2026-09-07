@@ -294,3 +294,24 @@ must not retain unaccounted texture references beyond that use. Provider lifetim
 retains Dawn object references but does not prevent an external Device.Destroy.
 Device-loss handling, provider resolution for presenters, Skia sharing, physical
 memory telemetry and rendered pixel/copy verification remain outstanding.
+
+## Native presenter resolution
+
+A live consumer now exposes its native provider lifetime anchor internally.
+`dawn_canvas_images::resolve` validates the provider type, exact Dawn device,
+allocation identity, generation and content serial before returning the retained
+texture. A storage mutex protects resolution against allocation changes in other
+slots. No native pointer is added to portable scene records or the JS surface.
+Callers must keep the consumer until its GPU fence and may only read the resolved
+texture; resolution itself does not wait for the producer timeline.
+
+The Metal fixture resolves the identical native texture and creates a view on a
+presenter thread after disposing the canvas owner and all CPU scene references.
+A different live Dawn device is rejected. Completion invalidates resolution and
+releases the final provider anchor. The focused hardware test passes in 0.45
+seconds. This proves native object lookup/lifetime, not a consumer draw, shared
+Skia image import, or cross-device synchronization.
+
+After native presenter resolution, a complete graphics-enabled rebuild and CTest
+run passed all 16 tests in 13.86 seconds. The earlier intermittent DOM activation
+failure remains an unresolved historical observation; this pass does not diagnose it.

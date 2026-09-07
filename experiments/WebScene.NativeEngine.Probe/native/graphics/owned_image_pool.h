@@ -37,6 +37,10 @@ public:
             if (!state_) throw std::invalid_argument("completed image consumer");
             return state_->pool.describe(token_);
         }
+        std::shared_ptr<image_provider_lifetime> provider() const {
+            if (!state_) throw std::invalid_argument("completed image consumer");
+            return state_->provider;
+        }
         void complete() {
             if (!state_) throw std::invalid_argument("duplicate image completion");
             state_->pool.finish_consumer(token_); state_.reset();

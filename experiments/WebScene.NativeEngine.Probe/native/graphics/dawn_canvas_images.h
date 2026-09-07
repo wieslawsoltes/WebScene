@@ -8,6 +8,7 @@ namespace webscene::graphics {
 class dawn_canvas_images {
     struct storage final : image_provider_lifetime {
         struct slot { wgpu::Texture texture; image_metadata metadata{}; uint64_t bytes{}; };
+        mutable std::mutex mutex;
         wgpu::Device device;
         std::array<slot,3> slots;
         uint64_t resident_bytes{},created{};
@@ -52,6 +53,7 @@ public:
         const auto bytes=pixels*pixel_bytes;
         auto writer=pool_.acquire();
         if (!writer) return {};
+        std::lock_guard lock(storage_->mutex);
         auto& slot=storage_->slots[writer->slot()];
         if (bytes>byte_limit_-(storage_->resident_bytes-slot.bytes)) return {};
         const bool reuse=slot.texture && slot.metadata.width==metadata.width
@@ -74,6 +76,23 @@ public:
         }
         slot.metadata=metadata;
         return frame{std::move(*writer),slot.texture,metadata};
+    }
+    // Native presenter only. Keep the consumer alive through its GPU fence;
+    // resolving an object is not synchronization with its producer timeline.
+    // The caller may use this texture for reading only, never Destroy or writes.
+    static wgpu::Texture resolve(const owned_image_pool::consumer& consumer,const wgpu::Device& device) {
+        const auto metadata=consumer.describe();
+        const auto provider=std::dynamic_pointer_cast<storage>(consumer.provider());
+        if (!provider || !device || provider->device.Get()!=device.Get())
+            throw std::invalid_argument("foreign Dawn image provider or device");
+        std::lock_guard lock(provider->mutex);
+        for (const auto& slot:provider->slots) {
+            if (slot.texture && slot.metadata.allocation==metadata.allocation
+                && slot.metadata.allocation_generation==metadata.allocation_generation
+                && slot.metadata.content_serial==metadata.content_serial)
+                return slot.texture;
+        }
+        throw std::invalid_argument("Dawn image allocation unavailable");
     }
     uint64_t resident_bytes() const { check_thread(); return storage_->resident_bytes; }
     uint64_t created_images() const { check_thread(); return storage_->created; }

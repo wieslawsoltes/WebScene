@@ -3,7 +3,7 @@
 #include "graphics/dawn_canvas_images.h"
 #include <iostream>
 using namespace webscene::graphics;
-void test_canvas_storage(dawn_event_service& service,const wgpu::Device& device) {
+void test_canvas_storage(dawn_event_service& service,const wgpu::Device& device,const wgpu::Device& foreign_device) {
     auto require=[](bool v) { if (!v) throw std::runtime_error("Dawn canvas storage requirement failed"); };
     dawn_canvas_images images(device,3*128*128*4);
     image_metadata m{100,0,1,1,200,1,64,64};
@@ -49,6 +49,29 @@ void test_canvas_storage(dawn_event_service& service,const wgpu::Device& device)
     m.width=512; m.height=512;
     require(!images.acquire(m) && images.created_images()==4);
     images.close(); require(!images.acquire(image_metadata{100,0,1,200,200,2,64,64}));
+    auto detached=std::make_unique<dawn_canvas_images>(device,64*64*4);
+    auto frame=detached->acquire(image_metadata{101,0,1,1,200,3,64,64});
+    const auto native_identity=frame->texture.Get();
+    frame->producer.begin(); auto scene=frame->producer.publish();
+    frame->producer.complete(); frame.reset();
+    auto consumer=scene->begin_consumer();
+    auto anchor=std::weak_ptr<image_provider_lifetime>(consumer->provider());
+    detached.reset(); scene.reset();
+    require(!anchor.expired());
+    bool rejected=false;
+    try { dawn_canvas_images::resolve(*consumer,foreign_device); }
+    catch (const std::invalid_argument&) { rejected=true; }
+    require(rejected);
+    std::thread presenter([&] {
+        { auto texture=dawn_canvas_images::resolve(*consumer,device);
+          require(texture.Get()==native_identity && texture.GetWidth()==64 && texture.CreateView()); }
+        consumer->complete();
+        bool stale=false;
+        try { dawn_canvas_images::resolve(*consumer,device); }
+        catch (const std::invalid_argument&) { stale=true; }
+        require(stale);
+    });
+    presenter.join(); consumer.reset(); require(anchor.expired());
 }
 int main() {
     auto wake=std::make_shared<engine_wake>();
@@ -105,7 +128,6 @@ int main() {
         if (!device_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
     }
     if (!device_done || !native_device->device) return 1;
-    test_canvas_storage(service,native_device->device);
     auto owned_device=root.adopt_device(state->adapter,native_device->device);
     if (root.live_devices()!=1) return 1;
     root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
@@ -154,6 +176,7 @@ int main() {
     resource_owner second_owner{};
     root.with_device(second_owned,[&](auto& device) { second_owner=device.owner(); });
     if (root.live_devices()!=2 || owner==second_owner) return 1;
+    test_canvas_storage(service,native_device->device,second_native->device);
     bool foreign_rejected=false;
     try { other_root.with_device(owned_device,[](auto&) {}); }
     catch (const std::invalid_argument&) { foreign_rejected=true; }
