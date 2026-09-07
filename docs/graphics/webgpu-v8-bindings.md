@@ -392,3 +392,26 @@ for a canceled native map. It verifies thrown-value identity in the promise
 rejection, cleared pending state, repeat cancellation and late callback retirement.
 The ordinary prototype cancellation/remap tests continue to verify AbortError.
 Broader public error-scope and device-loss integration remains outstanding.
+
+### JavaScript descriptor to owned buffer creation
+
+The buffer registry's create entry point now combines GPUBufferDescriptor
+conversion, native allocation and wrapper registration. It rejects a misaligned
+mapped-at-creation size with RangeError before allocating. Unknown browser usage
+bits enter Dawn's validation/error-buffer path via invalid usage None, never a
+private native usage extension. Wrapper metadata preserves the original browser
+usage, size and label even for error buffers. Metadata getters now read retained
+wrapper values rather than dispatching native calls.
+
+Creation releases its native handle if wrapping fails and propagates an exception
+instead of silently returning no object. The macOS V8 fixture now creates its WRITE
+mapping buffers from JavaScript descriptors via this entry point. It also verifies
+misaligned mapped size without allocation, an invalid-usage error buffer with
+preserved metadata and a usable mapped-at-creation region, actual Dawn validation
+scope delivery, and native handle rollback when release registration is saturated.
+The rebuilt runtime CTest passes and explicitly requires callback retirement.
+
+This is the native entry point for the forthcoming GPUDevice.createBuffer method;
+it does not install a public device object. Full device creation, error-scope/event
+exposure, native allocation failure/admission policy and loss integration still
+require implementation or qualification.

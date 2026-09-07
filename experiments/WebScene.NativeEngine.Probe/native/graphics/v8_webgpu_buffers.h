@@ -2,6 +2,7 @@
 #include "graphics_service.h"
 #include "v8_webgpu_mapped_ranges.h"
 #include "v8_webgpu_map_request.h"
+#include "v8_webgpu_buffer_descriptor.h"
 #include <cstring>
 #include <list>
 #include <cmath>
@@ -22,6 +23,8 @@ class v8_webgpu_buffers {
         release_ticket ticket;
         bool published{};
         std::string label;
+        uint64_t size{};
+        uint32_t usage{};
         std::unique_ptr<v8_webgpu_mapped_ranges> mapping;
         v8::Global<v8::Function> dom_exception;
         v8_webgpu_buffers* registry{};
@@ -70,14 +73,12 @@ class v8_webgpu_buffers {
         catch (const std::exception&) { error(info.GetIsolate(),"GPUBuffer native ownership is unavailable"); }
     }
     static void size(const v8::FunctionCallbackInfo<v8::Value>& info) {
-        access(info,[&](auto& device,auto handle) { device.with_buffer(handle,[&](const auto& buffer) {
-            info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(),static_cast<double>(buffer.GetSize())));
-        }); });
+        auto* item=receiver(info);
+        if (item) info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(),static_cast<double>(item->size)));
     }
     static void usage(const v8::FunctionCallbackInfo<v8::Value>& info) {
-        access(info,[&](auto& device,auto handle) { device.with_buffer(handle,[&](const auto& buffer) {
-            info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(info.GetIsolate(),static_cast<uint32_t>(buffer.GetUsage())));
-        }); });
+        auto* item=receiver(info);
+        if (item) info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(info.GetIsolate(),item->usage));
     }
     static void label(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info);
@@ -326,10 +327,52 @@ public:
         }
         return detached;
     }
+    // GPUDevice binding entry point: converts the JS descriptor, creates native
+    // storage, and rolls back the native handle if wrapper registration fails.
+    v8::MaybeLocal<v8::Object> create(v8::Local<v8::Context> context,graphics_service& service,
+        resource_handle<dawn_device> device,v8::Local<v8::Value> descriptor) {
+        check_scope();
+        if (realm_.Get(isolate_)!=context) throw std::logic_error("Buffer creation belongs to another realm");
+        webgpu_buffer_descriptor converted;
+        if (!read_webgpu_buffer_descriptor(isolate_,context,descriptor,converted)) return {};
+        if (converted.mapped_at_creation && converted.size%4) {
+            isolate_->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate_,"Mapped buffer size must be a multiple of four")));
+            return {};
+        }
+        if (std::none_of(entries_.begin(),entries_.end(),[](const auto& item) { return !item || item->published; })) {
+            isolate_->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate_,"Buffer wrapper capacity exhausted")));
+            return {};
+        }
+        auto native=make_dawn_buffer_descriptor(converted);
+        if (!native) {
+            // None is invalid in both standards and Dawn: it forces Dawn's
+            // validation/error-buffer path without enabling a private usage bit.
+            // The wrapper retains the original browser usage value below.
+            native=wgpu::BufferDescriptor{};
+            native->label=wgpu::StringView(converted.label.data(),converted.label.size());
+            native->size=converted.size; native->mappedAtCreation=converted.mapped_at_creation;
+            native->usage=wgpu::BufferUsage::None;
+        }
+        resource_handle<wgpu::Buffer> handle;
+        service.with_device(device,[&](auto& owner) { handle=owner.create_buffer(*native); });
+        v8::TryCatch caught(isolate_);
+        try {
+            v8::Local<v8::Object> wrapper;
+            if (wrap(context,service,device,handle,converted.label,converted.usage).ToLocal(&wrapper)) return wrapper;
+        } catch (...) {
+            service.with_device(device,[&](auto& owner) { owner.release_buffer(handle); });
+            throw;
+        }
+        service.with_device(device,[&](auto& owner) { owner.release_buffer(handle); });
+        if (caught.HasCaught()) { caught.ReThrow(); return {}; }
+        isolate_->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate_,"Buffer wrapper registration failed")));
+        caught.ReThrow();
+        return {};
+    }
     // Ownership transfers only on success. Caller releases the native handle if
     // allocation/registration fails. No native operation runs in GC callbacks.
     v8::MaybeLocal<v8::Object> wrap(v8::Local<v8::Context> context,graphics_service& service,
-        resource_handle<dawn_device> device,resource_handle<wgpu::Buffer> buffer,std::string initial_label={}) {
+        resource_handle<dawn_device> device,resource_handle<wgpu::Buffer> buffer,std::string initial_label={},std::optional<uint32_t> browser_usage={}) {
         check_scope();
         if (realm_.Get(isolate_)!=context) throw std::logic_error("GPUBuffer wrapper belongs to another realm");
         service.with_device(device,[&](auto& owner) { owner.with_buffer(buffer,[](const auto&) {}); });
@@ -352,6 +395,7 @@ public:
         // This factory currently accepts only unmapped buffers or a complete
         // mapped-at-creation region. mapAsync will attach its selected subrange.
         service.with_device(device,[&](auto& owner) { owner.with_buffer(buffer,[&](const auto& native) {
+            item->size=native.GetSize(); item->usage=browser_usage.value_or(static_cast<uint32_t>(native.GetUsage()));
             if (native.GetMapState()==wgpu::BufferMapState::Mapped) {
                 auto size=native.GetSize();
                 auto* data=native.GetMappedRange(0,size);
