@@ -40,6 +40,18 @@ internal struct NativeGpuImageInfoV3
     public static NativeGpuImageInfoV3 Empty => new() { StructSize = 80, Version = 3 };
 }
 
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeGpuIOSurfaceViewV3
+{
+    public uint StructSize, Version;
+    public IntPtr BorrowedIOSurface;
+    public ulong AllocationBytes;
+    public static NativeGpuIOSurfaceViewV3 Empty => new()
+    {
+        StructSize = (uint)Marshal.SizeOf<NativeGpuIOSurfaceViewV3>(), Version = 3
+    };
+}
+
 public static unsafe partial class NativeWebSceneApi
 {
     // These declarations do not opt the existing renderer into GPU scenes.
@@ -70,6 +82,9 @@ public static unsafe partial class NativeWebSceneApi
     // Dispose/finalization of a CPU wrapper is not a GPU completion event.
     [DllImport(LibraryName, EntryPoint = "webscene_gpu_image_complete_consumer_v3", CallingConvention = CallingConvention.Cdecl)]
     internal static extern void GpuImageCompleteConsumerV3(IntPtr consumer);
+    [DllImport(LibraryName, EntryPoint = "webscene_gpu_image_get_iosurface_v3", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern byte GpuImageGetIOSurfaceV3(IntPtr consumer, ref NativeGpuIOSurfaceViewV3 view);
+
 }
 
 // CPU scene retention only: disposing this handle does not complete GPU work.
@@ -213,4 +228,82 @@ public static unsafe partial class NativeWebSceneApi
     internal static extern byte GpuImageDescribeV3(NativeGpuImageLeaseV3 image, ref NativeGpuImageInfoV3 info);
     [DllImport(LibraryName, EntryPoint = "webscene_gpu_image_begin_consumer_v3", CallingConvention = CallingConvention.Cdecl)]
     internal static extern NativeSceneAcquireStatus GpuImageBeginConsumerV3(NativeGpuImageLeaseV3 image, out IntPtr consumer);
+}
+
+
+// Explicit GPU completion ownership: deliberately neither IDisposable nor a
+// finalizable SafeHandle. The presenter must retain this wrapper until its GPU
+// completion path calls Complete; GC cannot certify that GPU use has ended.
+internal sealed class NativeGpuImageConsumerV3
+{
+    private readonly object _gate = new();
+    private IntPtr _handle;
+    private int _borrows;
+    private bool _completionRequested;
+    private NativeGpuImageConsumerV3() { }
+
+    internal static NativeSceneAcquireStatus Acquire(NativeGpuImageLeaseV3 image,
+        out NativeGpuImageConsumerV3? consumer)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        consumer = null;
+        var candidate = new NativeGpuImageConsumerV3();
+        var status = NativeWebSceneApi.GpuImageBeginConsumerV3(image, out candidate._handle);
+        if (status != NativeSceneAcquireStatus.Success) return status;
+        if (candidate._handle == IntPtr.Zero)
+            throw new InvalidOperationException("Native consumer acquisition returned an empty handle.");
+        consumer = candidate;
+        return status;
+    }
+
+    // Borrow is synchronous. Importers must take their own required native
+    // references and preserve this consumer until the associated GPU fence.
+    internal bool WithIOSurface(Action<NativeGpuIOSurfaceViewV3> import)
+    {
+        ArgumentNullException.ThrowIfNull(import);
+        IntPtr pointer;
+        lock (_gate)
+        {
+            if (_completionRequested) throw new InvalidOperationException("GPU consumer already completed.");
+            _borrows++;
+            pointer = _handle;
+        }
+        try
+        {
+            var view = NativeGpuIOSurfaceViewV3.Empty;
+            try
+            {
+                if (NativeWebSceneApi.GpuImageGetIOSurfaceV3(pointer, ref view) == 0) return false;
+            }
+            catch (EntryPointNotFoundException) { return false; } // Older v3 runtime lacks this optional hook.
+            if (view.BorrowedIOSurface == IntPtr.Zero || view.AllocationBytes == 0)
+                throw new InvalidOperationException("Native IOSurface lookup returned an invalid view.");
+            import(view);
+            return true;
+        }
+        finally
+        {
+            IntPtr retired = IntPtr.Zero;
+            lock (_gate)
+            {
+                _borrows--;
+                if (_completionRequested && _borrows == 0) { retired = _handle; _handle = IntPtr.Zero; }
+            }
+            if (retired != IntPtr.Zero) NativeWebSceneApi.GpuImageCompleteConsumerV3(retired);
+        }
+    }
+
+    internal void Complete()
+    {
+        IntPtr retired = IntPtr.Zero;
+        lock (_gate)
+        {
+            if (_completionRequested) throw new InvalidOperationException("Duplicate GPU consumer completion.");
+            _completionRequested = true;
+            if (_borrows == 0) { retired = _handle; _handle = IntPtr.Zero; }
+        }
+        // Outstanding synchronous imports defer deletion without blocking a
+        // completion thread or freeing a pointer still borrowed by an importer.
+        if (retired != IntPtr.Zero) NativeWebSceneApi.GpuImageCompleteConsumerV3(retired);
+    }
 }

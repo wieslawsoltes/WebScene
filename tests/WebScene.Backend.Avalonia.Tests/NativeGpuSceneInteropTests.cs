@@ -22,9 +22,24 @@ public sealed class NativeGpuSceneInteropTests
         Assert.Equal(16, Marshal.SizeOf<NativeSceneAcquireOptionsV3>());
         Assert.Equal(16 + 2 * IntPtr.Size, Marshal.SizeOf<NativeSceneViewV3>());
         Assert.Equal(80, Marshal.SizeOf<NativeGpuImageInfoV3>());
+        Assert.Equal(24, Marshal.SizeOf<NativeGpuIOSurfaceViewV3>());
+        Assert.Equal(8, Marshal.OffsetOf<NativeGpuIOSurfaceViewV3>(nameof(NativeGpuIOSurfaceViewV3.BorrowedIOSurface)).ToInt32());
+        Assert.Equal(16, Marshal.OffsetOf<NativeGpuIOSurfaceViewV3>(nameof(NativeGpuIOSurfaceViewV3.AllocationBytes)).ToInt32());
         Assert.Equal(8, Marshal.OffsetOf<NativeGpuImageInfoV3>(nameof(NativeGpuImageInfoV3.Canvas)).ToInt32());
         Assert.Equal(56, Marshal.OffsetOf<NativeGpuImageInfoV3>(nameof(NativeGpuImageInfoV3.Width)).ToInt32());
         Assert.Equal(0UL, NativeSceneAcquireOptionsV3.CpuOnly.ConsumerCapabilities);
+    }
+
+    [NativeRuntimeFact]
+    public void IOSurfaceLookupRejectsAbsentConsumerAcrossNativeBoundary()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        var view = NativeGpuIOSurfaceViewV3.Empty;
+        view.BorrowedIOSurface = new IntPtr(123);
+        view.AllocationBytes = 456;
+        Assert.Equal(0, NativeWebSceneApi.GpuImageGetIOSurfaceV3(IntPtr.Zero, ref view));
+        Assert.Equal(IntPtr.Zero, view.BorrowedIOSurface);
+        Assert.Equal(0UL, view.AllocationBytes);
     }
 
     [NativeRuntimeFact]

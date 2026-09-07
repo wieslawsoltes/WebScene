@@ -555,3 +555,24 @@ The common image-lease CTest and graphics V8 runtime CTest passed.
 
 This is the native presenter lookup boundary. Producer completion resolution,
 framework import and actual V8 GPU canvas publication remain unfinished.
+
+### Managed IOSurface consumer binding
+
+The shared Avalonia/Uno interop source now declares the additive IOSurface view
+and lookup export. NativeGpuImageConsumerV3 provides explicit acquisition and
+GPU completion ownership. It intentionally has no Dispose/finalizer: collection
+of a managed wrapper cannot prove GPU completion. Presenters must retain it
+until their completion path calls Complete.
+
+Synchronous WithIOSurface imports protect the native consumer from concurrent
+completion. Completion requests prevent new borrows and defer native deletion
+until existing callbacks finish, without holding a monitor during the callback.
+Missing lookup exports on older v3 runtimes report unavailable. Importers still
+must retain their own native objects as required and preserve the consumer
+through actual GPU completion; a successful lookup does not synchronize work.
+
+All four NativeGpuSceneInteropTests passed against the enabled native library
+on net8.0 and net10.0, with no skips. This covers layouts, null lookup clearing and
+existing scene ABI ownership tests. The managed GPU consumer's positive import
+and concurrent completion paths still need an actual GPU scene fixture; they
+are not claimed hardware-qualified by these tests.
