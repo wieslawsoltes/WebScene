@@ -36,15 +36,18 @@ class dawn_device {
     size_t active_shader_scopes_{};
     resource_table<wgpu::RenderPipeline> render_pipelines_;
     size_t active_render_pipeline_scopes_{};
+    resource_table<wgpu::Texture> textures_;
+    resource_table<wgpu::TextureView> texture_views_;
+    size_t active_texture_scopes_{},active_texture_view_scopes_{};
     void check_thread() const {
         if (std::this_thread::get_id()!=thread_)
             throw std::logic_error("Dawn device requires its engine thread");
     }
 public:
     dawn_device(uint64_t engine,std::shared_ptr<completion_mailbox> mailbox,
-                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024)
+                wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024,size_t texture_capacity=1024,size_t texture_view_capacity=4096)
         : owner_{engine,new_owner_token(),0},mailbox_(std::move(mailbox)),
-          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_),render_pipelines_(render_pipeline_capacity,owner_) {
+          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_),render_pipelines_(render_pipeline_capacity,owner_),textures_(texture_capacity,owner_),texture_views_(texture_view_capacity,owner_) {
         if (!engine || !mailbox_ || !adapter_ || !device_)
             throw std::invalid_argument("Dawn device requires native ownership");
     }
@@ -131,6 +134,46 @@ public:
         render_pipelines_.destroy(handle,owner_);
     }
     size_t live_render_pipelines() const {check_thread();return render_pipelines_.resident_count();}
+    resource_handle<wgpu::Texture> create_texture(const wgpu::TextureDescriptor& descriptor) {
+        const auto& device=native();
+        if(!textures_.can_insert())throw std::length_error("Graphics texture capacity exhausted");
+        auto texture=device.CreateTexture(&descriptor);
+        if(!texture)throw std::runtime_error("Dawn did not return a texture");
+        return textures_.insert(owner_,std::make_unique<wgpu::Texture>(std::move(texture)));
+    }
+    template<class Execute> void with_texture(resource_handle<wgpu::Texture> handle,Execute execute) {
+        check_thread();
+        const auto& texture=textures_.get(handle,owner_);
+        struct guard { size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;} } scope(active_texture_scopes_);
+        execute(texture);
+    }
+    void release_texture(resource_handle<wgpu::Texture> handle) {
+        check_thread();
+        if(active_texture_scopes_)throw std::logic_error("Cannot release texture during execution");
+        textures_.destroy(handle,owner_);
+    }
+    size_t live_textures() const {check_thread();return textures_.resident_count();}
+    resource_handle<wgpu::TextureView> create_texture_view(resource_handle<wgpu::Texture> texture,const wgpu::TextureViewDescriptor& descriptor) {
+        native();
+        if(!texture_views_.can_insert())throw std::length_error("Texture view capacity exhausted");
+        auto view=textures_.get(texture,owner_).CreateView(&descriptor);
+        if(!view)throw std::runtime_error("Dawn did not return a texture view");
+        return texture_views_.insert(owner_,std::make_unique<wgpu::TextureView>(std::move(view)));
+    }
+    template<class Execute> void with_texture_view(resource_handle<wgpu::TextureView> handle,Execute execute) {
+        check_thread();const auto& view=texture_views_.get(handle,owner_);
+        struct guard {size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;}} scope(active_texture_view_scopes_);
+        execute(view);
+    }
+    void release_texture_view(resource_handle<wgpu::TextureView> handle) {
+        check_thread();if(active_texture_view_scopes_)throw std::logic_error("Cannot release a borrowed texture view");
+        texture_views_.destroy(handle,owner_);
+    }
+    void destroy_texture(resource_handle<wgpu::Texture> handle) {
+        check_thread();if(active_texture_scopes_ || active_texture_view_scopes_)throw std::logic_error("Cannot destroy a borrowed texture");
+        textures_.get(handle,owner_).Destroy();
+    }
+    size_t live_texture_views() const {check_thread();return texture_views_.resident_count();}
     bool loss_pending() const {
         check_thread();
         return !closed_ && !lost_ && loss_ && loss_->lost.load(std::memory_order_acquire);
@@ -144,7 +187,7 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_buffer_scopes_ || active_shader_scopes_ || active_render_pipeline_scopes_) throw std::logic_error("Cannot close device during resource execution");
+        if (active_buffer_scopes_ || active_shader_scopes_ || active_render_pipeline_scopes_ || active_texture_scopes_ || active_texture_view_scopes_) throw std::logic_error("Cannot close device during resource execution");
         process_loss();
         closed_=true;
         // Logical cancellation is independent of physical GPU completion.
@@ -155,6 +198,8 @@ public:
         buffers_.destroy_owner(owner_);
         shaders_.destroy_owner(owner_);
         render_pipelines_.destroy_owner(owner_);
+        texture_views_.destroy_owner(owner_);
+        textures_.destroy_owner(owner_);
     }
 };
 } // namespace webscene::graphics

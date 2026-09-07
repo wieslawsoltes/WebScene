@@ -426,7 +426,7 @@ int main() {
     invalid_handles[0]=reinterpret_cast<void*>(uintptr_t{1});
     if (import_dxgi_fences(native_device->device,invalid_handles,wait_values,imported)
         !=dxgi_fence_status::missing_device_feature || !imported.fences.empty()) return 1;
-    auto owned_device=root.adopt_device(state->adapter,native_device->device,{},1,1,1);
+    auto owned_device=root.adopt_device(state->adapter,native_device->device,{},1,1,1,1,1);
     if (root.live_devices()!=1) return 1;
     root.with_device(owned_device,[&](auto& device) { owner=device.owner(); });
     root.with_device(owned_device,[&](auto& device) {
@@ -477,7 +477,25 @@ int main() {
         device.release_shader_module(shader);
         wgpu::TextureDescriptor texture_desc{};texture_desc.size={4,4,1};texture_desc.format=target.format;
         texture_desc.usage=wgpu::TextureUsage::RenderAttachment;
-        auto texture=device.native().CreateTexture(&texture_desc);auto view=texture.CreateView();
+        auto texture=device.create_texture(texture_desc);
+        auto view_handle=device.create_texture_view(texture,{});wgpu::TextureView view;
+        bool texture_full=false,view_full=false;
+        try{device.create_texture(texture_desc);}catch(const std::length_error&){texture_full=true;}
+        try{device.create_texture_view(texture,{});}catch(const std::length_error&){view_full=true;}
+        if(!texture_full || !view_full)throw std::runtime_error("Texture capacity admission failed");
+        device.with_texture_view(view_handle,[&](const auto& native) {
+            view=native;bool release_guard=false,destroy_guard=false,close_guard=false;
+            try{device.release_texture_view(view_handle);}catch(const std::logic_error&){release_guard=true;}
+            try{device.destroy_texture(texture);}catch(const std::logic_error&){destroy_guard=true;}
+            try{device.close();}catch(const std::logic_error&){close_guard=true;}
+            if(!release_guard || !destroy_guard || !close_guard)throw std::runtime_error("Borrowed texture view lifetime unguarded");
+        });
+        device.release_texture(texture); // The view retains its source texture.
+        device.release_texture_view(view_handle);
+        bool stale_texture=false,stale_view=false;
+        try{device.with_texture(texture,[](const auto&){});}catch(const std::invalid_argument&){stale_texture=true;}
+        try{device.with_texture_view(view_handle,[](const auto&){});}catch(const std::invalid_argument&){stale_view=true;}
+        if(!stale_texture || !stale_view || device.live_textures() || device.live_texture_views())throw std::runtime_error("Texture references did not retire");
         wgpu::RenderPassColorAttachment attachment{};attachment.view=view;
         attachment.loadOp=wgpu::LoadOp::Clear;attachment.storeOp=wgpu::StoreOp::Store;
         wgpu::RenderPassDescriptor pass_desc{};pass_desc.colorAttachmentCount=1;pass_desc.colorAttachments=&attachment;
@@ -507,6 +525,13 @@ int main() {
         if(!render_checked)wake->wait_for(std::chrono::milliseconds(1),[]{return false;});
     }
     if(!render_checked)throw std::runtime_error("Render pipeline validation did not complete");
+    root.with_device(owned_device,[&](auto& device) {
+        wgpu::TextureDescriptor descriptor{};descriptor.size={1,1,1};descriptor.format=wgpu::TextureFormat::RGBA8Unorm;descriptor.usage=wgpu::TextureUsage::RenderAttachment;
+        auto texture=device.create_texture(descriptor);auto view=device.create_texture_view(texture,{});
+        device.destroy_texture(texture);device.destroy_texture(texture);
+        if(device.live_textures()!=1 || device.live_texture_views()!=1)throw std::runtime_error("Texture destroy removed API handles");
+        device.release_texture_view(view);device.release_texture(texture);
+    });
     auto shader_releases=root.release_endpoint();
     resource_handle<wgpu::ShaderModule> retired_shader,reused_shader;
     release_ticket retired_ticket;

@@ -968,3 +968,20 @@ bounded eight-ticket fixture drains disposed resources before its next unrelated
 registration; collection still only publishes deferred releases. Runtime CTest
 passes. Drawing commands, textures and normal canvas presentation remain needed
 for a visible JavaScript triangle; this test does not verify rendered pixels.
+
+
+### Owned native textures and views
+
+Dawn devices now own separately bounded texture and texture-view tables with
+full generational handles. Creation checks capacity before native allocation;
+borrowed scopes guard release, destruction and device close. Texture destroy
+invalidates storage while preserving API handles and retained views. Reference
+release does not call Destroy. Deferred commands carry device/resource identity
+for future wrapper collection, and device close retires both tables.
+
+The macOS native draw test now obtains its target from these owned tables. It
+releases table references before drawing through a retained view and verifies
+native validation succeeds. Capacity, stale handles, borrowed-scope guards and
+repeated destroy preserving handles are covered. Dawn event and V8 runtime tests
+pass. JavaScript texture/view descriptor conversion and wrappers remain pending;
+these tests do not establish JavaScript rendering or pixel correctness.
