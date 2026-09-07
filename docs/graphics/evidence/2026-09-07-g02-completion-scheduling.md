@@ -347,3 +347,15 @@ arrives through the service's bounded completion mailbox and headless event pump
 No presentation or RAF is involved. This proves native asynchronous compilation
 progress for the fixture, not compute correctness or WebGPU CTS conformance.
 The focused hardware test passed in 0.56 seconds on Apple M4 / Metal.
+
+## Native error-scope completion
+
+The hardware fixture now pushes a validation scope, creates a deliberately invalid
+buffer, and pops the scope asynchronously through the native completion mailbox.
+It requires a successful scope operation with a Validation error and nonempty
+native message. A following scope creates a valid buffer and must complete with
+NoError, proving the captured error does not contaminate the next scope. Both
+operations use service readiness and idle recommendations without RAF; occupied
+completion storage returns to zero after each. The Metal hardware fixture passed
+in 0.48 seconds. This verifies native error-scope progress and isolation, not yet
+JavaScript GPUError object construction or browser error-scope conformance.

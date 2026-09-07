@@ -266,6 +266,34 @@ int main() {
         if (!pipeline_done) wake->wait_for(root.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
     }
     if (!pipeline_done || !*pipeline) return 1;
+    // Captured validation errors and empty scopes both complete independently
+    // of animation frames. A captured error must not poison the next scope.
+    for (const bool invalid : {true,false}) {
+        second_native->device.PushErrorScope(wgpu::ErrorFilter::Validation);
+        wgpu::BufferDescriptor scoped_descriptor{};
+        scoped_descriptor.size=4;
+        scoped_descriptor.usage=invalid ? wgpu::BufferUsage::None : wgpu::BufferUsage::CopyDst;
+        auto scoped_buffer=second_native->device.CreateBuffer(&scoped_descriptor);
+        auto error_ticket=mailbox->reserve(invalid ? 25 : 26,second_owner).value();
+        second_native->device.PopErrorScope(wgpu::CallbackMode::AllowProcessEvents,
+            [mailbox,error_ticket,invalid](wgpu::PopErrorScopeStatus status,wgpu::ErrorType type,wgpu::StringView message) {
+                const bool expected=status==wgpu::PopErrorScopeStatus::Success
+                    && type==(invalid ? wgpu::ErrorType::Validation : wgpu::ErrorType::NoError)
+                    && (!invalid || (message.data && message.length));
+                mailbox->publish(error_ticket,expected ? completion_status::success : completion_status::failed);
+            });
+        bool error_done=false;
+        const auto error_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+        while (!error_done && std::chrono::steady_clock::now()<error_deadline) {
+            if (root.has_ready_work()) root.pump([&](auto record) {
+                if (record.operation!=(invalid ? 25u : 26u) || record.status!=completion_status::success)
+                    throw std::runtime_error("native error scope completion was incorrect");
+                error_done=true;
+            });
+            if (!error_done) wake->wait_for(root.recommended_idle_wait(std::chrono::milliseconds(100)),[] { return false; });
+        }
+        if (!error_done || mailbox->metrics().occupied!=0) return 1;
+    }
     auto loss_ticket=mailbox->reserve(22,second_owner).value();
     auto loss_buffer=second_native->device.CreateBuffer(&map_descriptor);
     struct loss_map_result { bool called{},accepted{}; };
