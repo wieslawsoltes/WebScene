@@ -42,20 +42,35 @@ internal sealed class WebGpuDocumentProbeApp : Application
                     layout:'auto',vertex:{module,entryPoint:'vs'},
                     fragment:{module,entryPoint:'fs',targets:[{format:navigator.gpu.getPreferredCanvasFormat()}]}
                   });
-                  const encoder=device.createCommandEncoder();
-                  const pass=encoder.beginRenderPass({colorAttachments:[{
-                    view:context.getCurrentTexture().createView(),
-                    clearValue:{r:0.03,g:0.04,b:0.07,a:1},loadOp:'clear',storeOp:'store'
-                  }]});
-                  pass.setPipeline(pipeline);
-                  pass.draw(3);
-                  pass.end();
-                  device.queue.submit([encoder.finish()]);
-                  globalThis.webGpuDemoSubmitted=true;
-                  requestAnimationFrame(()=>{globalThis.webGpuDemoRaf=true;});
+                  globalThis.webGpuDemoFrames=0;
+                  const draw=()=>{
+                    try {
+                      const encoder=device.createCommandEncoder();
+                      const pass=encoder.beginRenderPass({colorAttachments:[{
+                        view:context.getCurrentTexture().createView(),
+                        clearValue:{r:webGpuDemoFrames%2 ? 0.15 : 0.03,g:0.04,b:0.07,a:1},
+                        loadOp:'clear',storeOp:'store'
+                      }]});
+                      pass.setPipeline(pipeline);
+                      pass.draw(3);
+                      pass.end();
+                      device.queue.submit([encoder.finish()]);
+                      globalThis.webGpuDemoSubmitted=true;
+                      ++globalThis.webGpuDemoFrames;
+                      if(webGpuDemoFrames<__FRAME_LIMIT__)requestAnimationFrame(draw);
+                    } catch(e) { globalThis.webGpuDemoError=String(e);console.error(e); }
+                  };
+                  const resize=()=>{
+                    const canvas=document.getElementById('gpu');
+                    canvas.width=Math.max(1,Math.floor(innerWidth));
+                    canvas.height=Math.max(1,Math.floor(innerHeight));
+                    requestAnimationFrame(draw);
+                  };
+                  addEventListener('resize',resize);
+                  resize();
                 })().catch(e=>{globalThis.webGpuDemoError=String(e);console.error(e)});
                 </script></body></html>
-                """);
+                """.Replace("__FRAME_LIMIT__", Environment.GetCommandLineArgs().Contains("--stress-webgpu") ? "120" : "1"));
             var uri = new Uri(path).AbsoluteUri;
             var view = new NativeWebSceneView(true, url => url == uri || url == path);
             desktop.MainWindow = new Window
@@ -69,8 +84,17 @@ internal sealed class WebGpuDocumentProbeApp : Application
                     await view.LoadAsync(uri, Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")
                         ?? throw new InvalidOperationException("Set WEBSCENE_TEST_NATIVE_LIBRARY"));
                     Console.WriteLine("WebGPU document loaded through NativeWebSceneView.");
+                    if (Environment.GetCommandLineArgs().Contains("--resize-webgpu"))
+                    {
+                        foreach (var size in new[] { (640, 360), (280, 180), (520, 320), (400, 240) })
+                        {
+                            desktop.MainWindow.Width = size.Item1;
+                            desktop.MainWindow.Height = size.Item2;
+                            await Task.Delay(500);
+                        }
+                    }
                     await Task.Delay(1000);
-                    Console.WriteLine(await view.EvaluateTextAsync("({submitted:globalThis.webGpuDemoSubmitted,error:globalThis.webGpuDemoError,gpu:!!navigator.gpu,raf:globalThis.webGpuDemoRaf})"));
+                    Console.WriteLine(await view.EvaluateTextAsync("({submitted:globalThis.webGpuDemoSubmitted,error:globalThis.webGpuDemoError,gpu:!!navigator.gpu,frames:globalThis.webGpuDemoFrames,width:document.getElementById('gpu').width,height:document.getElementById('gpu').height})"));
                     Console.WriteLine(view.SceneDiagnostics);
                 }
                 catch (Exception error) { Console.Error.WriteLine(error); desktop.Shutdown(1); }

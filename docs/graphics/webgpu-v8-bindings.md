@@ -1634,3 +1634,23 @@ reports GPU exposure, submission, and RAF completion without a demo error.
 The managed probe builds with no warnings/errors. This is visual end-to-end
 evidence for the basic shader/draw route; it does not qualify exact color
 management, continuous frame replacement, or full WebGPU conformance.
+
+### Resize and repeated-frame probes (2026-09-08)
+
+The document demo now updates its canvas backing size from innerWidth/innerHeight
+on window resize and schedules a redraw. --resize-webgpu drives 640x360,
+280x180, 520x320, then 400x240 at 500ms intervals. The observed run submitted
+five frames, ended with a 400x240 backing store, reported no demo error, and
+visibly displayed the final triangle (macos-resize-final.png). This verifies
+discrete resizing and final output, not smooth live dragging, Retina backing
+resolution, or resize during sustained rendering.
+
+--stress-webgpu requests 120 RAF-driven frames and currently FAILS: one run
+stopped at three frames with canvas texture acquisition unavailable; another
+stopped at fifty with texture-view wrapper capacity exhausted. Temporary scene
+tracing also found many zero-image scenes between completed GPU images.
+Current generation/content-serial filtering excludes the previous completed
+image as soon as the next texture is acquired; retaining the last completed
+image until replacement needs an explicit invalidation/serial contract.
+These failures remain open; the stress mode is separate from the default demo.
+No continuous-rendering or smooth-resize acceptance is claimed.
