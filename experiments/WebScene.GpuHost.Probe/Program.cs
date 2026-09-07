@@ -66,6 +66,11 @@ internal sealed class ProbeApp : Application
                         {
                             await visual.Compositor.RequestCommitAsync().WaitAsync(TimeSpan.FromSeconds(30));
                             visualCommitCompleted = true;
+                            if (Environment.GetCommandLineArgs().Contains("--inspect"))
+                            {
+                                Console.WriteLine("Shared surface attached; inspection window is open for 30 seconds.");
+                                await Task.Delay(TimeSpan.FromSeconds(30));
+                            }
                         }
                         finally
                         {

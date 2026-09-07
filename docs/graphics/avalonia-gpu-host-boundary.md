@@ -83,3 +83,12 @@ Both commits complete on M4. Per Avalonia's API contract, this is render-thread
 state application, not a display/GPU-completion fence or a pixel correctness test.
 The next boundary test still needs independent displayed-pixel verification and
 connection of the Dawn-produced allocation to the host-compatible source.
+
+## Visible output evidence
+
+A targeted capture of the exact probe window during `--inspect` shows the expected
+blue composition surface and white remaining background. See
+[evidence](evidence/avalonia-host/shared-gl-window.png). This independently confirms
+visible output for the shared-OpenGL host route. It is not exact color validation;
+window capture/display color management differs from raw texture verification.
+The Dawn/Metal-to-host allocation bridge remains unimplemented and unverified.

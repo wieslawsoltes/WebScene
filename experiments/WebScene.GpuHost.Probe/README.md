@@ -30,3 +30,11 @@ visual. The probe awaits RequestCommitAsync before detaching, then awaits a seco
 commit before teardown. M4 reports `visualCommitCompleted=true`. This proves the
 visual changes were applied on the render thread, not that pixels were displayed;
 `presentationVerified` remains false until an independent pixel observation exists.
+
+Use `-- --inspect` to keep the attached visual alive for 30 seconds. A targeted
+macOS window capture during this mode visibly confirms the blue shared-GL surface
+on the left and untouched white background on the right. Evidence is stored at
+`docs/graphics/evidence/avalonia-host/shared-gl-window.png`. This is visual evidence
+for GL-to-Avalonia display, not a colorimetric pixel test or Dawn-to-host integration.
+The runtime JSON keeps presentationVerified=false because the program itself does
+not perform the independent window observation.
