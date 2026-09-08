@@ -1,0 +1,58 @@
+{
+  "runs": {
+    "commands": {
+      "validated": true,
+      "compilations": 45,
+      "buckets": {
+        "text": {
+          "totalMilliseconds": 617.165347,
+          "medianMillisecondsPerCompilation": 13.09659
+        },
+        "svg": {
+          "totalMilliseconds": 9.603327,
+          "medianMillisecondsPerCompilation": 0.152826
+        }
+      }
+    },
+    "textRoutes": {
+      "validated": true,
+      "compilations": 41,
+      "buckets": {
+        "ordinaryText": {
+          "totalMilliseconds": 438.980528,
+          "medianMillisecondsPerCompilation": 10.018664
+        },
+        "spacedText": {
+          "totalMilliseconds": 156.592934,
+          "medianMillisecondsPerCompilation": 3.517793
+        }
+      }
+    },
+    "drawing": {
+      "validated": true,
+      "compilations": 43,
+      "buckets": {
+        "ordinaryTextTotal": {
+          "totalMilliseconds": 442.346195,
+          "medianMillisecondsPerCompilation": 9.59738
+        },
+        "ordinaryTextDrawSubset": {
+          "totalMilliseconds": 17.392991,
+          "medianMillisecondsPerCompilation": 0.274666
+        },
+        "spacedText": {
+          "totalMilliseconds": 158.53589,
+          "medianMillisecondsPerCompilation": 3.333041
+        }
+      }
+    }
+  },
+  "temporaryInstrumentationRemoved": true,
+  "physicalPresentationVerified": false,
+  "limitations": [
+    "Includes startup and interaction compilations; not an active-only FPS measure.",
+    "Diagnostic timers/logging may perturb timings.",
+    "Draw subset overlaps ordinary-text total; do not sum these buckets.",
+    "Preparation includes parsing, font resolution, fallback checking, shaping, positioning and metrics; finer attribution remains."
+  ]
+}
