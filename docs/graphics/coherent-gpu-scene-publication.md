@@ -521,3 +521,16 @@ Avalonia UsePlatformDetect configuration without a custom render timer override.
 Before altering that configuration, correlate individual compositor ticks with
 native publication availability and frame demand. Evidence:
 `evidence/kestrel/callback-cadence-audit.json`.
+
+A temporary per-compositor-callback trace recorded 70 measured callbacks in a
+validated pan. At callback entry none had accepted work awaiting drawing or
+pending GPU retirements. Thirty-three callbacks had one pending mailbox signal;
+37 had none. Of 33 matched rendered revisions, 18 had one callback between
+publication and acceptance and 15 had none; none spanned multiple observed
+callbacks before acceptance. Demand was caret-only (bit 4) on 45 callbacks, zero
+on 24, and RAF/current-texture demand (bit 1) on one. Thus this run does not show
+ready scenes being repeatedly ignored at compositor boundaries. Investigate
+input-to-publication timing and callback delivery without assuming every tick
+has application GPU work. Trace logging was removed and the probe rebuilt.
+Evidence: `evidence/kestrel/compositor-demand-trace.json`; timing remains affected
+by tracing and does not qualify physical presentation.
