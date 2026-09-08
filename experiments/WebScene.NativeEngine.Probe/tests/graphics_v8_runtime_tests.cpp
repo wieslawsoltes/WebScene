@@ -423,11 +423,21 @@ void test_runtime_webgpu_installation() {
             const shared=new SharedArrayBuffer(8);new Uint32Array(shared).set([55,66]);
             queue.writeBuffer(buffer,12,new Uint32Array(shared),1,1);
             queue.writeBuffer(buffer,16,shared,0,4);
+            new Uint32Array(shared).fill(0); // Submitted shared bytes are call-time data.
+            const detachable=new Uint32Array([0x12345678]);
+            queue.writeBuffer(buffer,20,detachable);
+            new Uint8Array(detachable.buffer.transfer()).fill(0);
+            if(detachable.byteLength!==0)throw new Error('source view was not detached');
+            const direct=new Uint32Array([0x23456789]).buffer;
+            queue.writeBuffer(buffer,24,direct);
+            new Uint8Array(direct.transfer()).fill(0);
+            if(direct.byteLength!==0)throw new Error('source buffer was not detached');
             queue.writeBuffer(buffer,32,new ArrayBuffer(0));
             await buffer.mapAsync(1);
             const result=new DataView(buffer.getMappedRange());
             if(result.getUint32(0,true)!==33||result.getUint32(4,true)!==0x07060504
-                ||result.getUint32(8,true)!==0x08070605||result.getUint32(12,true)!==66||result.getUint32(16,true)!==55)
+                ||result.getUint32(8,true)!==0x08070605||result.getUint32(12,true)!==66||result.getUint32(16,true)!==55
+                ||result.getUint32(20,true)!==0x12345678||result.getUint32(24,true)!==0x23456789)
                 throw new Error('writeBuffer uploaded wrong bytes');
             buffer.unmap();
             for(const args of [[buffer,0,bytes,9],[buffer,0,bytes,0,3],[buffer,0,bytes,4,8]]) {

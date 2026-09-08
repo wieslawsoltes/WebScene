@@ -1,0 +1,22 @@
+{
+  "scope": "V8 GPUQueue.writeBuffer call-time bytes verified by Dawn buffer mapping on macOS",
+  "sourceBaseCommit": "75bf60d693b0dbed3ab5541492881d11da9dcc2f",
+  "testCommand": "ctest --test-dir artifacts/graphics-build/native-v8-enabled -R '^webscene_graphics_v8_runtime_tests$' --output-on-failure",
+  "buildCommand": "cmake --build artifacts/graphics-build/native-v8-enabled --target webscene_graphics_v8_runtime_tests -j4",
+  "result": {
+    "passed": 1,
+    "failed": 0,
+    "seconds": 0.75
+  },
+  "checks": [
+    "Typed-array buffer transferred immediately after writeBuffer; transferred bytes overwritten; GPU word remains 0x12345678",
+    "Direct ArrayBuffer transferred immediately after writeBuffer; transferred bytes overwritten; GPU word remains 0x23456789",
+    "SharedArrayBuffer overwritten after writes; GPU words retain original values",
+    "Source byteLength confirms detachment before awaiting GPU mapping"
+  ],
+  "limits": [
+    "Diagnostic buffer mapping is test readback, not presentation transport",
+    "SharedArrayBuffer test uses same-thread mutation; no cross-worker concurrency claim",
+    "No full CTS or cross-platform qualification"
+  ]
+}
