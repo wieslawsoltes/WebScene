@@ -423,3 +423,14 @@ identical external event. A rebuilt probe completed with 51 delivered moves,
 37 application callbacks, 43 rendered scenes, one blocked publication and zero
 script errors. See `evidence/kestrel/validated-pan-workload.json`. This establishes
 a usable workload trace only, not presentation timing or sustained performance.
+
+An ordinary-host-frame publication bypass was built and run against the validated
+pan workload. The run passed workload/startup checks with zero script errors,
+28 application callbacks and 32 rendered scenes, versus 37/43 in the preceding
+validated run. This is not a statistical regression finding, but provides no
+support for retaining the change. The experiment was removed and the original
+scheduler restored. Evidence: `evidence/kestrel/host-frame-gate-experiment.json`.
+A same-iteration host-frame flag also cannot represent an RAF batch that finishes
+in a later worker iteration; any eventual scheduling change must track the actual
+completed rendering opportunity. Next profiling should timestamp host-frame
+admission, RAF completion, scene capture/commit and compositor drawing separately.
