@@ -1153,7 +1153,7 @@ if(BUILD_TESTING AND APPLE AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     add_executable(webscene_graphics_metal_event_handoff_tests tests/graphics_metal_event_handoff.mm)
     target_compile_features(webscene_graphics_metal_event_handoff_tests PRIVATE cxx_std_20)
     target_compile_options(webscene_graphics_metal_event_handoff_tests PRIVATE -fobjc-arc)
-    target_link_libraries(webscene_graphics_metal_event_handoff_tests PRIVATE "-framework Foundation" "-framework Metal")
+    target_link_libraries(webscene_graphics_metal_event_handoff_tests PRIVATE dawn::webgpu_dawn "-framework Foundation" "-framework Metal")
     add_test(NAME webscene_graphics_metal_event_handoff_tests COMMAND webscene_graphics_metal_event_handoff_tests)
     set_tests_properties(webscene_graphics_metal_event_handoff_tests PROPERTIES TIMEOUT 15 LABELS "graphics;hardware;metal")
     # Private managed-interop fixture, deliberately excluded from install/package targets.

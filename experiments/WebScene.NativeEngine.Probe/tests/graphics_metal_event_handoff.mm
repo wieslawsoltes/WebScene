@@ -3,7 +3,7 @@
 #include <chrono>
 #include <cstdio>
 #include <thread>
-#include "../native/graphics/metal_producer_wait.h"
+#include "../native/graphics/dawn_metal_producer_wait.h"
 
 // Hardware dependency test, not a presentation/FPS or Dawn/Skia interop test.
 int main() {
@@ -30,7 +30,40 @@ int main() {
             gate.signaledValue=1; return 6;
         }
         const webscene::graphics::metal_producer_dependency dependencies[]={{ready,7},{second,11}};
-        auto barrier=webscene::graphics::submit_metal_producer_waits(consumer,dependencies);
+        const wgpu::InstanceFeatureName timed=wgpu::InstanceFeatureName::TimedWaitAny;
+        wgpu::InstanceDescriptor instance_desc{}; instance_desc.requiredFeatureCount=1; instance_desc.requiredFeatures=&timed;
+        auto instance=wgpu::CreateInstance(&instance_desc);
+        wgpu::Adapter adapter;
+        wgpu::RequestAdapterOptions options{}; options.backendType=wgpu::BackendType::Metal;
+        auto request=instance.RequestAdapter(&options,wgpu::CallbackMode::WaitAnyOnly,
+            [&adapter](wgpu::RequestAdapterStatus status,wgpu::Adapter result,wgpu::StringView) {
+                if(status==wgpu::RequestAdapterStatus::Success) adapter=std::move(result);
+            });
+        if(instance.WaitAny(request,5'000'000'000ULL)!=wgpu::WaitStatus::Success || !adapter) {
+            gate.signaledValue=1; return 9;
+        }
+        const wgpu::FeatureName feature=wgpu::FeatureName::SharedFenceMTLSharedEvent;
+        wgpu::DeviceDescriptor device_desc{}; device_desc.requiredFeatureCount=1; device_desc.requiredFeatures=&feature;
+        wgpu::Device dawn;
+        request=adapter.RequestDevice(&device_desc,wgpu::CallbackMode::WaitAnyOnly,
+            [&dawn](wgpu::RequestDeviceStatus status,wgpu::Device result,wgpu::StringView) {
+                if(status==wgpu::RequestDeviceStatus::Success) dawn=std::move(result);
+            });
+        if(instance.WaitAny(request,5'000'000'000ULL)!=wgpu::WaitStatus::Success || !dawn) {
+            gate.signaledValue=1; return 10;
+        }
+        wgpu::SharedFence fences[2];
+        uint64_t values[2]={7,11};
+        for(size_t i=0;i<2;++i) {
+            wgpu::SharedFenceMTLSharedEventDescriptor metal;
+            metal.sharedEvent=(__bridge void*)dependencies[i].event;
+            wgpu::SharedFenceDescriptor desc{};desc.nextInChain=&metal;
+            fences[i]=dawn.ImportSharedFence(&desc);
+        }
+        if(webscene::graphics::submit_dawn_metal_producer_waits(consumer,fences,std::span(values,1))) {
+            gate.signaledValue=1;second.signaledValue=11;return 11;
+        }
+        auto barrier=webscene::graphics::submit_dawn_metal_producer_waits(consumer,fences,values);
         if(!barrier) { gate.signaledValue=1; return 7; }
         id<MTLCommandBuffer> read=[consumer commandBuffer];
         id<MTLBuffer> result=[device newBufferWithLength:4096 options:MTLResourceStorageModeShared];

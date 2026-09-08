@@ -1,0 +1,15 @@
+{
+  "test": "webscene_graphics_metal_event_handoff_tests",
+  "result": "passed",
+  "durationSeconds": 0.44,
+  "scope": "Two controlled Metal shared events imported into Dawn SharedFence objects, exported by the bridge and waited on by a separate Metal consumer queue",
+  "checks": [
+    "reject mismatched fence/value count before queue submission",
+    "export every fence as MTLSharedEvent",
+    "consumer remains held by second dependency after first completes",
+    "diagnostic buffer bytes match after both dependencies complete"
+  ],
+  "dawnProducedTextureConsumed": false,
+  "productionPresenterIntegrated": false,
+  "physicalPresentationVerified": false
+}
