@@ -39,6 +39,20 @@ internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
     private static extern IntPtr SendObject(IntPtr receiver,IntPtr selector,IntPtr argument);
     [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="objc_msgSend")]
     private static extern void SendVoid(IntPtr receiver,IntPtr selector);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate byte CreateFixture(out NativeGpuImageLeaseV3 image);
+    private NativeGpuImageLeaseV3? _fixture;
+    public MetalHostProbeControl()
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--metal-fixture")) return;
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")
+            ?? throw new InvalidOperationException("Native library is required"));
+        var library=NativeLibrary.Load(Environment.GetEnvironmentVariable("WEBSCENE_TEST_GPU_FIXTURE_LIBRARY")
+            ?? throw new InvalidOperationException("Fixture library is required"));
+        var create=Marshal.GetDelegateForFunctionPointer<CreateFixture>(NativeLibrary.GetExport(library,"webscene_test_create_dawn_iosurface"));
+        if(create(out var fixture)==0) throw new InvalidOperationException("Dawn fixture failed");
+        _fixture=fixture;
+    }
     public TaskCompletionSource<string> Completed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public override void Render(DrawingContext context) => context.Custom(this);
     Rect ICustomDrawOperation.Bounds => new(0,0,Bounds.Width,Bounds.Height);
@@ -74,12 +88,23 @@ internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
                     if(!wrapped.IsValid || wrapped.Width!=16 || wrapped.Height!=16)
                         throw new InvalidOperationException("Metal backend wrapper invalid");
                 } finally { SendVoid(texture,Selector("release")); }
+                if (_fixture is not null)
+                {
+                    if(NativeGpuImageConsumerV3.Acquire(_fixture,out var consumer)!=NativeSceneAcquireStatus.Success || consumer is null)
+                        throw new InvalidOperationException("Fixture consumer acquisition failed");
+                    try {
+                        using var imported=NativeMetalIOSurfaceTexture.Import(device,consumer);
+                        using var backend=NativeMetalBackendTexture.Create(imported.Width,imported.Height,imported.Handle);
+                        if(!backend.IsValid) throw new InvalidOperationException("Imported Metal texture wrapper invalid");
+                    } finally { consumer.Complete(); _fixture.Dispose(); _fixture=null; }
+                }
                 hostName=host.GetType().FullName!;
             }
             lease.SkCanvas.Clear(SkiaSharp.SKColors.Teal);
             Completed.TrySetResult(JsonSerializer.Serialize(new {
                 host=hostName, metalDeviceAvailable=true,
                 metalQueueAvailable=true, skiaGpuContextAvailable=true, metalTextureWrapperVerified=true,
+                dawnIOSurfaceImportVerified=Environment.GetCommandLineArgs().Contains("--metal-fixture"),
                 producerInteropVerified=false, physicalPresentationVerified=false }));
         } catch(Exception error) { Completed.TrySetException(error); }
     }
