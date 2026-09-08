@@ -2092,17 +2092,22 @@
         }
       ],
       "reason": "Self-verifying reduction for two retained-path replay boundaries: geometry keeps the transform active when each segment is authored even if the transform changes before stroke(), and a full-circle arc appended to a non-empty subpath includes the required connecting line to its start point."
-    }
-  ],
-  "harnessBlocked": [
+    },
     {
       "path": "contracts/html-script-style-text-is-inert.html",
       "type": "testharness",
-      "capabilities": ["html-raw-text", "stylesheet-discovery"],
-      "evidence": ["kestrel-print-preview-style-leak"],
-      "reason": "Print-preview HTML inside original Kestrel script text must not become active styles. Blocked: EngineAdapters.LoadDocument extracts styles with regex from comments and template contents. Requires a real document-navigation harness path; native navigation regression covers production."
+      "capabilities": [
+        "html-raw-text",
+        "stylesheet-discovery"
+      ],
+      "evidence": [
+        "kestrel-print-preview-style-leak"
+      ],
+      "reason": "Candidate passes through native document navigation, preserving parser raw-text/comment/template semantics. Prepared-markup regex loading cannot qualify this parsing regression.",
+      "nativeNavigation": true
     }
   ],
+  "harnessBlocked": [],
   "excluded": [
     {
       "area": "print-and-paged-media",

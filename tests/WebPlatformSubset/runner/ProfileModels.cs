@@ -25,6 +25,7 @@ internal sealed class ProfileTest
 {
     public required string Path { get; init; }
     public string Type { get; init; } = "testharness";
+    public bool NativeNavigation { get; init; }
     public string? Reference { get; init; }
     public List<string> Capabilities { get; init; } = [];
     public List<string> Evidence { get; init; } = [];

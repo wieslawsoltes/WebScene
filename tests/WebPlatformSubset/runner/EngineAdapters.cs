@@ -63,8 +63,9 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
     private ulong _sequence;
     private double _frameTimestampMs;
     private bool _loaded;
+    private string? _navigationDocumentPath;
     private bool _disposed;
-    private readonly bool _managedFontEngine;
+    private readonly bool _managedHostEngine;
 
     internal NativeWptEngineEnvironment(
         RunnerOptions options,
@@ -72,7 +73,8 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         string upstreamRoot,
         string documentPath,
         string html,
-        string? fontBaseDirectory = null)
+        string? fontBaseDirectory = null,
+        bool nativeNavigation = false)
     {
         _viewport = viewport;
         _renderer = new NativeSceneSnapshotRenderer(viewport.DeviceScaleFactor);
@@ -88,10 +90,10 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         }
 
         NativeApi.Configure(libraryPath);
-        _managedFontEngine = html.Contains("@font-face", StringComparison.OrdinalIgnoreCase);
-        if (_managedFontEngine)
+        _managedHostEngine = nativeNavigation || html.Contains("@font-face", StringComparison.OrdinalIgnoreCase);
+        if (_managedHostEngine)
         {
-            // Font contracts must exercise the product stylesheet-consumption,
+            // Navigation and font contracts use the product resource-loading,
             // registration and measurement path, not a separate harness font map.
             NativeWebSceneApi.ConfigureLibraryPath(libraryPath);
             _engine = NativeWebSceneApi.EngineCreate(0, options.NativeCacheDirectory,
@@ -122,7 +124,17 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
                 // screenshot rasterization, including before document scripts.
                 DeltaX = viewport.DeviceScaleFactor
             });
-            LoadPreparedDocument(html, upstreamRoot, documentPath);
+            if (nativeNavigation)
+            {
+                // Preserve parser ordering and raw-text/template semantics.
+                // Keep relative fixture resources beside the prepared document.
+                _navigationDocumentPath = Path.Combine(fontBaseDirectory ?? upstreamRoot,
+                    $".webscene-wpt-navigation-{Guid.NewGuid():N}.html");
+                File.WriteAllText(_navigationDocumentPath, html);
+                if (!NativeWebSceneApi.TryLoadUrl(_engine, new Uri(_navigationDocumentPath).AbsoluteUri))
+                    throw new InvalidOperationException(NativeApi.GetLastError(_engine));
+            }
+            else LoadPreparedDocument(html, upstreamRoot, documentPath);
             _loaded = true;
             for (var index = 0; index < 4; index++) SettleFrame();
         }
@@ -278,9 +290,10 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         _interop.Dispose();
         if (_engine != IntPtr.Zero)
         {
-            if (_managedFontEngine) NativeWebSceneApi.EngineDestroy(_engine);
+            if (_managedHostEngine) NativeWebSceneApi.EngineDestroy(_engine);
             else NativeApi.EngineDestroy(_engine);
         }
+        if (_navigationDocumentPath is not null) File.Delete(_navigationDocumentPath);
     }
 
     private void LoadPreparedDocument(string html, string upstreamRoot, string documentPath)

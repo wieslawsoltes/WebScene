@@ -672,3 +672,11 @@ dotnet run --project tests/WebPlatformSubset/runner -c Release -- --manifest tes
 ```
 
 It is a local candidate, not an upstream WPT or physical-presentation qualification. The native engine regression additionally checks that host evaluation cannot observe a partial admitted batch.
+
+A harness or contract entry can opt into `"nativeNavigation": true`. That path loads the prepared HTML through the native document parser and the product resource loader, instead of extracting scripts/styles into an `innerHTML` fixture. The temporary prepared file lives beside the source fixture so relative resources retain their directory, and is removed after engine destruction. Other entries retain their existing adapter path. This still uses the runner’s prepared harness scripts; it is not a claim of an unmodified upstream navigation test.
+
+The inert script/comment/template stylesheet regression uses this path. Reproduce its candidate result with:
+
+```sh
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- --manifest tests/WebPlatformSubset/webscene-native-navigation-profile.json --selection candidate --native-library /absolute/path/to/libwebscene_native_engine.dylib --output artifacts/wpt-native-navigation
+```

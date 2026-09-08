@@ -672,3 +672,9 @@ The native document probe accepts positive-integer `--document-width` and `--doc
 ### Preserve the cross-library DOM footprint budget
 
 Linux package CI failed the existing `sizeof(dom_node) <= 1024` assertion. Moving `xml_mode` beside the byte-sized node kind removes padding without changing defaults or increasing the budget. A Linux x64 Ubuntu GCC 13.3/libstdc++ container reproduced the original-header failure and compiled the changed header with a measured 1024-byte node. Both macOS native suites also pass after rebuilding. Evidence: `evidence/kestrel/linux-dom-footprint-fix.json`. This is emulated compile/layout verification, not Linux GPU hardware or complete package qualification. The separate CI failure for the explicit inert-style harnessBlocked entry remains open.
+
+### Remove the inert-style harness block through native navigation
+
+The WPT-style runner now supports opt-in native navigation for harness/contract entries. It loads prepared HTML with the existing product resource loader, allowing the native parser to retain script raw text, comments and inert template contents. It does not activate styles by extracting regex matches. The unchanged `html-script-style-text-is-inert.html` case passes its assertion through this route and is now a candidate rather than harnessBlocked. The main profile’s existing empty-harnessBlocked architecture assertion is unchanged; all six release-compatibility guard tests pass. The default prepared-document RAF contract also remains 5/5 passing.
+
+Evidence: `evidence/kestrel/inert-style-native-navigation.json`. This is a local candidate pass, not upstream or multi-platform qualification. Temporary prepared files are deleted after engine destruction; no source fixture or original Kestrel code was altered.
