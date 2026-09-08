@@ -445,3 +445,24 @@ revision timestamps yields median publication-to-draw latency 33.37ms. This dire
 further investigation toward compositor consumption/retirement; it does not prove
 a GPU execution bottleneck or a physical frame rate. Evidence:
 `evidence/kestrel/pan-composition-timeline.json`.
+
+A bounded consumer-drain prototype now applies at most a second queued GPU diff
+before invalidating/drawing, preserving diff order and combining both damage
+regions. Manual frame certification remains one diff per frame. The existing
+presenter capacity/retirement checks can reject the second acquisition without
+advancing its acknowledgement. A validated trial recorded 50 publications, 30
+rendered scenes, 48 RAF callbacks and median publication-to-draw latency 28.42ms.
+Intermediate revisions need not be drawn, but every accepted diff is applied.
+Existing interop/frame-policy/damage tests pass: 18 each on net8/net10, no skips.
+The prototype remains under evaluation and needs dedicated combined-damage and
+multi-scene lifetime coverage before acceptance. Evidence:
+`evidence/kestrel/bounded-mailbox-drain-trial.json`. No physical 60fps claim follows.
+
+Dedicated damage regressions now cover separated changes, unchanged-following
+scenes, and full invalidation in either order. A native IOSurface ownership test
+retains four undrawn scene groups, accepts only the bounded current-plus-two
+retiring groups, and verifies that the rejected group remains caller-owned until
+explicit discard. This checks undrawn ownership, not imported GPU fence execution.
+The focused suite passes 23 tests each on net8/net10 with no skips. The bounded
+consumer change is retained for further performance and physical-render testing;
+its single-run latency result remains unqualified.

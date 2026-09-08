@@ -241,6 +241,44 @@ public sealed class NativeGpuSceneInteropTests
     }
 
     [IOSurfaceFixtureFact]
+    public void MultipleUndrawnScenesKeepBoundedOwnershipUntilDiscard()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        var library = NativeLibrary.Load(Environment.GetEnvironmentVariable("WEBSCENE_TEST_GPU_FIXTURE_LIBRARY")!);
+        var create = Marshal.GetDelegateForFunctionPointer<CreateIOSurface>(NativeLibrary.GetExport(library, "webscene_test_create_iosurface"));
+        var alive = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_iosurface_alive"));
+        Assert.Equal(1, create(out var source));
+        var groups = new List<NativeMacOSGpuSceneImages>();
+        var presenter = new NativeMacOSGpuScenePresenter();
+        try
+        {
+            for (var i = 0; i < 4; ++i)
+            {
+                Assert.Equal(NativeSceneAcquireStatus.Success,
+                    NativeMacOSGpuSceneImages.Retain(new[] { source }, out var group));
+                groups.Add(group!);
+            }
+            source.Dispose();
+            Assert.True(presenter.TryReplace(groups[0]));
+            Assert.True(presenter.TryReplace(groups[1]));
+            Assert.True(presenter.TryReplace(groups[2]));
+            Assert.False(presenter.TryReplace(groups[3]));
+            Assert.Equal(1, alive());
+            Assert.True(presenter.TryDiscardUnprepared());
+            // Rejected replacement still belongs to the caller.
+            Assert.Equal(1, alive());
+            groups[3].DiscardUnprepared();
+            Assert.Equal(0, alive());
+        }
+        finally
+        {
+            presenter.TryDiscardUnprepared();
+            foreach (var group in groups) group.DiscardUnprepared();
+            source.Dispose();
+        }
+    }
+
+    [IOSurfaceFixtureFact]
     public void SceneImageCaptureRollsBackEarlierRetainsWhenALaterImageIsDisposed()
     {
         NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);

@@ -225,6 +225,16 @@ internal readonly record struct NativeSceneDamage(
     double SummedArea)
 {
     public static NativeSceneDamage None => default;
+
+    internal NativeSceneDamage Combine(in NativeSceneDamage following)
+    {
+        if (!RequiresRender) return following;
+        if (!following.RequiresRender) return this;
+        return new NativeSceneDamage(true, IsFull || following.IsFull,
+            Bounds.Union(following.Bounds),
+            RectangleCount + following.RectangleCount,
+            SummedArea + following.SummedArea);
+    }
 }
 
 internal static class NativeSceneDamagePolicy
@@ -734,6 +744,17 @@ internal sealed unsafe class NativeSceneCompositionHandler
             if (!_gpuNeedsRender && _gpuPresenter?.HasPendingRetirements != true)
             { _invalidationGate.Complete(); return; }
             damage = new NativeSceneDamage(true, true, default, 0, 0);
+        }
+
+        // Consume at most the second slot already offered by the ordered
+        // mailbox. Apply both diffs in order, then draw the newest coherent
+        // scene once. Manual certification retains one scene per boundary.
+        if (_gpuPresenter is not null && _running && !_manualFrames
+            && _publicationMailbox.PendingCount > 0
+            && TryAcquireNextDiff(out var followingDamage))
+        {
+            damage = damage.Combine(followingDamage);
+            _pendingDamage = damage;
         }
 
         if (_gpuNeedsRender && !damage.RequiresRender)
