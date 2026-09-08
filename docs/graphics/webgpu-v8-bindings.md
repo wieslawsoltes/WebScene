@@ -1824,3 +1824,16 @@ external-texture resource support or exhaustive bind-group-layout conformance.
 
 Unchanged Kestrel startup still exits 1, now reporting "d.createBindGroup is not
 a function". Its layout creation step advances successfully to resource binding.
+
+### Bind-group ownership foundation (2026-09-08)
+
+Added bounded native bind-group handles, access guards, deferred release and a
+distinct GPUBindGroup wrapper brand. The runtime suite passes with a uniform
+buffer binding, release of the original buffer/layout handles, guarded device
+closure, brand rejection and deferred wrapper retirement. This establishes
+resource ownership; JavaScript createBindGroup conversion/exposure is still
+pending, so Kestrel remains a failing acceptance test at that API.
+
+The unchanged original Kestrel archive remains mandatory acceptance evidence.
+Triangle and synthetic resize probes do not replace successful Kestrel WebGPU
+startup, app interaction and resize verification.

@@ -172,6 +172,15 @@ public:
             } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
         },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
     }
+    static graphics_command deferred_bind_group_release(resource_handle<dawn_device> device,resource_handle<wgpu::BindGroup> pipeline) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try {
+                service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
+                    owner.release_bind_group({args[3],args[4],static_cast<uint32_t>(args[5])});
+                });
+            } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
+        },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
+    }
     static graphics_command deferred_pipeline_layout_release(resource_handle<dawn_device> device,resource_handle<wgpu::PipelineLayout> pipeline) noexcept {
         return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
             try {

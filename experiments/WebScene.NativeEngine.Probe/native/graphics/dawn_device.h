@@ -34,6 +34,8 @@ class dawn_device {
     size_t active_buffer_scopes_{};
     resource_table<wgpu::ShaderModule> shaders_;
     size_t active_shader_scopes_{};
+    resource_table<wgpu::BindGroup> bind_groups_;
+    size_t active_bind_group_scopes_{};
     resource_table<wgpu::BindGroupLayout> bind_group_layouts_;
     size_t active_bind_group_layout_scopes_{};
     resource_table<wgpu::PipelineLayout> pipeline_layouts_;
@@ -55,7 +57,7 @@ public:
     dawn_device(uint64_t engine,std::shared_ptr<completion_mailbox> mailbox,
                 wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024,size_t texture_capacity=1024,size_t texture_view_capacity=4096,size_t command_capacity=1024)
         : owner_{engine,new_owner_token(),0},mailbox_(std::move(mailbox)),
-          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_),bind_group_layouts_(render_pipeline_capacity,owner_),pipeline_layouts_(render_pipeline_capacity,owner_),render_pipelines_(render_pipeline_capacity,owner_),textures_(texture_capacity,owner_),texture_views_(texture_view_capacity,owner_),command_encoders_(command_capacity,owner_),render_passes_(command_capacity,owner_),command_buffers_(command_capacity,owner_) {
+          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_),bind_groups_(render_pipeline_capacity,owner_),bind_group_layouts_(render_pipeline_capacity,owner_),pipeline_layouts_(render_pipeline_capacity,owner_),render_pipelines_(render_pipeline_capacity,owner_),textures_(texture_capacity,owner_),texture_views_(texture_view_capacity,owner_),command_encoders_(command_capacity,owner_),render_passes_(command_capacity,owner_),command_buffers_(command_capacity,owner_) {
         if (!engine || !mailbox_ || !adapter_ || !device_)
             throw std::invalid_argument("Dawn device requires native ownership");
     }
@@ -161,6 +163,25 @@ public:
         bind_group_layouts_.destroy(handle,owner_);
     }
     size_t live_bind_group_layouts() const {check_thread();return bind_group_layouts_.resident_count();}
+    resource_handle<wgpu::BindGroup> create_bind_group(const wgpu::BindGroupDescriptor& descriptor) {
+        const auto& device=native();
+        if(!bind_groups_.can_insert())throw std::length_error("Graphics bind_group capacity exhausted");
+        auto pipeline=device.CreateBindGroup(&descriptor);
+        if(!pipeline)throw std::runtime_error("Dawn did not return a bind_group");
+        return bind_groups_.insert(owner_,std::make_unique<wgpu::BindGroup>(std::move(pipeline)));
+    }
+    template<class Execute> void with_bind_group(resource_handle<wgpu::BindGroup> handle,Execute execute) {
+        check_thread();
+        const auto& pipeline=bind_groups_.get(handle,owner_);
+        struct guard { size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;} } scope(active_bind_group_scopes_);
+        execute(pipeline);
+    }
+    void release_bind_group(resource_handle<wgpu::BindGroup> handle) {
+        check_thread();
+        if(active_bind_group_scopes_)throw std::logic_error("Cannot release bind_group during execution");
+        bind_groups_.destroy(handle,owner_);
+    }
+    size_t live_bind_groups() const {check_thread();return bind_groups_.resident_count();}
     resource_handle<wgpu::PipelineLayout> create_pipeline_layout(const wgpu::PipelineLayoutDescriptor& descriptor) {
         const auto& device=native();
         if(!pipeline_layouts_.can_insert())throw std::length_error("Graphics pipeline_layout capacity exhausted");
@@ -287,7 +308,7 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_pipeline_layout_scopes_ || active_bind_group_layout_scopes_ || active_buffer_scopes_ || active_shader_scopes_ || active_render_pipeline_scopes_ || active_texture_scopes_ || active_texture_view_scopes_ || active_command_scopes_) throw std::logic_error("Cannot close device during resource execution");
+        if (active_bind_group_scopes_ || active_pipeline_layout_scopes_ || active_bind_group_layout_scopes_ || active_buffer_scopes_ || active_shader_scopes_ || active_render_pipeline_scopes_ || active_texture_scopes_ || active_texture_view_scopes_ || active_command_scopes_) throw std::logic_error("Cannot close device during resource execution");
         process_loss();
         closed_=true;
         // Logical cancellation is independent of physical GPU completion.
@@ -302,6 +323,7 @@ public:
         shaders_.destroy_owner(owner_);
         render_pipelines_.destroy_owner(owner_);
         pipeline_layouts_.destroy_owner(owner_);
+        bind_groups_.destroy_owner(owner_);
         bind_group_layouts_.destroy_owner(owner_);
         texture_views_.destroy_owner(owner_);
         textures_.destroy_owner(owner_);

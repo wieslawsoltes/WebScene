@@ -13,6 +13,7 @@
 #include "graphics/v8_webgpu_render_pipelines.h"
 #include "graphics/v8_webgpu_bind_group_layouts.h"
 #include "graphics/v8_webgpu_pipeline_layouts.h"
+#include "graphics/v8_webgpu_bind_groups.h"
 #include "graphics/v8_webgpu_texture_views.h"
 #include "graphics/v8_webgpu_adapters.h"
 #include "graphics/v8_webgpu_discovery.h"
@@ -1537,6 +1538,47 @@ int main() {
                         adapter_service->drain_commands();
                         adapter_service->with_device(gc_buffer_device,[&](auto& owned){require(owned.live_pipeline_layouts()==0,"Deferred pipeline layout release failed");});
                         require(static_cast<bool>(native),"Retained native layout reference lost");
+                    }
+                    {
+                        resource_handle<wgpu::BindGroup> group_handle;
+                        adapter_service->with_device(gc_buffer_device,[&](auto& owned){
+                            wgpu::BufferDescriptor buffer_descriptor{};
+                            buffer_descriptor.size=64;buffer_descriptor.usage=wgpu::BufferUsage::Uniform;
+                            auto buffer_handle=owned.create_buffer(buffer_descriptor);
+                            wgpu::BindGroupLayoutEntry layout_entry{};layout_entry.binding=0;
+                            layout_entry.visibility=wgpu::ShaderStage::Vertex;
+                            layout_entry.buffer.type=wgpu::BufferBindingType::Uniform;
+                            wgpu::BindGroupLayoutDescriptor layout_descriptor{};
+                            layout_descriptor.entryCount=1;layout_descriptor.entries=&layout_entry;
+                            auto layout_handle=owned.create_bind_group_layout(layout_descriptor);
+                            owned.with_bind_group_layout(layout_handle,[&](const auto& layout){
+                                owned.with_buffer(buffer_handle,[&](const auto& buffer){
+                                    wgpu::BindGroupEntry entry{};entry.binding=0;entry.buffer=buffer;entry.size=64;
+                                    wgpu::BindGroupDescriptor descriptor{};descriptor.layout=layout;
+                                    descriptor.entryCount=1;descriptor.entries=&entry;
+                                    group_handle=owned.create_bind_group(descriptor);
+                                });
+                            });
+                            owned.release_buffer(buffer_handle);
+                            owned.release_bind_group_layout(layout_handle);
+                            owned.with_bind_group(group_handle,[&](const auto& group){
+                                require(static_cast<bool>(group),"Bind group lost native dependencies");
+                                bool guarded=false;try{owned.release_bind_group(group_handle);}catch(const std::logic_error&){guarded=true;}
+                                require(guarded,"Bind group released during native access");
+                                guarded=false;try{owned.close();}catch(const std::logic_error&){guarded=true;}
+                                require(guarded,"Device closed during bind group access");
+                            });
+                        });
+                        auto groups=std::make_unique<v8_webgpu_bind_groups>(isolate,context,1);
+                        auto wrapper=groups->wrap(context,*adapter_service,gc_buffer_device,group_handle,device_object).ToLocalChecked();
+                        auto native=v8_webgpu_bind_groups::native_reference(wrapper);
+                        bool wrong=false;try{v8_webgpu_bind_group_layouts::native_reference(wrapper);}catch(const std::invalid_argument&){wrong=true;}
+                        require(wrong,"Bind group accepted as a bind group layout");
+                        groups.reset();
+                        adapter_service->with_device(gc_buffer_device,[&](auto& owned){require(owned.live_bind_groups()==1,"Bind group released inline");});
+                        adapter_service->drain_commands();
+                        adapter_service->with_device(gc_buffer_device,[&](auto& owned){require(owned.live_bind_groups()==0,"Deferred bind group release failed");});
+                        require(static_cast<bool>(native),"Retained native bind group reference lost");
                     }
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {
