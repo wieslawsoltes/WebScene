@@ -2085,3 +2085,15 @@ submitting it. Its latest run exits 1 at the missing showModal method, preservin
 the real UI prerequisite rather than submitting a hidden form. Kestrel solid
 creation/rendering is still unqualified. Dialog/top-layer support is the next
 identified browser-stack dependency.
+
+### Closed dialog layout dependency (2026-09-08)
+
+Closed dialog elements now default to display:none, with author display styles
+still able to override the default. Adding or removing the open attribute
+triggers style recascade so opening creates a layout box and closing removes
+it. A runtime regression checks computed display and geometry before opening,
+after opening and after closing, plus an explicit author display override.
+The native-engine and GPU runtime suites passed (12.55 seconds combined).
+This is a layout prerequisite only: showModal/close, modal top-layer painting,
+focus and inert input behavior remain outstanding, and the original Kestrel
+solid-creation workflow remains unqualified.

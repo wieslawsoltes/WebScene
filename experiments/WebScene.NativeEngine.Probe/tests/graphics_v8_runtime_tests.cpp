@@ -340,6 +340,20 @@ void test_runtime_webgpu_installation() {
             host.remove();
         }
     )JS","form-data-controls"),"FormData form control collection failed");
+    const bool dialog_layout_ok=runtime.execute(R"JS(
+        {
+            const dialog=document.createElement('dialog');dialog.textContent='Dialog contents';document.body.appendChild(dialog);
+            if(getComputedStyle(dialog).display!=='none'||dialog.getBoundingClientRect().height!==0)throw new Error('closed dialog participates in layout');
+            dialog.setAttribute('open','');
+            if(getComputedStyle(dialog).display==='none'||dialog.getBoundingClientRect().height<=0)throw new Error('open dialog stayed hidden');
+            dialog.removeAttribute('open');
+            if(getComputedStyle(dialog).display!=='none'||dialog.getBoundingClientRect().height!==0)throw new Error('closing dialog retained its box');
+            dialog.style.display='block';
+            if(getComputedStyle(dialog).display!=='block')throw new Error('author display did not override dialog default');
+            dialog.remove();
+        }
+    )JS","closed-dialog-layout");
+    if (!dialog_layout_ok) throw std::runtime_error("Dialog default visibility failed: " + runtime.last_error());
     require(runtime.execute(R"JS(
         if(installedDevice.createBindGroupLayout.length!==1)throw new Error('binding layout arity');
         globalThis.bindingLayout=installedDevice.createBindGroupLayout({label:'camera',entries:new Set([{binding:0,visibility:1,buffer:{}}])});
