@@ -267,6 +267,58 @@ void test_runtime_webgpu_installation() {
     }
     require(document.find_by_id("loss-ready")!=nullptr,"Device destruction did not resolve lost promise");
     require(runtime.execute(R"JS(
+        (async()=>{
+            const queue=installedDevice.queue;
+            if(queue.writeBuffer.length!==3)throw new Error('writeBuffer arity');
+            const buffer=installedDevice.createBuffer({size:32,usage:9});
+            const source=new Uint32Array([11,22,33,44]);
+            queue.writeBuffer(buffer,0,source.subarray(1),1,1);
+            source.fill(99);
+            const bytes=new Uint8Array([1,2,3,4,5,6,7,8]);
+            queue.writeBuffer(buffer,4,new DataView(bytes.buffer,2,6),1,4);
+            queue.writeBuffer(buffer,8,bytes.buffer,4,4);
+            const shared=new SharedArrayBuffer(8);new Uint32Array(shared).set([55,66]);
+            queue.writeBuffer(buffer,12,new Uint32Array(shared),1,1);
+            queue.writeBuffer(buffer,16,shared,0,4);
+            queue.writeBuffer(buffer,32,new ArrayBuffer(0));
+            await buffer.mapAsync(1);
+            const result=new DataView(buffer.getMappedRange());
+            if(result.getUint32(0,true)!==33||result.getUint32(4,true)!==0x07060504
+                ||result.getUint32(8,true)!==0x08070605||result.getUint32(12,true)!==66||result.getUint32(16,true)!==55)
+                throw new Error('writeBuffer uploaded wrong bytes');
+            buffer.unmap();
+            for(const args of [[buffer,0,bytes,9],[buffer,0,bytes,0,3],[buffer,0,bytes,4,8]]) {
+                let rejected=false;try{queue.writeBuffer(...args)}catch(e){rejected=e instanceof DOMException&&e.name==='OperationError'}
+                if(!rejected)throw new Error('invalid source range accepted');
+            }
+            for(const args of [[],[{},0,bytes],[buffer,-1,bytes],[buffer,0,{}],[buffer,0,bytes,-1]]) {
+                let rejected=false;try{queue.writeBuffer(...args)}catch(e){rejected=e instanceof TypeError}
+                if(!rejected)throw new Error('invalid writeBuffer conversion accepted');
+            }
+            const detached=new ArrayBuffer(8);detached.transfer();
+            const resizable=new ArrayBuffer(8,{maxByteLength:16});
+            for(const source of [detached,resizable]) {
+                let rejected=false;try{queue.writeBuffer(buffer,0,source)}catch(e){rejected=e instanceof TypeError}
+                if(!rejected)throw new Error('invalid backing store accepted');
+            }
+            const reentrant=new ArrayBuffer(8);let detachedRejected=false;
+            try{queue.writeBuffer(buffer,0,reentrant,{valueOf(){reentrant.transfer();return 0}})}catch(e){detachedRejected=e instanceof TypeError}
+            if(!detachedRejected)throw new Error('detachment during conversion accepted');
+            const sentinel={};let propagated=false;
+            try{queue.writeBuffer(buffer,{valueOf(){throw sentinel}},bytes)}catch(e){propagated=e===sentinel}
+            if(!propagated)throw new Error('writeBuffer conversion exception lost');
+            installedDevice.pushErrorScope('validation');
+            queue.writeBuffer(buffer,2,new Uint32Array([1]));
+            if(!(await installedDevice.popErrorScope() instanceof GPUValidationError))throw new Error('unaligned destination did not reach Dawn validation');
+            const node=document.createElement('div');node.id='write-ready';document.body.appendChild(node);
+        })();
+    )JS","queue-write-buffer"),"writeBuffer request failed");
+    deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(!document.find_by_id("write-ready")&&std::chrono::steady_clock::now()<deadline) {
+        require(runtime.pump_task(),"writeBuffer completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(document.find_by_id("write-ready")!=nullptr,"writeBuffer readback did not pass");
+    require(runtime.execute(R"JS(
         if(installedDevice.createBindGroupLayout.length!==1)throw new Error('binding layout arity');
         globalThis.bindingLayout=installedDevice.createBindGroupLayout({label:'camera',entries:new Set([{binding:0,visibility:1,buffer:{}}])});
         if(Object.prototype.toString.call(bindingLayout)!=='[object GPUBindGroupLayout]'||bindingLayout.label!=='camera')throw new Error('binding layout wrapper');

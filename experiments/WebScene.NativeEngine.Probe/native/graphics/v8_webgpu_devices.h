@@ -544,7 +544,7 @@ public:
         if(!info_factory_.create(context,metadata).ToLocal(&info_object)
             || !wrapper->SetPrivate(context,item->info_key.Get(isolate_),info_object).FromMaybe(false))return {};
         item->queue_key.Reset(isolate_,v8::Private::New(isolate_));
-        item->queue=std::make_unique<v8_webgpu_queue>(isolate_,service,device,std::move(queue_label));
+        item->queue=std::make_unique<v8_webgpu_queue>(isolate_,service,device,std::move(queue_label),dom_exception_.Get(isolate_));
         v8::Local<v8::Object> queue_object;
         if(!item->queue->create(context,wrapper).ToLocal(&queue_object)||!wrapper->SetPrivate(context,item->queue_key.Get(isolate_),queue_object).FromMaybe(false))return {};
         auto ticket=item->releases->reserve(graphics_service::deferred_device_release(device));

@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-08",
+  "originalDocumentSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "status": {
+    "ready": "true",
+    "backend": "WebGPU \u00b7 GPU pipeline",
+    "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands.Renderpass.setBindGroup is not a function",
+    "errors": 1,
+    "gpu": true
+  },
+  "exitCode": 1,
+  "acceptance": "failed: initial render requires setBindGroup"
+}

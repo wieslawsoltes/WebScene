@@ -1954,3 +1954,29 @@ loss under memory pressure, listener/GC lifetime, allocation-failure settlement,
 and complete standards coverage. Internal devices adopted without a configured
 loss signal are not qualified for device.lost delivery. Native uncaptured-error
 events are also still outstanding.
+
+### GPUQueue.writeBuffer (2026-09-08)
+
+writeBuffer now converts destination/source offsets in argument order, supports
+ArrayBuffer, DataView, typed arrays and shared buffer sources, and preserves
+typed-array element units versus byte units. Source bounds/alignment failures
+throw OperationError; numeric/interface conversion failures throw TypeError.
+Dawn handles destination alignment, usage, mapping and bounds validation.
+Conversion and range handling follow the [WebGPU queue API](https://gpuweb.github.io/gpuweb/#dom-gpuqueue-writebuffer)
+and were compared with the pinned Dawn node binding.
+
+Normal fixed ArrayBuffer sources are passed directly to Dawn's synchronous
+WriteBuffer snapshot; no additional browser-side staging copy is introduced.
+Shared sources use an atomic-byte snapshot before that call. Data is rechecked
+after coercion, rejecting detached and resizable backing stores. This is buffer
+upload functionality and does not add pixel readback to canvas composition.
+
+GPU runtime tests verify actual bytes through MAP_READ after typed subarray,
+DataView, raw/shared buffer writes and immediate source mutation. They also
+cover invalid ranges, conversion exceptions, native validation, and detachment
+during offset coercion. Full concurrent shared-memory stress, allocation-budget
+qualification and standards conformance remain outstanding.
+
+Unchanged Kestrel now advances to “pass.setBindGroup is not a function”. The
+probe still reports one application render error and exits 1. WebGPU backend
+selection alone remains insufficient for Kestrel acceptance.
