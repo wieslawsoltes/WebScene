@@ -360,7 +360,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                             }
                             var inputEnded = System.Diagnostics.Stopwatch.GetTimestamp();
                             await Task.Delay(750);
-                                var diagnostics = await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();const ancestors=[];for(let n=c.parentElement;n;n=n.parentElement){const b=n.getBoundingClientRect(),s=getComputedStyle(n);ancestors.push({id:n.id,tag:n.tagName,rect:[b.x,b.y,b.width,b.height],height:s.height,minHeight:s.minHeight,display:s.display,flex:s.flex,gridTemplateRows:s.gridTemplateRows});}return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],ancestors,dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
+                            var diagnostics = await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();const ancestors=[];for(let n=c.parentElement;n;n=n.parentElement){const b=n.getBoundingClientRect(),s=getComputedStyle(n);ancestors.push({id:n.id,tag:n.tagName,rect:[b.x,b.y,b.width,b.height],height:s.height,minHeight:s.minHeight,display:s.display,flex:s.flex,gridTemplateRows:s.gridTemplateRows});}return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],ancestors,dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
                             var published = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted).ToArray();
                             var drawn = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted).ToArray();
                             Console.WriteLine("Kestrel continuous window resize: " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -369,7 +369,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 publications = published, renderedScenes = drawn,
                                 scheduling = surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted),
                                 physicalPresentationVerified = false, nativeUserDragVerified = false
-                            }));
+                            }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
                             ValidateResizeGeometry(diagnostics);
                             using var geometry = System.Text.Json.JsonDocument.Parse(diagnostics);
                             var finalWindow = geometry.RootElement.GetProperty("window");
