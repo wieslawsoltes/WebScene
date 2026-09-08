@@ -1,0 +1,9 @@
+{
+  "host": "Avalonia.Native.MetalDevice",
+  "metalDeviceAvailable": true,
+  "metalQueueAvailable": true,
+  "skiaGpuContextAvailable": true,
+  "metalTextureWrapperVerified": true,
+  "producerInteropVerified": false,
+  "physicalPresentationVerified": false
+}

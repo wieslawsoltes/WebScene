@@ -5,6 +5,8 @@ using Avalonia.Media;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using System.Text.Json;
+using System.Runtime.InteropServices;
+using WebScene.Backends.Avalonia.Native;
 
 internal sealed class MetalHostProbeApp : Application
 {
@@ -27,6 +29,16 @@ internal sealed class MetalHostProbeApp : Application
 }
 internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
 {
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="objc_getClass")]
+    private static extern IntPtr GetClass(string name);
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="sel_registerName")]
+    private static extern IntPtr Selector(string name);
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="objc_msgSend")]
+    private static extern IntPtr TextureDescriptor(IntPtr receiver,IntPtr selector,ulong format,ulong width,ulong height,[MarshalAs(UnmanagedType.I1)] bool mipmapped);
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="objc_msgSend")]
+    private static extern IntPtr SendObject(IntPtr receiver,IntPtr selector,IntPtr argument);
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="objc_msgSend")]
+    private static extern void SendVoid(IntPtr receiver,IntPtr selector);
     public TaskCompletionSource<string> Completed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public override void Render(DrawingContext context) => context.Custom(this);
     Rect ICustomDrawOperation.Bounds => new(0,0,Bounds.Width,Bounds.Height);
@@ -53,12 +65,21 @@ internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
                 var queue=(IntPtr)metal.GetProperty("CommandQueue")!.GetValue(host)!;
                 if(device==IntPtr.Zero || queue==IntPtr.Zero || lease.GrContext is null)
                     throw new InvalidOperationException("Incomplete Metal/Skia host");
+                var descriptor=TextureDescriptor(GetClass("MTLTextureDescriptor"),
+                    Selector("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"),80,16,16,false);
+                var texture=SendObject(device,Selector("newTextureWithDescriptor:"),descriptor);
+                if(texture==IntPtr.Zero) throw new InvalidOperationException("Metal texture allocation failed");
+                try {
+                    using var wrapped=NativeMetalBackendTexture.Create(16,16,texture);
+                    if(!wrapped.IsValid || wrapped.Width!=16 || wrapped.Height!=16)
+                        throw new InvalidOperationException("Metal backend wrapper invalid");
+                } finally { SendVoid(texture,Selector("release")); }
                 hostName=host.GetType().FullName!;
             }
             lease.SkCanvas.Clear(SkiaSharp.SKColors.Teal);
             Completed.TrySetResult(JsonSerializer.Serialize(new {
                 host=hostName, metalDeviceAvailable=true,
-                metalQueueAvailable=true, skiaGpuContextAvailable=true,
+                metalQueueAvailable=true, skiaGpuContextAvailable=true, metalTextureWrapperVerified=true,
                 producerInteropVerified=false, physicalPresentationVerified=false }));
         } catch(Exception error) { Completed.TrySetException(error); }
     }
