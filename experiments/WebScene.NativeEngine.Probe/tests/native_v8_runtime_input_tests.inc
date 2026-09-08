@@ -178,6 +178,10 @@ void test_host_pointer_exit_clears_tooltip_without_another_move()
 
     // Many chart gestures use document mousemove/up rather than DOM capture.
     pointer_move(engine, 20, 20, 9U);
+    // The down event flushes the pending frame-paced entry move. Install
+    // counters afterward so worker timing cannot count that setup movement
+    // as part of the outside-host drag being tested.
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 10U, true);
     execute(engine, R"JS(
         globalThis.dragMoves = 0;
         globalThis.dragUps = 0;
@@ -186,13 +190,13 @@ void test_host_pointer_exit_clears_tooltip_without_another_move()
     )JS", "host-exit-document-drag.js");
     require(evaluate(engine, "dragUps", "host-exit-document-drag-ready.js") == "0",
         "document drag fixture not ready");
-    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 10U, true);
     exit(11U, 1U);
     pointer_move(engine, -20, -20, 12U, true);
     pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, -20, -20, 13U, false);
-    require(evaluate(engine, "[dragMoves, dragUps, getComputedStyle(tip).display]",
-        "host-exit-document-drag-result.js") == R"([1,1,"none"])",
-        "host exit interrupted document-level drag movement or release");
+    const auto drag_result = evaluate(engine, "[dragMoves, dragUps, getComputedStyle(tip).display]",
+        "host-exit-document-drag-result.js");
+    require(drag_result == R"([1,1,"none"])",
+        "host exit interrupted document-level drag movement or release: " + drag_result);
 
     pointer_move(engine, 20, 20, 14U);
     execute(engine, R"JS(
