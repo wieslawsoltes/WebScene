@@ -1402,6 +1402,30 @@ uint8_t webscene_gpu_image_get_iosurface_v3(
     return 0;
 #endif
 }
+uint8_t webscene_gpu_image_dependency_count_v3(
+    const webscene_gpu_image_consumer_v3* consumer,uint32_t* count)
+{
+    if(!count) return 0;
+    *count=0;
+    if(!consumer) return 0;
+    const auto size=consumer->dependencies ? consumer->dependencies->count() : 0;
+    if(size>UINT32_MAX) return 0;
+    *count=static_cast<uint32_t>(size); return 1;
+}
+uint8_t webscene_gpu_image_get_metal_event_v3(
+    const webscene_gpu_image_consumer_v3* consumer,uint32_t index,webscene_gpu_metal_event_view_v3* result)
+{
+    if(!result || result->struct_size<sizeof(*result) || result->version!=3) return 0;
+    result->borrowed_shared_event=nullptr;result->signaled_value=0;
+    if(!consumer || !consumer->dependencies) return 0;
+    try {
+        void* event=nullptr;uint64_t value=0;
+        if(index>=consumer->dependencies->count() ||
+            !consumer->dependencies->metal_event(index,event,value) || !event) return 0;
+        result->borrowed_shared_event=event;result->signaled_value=value;return 1;
+    } catch(...) { return 0; }
+}
+
 void webscene_gpu_image_complete_consumer_v3(webscene_gpu_image_consumer_v3* consumer)
 {
     if (!consumer) return;

@@ -15,9 +15,10 @@ void test_native_gpu_scene_leases()
     {
         struct provider final : webscene::graphics::image_provider_lifetime {};
         struct dependency final : webscene_gpu_producer_dependencies {
-            size_t count() const noexcept override { return 0; }
-            bool metal_event(size_t,void*& event,uint64_t& value) const override {
-                event=nullptr;value=0;return false;
+            size_t count() const noexcept override { return 2; }
+            bool metal_event(size_t index,void*& event,uint64_t& value) const override {
+                event=index<2 ? const_cast<dependency*>(this) : nullptr;
+                value=index+7;return index<2;
             }
         };
         webscene::graphics::owned_image_pool pool(std::make_shared<provider>());
@@ -35,6 +36,16 @@ void test_native_gpu_scene_leases()
         require(webscene_gpu_image_begin_consumer_v3(retained,&consumer)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
         webscene_gpu_image_release_v3(retained);
         require(!lifetime.expired() && consumer->dependencies);
+        uint32_t count=99;
+        require(!webscene_gpu_image_dependency_count_v3(nullptr,&count) && count==0);
+        require(!webscene_gpu_image_dependency_count_v3(consumer,nullptr));
+        require(webscene_gpu_image_dependency_count_v3(consumer,&count) && count==2);
+        webscene_gpu_metal_event_view_v3 event{sizeof(event),3,nullptr,0};
+        require(webscene_gpu_image_get_metal_event_v3(consumer,0,&event) && event.borrowed_shared_event && event.signaled_value==7);
+        require(webscene_gpu_image_get_metal_event_v3(consumer,1,&event) && event.signaled_value==8);
+        require(!webscene_gpu_image_get_metal_event_v3(consumer,2,&event) && !event.borrowed_shared_event && event.signaled_value==0);
+        event.version=4;require(!webscene_gpu_image_get_metal_event_v3(consumer,0,&event));
+        event.version=3;event.struct_size=0;require(!webscene_gpu_image_get_metal_event_v3(consumer,0,&event));
         webscene_gpu_image_complete_consumer_v3(consumer);
         require(lifetime.expired());
     }

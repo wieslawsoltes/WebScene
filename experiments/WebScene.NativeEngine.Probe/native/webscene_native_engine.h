@@ -562,6 +562,20 @@ typedef struct webscene_gpu_iosurface_view_v3 {
 WEBSCENE_API uint8_t webscene_gpu_image_get_iosurface_v3(
     const webscene_gpu_image_consumer_v3* consumer,webscene_gpu_iosurface_view_v3* result);
 
+/* Optional native producer synchronization. Borrowed event ownership follows the
+ * consumer; callers must encode every dependency before reading an early image.
+ * A successful zero count means no attached dependencies, not GPU completion.
+ * These hooks never wait or authorize consumer completion. */
+typedef struct webscene_gpu_metal_event_view_v3 {
+    uint32_t struct_size, version;
+    void* borrowed_shared_event;
+    uint64_t signaled_value;
+} webscene_gpu_metal_event_view_v3;
+WEBSCENE_API uint8_t webscene_gpu_image_dependency_count_v3(
+    const webscene_gpu_image_consumer_v3* consumer,uint32_t* count);
+WEBSCENE_API uint8_t webscene_gpu_image_get_metal_event_v3(
+    const webscene_gpu_image_consumer_v3* consumer,uint32_t index,webscene_gpu_metal_event_view_v3* result);
+
 
 typedef enum webscene_resource_kind {
     WEBSCENE_RESOURCE_DOCUMENT = 0,
