@@ -9,7 +9,7 @@ namespace WebScene.Backends.Avalonia.Native;
 internal sealed class NativeMacOSGpuSceneImages
 {
     private readonly NativeGpuImageLeaseV3?[] _sources;
-    private readonly NativeMacOSRetainedGpuImage?[] _images;
+    private readonly INativeRetainedGpuImage?[] _images;
     private readonly NativeGpuImageInfoV3[] _metadata;
     internal bool IsRetiring { get; private set; }
     internal int ImportedCount { get; private set; }
@@ -17,7 +17,7 @@ internal sealed class NativeMacOSGpuSceneImages
     private NativeMacOSGpuSceneImages(int count)
     {
         _sources = new NativeGpuImageLeaseV3?[count];
-        _images = new NativeMacOSRetainedGpuImage?[count];
+        _images = new INativeRetainedGpuImage?[count];
         _metadata = new NativeGpuImageInfoV3[count];
     }
 
@@ -89,7 +89,11 @@ internal sealed class NativeMacOSGpuSceneImages
         {
             if (_images[index] is not null) continue;
             var metadata = _metadata[index];
-            var image = NativeMacOSRetainedGpuImage.Import(_sources[index]!, lease,
+            var origin = metadata.Orientation == 1 ? GRSurfaceOrigin.TopLeft : GRSurfaceOrigin.BottomLeft;
+            var alpha = metadata.Alpha == 1 ? SKAlphaType.Opaque : SKAlphaType.Premul;
+            INativeRetainedGpuImage? image = NativeMetalRetainedGpuImage.Supports(lease)
+                ? NativeMetalRetainedGpuImage.Import(_sources[index]!, lease, origin, alpha)
+                : NativeMacOSRetainedGpuImage.Import(_sources[index]!, lease,
                 metadata.Orientation == 1 ? GRSurfaceOrigin.TopLeft : GRSurfaceOrigin.BottomLeft,
                 metadata.Alpha == 1 ? SKAlphaType.Opaque : SKAlphaType.Premul);
             if (image is null) return false;

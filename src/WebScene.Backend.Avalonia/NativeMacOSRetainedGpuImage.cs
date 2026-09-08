@@ -7,7 +7,7 @@ namespace WebScene.Backends.Avalonia.Native;
 
 // Host-context ownership of one imported image version. The scene cache must
 // retain this object through Retire/TryComplete; GC is never GPU completion.
-internal sealed class NativeMacOSRetainedGpuImage
+internal sealed class NativeMacOSRetainedGpuImage : INativeRetainedGpuImage
 {
     private readonly IGlContext _host;
     private readonly GRContext _skia;
@@ -66,13 +66,13 @@ internal sealed class NativeMacOSRetainedGpuImage
             NativeMacOSGpuImageImport.CurrentContext != _nativeContext)
             throw new InvalidOperationException("GPU image use requires its owning leased Skia and CGL contexts.");
     }
-    internal void Draw(ISkiaSharpApiLease lease, SKRect destination, SKPaint? paint = null)
+    public void Draw(ISkiaSharpApiLease lease, SKRect destination, SKPaint? paint = null)
     {
         Check(lease);
         if (IsRetiring) throw new InvalidOperationException("A retiring GPU image cannot be drawn again.");
         lease.SkCanvas.DrawImage(_image!, destination, paint);
     }
-    internal void Retire(ISkiaSharpApiLease lease)
+    public void Retire(ISkiaSharpApiLease lease)
     {
         Check(lease);
         if (_fence is not null || _consumer is null) return;
@@ -85,7 +85,7 @@ internal sealed class NativeMacOSRetainedGpuImage
         // failure retain ownership and allow retry; never fabricate completion.
         _fence = NativeMacOSGpuConsumerFence.Create(_host.GlInterface.GetProcAddress, _consumer);
     }
-    internal bool TryComplete(ISkiaSharpApiLease lease)
+    public bool TryComplete(ISkiaSharpApiLease lease)
     {
         Check(lease);
         if (!IsRetiring) throw new InvalidOperationException("Retire the GPU image before polling completion.");
@@ -102,7 +102,7 @@ internal sealed class NativeMacOSRetainedGpuImage
     // Avalonia 11.3.4 takes the CGL lock via EnsureCurrent before the GRContext
     // monitor during drawing. Use the same order after a visual is detached;
     // never touch a live drawing lease or wait for GPU completion on the CPU.
-    internal bool TryRetireWithoutVisual()
+    public bool TryRetireWithoutVisual()
     {
         using var current = _host.EnsureCurrent();
         lock (_skia)

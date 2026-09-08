@@ -31,7 +31,7 @@ internal sealed class GaneshWindowProbeApp : Application
                 try { await control.Completed.Task.WaitAsync(TimeSpan.FromSeconds(15)); }
                 catch (Exception error) { Console.Error.WriteLine(error); exit = 1; }
                 timer.Stop();
-                Console.WriteLine(JsonSerializer.Serialize(new { route = "Dawn-IOSurface-CGL-Ganesh",
+                Console.WriteLine(JsonSerializer.Serialize(new { route = Environment.GetCommandLineArgs().Contains("--ganesh-metal") ? "Dawn-IOSurface-Metal-Ganesh" : "Dawn-IOSurface-CGL-Ganesh",
                     renderedFrames = control.Frames, imports = control.Imports,
                     gpuRetirementCompleted = control.Completed.Task.IsCompletedSuccessfully,
                     explicitTransportCopies = 0, diagnosticReadbacks = control.VerifiedPixels,
