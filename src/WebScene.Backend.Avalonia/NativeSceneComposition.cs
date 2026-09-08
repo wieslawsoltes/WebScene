@@ -446,6 +446,16 @@ internal sealed unsafe class NativeSceneCompositionHandler
     : CompositionCustomVisualHandler
 {
     private readonly IntPtr _engine;
+    private bool _stopped;
+    private readonly object _engineAccessGate = new();
+    private bool _engineAccessRevoked;
+
+    internal void RevokeEngineAccess()
+    {
+        // Join any engine-using callback before the UI destroys the engine.
+        // No compositor tick or GPU completion is needed to revoke access.
+        lock (_engineAccessGate) _engineAccessRevoked = true;
+    }
     private NativeMacOSGpuScenePresenter? _gpuPresenter;
     private bool _gpuNeedsRender;
     internal Task GpuRetirement { get; private set; } = Task.CompletedTask;
@@ -509,6 +519,22 @@ internal sealed unsafe class NativeSceneCompositionHandler
 
     public override void OnMessage(object message)
     {
+        lock (_engineAccessGate)
+        {
+            if (_engineAccessRevoked && !Equals(message, NativeSceneCompositionMessage.Stop))
+            {
+                if (message is NativeCanvasCaptureRequest canvas)
+                    canvas.TrySetException(new ObjectDisposedException(nameof(NativeSceneCompositionHandler)));
+                if (message is NativeSceneCaptureRequest scene)
+                    scene.TrySetException(new ObjectDisposedException(nameof(NativeSceneCompositionHandler)));
+                return;
+            }
+            OnMessageCore(message);
+        }
+    }
+
+    private void OnMessageCore(object message)
+    {
         if (message is NativeCanvasCaptureRequest canvasCapture)
         {
             try
@@ -544,6 +570,10 @@ internal sealed unsafe class NativeSceneCompositionHandler
         {
             return;
         }
+
+        // A detached handler can still receive messages already queued by the UI.
+        // Stop is terminal: its engine may be destroyed once this batch applies.
+        if (_stopped) return;
 
         if (command is NativeSceneCompositionMessage.TextScale1X
             or NativeSceneCompositionMessage.TextScaleRetina)
@@ -643,6 +673,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
             return;
         }
 
+        _stopped = true;
         _running = false;
         _manualFrames = false;
         _animationFrameScheduled = false;
@@ -661,6 +692,15 @@ internal sealed unsafe class NativeSceneCompositionHandler
     }
 
     public override void OnAnimationFrameUpdate()
+    {
+        lock (_engineAccessGate)
+        {
+            if (_engineAccessRevoked) return;
+            OnAnimationFrameUpdateCore();
+        }
+    }
+
+    private void OnAnimationFrameUpdateCore()
     {
         _animationFrameScheduled = false;
         if (!_running)
@@ -958,6 +998,15 @@ internal sealed unsafe class NativeSceneCompositionHandler
     }
 
     public override void OnRender(ImmediateDrawingContext drawingContext)
+    {
+        lock (_engineAccessGate)
+        {
+            if (_engineAccessRevoked || _stopped) return;
+            OnRenderCore(drawingContext);
+        }
+    }
+
+    private void OnRenderCore(ImmediateDrawingContext drawingContext)
     {
         var requestedByWebScene = _invalidationGate.Complete();
         var monitoring = _performanceInstrumentation.IsEnabled;

@@ -70,6 +70,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     private int _compositionProjectionActive;
     private long _compositionUiWakeCount;
     private CompositionCustomVisual? _customVisual;
+    private NativeSceneCompositionHandler? _compositionHandler;
 
     public NativeSceneSurface(
         IntPtr engine,
@@ -168,6 +169,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         if (_customVisual is not null)
         {
             Volatile.Write(ref _compositionProjectionActive, 0);
+            _compositionHandler?.RevokeEngineAccess();
+            _compositionHandler = null;
             _customVisual.SendHandlerMessage(NativeSceneCompositionMessage.Stop);
             ElementComposition.SetElementChildVisual(this, null);
             _customVisual = null;
@@ -218,8 +221,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             var compositor = ElementComposition.GetElementVisual(this)?.Compositor;
             if (compositor is not null)
             {
-                _customVisual = compositor.CreateCustomVisual(
-                    new NativeSceneCompositionHandler(
+                _compositionHandler = new NativeSceneCompositionHandler(
                         _engine,
                         _renderObserver,
                         _compositionMailbox,
@@ -227,7 +229,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                         _performanceInstrumentation,
                         ScheduleCompositionUiWake,
                         TopLevel.GetTopLevel(this)?.RenderScaling ?? 1,
-                        enableGpuScenes: _enableGpuScenes));
+                        enableGpuScenes: _enableGpuScenes);
+                _customVisual = compositor.CreateCustomVisual(_compositionHandler);
                 _customVisual.Size = new Vector2((float)Bounds.Width, (float)Bounds.Height);
                 ElementComposition.SetElementChildVisual(this, _customVisual);
                 Volatile.Write(ref _compositionProjectionActive, 1);
@@ -248,6 +251,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         if (_customVisual is not null)
         {
             Volatile.Write(ref _compositionProjectionActive, 0);
+            _compositionHandler?.RevokeEngineAccess();
+            _compositionHandler = null;
             _customVisual.SendHandlerMessage(NativeSceneCompositionMessage.Stop);
             ElementComposition.SetElementChildVisual(this, null);
             _customVisual = null;

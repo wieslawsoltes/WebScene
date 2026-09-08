@@ -277,6 +277,25 @@ public sealed class NativeSceneCaptureTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StoppedCompositionIgnoresQueuedEngineMessages(bool revokeBeforeStop)
+    {
+        var instrumentation = new NativePerformanceInstrumentation();
+        var handler = new NativeSceneCompositionHandler(
+            IntPtr.Zero, new NativeSceneRenderObserver(instrumentation),
+            new NativeScenePublicationMailbox(), new NativeSceneUiWakeGate(),
+            instrumentation, static () => throw new InvalidOperationException("Stopped handler woke the UI"), 1);
+        if (revokeBeforeStop) handler.RevokeEngineAccess();
+        else handler.OnMessage(NativeSceneCompositionMessage.Stop);
+        // No native engine or attached compositor exists: any resumed work is invalid.
+        foreach (var message in Enum.GetValues<NativeSceneCompositionMessage>())
+            handler.OnMessage(message);
+        handler.OnAnimationFrameUpdate();
+        handler.OnRender(null!); // A late render must return before using engine/context.
+    }
+
     [Fact]
     public async Task CompositionCaptureCompletesFromRetainedRendererWithoutDrivingSceneLane()
     {
