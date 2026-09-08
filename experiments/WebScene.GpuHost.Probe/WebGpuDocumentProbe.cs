@@ -306,12 +306,9 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 pressed = false;
                                 await Task.Delay(500);
                                 var width = double.Parse(await view.EvaluateTextAsync("document.getElementById('explorer').offsetWidth"), System.Globalization.CultureInfo.InvariantCulture);
-                                if (Math.Abs(width - Math.Clamp(originalWidth + 120, 170, 390)) > 1)
-                                    throw new InvalidOperationException($"Sidebar drag failed: width {originalWidth} became {width}.");
                                 var after = view.CapturePerformanceSnapshot();
                                 var diagnostics = await view.EvaluateTextAsync("(()=>{return {events:globalThis.kestrelSidebarProbe.events,panning:document.getElementById('viewport').classList.contains('panning'),errors:document.querySelectorAll('#command-history .history-error').length}})()");
                                 Console.WriteLine("Kestrel sidebar diagnostics: " + diagnostics);
-                                KestrelDragWorkloadValidator.Validate(diagnostics, x, y, sidebar: true);
                                 Console.WriteLine("Kestrel sidebar timeline: " + System.Text.Json.JsonSerializer.Serialize(new {
                                     traceStarted, timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
                                     originalWidth, width, initialGeometry = setup.RootElement, baseline, after, delta = after.Since(baseline), submittedMoves,
@@ -320,6 +317,10 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                     scheduling = surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted),
                                     physicalPresentationVerified = false
                                 }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
+                                // Preserve failure diagnostics before rejecting an interrupted gesture.
+                                if (Math.Abs(width - Math.Clamp(originalWidth + 120, 170, 390)) > 1)
+                                    throw new InvalidOperationException($"Sidebar drag failed: width {originalWidth} became {width}.");
+                                KestrelDragWorkloadValidator.Validate(diagnostics, x, y, sidebar: true);
                                 Console.WriteLine("Kestrel sidebar workload validated (physical presentation remains unqualified).");
                             }
                             finally
