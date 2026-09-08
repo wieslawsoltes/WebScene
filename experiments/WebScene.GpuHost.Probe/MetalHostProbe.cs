@@ -67,6 +67,7 @@ internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
                 ?? throw new NotSupportedException("No Skia drawing lease");
             using var lease=feature.Lease();
             string hostName;
+            IntPtr metalDevice;
             using (var platform=lease.TryLeasePlatformGraphicsApi()
                 ?? throw new NotSupportedException("No platform graphics lease"))
             {
@@ -88,24 +89,52 @@ internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
                     if(!wrapped.IsValid || wrapped.Width!=16 || wrapped.Height!=16)
                         throw new InvalidOperationException("Metal backend wrapper invalid");
                 } finally { SendVoid(texture,Selector("release")); }
-                if (_fixture is not null)
-                {
-                    if(NativeGpuImageConsumerV3.Acquire(_fixture,out var consumer)!=NativeSceneAcquireStatus.Success || consumer is null)
-                        throw new InvalidOperationException("Fixture consumer acquisition failed");
-                    try {
-                        using var imported=NativeMetalIOSurfaceTexture.Import(device,consumer);
-                        using var backend=NativeMetalBackendTexture.Create(imported.Width,imported.Height,imported.Handle);
-                        if(!backend.IsValid) throw new InvalidOperationException("Imported Metal texture wrapper invalid");
-                    } finally { consumer.Complete(); _fixture.Dispose(); _fixture=null; }
-                }
+                metalDevice=device;
                 hostName=host.GetType().FullName!;
             }
+            if (_fixture is not null) VerifyFixturePixels(lease,metalDevice);
             lease.SkCanvas.Clear(SkiaSharp.SKColors.Teal);
             Completed.TrySetResult(JsonSerializer.Serialize(new {
                 host=hostName, metalDeviceAvailable=true,
                 metalQueueAvailable=true, skiaGpuContextAvailable=true, metalTextureWrapperVerified=true,
                 dawnIOSurfaceImportVerified=Environment.GetCommandLineArgs().Contains("--metal-fixture"),
+                metalSampledPixelsVerified=Environment.GetCommandLineArgs().Contains("--metal-fixture"),
+                diagnosticReadbacks=Environment.GetCommandLineArgs().Contains("--metal-fixture")?1:0,
                 producerInteropVerified=false, physicalPresentationVerified=false }));
         } catch(Exception error) { Completed.TrySetException(error); }
     }
+    private void VerifyFixturePixels(ISkiaSharpApiLease lease,IntPtr device)
+    {
+        if(NativeGpuImageConsumerV3.Acquire(_fixture!,out var consumer)!=NativeSceneAcquireStatus.Success || consumer is null)
+            throw new InvalidOperationException("Fixture consumer acquisition failed");
+        NativeMetalIOSurfaceTexture? imported=null;
+        try {
+            using(var platform=lease.TryLeasePlatformGraphicsApi()
+                ?? throw new NotSupportedException("No Metal platform lease"))
+                imported=NativeMetalIOSurfaceTexture.Import(device,consumer);
+            using var backend=NativeMetalBackendTexture.Create(imported.Width,imported.Height,imported.Handle);
+            using var image=SkiaSharp.SKImage.FromTexture(lease.GrContext,backend,SkiaSharp.GRSurfaceOrigin.TopLeft,
+                SkiaSharp.SKColorType.Bgra8888,SkiaSharp.SKAlphaType.Premul)
+                ?? throw new InvalidOperationException("Metal image wrapping failed");
+            var info=new SkiaSharp.SKImageInfo(imported.Width,imported.Height,SkiaSharp.SKColorType.Bgra8888,SkiaSharp.SKAlphaType.Premul);
+            using var target=SkiaSharp.SKSurface.Create(lease.GrContext,false,info)
+                ?? throw new InvalidOperationException("Metal diagnostic surface creation failed");
+            target.Canvas.Clear(SkiaSharp.SKColors.Magenta);
+            target.Canvas.DrawImage(image,0,0);
+            using var pixels=new SkiaSharp.SKBitmap(info);
+            if(!target.ReadPixels(info,pixels.GetPixels(),pixels.RowBytes,0,0))
+                throw new InvalidOperationException("Metal diagnostic readback failed");
+            for(var y=0;y<info.Height;y++) for(var x=0;x<info.Width;x++) {
+                var color=pixels.GetPixel(x,y);
+                if(Math.Abs(color.Red-51)>1 || Math.Abs(color.Green-102)>1 || Math.Abs(color.Blue-153)>1 || color.Alpha!=255)
+                    throw new InvalidOperationException($"Metal sampled pixel mismatch at {x},{y}: {color}");
+            }
+        } finally {
+            // Diagnostic-only synchronous completion, including failed reads.
+            // Production retirement must use an asynchronous consumer fence.
+            lease.GrContext!.Flush(true,true);
+            imported?.Dispose(); consumer.Complete(); _fixture!.Dispose(); _fixture=null;
+        }
+    }
+
 }
