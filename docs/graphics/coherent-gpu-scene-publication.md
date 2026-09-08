@@ -664,3 +664,7 @@ Both native suites pass. The new project-owned WPT-style candidate `contracts/an
 ### Current graphics-disabled verification
 
 The current macOS Release V8 engine also builds with graphics OFF. Its native engine suite passes, including the expanded RAF batch regression, and the project-owned RAF candidate passes all five subtests against that disabled binary. `otool -L` lists no Dawn or ANGLE dynamic dependency. `evidence/kestrel/current-graphics-disabled-verification.json` records the binary hash and local worktree qualifications. This incremental check does not complete the clean-build, relocation, Windows/Linux or performance gates of #23.
+
+### Align browser and native sidebar geometry
+
+The native document probe accepts positive-integer `--document-width` and `--document-height` options and records initial viewport, DPR, sidebar and canvas dimensions in sidebar timelines. A 792×878 run at DPR 2 matched the current Chrome viewport and sidebar endpoints (175→295px). Original Kestrel input validation and startup passed, with 11 scene draws and 51 RAF callbacks in the native run. Chrome endpoint inspection showed the drawing and no application errors after a CUA drag; its initial sidebar width was restored and the temporary tab closed. This does not classify intermediate flicker, establish matched gesture timing, or qualify physical FPS. Browser restored local workspace state, so full document-state equivalence is also unverified. Evidence: `evidence/kestrel/browser-native-sidebar-geometry.json`.

@@ -90,7 +90,8 @@ internal sealed class WebGpuDocumentProbeApp : Application
             var view = new NativeWebSceneView(true, url => url == uri || url == path);
             desktop.MainWindow = new Window
             {
-                Width = kestrel ? 1280 : 400, Height = kestrel ? 800 : 240, Title = kestrel ? "Kestrel in WebScene" : "WebScene WebGPU document", Content = view
+                Width = ReadDocumentDimension(arguments, "--document-width", kestrel ? 1280 : 400),
+                Height = ReadDocumentDimension(arguments, "--document-height", kestrel ? 800 : 240), Title = kestrel ? "Kestrel in WebScene" : "WebScene WebGPU document", Content = view
             };
             desktop.MainWindow.Opened += async (_, _) =>
             {
@@ -276,7 +277,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                         if (arguments.Contains("--sidebar-kestrel"))
                         {
                             var surface = (NativeSceneSurface)view.Content!;
-                            using var setup = System.Text.Json.JsonDocument.Parse(await view.EvaluateTextAsync("(()=>{const r=document.querySelector('.left-resizer').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:document.getElementById('explorer').offsetWidth}})()"));
+                            using var setup = System.Text.Json.JsonDocument.Parse(await view.EvaluateTextAsync("(()=>{const r=document.querySelector('.left-resizer').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:document.getElementById('explorer').offsetWidth,viewport:[innerWidth,innerHeight],dpr:devicePixelRatio,canvas:[document.getElementById('scene').width,document.getElementById('scene').height]}})()"));
                             var x = setup.RootElement.GetProperty("x").GetDouble();
                             var y = setup.RootElement.GetProperty("y").GetDouble();
                             var originalWidth = setup.RootElement.GetProperty("width").GetDouble();
@@ -312,7 +313,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 KestrelDragWorkloadValidator.Validate(diagnostics, x, y, sidebar: true);
                                 Console.WriteLine("Kestrel sidebar timeline: " + System.Text.Json.JsonSerializer.Serialize(new {
                                     traceStarted, timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
-                                    originalWidth, width, baseline, after, delta = after.Since(baseline), submittedMoves,
+                                    originalWidth, width, initialGeometry = setup.RootElement, baseline, after, delta = after.Since(baseline), submittedMoves,
                                     publications = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted),
                                     renderedScenes = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted),
                                     physicalPresentationVerified = false
@@ -396,6 +397,15 @@ internal sealed class WebGpuDocumentProbeApp : Application
         var workbench = ancestors.Single(node => node.GetProperty("id").GetString() == "workbench").GetProperty("rect");
         if (Math.Abs(viewport[3].GetDouble() - workbench[3].GetDouble()) > 1)
             throw new InvalidOperationException("Kestrel viewport no longer tracks the resized workbench height.");
+    }
+
+    private static int ReadDocumentDimension(string[] arguments, string option, int fallback)
+    {
+        var index = Array.IndexOf(arguments, option);
+        if (index < 0) return fallback;
+        if (index + 1 >= arguments.Length || !int.TryParse(arguments[index + 1], out var value) || value <= 0)
+            throw new ArgumentException($"{option} requires a positive integer.");
+        return value;
     }
 
 }

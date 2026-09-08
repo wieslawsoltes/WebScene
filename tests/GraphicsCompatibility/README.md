@@ -49,3 +49,5 @@ are present it reports progress to a published consumption watermark; coalesced
 inputs need not each be drawn. These distributions include the probe's settling
 period and never establish physical presentation FPS. Logs rejected by workload
 validation must not be used for performance comparisons.
+
+For viewport alignment, the native GPU document probe accepts `--document-width 792 --document-height 878` (positive integer CSS dimensions). Sidebar timelines record actual viewport/DPR/canvas geometry; verify these against the browser instead of assuming the requested window size or scale was applied. Matching geometry alone is not a matched performance workload.
