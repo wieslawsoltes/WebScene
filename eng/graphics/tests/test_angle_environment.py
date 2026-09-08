@@ -42,11 +42,14 @@ class AngleEnvironmentTests(unittest.TestCase):
             stack.enter_context(patch.object(builder, "sha", return_value="test-hash"))
             run = stack.enter_context(patch.object(builder, "run"))
             capture = stack.enter_context(patch.object(builder, "capture", return_value="metadata"))
+            # Exercise the one-token Windows bootstrap command on every host,
+            # so command selection cannot accidentally assume an argument exists.
+            run([depot / "bootstrap/win_tools.bat"], cwd=depot)
             # Simulate a caller configured to use Chromium's downloaded toolchain.
             stack.enter_context(patch.dict(os.environ, DEPOT_TOOLS_WIN_TOOLCHAIN="1"))
             builder.angle(args)
-            generation = next(call for call in run.call_args_list if call.args[0][1] == "gen")
-            metadata = next(call for call in capture.call_args_list if call.args[0][1] == "args")
+            generation = next(call for call in run.call_args_list if call.args[0][1:2] == ["gen"])
+            metadata = next(call for call in capture.call_args_list if call.args[0][1:2] == ["args"])
             self.assertIs(metadata.kwargs["env"], generation.kwargs["env"])
             self.assertEqual(metadata.kwargs["env"]["DEPOT_TOOLS_WIN_TOOLCHAIN"], "0")
             self.assertEqual(metadata.kwargs["env"]["DEPOT_TOOLS_UPDATE"], "0")

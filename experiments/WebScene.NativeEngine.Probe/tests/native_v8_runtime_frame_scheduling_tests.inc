@@ -756,11 +756,13 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
         if (after.dom_nodes <= before.dom_nodes + 8U) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    require(
-        after.dom_nodes <= before.dom_nodes + 8U,
-        "unreachable detached DOM nodes remained permanently owned after V8 collection (before="
+    if (after.dom_nodes > before.dom_nodes + 8U) {
+        require(false,
+        "unreachable detached DOM nodes remained after the idle collection deadline (before="
             + std::to_string(before.dom_nodes)
-            + ", after=" + std::to_string(after.dom_nodes) + ")");
+            + ", after=" + std::to_string(after.dom_nodes) + "): "
+            + diagnostics(engine));
+    }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     require(
         diagnostic_value("detached-dom-release-batches")
