@@ -319,6 +319,28 @@ void test_runtime_webgpu_installation() {
     }
     require(document.find_by_id("write-ready")!=nullptr,"writeBuffer readback did not pass");
     require(runtime.execute(R"JS(
+        {
+            const host=document.createElement('div');
+            host.innerHTML='<form id="form-data-probe"><input name="x" value="10"><input name="x" value="20"><input name="omit" disabled value="bad"><input type="checkbox" name="checked" checked><input type="checkbox" name="unchecked"><fieldset disabled><legend><input name="legend" value="yes"></legend><input name="blocked" value="bad"></fieldset><select name="choice" multiple><option value="a" selected>A</option><option value="b" selected disabled>B</option><optgroup disabled><option value="c" selected>C</option></optgroup></select><textarea name="text">hello</textarea><button name="send" value="go" type="submit">Go</button></form><input name="external" value="outside" form="form-data-probe">';
+            document.body.appendChild(host);
+            const form=document.getElementById('form-data-probe');
+            const data=new FormData(form);
+            const expected=[['x','10'],['x','20'],['checked','on'],['legend','yes'],['choice','a'],['text','hello'],['external','outside']];
+            if(JSON.stringify([...data])!==JSON.stringify(expected))throw new Error('form entries: '+JSON.stringify([...data]));
+            form.querySelector('[name=x]').value='changed';
+            if(data.get('x')!=='10')throw new Error('FormData was not a snapshot');
+            const submitter=form.querySelector('button');
+            if(new FormData(form,submitter).get('send')!=='go')throw new Error('submitter missing');
+            for(const value of [null,{},host]) {
+                let rejected=false;try{new FormData(value)}catch(e){rejected=e instanceof TypeError}
+                if(!rejected)throw new Error('invalid form accepted');
+            }
+            let rejected=false;try{new FormData(form,form.querySelector('input'))}catch(e){rejected=e instanceof TypeError}
+            if(!rejected)throw new Error('invalid submitter accepted');
+            host.remove();
+        }
+    )JS","form-data-controls"),"FormData form control collection failed");
+    require(runtime.execute(R"JS(
         if(installedDevice.createBindGroupLayout.length!==1)throw new Error('binding layout arity');
         globalThis.bindingLayout=installedDevice.createBindGroupLayout({label:'camera',entries:new Set([{binding:0,visibility:1,buffer:{}}])});
         if(Object.prototype.toString.call(bindingLayout)!=='[object GPUBindGroupLayout]'||bindingLayout.label!=='camera')throw new Error('binding layout wrapper');

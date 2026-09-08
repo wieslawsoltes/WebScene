@@ -2062,3 +2062,26 @@ arguments. These must be addressed as real browser-stack dependencies for full
 Kestrel acceptance; the probe does not patch the app or inject geometry through
 its internals. GPU solid rendering is not yet assessed by this failed workflow.
 Evidence is in evidence/kestrel/mesh-creation-blockers.json.
+
+### Form-backed FormData dependency (2026-09-08)
+
+The main and frame FormData constructors now collect basic successful form
+controls, preserving document order and duplicate names. Collection uses form
+ownership (including external associated controls), disabled-state matching
+(including fieldset/legend handling), checkbox/radio checked state, selected
+non-disabled options, textarea values and optional submitters. Constructed
+entries snapshot values. Invalid form/submitter interfaces are rejected.
+
+Tests cover duplicate names, disabled fieldsets with first-legend exemption,
+checked and unchecked boxes, multiple-select option filtering, associated
+controls outside the form, textareas, submitter inclusion and snapshot behavior.
+Both native-engine and GPU runtime suites passed (12.85 seconds combined), and
+the managed probe build passed. File controls remain explicitly unsupported;
+FormDataEvent delivery, custom form-associated elements, dirname and full
+standards conformance remain outstanding. This is partial FormData support.
+
+The mesh probe now requires the original dialog's open state before filling or
+submitting it. Its latest run exits 1 at the missing showModal method, preserving
+the real UI prerequisite rather than submitting a hidden form. Kestrel solid
+creation/rendering is still unqualified. Dialog/top-layer support is the next
+identified browser-stack dependency.

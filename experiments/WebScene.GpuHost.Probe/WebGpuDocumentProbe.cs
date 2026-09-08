@@ -111,6 +111,11 @@ internal sealed class WebGpuDocumentProbeApp : Application
                             if (surface.SubmitText("BOX") == 0 || surface.SubmitKey(7, 13) == 0 || surface.SubmitKey(8, 13) == 0)
                                 throw new InvalidOperationException("Kestrel box command was not accepted.");
                             await Task.Delay(750);
+                            if (await view.EvaluateTextAsync("document.getElementById('modal').open===true") != "true")
+                            {
+                                Console.WriteLine("Kestrel modal failure: " + await view.EvaluateTextAsync("({open:document.getElementById('modal').open,history:document.getElementById('command-history').textContent})"));
+                                throw new InvalidOperationException("Kestrel's original primitive dialog did not open.");
+                            }
                             await view.EvaluateTextAsync("(()=>{const f=document.getElementById('modal-form');for(const [name,value] of Object.entries({x:0,y:0,z:0,width:2000,depth:1500,height:2500}))f.querySelector('[name='+name+']').value=String(value);f.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));})()");
                             await Task.Delay(1000);
                             Console.WriteLine("Kestrel mesh: " + await view.EvaluateTextAsync("({objects:Number(document.getElementById('object-count').textContent),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length,modalError:document.getElementById('modal-error').textContent,history:document.getElementById('command-history').textContent})"));

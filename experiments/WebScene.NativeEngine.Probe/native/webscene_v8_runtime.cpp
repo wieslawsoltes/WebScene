@@ -3323,13 +3323,44 @@ struct v8_dom_runtime::implementation final {
               }
             }
             class WebSceneFormData {
-              constructor(form = undefined) {
+              constructor(form = undefined, submitter = null) {
                 __webSceneRecordWebApi(
                   'FormData.constructor', 'partially-supported',
                   'ordered string and Blob fields with multipart fetch serialization');
                 this._entries = [];
-                if (form !== undefined && form !== null) {
-                  throw new TypeError('Constructing FormData from a form is not yet supported');
+                if (form !== undefined) {
+                  if (!(form instanceof HTMLFormElement)) throw new TypeError('FormData requires an HTMLFormElement');
+                  const isSubmit = control => control && ((control.tagName === 'BUTTON' && (!control.type || control.type === 'submit')) ||
+                    (control.tagName === 'INPUT' && ['submit', 'image'].includes(control.type)));
+                  if (submitter !== null) {
+                    if (!(submitter instanceof HTMLElement) || !isSubmit(submitter)) throw new TypeError('FormData submitter must be a submit button');
+                    if (submitter.form !== form) throw new DOMException('Submitter belongs to another form', 'NotFoundError');
+                  }
+                  const root = form.getRootNode();
+                  for (const control of root.querySelectorAll('input,select,textarea,button')) {
+                    if (control.form !== form || control.matches(':disabled') || control.closest('datalist')) continue;
+                    const tag = control.tagName;
+                    const type = String(control.type || (tag === 'BUTTON' ? 'submit' : 'text')).toLowerCase();
+                    if ((tag === 'BUTTON' || ['submit', 'image', 'reset', 'button'].includes(type)) && control !== submitter) continue;
+                    const name = control.getAttribute('name') || '';
+                    if (type === 'image') {
+                      this.append(name ? name + '.x' : 'x', '0');
+                      this.append(name ? name + '.y' : 'y', '0');
+                      continue;
+                    }
+                    if (!name || (['checkbox', 'radio'].includes(type) && !control.checked)) continue;
+                    if (tag === 'SELECT') {
+                      for (const option of control.options) {
+                        if (option.selected && !option.matches(':disabled')) this.append(name, option.value);
+                      }
+                    } else if (type === 'file') {
+                      throw new TypeError('File controls in FormData are not yet supported');
+                    } else {
+                      const value = type === 'hidden' && name === '_charset_' ? 'UTF-8' :
+                        ['checkbox', 'radio'].includes(type) && !control.hasAttribute('value') ? 'on' : control.value;
+                      this.append(name, value);
+                    }
+                  }
                 }
               }
               append(name, value, filename = undefined) {
