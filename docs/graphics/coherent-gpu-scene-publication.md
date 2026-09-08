@@ -690,3 +690,7 @@ Future captures now retain the exact four harness source files and both generate
 ### Attempt publication at every host frame boundary
 
 Ordinary host RAF boundaries now bypass the producer-only 16ms publication timer, as paired native resize frames already did. GPU completion, immutable capture validation and mailbox admission remain unchanged. Both native suites pass. The unchanged original Kestrel sidebar workload validates at 792×878, DPR 2, but produced only 12 scene draws in this run. This does not establish a performance improvement or physical 60fps; resize redraw starvation remains unresolved. Full probe evidence: `evidence/kestrel/all-host-frame-publication.json`.
+
+### Diagnose remaining sidebar publication holds
+
+Temporary branch tracing during the validated original Kestrel sidebar workload recorded 206 open-output deferrals, all caused by bitmap reset awaiting RAF redraw, and 34 unresolved immutable GPU capture deferrals. No mailbox-full, invalidated capture or failed-producer branch was observed. Counts include startup and do not measure time spent; logging perturbs timing. The instrumentation was removed. This narrows further work to resize/redraw scheduling rather than mailbox capacity, without establishing a fix or physical cadence. Evidence: `evidence/kestrel/sidebar-publication-gate-diagnosis.json`.
