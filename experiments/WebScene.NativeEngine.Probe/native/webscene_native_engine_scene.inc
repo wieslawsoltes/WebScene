@@ -406,8 +406,10 @@
             || next->header.viewport_height!=static_cast<float>(viewport_height_)) {
             staged_scene_.reset();return publication_result::deferred;
         }
-        for(size_t index=0;index<next->gpu_bindings.size();++index) {
-            const auto& binding=next->gpu_bindings[index];
+        // Inspect every dependency before waiting on any one of them. A later
+        // failed/reset canvas invalidates the capture even if an earlier GPU
+        // producer is still pending; producer ownership still guards its writes.
+        for(const auto& binding:next->gpu_bindings) {
             if(!document_.validate_gpu_canvas_binding(binding)) {
                 staged_scene_.reset();return publication_result::deferred;
             }
@@ -416,6 +418,9 @@
                 set_last_error("GPU scene producer failed; retaining the last complete scene");
                 return publication_result::discarded;
             }
+        }
+        for(size_t index=0;index<next->gpu_bindings.size();++index) {
+            const auto& binding=next->gpu_bindings[index];
             if(!next->gpu_images[index])next->gpu_images[index]=binding.resolve();
             if(!next->gpu_images[index]) {
                 staged_scene_=std::move(next);return publication_result::deferred;

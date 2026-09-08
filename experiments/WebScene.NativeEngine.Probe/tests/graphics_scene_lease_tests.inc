@@ -107,10 +107,10 @@ void test_native_gpu_scene_leases()
         webscene::graphics::owned_image_pool pool(std::make_shared<capture_provider>());
         struct captured_output final : webscene_gpu_image_snapshot {
             std::shared_ptr<const webscene_gpu_image_lease_v3> image;
-            bool ready=false;
+            bool ready=false,failed=false;
             webscene::graphics::image_metadata describe()const override{return image->value.describe();}
-            status state()const override{return ready?status::ready:status::pending;}
-            std::shared_ptr<const webscene_gpu_image_lease_v3> resolve()override{return ready?image:nullptr;}
+            status state()const override{return failed?status::failed:(ready?status::ready:status::pending);}
+            std::shared_ptr<const webscene_gpu_image_lease_v3> resolve()override{return state()==status::ready?image:nullptr;}
         };
         auto& node=engine.document_.create_element("canvas");
         require(engine.document_.append_child(engine.document_.body(),node));
@@ -154,6 +154,63 @@ void test_native_gpu_scene_leases()
         require(engine.publish_scene()==result::deferred);check(2,0x00ff00ff);
         c->ready=true;
         require(engine.publish_scene()==result::published);check(3,0x0000ffff);acknowledge();
+
+        // Add a first-ever pending second canvas. Neither completion order may
+        // expose a partially updated scene, and paint indices must remain exact.
+        a.reset();b.reset();
+        auto& second=engine.document_.create_element("canvas");
+        require(engine.document_.append_child(engine.document_.body(),second));
+        auto& second_backing=second.mutable_canvas().backing;
+        require(second_backing.claim_context(webscene::graphics::canvas_context_mode::webgpu));
+        webscene::graphics::owned_image_pool second_pool(std::make_shared<capture_provider>());
+        const auto submit_second=[&] {
+            second_backing.publish_content();
+            auto writer=second_pool.acquire();require(writer.has_value());
+            writer->set_metadata({second_backing.identity(),200+second_backing.content_serial(),second_backing.allocation_generation(),second_backing.content_serial(),1,1,second_backing.width(),second_backing.height()});
+            writer->begin();auto image=writer->publish();writer->complete();writer.reset();
+            auto output=std::make_shared<captured_output>();
+            output->image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image));
+            second.mutable_canvas().gpu_snapshot=output;
+            engine.document_.mark_scene_changed();
+            return output;
+        };
+        const auto check_pair=[&](uint64_t first_serial,uint64_t second_serial,uint32_t color) {
+            require(engine.latest_->gpu_images.size()==2);
+            for(const auto& command:engine.latest_->commands) {
+                if(command.kind!=WEBSCENE_SCENE_COMMAND_GPU_IMAGE)continue;
+                require(command.rgba<engine.latest_->gpu_images.size());
+                const auto metadata=engine.latest_->gpu_images[command.rgba]->value.describe();
+                require((command.node_id==node.id && metadata.canvas==backing.identity() && metadata.content_serial==first_serial)
+                    || (command.node_id==second.id && metadata.canvas==second_backing.identity() && metadata.content_serial==second_serial));
+            }
+            require(std::count_if(engine.latest_->commands.begin(),engine.latest_->commands.end(),
+                [](const auto& command){return command.kind==WEBSCENE_SCENE_COMMAND_GPU_IMAGE;})==2);
+            require(std::any_of(engine.latest_->commands.begin(),engine.latest_->commands.end(),
+                [&](const auto& command){return command.node_id==engine.document_.body().id && command.rgba==color;}));
+        };
+        auto d=submit(0xffff00ff);auto second_a=submit_second();
+        require(engine.publish_scene()==result::deferred);check(3,0x0000ffff);
+        require(engine.staged_scene_ && engine.staged_scene_->gpu_bindings.size()==2);
+        second_a->ready=true;
+        require(engine.publish_scene()==result::deferred);check(3,0x0000ffff);
+        d->ready=true;
+        require(engine.publish_scene()==result::published);check_pair(4,1,0xffff00ff);acknowledge();
+        auto e=submit(0xff00ffff);auto second_b=submit_second();
+        require(engine.publish_scene()==result::deferred);check_pair(4,1,0xffff00ff);
+        e->ready=true;
+        require(engine.publish_scene()==result::deferred);check_pair(4,1,0xffff00ff);
+        second_b->ready=true;
+        require(engine.publish_scene()==result::published);check_pair(5,2,0xff00ffff);acknowledge();
+        c.reset();d.reset();
+        auto f=submit(0xabcdefFF);auto second_c=submit_second();
+        require(engine.publish_scene()==result::deferred);check_pair(5,2,0xff00ffff);
+        auto invalidated_capture=engine.staged_scene_;
+        second_c->failed=true;
+        require(engine.publish_scene()==result::discarded);
+        require(!engine.staged_scene_);check_pair(5,2,0xff00ffff);
+        second_backing.reset_bitmap(second_backing.width(),second_backing.height());
+        require(engine.commit_captured_scene(invalidated_capture,std::chrono::steady_clock::now())==result::deferred);
+        require(!engine.staged_scene_);check_pair(5,2,0xff00ffff);
     }
     // Ordered Canvas2D placement is independently negotiated, including a diff
     // whose unchanged command payload has been stripped after capability hashing.

@@ -276,3 +276,25 @@ This run produced one no-damage build (previously ten), 62 rendered scenes
 performed 117 layouts for 42 application RAF callbacks. Counts vary with scheduling
 and coalescing, so these single runs do not qualify an FPS or latency improvement.
 Evidence: `evidence/kestrel/completion-invalidation-and-full-capture.json`.
+
+
+## Multiple canvas completion order and failure preflight (2026-09-08)
+
+The production scene-builder regression now introduces a second canvas whose
+first image is pending. It checks both producer completion orders: the previous
+complete scene remains published until both exact outputs are ready. Published
+GPU command indices must map to each canvas identity and expected content serial;
+the CPU marker must belong to the same capture.
+
+A failing second output initially exposed a bug: the commit loop returned at the
+first pending dependency before inspecting later failures. Commit now validates
+every captured dependency before trying to resolve any pending output. The test
+verifies failed and bitmap-reset second-canvas captures are discarded promptly
+while the first producer remains pending. Previous published content stays intact.
+The native engine suite passes (12.55s), and the expanded GPU runtime suite passes
+(0.67s). Evidence: `evidence/kestrel/two-canvas-publication.json`.
+
+These tests use controlled native completion snapshots; they do not stall a
+hardware queue or prove physical presentation timing. Browser-comparable pan
+performance, live resize timing, device-loss recovery, cross-platform interop and
+all other epic gates remain required.
