@@ -28,6 +28,7 @@ void test_native_gpu_scene_leases()
         auto& canvas=engine.document_.create_element("canvas");
         require(engine.document_.append_child(engine.document_.body(),canvas));
         const auto& backing=canvas.mutable_canvas().backing;
+        require(canvas.mutable_canvas().backing.claim_context(webscene::graphics::canvas_context_mode::webgpu));
         auto writer=pool.acquire();
         writer->set_metadata({backing.identity(),100,backing.allocation_generation(),backing.content_serial(),1,1,backing.width(),backing.height()});
         writer->begin();auto retained=writer->publish();writer->complete();writer.reset();
@@ -46,6 +47,16 @@ void test_native_gpu_scene_leases()
         };
         const auto commit=[&](auto value){return engine.commit_captured_scene(value,std::chrono::steady_clock::now());};
         using result=webscene_engine::publication_result;
+        canvas.mutable_canvas().gpu_snapshot=output;
+        engine.document_.mark_scene_changed(); // Rendering opportunity submission.
+        const auto submitted_generation=engine.document_.scene_generation();
+        output->completion=webscene_gpu_image_snapshot::status::ready;
+        engine.document_.publish_gpu_canvas_image(canvas,output->image);
+        require(engine.document_.scene_generation()==submitted_generation);
+        // A completed output without a captured dependency must still invalidate.
+        canvas.mutable_canvas().gpu_snapshot.reset();canvas.mutable_canvas().gpu_image.reset();
+        engine.document_.publish_gpu_canvas_image(canvas,output->image);
+        require(engine.document_.scene_generation()==submitted_generation+1);
         auto a=make_capture(1,0);output->completion=webscene_gpu_image_snapshot::status::ready;
         require(commit(a)==result::published);
         engine.acknowledgement_->pending_scenes.clear();engine.acknowledgement_->revision=1;
@@ -85,6 +96,64 @@ void test_native_gpu_scene_leases()
         auto reset=make_capture(7,4);
         canvas.mutable_canvas().backing.reset_bitmap(backing.width(),backing.height());
         require(commit(reset)==result::deferred && engine.latest_->header.revision==4);
+    }
+    // Full production capture + commit: A remains published while B is pending,
+    // even after live DOM and GPU state advance to C. No manual scene assembly.
+    {
+        webscene_engine engine(nullptr);
+        engine.native_scene_active_=true;
+        engine.ordered_scene_consumer_.store(true);
+        struct capture_provider final : webscene::graphics::image_provider_lifetime {};
+        webscene::graphics::owned_image_pool pool(std::make_shared<capture_provider>());
+        struct captured_output final : webscene_gpu_image_snapshot {
+            std::shared_ptr<const webscene_gpu_image_lease_v3> image;
+            bool ready=false;
+            webscene::graphics::image_metadata describe()const override{return image->value.describe();}
+            status state()const override{return ready?status::ready:status::pending;}
+            std::shared_ptr<const webscene_gpu_image_lease_v3> resolve()override{return ready?image:nullptr;}
+        };
+        auto& node=engine.document_.create_element("canvas");
+        require(engine.document_.append_child(engine.document_.body(),node));
+        auto& backing=node.mutable_canvas().backing;
+        require(backing.claim_context(webscene::graphics::canvas_context_mode::webgpu));
+        const auto submit=[&](uint32_t color) {
+            backing.publish_content();
+            auto writer=pool.acquire();require(writer.has_value());
+            writer->set_metadata({backing.identity(),100+backing.content_serial(),backing.allocation_generation(),backing.content_serial(),1,1,backing.width(),backing.height()});
+            writer->begin();auto image=writer->publish();writer->complete();writer.reset();
+            auto output=std::make_shared<captured_output>();
+            output->image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image));
+            node.mutable_canvas().gpu_snapshot=output;
+            engine.document_.body().style.background_rgba=color;
+            engine.document_.mark_dirty();
+            return output;
+        };
+        const auto check=[&](uint64_t serial,uint32_t color) {
+            require(engine.latest_ && engine.latest_->gpu_images.size()==1);
+            require(engine.latest_->gpu_images[0]->value.describe().content_serial==serial);
+            require(std::any_of(engine.latest_->commands.begin(),engine.latest_->commands.end(),
+                [&](const auto& command){return command.node_id==engine.document_.body().id && command.rgba==color;}));
+        };
+        const auto acknowledge=[&] {
+            const webscene_scene_view_v3* view=nullptr;
+            require(acquire_scene_value_v3(engine.latest_,engine.acknowledgement_,
+                WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES|WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS,&view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+            require(webscene_scene_acknowledge_v3(view));webscene_scene_release_v3(view);
+        };
+        using result=webscene_engine::publication_result;
+        auto a=submit(0xff0000ff);a->ready=true;
+        require(engine.publish_scene()==result::published);check(1,0xff0000ff);acknowledge();
+        auto b=submit(0x00ff00ff);
+        require(engine.publish_scene()==result::deferred);check(1,0xff0000ff);
+        auto c=submit(0x0000ffff);
+        require(engine.publish_scene()==result::deferred);check(1,0xff0000ff);
+        b->ready=true;
+        require(engine.publish_scene()==result::published);check(2,0x00ff00ff);
+        require(engine.published_document_generation_!=engine.document_.scene_generation());
+        acknowledge();
+        require(engine.publish_scene()==result::deferred);check(2,0x00ff00ff);
+        c->ready=true;
+        require(engine.publish_scene()==result::published);check(3,0x0000ffff);acknowledge();
     }
     // Ordered Canvas2D placement is independently negotiated, including a diff
     // whose unchanged command payload has been stripped after capability hashing.

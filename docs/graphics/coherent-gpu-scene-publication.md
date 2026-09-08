@@ -252,3 +252,27 @@ events were observed, so capture-event conformance remains unqualified. The next
 performance investigation should separate input/RAF/layout scheduling, producer
 completion and consumer retirement. Browser timings, presented-frame coherence
 and resize qualification remain required.
+
+
+## Completion invalidation and full A/B/C capture (2026-09-08)
+
+Ordinary completion of the exact already-captured GPU output no longer marks the
+document changed a second time. Submission remains the content invalidation;
+completion wakes and resolves the existing dependency. A completed image without
+a matching valid snapshot still invalidates normally. Native suites pass with
+that regression (12.18 seconds together).
+
+A further white-box regression uses the production document and scene builder,
+three distinct content serials and CPU background colors, and real ABI v3 scene
+acknowledgements. It verifies A/A remains published while B is pending, changing
+live state to C does not alter frozen B, completing B publishes B/B, and completing
+C publishes C/C. This addresses the earlier commit-only test limitation; it does
+not yet cover multiple canvases or physical presentation. The expanded GPU
+runtime suite passes (0.65 seconds).
+
+The same eighty-move native pan probe completed without errors or dropped inputs.
+This run produced one no-damage build (previously ten), 62 rendered scenes
+(previously 66), and zero blocked publication attempts (previously nine). It still
+performed 117 layouts for 42 application RAF callbacks. Counts vary with scheduling
+and coalescing, so these single runs do not qualify an FPS or latency improvement.
+Evidence: `evidence/kestrel/completion-invalidation-and-full-capture.json`.

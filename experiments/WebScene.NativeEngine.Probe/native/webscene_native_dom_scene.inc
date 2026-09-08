@@ -66,7 +66,19 @@ void native_document::publish_gpu_canvas_image(dom_node& node,
     auto& canvas=node.mutable_canvas();
     const bool changed=canvas.gpu_image!=image;
     canvas.publish_gpu_image(std::move(image));
-    if (changed) mark_scene_changed();
+    if (changed) {
+        // Submission already invalidated the document and captured this output.
+        // Completion resolves that dependency; it does not create new content.
+        // Keep ordinary completed-image publication invalidating as before.
+        if(canvas.gpu_snapshot && canvas.gpu_snapshot->state()!=webscene_gpu_image_snapshot::status::failed) {
+            const auto captured=canvas.gpu_snapshot->describe();
+            const auto completed=canvas.gpu_image->value.describe();
+            if(captured.canvas==completed.canvas && captured.allocation==completed.allocation
+                && captured.allocation_generation==completed.allocation_generation
+                && captured.content_serial==completed.content_serial)return;
+        }
+        mark_scene_changed();
+    }
 }
 
 bool native_document::validate_gpu_canvas_binding(const gpu_canvas_scene_binding& binding) const
