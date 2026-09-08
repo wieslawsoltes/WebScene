@@ -88,6 +88,9 @@ internal sealed class NativeMetalRetainedGpuImage : INativeRetainedGpuImage
     }
     public bool TryRetireWithoutVisual()
     {
+        // Once sealed on the composition owner, background retirement only
+        // observes the command buffer. Never flush a live Skia session there.
+        if (_fence is not null || _consumer is null) return Complete();
         using var current=_host.EnsureCurrent();
         lock(_skia)
         {

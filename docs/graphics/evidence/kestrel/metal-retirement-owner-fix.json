@@ -1,0 +1,23 @@
+{
+  "change": "Initiate detached retirement on composition Stop owner; Metal background polls do not flush Skia",
+  "runs": [
+    {
+      "name": "owner",
+      "exitCode": 0,
+      "geometryChecks": 4,
+      "startupPassed": true
+    },
+    {
+      "name": "owner-repeat",
+      "exitCode": 0,
+      "geometryChecks": 4,
+      "startupPassed": true
+    }
+  ],
+  "testSummaries": [
+    "Passed!  - Failed:     0, Passed:     7, Skipped:     0, Total:     7, Duration: 144 ms - WebScene.Backend.Avalonia.Tests.dll (net8.0)",
+    "Passed!  - Failed:     0, Passed:     7, Skipped:     0, Total:     7, Duration: 110 ms - WebScene.Backend.Avalonia.Tests.dll (net10.0)"
+  ],
+  "physicalPresentationVerified": false,
+  "continuousResizeQualified": false
+}

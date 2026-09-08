@@ -26,6 +26,15 @@ internal static class NativeMacOSGpuRetirement
         if (!Owners.TryAdd(id, pending)) throw new InvalidOperationException("GPU retirement identity collision.");
         try
         {
+            // Stop is delivered on the composition owner. Seal GPU reads here,
+            // before handing polling to a background task. In particular Metal
+            // session finalization is not covered by only the GRContext monitor.
+            if (presenter.TryCompleteWithoutVisual())
+            {
+                Owners.TryRemove(id, out _);
+                pending.Completion.TrySetResult();
+                return pending.Completion.Task;
+            }
             _ = Task.Run(async () =>
             {
                 try
