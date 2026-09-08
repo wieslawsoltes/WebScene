@@ -2264,3 +2264,22 @@ is not evidence that the reported white painted regions or canvas flicker are
 fixed. Full Kestrel painting, GPU image presentation, and resize remain under
 investigation. The new contract is local coverage, not an upstream WPT import,
 and remains candidate pending broader qualification.
+
+
+### Native wheel zoom diagnostic (2026-09-08)
+
+The original-document probe now accepts `--zoom-kestrel`. It sends forty wheel
+inputs through `NativeSceneSurface.SubmitWheel` at the viewport center, twenty
+in each direction, and observes resize notifications and bitmap attribute
+mutations without changing the source document or replacing application code.
+Observers are disconnected after the run. The macOS run handled all forty events
+(default prevented by the application's viewport handler), reported zero app
+errors, one initial 556x614 resize notification, and no canvas width/height
+mutations. This does not reproduce the hypothesized repeated bitmap reset during
+zoom. Evidence: `evidence/kestrel/native-wheel-zoom-diagnostics.json`.
+
+Build and run with the existing ordinary-view probe commands, adding
+`--zoom-kestrel --verify-kestrel`. The startup verifier remains a startup gate;
+these diagnostics do not certify camera transformations, frame timing, or
+flicker-free presentation. GPU presentation and overlay painting still require
+investigation and captured-frame evidence.

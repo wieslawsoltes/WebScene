@@ -148,6 +148,44 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 Console.WriteLine("Kestrel view: " + await view.EvaluateTextAsync("({view:document.getElementById('view-select').value,style:document.getElementById('style-select').value,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length,history:document.getElementById('command-history').textContent})"));
                             }
                         }
+                        if (arguments.Contains("--zoom-kestrel"))
+                        {
+                            // Observe the unchanged application's own resize behavior. Drive wheel
+                            // through the host input queue, not synthetic JS events or camera calls.
+                            await view.EvaluateTextAsync("""
+                                (()=>{
+                                  const viewport=document.getElementById('viewport'),canvas=document.getElementById('scene');
+                                  const probe=globalThis.kestrelZoomProbe={resizes:[],bitmapMutations:[],wheelEvents:0,handledWheelEvents:0};
+                                  probe.wheel=e=>{++probe.wheelEvents;if(e.defaultPrevented)++probe.handledWheelEvents;};
+                                  document.addEventListener('wheel',probe.wheel);
+                                  probe.resize=new ResizeObserver(entries=>{for(const e of entries)probe.resizes.push([e.contentRect.width,e.contentRect.height]);});
+                                  probe.mutations=new MutationObserver(entries=>{for(const e of entries)probe.bitmapMutations.push([e.attributeName,canvas.width,canvas.height]);});
+                                  probe.resize.observe(viewport);
+                                  probe.mutations.observe(canvas,{attributes:true,attributeFilter:['width','height']});
+                                })()
+                                """);
+                            try
+                            {
+                                await Task.Delay(250); // Let the required initial resize notification settle.
+                                using var center = System.Text.Json.JsonDocument.Parse(await view.EvaluateTextAsync("(()=>{const r=document.getElementById('viewport').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()"));
+                                var x = center.RootElement[0].GetDouble();
+                                var y = center.RootElement[1].GetDouble();
+                                var surface = (NativeSceneSurface)view.Content!;
+                                surface.SubmitPointerMove(x, y);
+                                for (var step = 0; step < 40; ++step)
+                                {
+                                    if (surface.SubmitWheel(x, y, step < 20 ? -25 : 25) == 0)
+                                        throw new InvalidOperationException("Kestrel zoom input was rejected.");
+                                    await Task.Delay(30);
+                                }
+                                await Task.Delay(500);
+                                Console.WriteLine("Kestrel zoom diagnostics: " + await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelZoomProbe,c=document.getElementById('scene');return {wheelEvents:p.wheelEvents,handledWheelEvents:p.handledWheelEvents,resizes:p.resizes,bitmapMutations:p.bitmapMutations,canvas:[c.width,c.height],backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
+                            }
+                            finally
+                            {
+                                await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelZoomProbe;p.resize.disconnect();p.mutations.disconnect();document.removeEventListener('wheel',p.wheel);delete globalThis.kestrelZoomProbe;})()");
+                            }
+                        }
                         if (arguments.Contains("--resize-kestrel"))
                         {
                             foreach (var size in new[] { (980, 680), (1440, 900), (1100, 740), (1280, 800) })
