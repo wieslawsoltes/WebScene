@@ -172,7 +172,7 @@ async function captureCase(chrome, serverUrl, output, test, repetition) {
   await page.send("Emulation.setDeviceMetricsOverride", { ...test.documentViewport, deviceScaleFactor: test.dpr, mobile: false });
   await page.send("Page.navigate", { url: `${serverUrl}/index.html?reference=${test.id}&repeat=${repetition}` });
   await page.send("Page.bringToFront");
-  await waitFor(page, "document.documentElement.dataset.ready==='true' && !!window.kestrel?.backendReady");
+  await waitFor(page, "document.documentElement?.dataset.ready==='true' && !!window.kestrel?.backendReady");
   const projectPath = test.scene.startsWith("lines-") ? `/reference/${test.scene}.kcad` : `/examples/${test.scene}.kcad`;
   await evaluate(page, `(async()=>{
     const response=await fetch(${JSON.stringify(projectPath)});
