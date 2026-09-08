@@ -2317,3 +2317,21 @@ The local WPT-style contract `html-script-style-text-is-inert.html` is explicitl
 harnessBlocked: the subset adapter itself regex-extracts comment/template styles
 instead of using the real navigation loader. Its failing result is retained in
 `evidence/kestrel/inert-style-harness-blocked.json`; it is not a conformance pass.
+
+
+### Fix functional border color tokenization (2026-09-08)
+
+Kestrel's layer rows use `border-bottom:1px solid color-mix(in srgb,
+var(--line-soft) 40%,transparent)`. The border shorthand parser split function
+arguments on whitespace and treated `40%` as a new width, losing the color and
+painting a large currentColor border over each row. It now uses balanced
+parenthesis-aware whitespace components, preserving the complete color function.
+
+The local WPT-style candidate `css-border-functional-color-width.html` failed
+before the fix (expected 1px, observed 40px) and passes after it. Result files
+`border-functional-color-before.json` and `border-functional-color-after.json`
+are retained under `evidence/kestrel/`. Both native suites pass (12.06 seconds).
+The fresh unchanged-app screenshot `macos-layer-list-border-fixed.png` confirms
+readable dark layer rows. This is local candidate coverage, not full border/CSS
+conformance or cross-RID qualification. GPU pan/zoom latency and flicker remain
+unqualified and are not claimed fixed by this CSS change.

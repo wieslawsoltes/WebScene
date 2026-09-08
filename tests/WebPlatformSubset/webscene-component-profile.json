@@ -1065,6 +1065,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/css-border-functional-color-width.html",
+      "type": "testharness",
+      "capabilities": ["border-shorthand", "functional-color"],
+      "evidence": ["kestrel-white-layer-list"],
+      "reason": "Color-mix percentages must stay inside the color component instead of becoming border widths. Local regression pending cross-RID qualification."
+    },
+    {
       "path": "contracts/css-root-theme-interaction-recascade.html",
       "type": "testharness",
       "capabilities": ["css-custom-properties", "attribute-selector", "focus-pseudo-class"],
