@@ -107,3 +107,21 @@ transport copies. Native GPU runtime regressions also pass. Evidence:
 This fixture does not deterministically delay completion, and does not prove
 pending-scene coherence or physical display timing. The provider/runtime/scene
 capture integration and delayed-producer tests above remain mandatory.
+
+
+## Provider capture boundary (2026-09-08)
+
+`dawn_iosurface_canvas_host::capture_latest_submission()` exposes the latest
+submitted ticket before ordinary ready-queue draining. It rejects capture while
+an acquired texture still belongs to an open rendering opportunity, and discard
+retirement clears the lookup. A weak submission lookup adds no hidden allocation
+retention; only the captured ticket retains the output. Capture must therefore
+happen before the ordinary ready queue consumes the provider reference.
+
+The fixture now captures through the provider, drains its ready queue and returns
+the captured image for the real Ganesh pixel/retirement test, verifying allocation
+and content serial identity and one-shot transfer. Discarded work yields no
+capture. The 32-frame fixture and native GPU runtime test pass; evidence is in
+`evidence/kestrel/gpu-provider-ticket-fixture.json`. Runtime snapshot capture,
+first-pending-image commands, atomic scene commit and delayed-completion tests
+remain unimplemented; this provider API alone does not fix presentation.

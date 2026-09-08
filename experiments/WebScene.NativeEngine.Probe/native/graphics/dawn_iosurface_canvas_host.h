@@ -18,6 +18,7 @@ class dawn_iosurface_canvas_host final {
     std::unique_ptr<active_frame> active_;
     std::array<std::shared_ptr<dawn_iosurface_submission>,3> pending_{};
     size_t active_slot_=0;
+    std::weak_ptr<dawn_iosurface_submission> latest_submission_;
     std::shared_ptr<completion_wake> wake_;
     void check_thread()const {
         if(thread_!=std::this_thread::get_id())throw std::logic_error("Canvas provider requires its engine thread");
@@ -60,7 +61,17 @@ public:
             throw std::invalid_argument("Canvas retirement requires its current texture");
         pending_[active_slot_]=dawn_iosurface_submission::publish_submitted(std::move(active_->frame),
             active_->device,active_->shared,active_->device_lifetime,wake_,present);
+        latest_submission_=present ? pending_[active_slot_] : std::weak_ptr<dawn_iosurface_submission>{};
         active_.reset();
+    }
+    // Capture at the rendering-opportunity boundary, before draining ready
+    // outputs. The weak lookup adds no hidden image retention; the returned
+    // ticket owns its exact allocation independently of later provider work.
+    std::unique_ptr<dawn_iosurface_submission::snapshot> capture_latest_submission() {
+        check_thread();
+        if(active_)throw std::logic_error("End the current GPU opportunity before capturing its output");
+        auto submission=latest_submission_.lock();
+        return submission ? submission->capture_snapshot() : nullptr;
     }
     std::optional<owned_image_pool::retained> take_ready() {
         check_thread();clear_retired();

@@ -159,6 +159,7 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
     catch(const std::invalid_argument&){foreign_retirement=true;}
     if(!foreign_retirement)return {};
     canvas_provider.retire(host_texture,false);
+    if(canvas_provider.capture_latest_submission())return {};
     auto host_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
     while(!canvas_provider.idle()&&std::chrono::steady_clock::now()<host_deadline) {
         instance.ProcessEvents();std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -184,10 +185,20 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
     auto host_recording=host_encoder.BeginRenderPass(&pass);host_recording.End();
     auto host_commands=host_encoder.Finish();device->GetQueue().Submit(1,&host_commands);
     canvas_provider.retire(host_texture,true);
+    auto provider_capture=canvas_provider.capture_latest_submission();
+    if(!provider_capture)return {};
+    const auto provider_metadata=provider_capture->describe();
     host_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
     do {
         auto ready=canvas_provider.take_ready();
-        if(ready)return ready;
+        if(ready) {
+            auto captured_ready=provider_capture->take_ready();
+            if(!captured_ready || provider_capture->take_ready() ||
+                captured_ready->describe().allocation!=ready->describe().allocation ||
+                captured_ready->describe().content_serial!=provider_metadata.content_serial)return {};
+            ready.reset();
+            return captured_ready;
+        }
         instance.ProcessEvents();std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }while(std::chrono::steady_clock::now()<host_deadline);
     return {};
