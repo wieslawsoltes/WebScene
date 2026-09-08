@@ -57,4 +57,15 @@ test(t => {
   assert_equals(document.activeElement, opener, 'previous focus restored');
   opener.focus(); assert_equals(document.activeElement, opener, 'modal blocking removed');
 }, 'modal focus uses autofocus and close restores background interaction');
+test(t => {
+  const {opener, dialog} = fixture(t);
+  for (const remove of [() => { dialog.open = false; }, () => dialog.removeAttribute('open')]) {
+    dialog.showModal(); remove();
+    opener.focus();
+    assert_not_equals(document.activeElement, opener, 'attribute removal is not close');
+    dialog.remove(); opener.focus();
+    assert_equals(document.activeElement, opener, 'detachment releases modal blocking');
+    document.body.append(dialog); dialog.show(); assert_true(dialog.open); dialog.close();
+  }
+}, 'Removing open alone retains modal state; detachment releases it');
 </script>
