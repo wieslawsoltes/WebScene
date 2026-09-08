@@ -240,5 +240,27 @@
   "StoreOp": {
     "store": "Store",
     "discard": "Discard"
+  },
+  "BufferBindingType": {
+    "uniform": "Uniform",
+    "storage": "Storage",
+    "read-only-storage": "ReadOnlyStorage"
+  },
+  "SamplerBindingType": {
+    "filtering": "Filtering",
+    "non-filtering": "NonFiltering",
+    "comparison": "Comparison"
+  },
+  "TextureSampleType": {
+    "float": "Float",
+    "unfilterable-float": "UnfilterableFloat",
+    "depth": "Depth",
+    "sint": "Sint",
+    "uint": "Uint"
+  },
+  "StorageTextureAccess": {
+    "write-only": "WriteOnly",
+    "read-only": "ReadOnly",
+    "read-write": "ReadWrite"
   }
 }

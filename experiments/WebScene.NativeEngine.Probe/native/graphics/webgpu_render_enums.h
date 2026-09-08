@@ -281,4 +281,34 @@ template<> struct webgpu_enum_names<wgpu::StoreOp> {
         {"discard",wgpu::StoreOp::Discard},
     }};
 };
+template<> struct webgpu_enum_names<wgpu::BufferBindingType> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::BufferBindingType>,3> values{{
+        {"uniform",wgpu::BufferBindingType::Uniform},
+        {"storage",wgpu::BufferBindingType::Storage},
+        {"read-only-storage",wgpu::BufferBindingType::ReadOnlyStorage},
+    }};
+};
+template<> struct webgpu_enum_names<wgpu::SamplerBindingType> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::SamplerBindingType>,3> values{{
+        {"filtering",wgpu::SamplerBindingType::Filtering},
+        {"non-filtering",wgpu::SamplerBindingType::NonFiltering},
+        {"comparison",wgpu::SamplerBindingType::Comparison},
+    }};
+};
+template<> struct webgpu_enum_names<wgpu::TextureSampleType> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::TextureSampleType>,5> values{{
+        {"float",wgpu::TextureSampleType::Float},
+        {"unfilterable-float",wgpu::TextureSampleType::UnfilterableFloat},
+        {"depth",wgpu::TextureSampleType::Depth},
+        {"sint",wgpu::TextureSampleType::Sint},
+        {"uint",wgpu::TextureSampleType::Uint},
+    }};
+};
+template<> struct webgpu_enum_names<wgpu::StorageTextureAccess> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::StorageTextureAccess>,3> values{{
+        {"write-only",wgpu::StorageTextureAccess::WriteOnly},
+        {"read-only",wgpu::StorageTextureAccess::ReadOnly},
+        {"read-write",wgpu::StorageTextureAccess::ReadWrite},
+    }};
+};
 } // namespace webscene::graphics

@@ -201,6 +201,16 @@ void test_runtime_webgpu_installation() {
     }
     require(document.find_by_id("gpu-installed-ready")!=nullptr,"Installed GPU did not create a device");
     require(runtime.execute(R"JS(
+        if(installedDevice.createBindGroupLayout.length!==1)throw new Error('binding layout arity');
+        globalThis.bindingLayout=installedDevice.createBindGroupLayout({label:'camera',entries:new Set([{binding:0,visibility:1,buffer:{}}])});
+        if(Object.prototype.toString.call(bindingLayout)!=='[object GPUBindGroupLayout]'||bindingLayout.label!=='camera')throw new Error('binding layout wrapper');
+        for(const descriptor of [{},{entries:[{visibility:1}]},{entries:[{binding:0}]},{entries:[{binding:0,visibility:1,buffer:{type:'bad'}}]}]){
+            let rejected=false;try{installedDevice.createBindGroupLayout(descriptor)}catch(e){rejected=e instanceof TypeError}
+            if(!rejected)throw new Error('binding descriptor accepted');
+        }
+        bindingLayout.label='updated';if(bindingLayout.label!=='updated')throw new Error('binding layout label');
+    )JS","binding-layout"),"Binding layout creation failed");
+    require(runtime.execute(R"JS(
         const namespaces={GPUBufferUsage:{MAP_READ:1,MAP_WRITE:2,COPY_SRC:4,COPY_DST:8,INDEX:16,VERTEX:32,UNIFORM:64,STORAGE:128,INDIRECT:256,QUERY_RESOLVE:512},
           GPUTextureUsage:{COPY_SRC:1,COPY_DST:2,TEXTURE_BINDING:4,STORAGE_BINDING:8,RENDER_ATTACHMENT:16,TRANSIENT_ATTACHMENT:32},
           GPUMapMode:{READ:1,WRITE:2},GPUShaderStage:{VERTEX:1,FRAGMENT:2,COMPUTE:4},GPUColorWrite:{RED:1,GREEN:2,BLUE:4,ALPHA:8,ALL:15}};
@@ -1275,6 +1285,22 @@ int main() {
                     test_v8_webgpu_shader_descriptor(isolate,context);
                 test_v8_webgpu_render_state(isolate,context);
                 test_v8_webgpu_texture_descriptor(isolate,context);
+                {
+                    auto evaluate=[&](const char* source){return v8::Script::Compile(context,v8::String::NewFromUtf8(isolate,source).ToLocalChecked()).ToLocalChecked()->Run(context).ToLocalChecked();};
+                    webgpu_bind_group_layout_descriptor descriptor;
+                    require(read_webgpu_bind_group_layout_descriptor(isolate,context,evaluate("({entries:[{binding:0,visibility:1,buffer:{}},{binding:1,visibility:2,sampler:{}},{binding:2,visibility:2,texture:{}},{binding:3,visibility:4,storageTexture:{format:'rgba8unorm'}},{binding:4,visibility:2,externalTexture:{}}]})"),descriptor),"Binding variant conversion failed");
+                    descriptor.with_native([&](const auto& native){
+                        require(native.entryCount==5&&native.entries[0].buffer.type==wgpu::BufferBindingType::Uniform
+                            &&native.entries[1].sampler.type==wgpu::SamplerBindingType::Filtering
+                            &&native.entries[2].texture.sampleType==wgpu::TextureSampleType::Float
+                            &&native.entries[3].storageTexture.access==wgpu::StorageTextureAccess::WriteOnly
+                            &&native.entries[4].nextInChain&&native.entries[4].nextInChain->sType==wgpu::SType::ExternalTextureBindingLayout,
+                            "Binding defaults or external chain incorrect");
+                    });
+                    require(read_webgpu_bind_group_layout_descriptor(isolate,context,evaluate("(()=>{globalThis.bindingOrder=[];return {entries:[new Proxy({binding:0,visibility:1,buffer:new Proxy({},{get(o,k){bindingOrder.push('buffer.'+k);return o[k]}})},{get(o,k){bindingOrder.push(k);return o[k]}})]}})()"),descriptor)
+                        &&evaluate("bindingOrder.join(',')==='binding,buffer,buffer.hasDynamicOffset,buffer.minBindingSize,buffer.type,externalTexture,sampler,storageTexture,texture,visibility'")->IsTrue(),"Binding dictionary conversion order incorrect");
+                }
+
                 test_v8_webgpu_render_pass_descriptor(isolate,context);
                     v8::Local<v8::Promise> promise;
                     webgpu_adapter_options options;

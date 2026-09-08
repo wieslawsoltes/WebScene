@@ -1808,3 +1808,19 @@ assuming earlier queued releases have not run.
 JavaScript createBindGroupLayout/createPipelineLayout descriptor conversion and
 exposure remain unimplemented; Kestrel's observed binding-layout failure remains
 open. The two tables currently use the existing pipeline-capacity setting.
+
+### createBindGroupLayout (2026-09-08)
+
+GPUDevice now exposes createBindGroupLayout with owned descriptor conversion,
+iterable entries, required binding/visibility fields, the five binding variants,
+native default values, and call-scoped external-texture chains. Binding enum
+tables are generated and checked against the pinned WebIDL. Semantic validation
+of incompatible/multiple entries remains with Dawn after conversion.
+
+Tests cover native wrapper identity/labels, missing and invalid fields, Set
+iteration, every variant/default, external chains, and nested getter order.
+The native runtime suite and generated-binding check pass. This does not claim
+external-texture resource support or exhaustive bind-group-layout conformance.
+
+Unchanged Kestrel startup still exits 1, now reporting "d.createBindGroup is not
+a function". Its layout creation step advances successfully to resource binding.

@@ -1,5 +1,7 @@
 #pragma once
 #include "v8_webgpu_buffers.h"
+#include "v8_webgpu_bind_group_layouts.h"
+#include "v8_webgpu_bind_group_layout_descriptor.h"
 #include "v8_webgpu_shaders.h"
 #include "v8_webgpu_render_pipelines.h"
 #include "v8_webgpu_textures.h"
@@ -28,6 +30,7 @@ class v8_webgpu_devices {
         resource_handle<dawn_device> device;
         std::unique_ptr<v8_webgpu_buffers> buffers;
         std::unique_ptr<v8_webgpu_shaders> shaders;
+        std::unique_ptr<v8_webgpu_bind_group_layouts> binding_layouts;
         std::unique_ptr<v8_webgpu_render_pipelines> pipelines;
         std::unique_ptr<v8_webgpu_textures> textures;
         std::unique_ptr<v8_webgpu_command_encoders> encoders;
@@ -98,6 +101,30 @@ class v8_webgpu_devices {
         } catch (const std::length_error&) {
             isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Buffer capacity exhausted")));
         } catch (const std::exception&) { fail(isolate,"GPUDevice native ownership is unavailable"); }
+    }
+    static void create_bind_group_layout(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if(!receiver(info))return;
+        auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
+        if(!info.Length()){fail(isolate,"createBindGroupLayout requires a descriptor");return;}
+        try {
+            webgpu_bind_group_layout_descriptor descriptor;
+            if(!read_webgpu_bind_group_layout_descriptor(isolate,context,info[0],descriptor))return;
+            auto* item=receiver(info);if(!item)return;
+            resource_handle<wgpu::BindGroupLayout> handle;
+            descriptor.with_native([&](const auto& native){
+                item->service->with_device(item->device,[&](auto& owned){handle=owned.create_bind_group_layout(native);});
+            });
+            v8::Local<v8::Object> wrapper;
+            try {
+                if(item->binding_layouts->wrap(context,*item->service,item->device,handle,info.This(),descriptor.label).ToLocal(&wrapper)){
+                    info.GetReturnValue().Set(wrapper);return;
+                }
+            }catch(...){
+                item->service->with_device(item->device,[&](auto& owned){owned.release_bind_group_layout(handle);});throw;
+            }
+            item->service->with_device(item->device,[&](auto& owned){owned.release_bind_group_layout(handle);});
+            fail(isolate,"Bind-group-layout wrapper capacity exhausted");
+        }catch(const std::exception&){fail(isolate,"Bind-group-layout creation failed");}
     }
     static void create_shader(const v8::FunctionCallbackInfo<v8::Value>& info) {
         if (!receiver(info)) return;
@@ -288,6 +315,8 @@ public:
         auto prototype=v8::ObjectTemplate::New(isolate);
         auto create=v8::FunctionTemplate::New(isolate,create_buffer); create->SetLength(1);
         prototype->Set(isolate,"createBuffer",create);
+        auto binding_create=v8::FunctionTemplate::New(isolate,create_bind_group_layout);binding_create->SetLength(1);
+        prototype->Set(isolate,"createBindGroupLayout",binding_create);
         auto push_scope=v8::FunctionTemplate::New(isolate,push_error_scope);push_scope->SetLength(1);
         prototype->Set(isolate,"pushErrorScope",push_scope);
         auto shader_create=v8::FunctionTemplate::New(isolate,create_shader); shader_create->SetLength(1);
@@ -316,6 +345,7 @@ public:
             item->encoders.reset();
             item->textures.reset();
             item->pipelines.reset();
+            item->binding_layouts.reset();
             item->shaders.reset();
             item->buffers.reset(); // Invalidate first; cancellation can construct JS exceptions.
             item->wrapper.Reset();
@@ -379,6 +409,7 @@ public:
         item->label=std::move(initial_label);
         item->service=&service; item->device=device; item->releases=service.release_endpoint();
         item->buffers=std::make_unique<v8_webgpu_buffers>(isolate_,context,buffer_capacity_,dom_exception_.Get(isolate_));
+        item->binding_layouts=std::make_unique<v8_webgpu_bind_group_layouts>(isolate_,context);
         item->shaders=std::make_unique<v8_webgpu_shaders>(isolate_,context);
         item->pipelines=std::make_unique<v8_webgpu_render_pipelines>(isolate_,context);
         item->textures=std::make_unique<v8_webgpu_textures>(isolate_,context);
