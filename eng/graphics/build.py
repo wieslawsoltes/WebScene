@@ -29,8 +29,8 @@ def run(args, cwd=None, env=None):
     subprocess.run([str(a) for a in args], cwd=cwd, env=env, check=True)
 
 
-def capture(args, cwd=None):
-    return subprocess.check_output([str(a) for a in args], cwd=cwd, text=True).strip()
+def capture(args, cwd=None, env=None):
+    return subprocess.check_output([str(a) for a in args], cwd=cwd, env=env, text=True).strip()
 
 
 def host_rid():
@@ -207,12 +207,14 @@ def angle(args):
             run(["codesign", "--force", "--sign", "-", path])
     (sdk / "build-info").mkdir()
     shutil.copy2(output / "args.gn", sdk / "build-info/args.gn")
-    (sdk / "build-info/resolved-args.gn").write_text(capture([gn, "args", output, "--list", "--short"], source) + "\n")
+    # GN evaluates the build configuration when listing arguments too. Keep the
+    # same toolchain selection as generation, particularly the local Windows SDK.
+    (sdk / "build-info/resolved-args.gn").write_text(capture([gn, "args", output, "--list", "--short"], source, env=env) + "\n")
     shutil.copy2(source / "DEPS", sdk / "build-info/DEPS")
     clang = source / "third_party/llvm-build/Release+Asserts/bin" / ("clang.exe" if os.name == "nt" else "clang")
     seal("angle", source, sdk, args.rid, settings,
-         {"gn": capture([gn, "--version"]), "ninja": capture(["ninja", "--version"]),
-          "clang": capture([clang, "--version"]), "clangSha256": sha(clang),
+         {"gn": capture([gn, "--version"], env=env), "ninja": capture(["ninja", "--version"], env=env),
+          "clang": capture([clang, "--version"], env=env), "clangSha256": sha(clang),
           "depotTools": LOCK["sources"]["depot-tools"]["revision"], "host": platform.platform()})
 
 
