@@ -1,0 +1,93 @@
+{
+  "experiment": "Sample animation demand before observing compositor frame",
+  "disposition": "Reverted; no measured improvement",
+  "runs": {
+    "baseline": {
+      "elapsedMilliseconds": 1919.3152,
+      "counters": {
+        "CompositionAnimationFrames": 107,
+        "CompositionSubmittedAnimationFrames": 53,
+        "CompositionSkippedEmptyAnimationFrames": 54,
+        "RenderedScenes": 33,
+        "PublishedScenes": 54
+      },
+      "timing": {
+        "physicalPresentationVerified": false,
+        "publicationToAcceptance": {
+          "count": 33,
+          "medianMilliseconds": 26.548125,
+          "p95Milliseconds": 34.276625,
+          "maximumMilliseconds": 35.23975
+        },
+        "acceptanceToDrawCallbackEnd": {
+          "count": 33,
+          "medianMilliseconds": 0.795709,
+          "p95Milliseconds": 1.179542,
+          "maximumMilliseconds": 2.415625
+        },
+        "publicationToDrawCallbackEnd": {
+          "count": 33,
+          "medianMilliseconds": 27.5425,
+          "p95Milliseconds": 35.215417,
+          "maximumMilliseconds": 36.144
+        },
+        "inputToPublishedConsumptionWatermark": {
+          "count": 80,
+          "medianMilliseconds": 14.6361875,
+          "p95Milliseconds": 32.557125,
+          "maximumMilliseconds": 44.848708
+        },
+        "unmatchedInputCount": 0,
+        "limitations": [
+          "Draw callback completion is not physical presentation.",
+          "A consumption watermark does not prove each coalesced move was drawn.",
+          "Measurement includes settling; no FPS qualification is derived."
+        ]
+      }
+    },
+    "experiment": {
+      "elapsedMilliseconds": 1917.7333,
+      "counters": {
+        "CompositionAnimationFrames": 102,
+        "CompositionSubmittedAnimationFrames": 53,
+        "CompositionSkippedEmptyAnimationFrames": 49,
+        "RenderedScenes": 33,
+        "PublishedScenes": 55
+      },
+      "timing": {
+        "physicalPresentationVerified": false,
+        "publicationToAcceptance": {
+          "count": 33,
+          "medianMilliseconds": 27.74775,
+          "p95Milliseconds": 33.9705,
+          "maximumMilliseconds": 35.260834
+        },
+        "acceptanceToDrawCallbackEnd": {
+          "count": 33,
+          "medianMilliseconds": 0.82875,
+          "p95Milliseconds": 1.236916,
+          "maximumMilliseconds": 2.069917
+        },
+        "publicationToDrawCallbackEnd": {
+          "count": 33,
+          "medianMilliseconds": 28.471333,
+          "p95Milliseconds": 34.786584,
+          "maximumMilliseconds": 36.177875
+        },
+        "inputToPublishedConsumptionWatermark": {
+          "count": 80,
+          "medianMilliseconds": 15.711333,
+          "p95Milliseconds": 33.017709,
+          "maximumMilliseconds": 45.134584
+        },
+        "unmatchedInputCount": 0,
+        "limitations": [
+          "Draw callback completion is not physical presentation.",
+          "A consumption watermark does not prove each coalesced move was drawn.",
+          "Measurement includes settling; no FPS qualification is derived."
+        ]
+      }
+    }
+  },
+  "nextInvestigation": "Capture per-compositor-tick mailbox availability and scene acquisition/retirement backpressure; aggregate demand counts cannot establish why individual frames miss."
+}
