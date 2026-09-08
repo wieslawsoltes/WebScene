@@ -2227,6 +2227,7 @@
 
     bool blur_active_element_before_detach(dom_node& detached_root)
     {
+        document.unregister_modal_subtree(detached_root);
         if (!subtree_contains(detached_root, active_element)) return true;
         webscene_input_event synthetic{};
         if (!set_active_element(nullptr, synthetic)) return false;

@@ -2172,3 +2172,29 @@ accessibility, find-in-page, selection, immediate focus fixup on mutation and
 pointer-capture transitions remain unqualified. showModal and the original
 BOX workflow remain outstanding. See the
 [HTML inert subtree requirements](https://html.spec.whatwg.org/multipage/interaction.html#inert-subtrees).
+
+### Native modal ordering and lifetime foundation (2026-09-08)
+
+The native document now owns ordered modal registrations identified by native
+scope/dialog IDs. Registration validates ownership, dialog identity and scope
+connectivity; duplicate registration preserves ordering. Removing the top
+registration restores the preceding modal in the same scope. The inert query
+uses each applicable scope's active modal to block background nodes while
+allowing the modal subtree to escape ancestor inert attributes. An inert
+attribute on the modal itself still applies, and a nested scope cannot escape
+an outer modal that blocks its embedding subtree. Documents without modal
+registrations retain the attribute-only inert query path.
+
+Parser removal, removal of all children and runtime detach handling remove
+registrations for the affected subtree. Native deletion removes invalid IDs,
+and document clear removes all registrations. Regression coverage verifies
+ordering, duplicate registration, restoration, explicit modal inertness,
+nested scopes, ownership/type rejection, detach/reattach, deletion and clear.
+Both native-engine and GPU runtime suites passed (12.97 seconds combined).
+
+This is internal state infrastructure only. No showModal method has been
+exposed and the original Kestrel BOX workflow remains unqualified. Native
+modal paint ordering, out-of-flow layout, hit-test routing into the active
+modal, backdrop, focus entry/restoration and event integration must use this
+state before modal opening is exposed. Cross-frame visual/input behavior and
+full conformance/performance remain unqualified.

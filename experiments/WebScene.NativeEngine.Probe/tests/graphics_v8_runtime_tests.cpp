@@ -190,6 +190,54 @@ void test_runtime_webgpu_document_policy() {
     require(decisions==std::vector<std::string>{"about:blank","https://graphics.test/allowed","https://graphics.test/denied"},"Document policy URL sequence incorrect");
 #endif
 }
+void test_native_modal_ordering() {
+    webscene_native::native_document document;
+    auto& scope=document.body();
+    auto& host=document.create_element("div");
+    auto& first=document.create_element("dialog");
+    auto& second=document.create_element("dialog");
+    auto& control=document.create_element("input");
+    auto& background=document.create_element("button");
+    require(document.append_child(scope,host)&&document.append_child(host,first)
+        &&document.append_child(first,control)&&document.append_child(scope,second)
+        &&document.append_child(scope,background),"Modal fixture tree failed");
+    host.attributes["inert"]="";
+    require(document.is_inert(control),"Baseline inherited inert state missing");
+    require(document.register_modal_dialog(scope,first),"First modal registration failed");
+    require(document.active_modal_dialog(scope)==&first&&!document.is_inert(control)
+        &&document.is_inert(background),"Modal did not escape inert ancestor or block background");
+    first.attributes["inert"]="";
+    require(document.is_inert(control),"Explicit modal inert state was escaped");
+    first.attributes.erase("inert");
+    require(document.register_modal_dialog(scope,second),"Second modal registration failed");
+    require(document.active_modal_dialog(scope)==&second&&document.is_inert(control)
+        &&!document.is_inert(second),"Second modal ordering failed");
+    require(document.register_modal_dialog(scope,first)&&document.active_modal_dialog(scope)==&second,
+        "Duplicate modal registration changed ordering");
+    document.unregister_modal_dialog(second);
+    require(document.active_modal_dialog(scope)==&first&&!document.is_inert(control),"Previous modal was not restored");
+    auto& innerScope=document.create_element("div");
+    auto& innerDialog=document.create_element("dialog");
+    require(document.append_child(scope,innerScope)&&document.append_child(innerScope,innerDialog)
+        &&document.register_modal_dialog(innerScope,innerDialog),"Nested scope fixture failed");
+    require(document.is_inert(innerDialog),"Nested scope escaped outer modal blockage");
+    document.unregister_modal_dialog(first);
+    require(!document.is_inert(background)&&!document.is_inert(innerDialog)&&document.is_inert(control),
+        "Modal removal did not restore attribute-only inert behavior");
+    webscene_native::native_document foreign;
+    require(!document.register_modal_dialog(scope,foreign.body()),"Foreign modal accepted");
+    require(!document.register_modal_dialog(scope,background),"Non-dialog modal accepted");
+    document.remove_all_children(innerScope);
+    require(document.active_modal_dialog(innerScope)==nullptr,"Detached dialog continued blocking its scope");
+    require(document.append_child(innerScope,innerDialog)&&document.active_modal_dialog(innerScope)==nullptr,
+        "Reattaching a dialog resurrected modal registration");
+    document.remove_all_children(innerScope);
+    document.erase_detached_subtree(innerDialog);
+    require(document.active_modal_dialog(innerScope)==nullptr,"Deleted modal retained native state");
+    document.clear();
+    require(document.active_modal_dialog(document.body())==nullptr,"Navigation retained modal ordering");
+}
+
 void test_runtime_webgpu_installation() {
     webscene_native::native_document document;
     webscene_native::v8_dom_runtime runtime(document,[]{return webscene_native::v8_dom_runtime::viewport_metrics{64,64,1,0};},
@@ -689,6 +737,7 @@ int main() {
             test_compilation_info_snapshot();
             test_inline_canvas_intrinsic_layout();
             test_runtime_webgpu_document_policy();
+            test_native_modal_ordering();
             test_runtime_webgpu_installation();
             webscene_native::native_document document;
             webscene_native::v8_dom_runtime runtime(document,[] {

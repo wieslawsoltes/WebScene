@@ -1557,6 +1557,10 @@ public:
     dom_node* find_by_native_id(uint32_t id) noexcept;
     dom_node* find_by_id(const std::string& id) noexcept;
     std::vector<dom_node*> query_selector_all(dom_node& root, const std::string& selector);
+    bool register_modal_dialog(dom_node& scope, dom_node& dialog);
+    void unregister_modal_dialog(const dom_node& dialog);
+    void unregister_modal_subtree(const dom_node& root);
+    const dom_node* active_modal_dialog(const dom_node& scope) const noexcept;
     bool is_inert(const dom_node& node) const noexcept;
     dom_node* hit_test(dom_node& root, float x, float y);
     void clear();
@@ -1964,6 +1968,8 @@ private:
     // trimmed when possible so short-lived text-node churn does not retain an
     // ever-growing pointer table.
     std::vector<dom_node*> native_id_index_;
+    struct modal_dialog_entry final { uint32_t scope_id; uint32_t dialog_id; };
+    std::vector<modal_dialog_entry> modal_dialogs_;
 #if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
     // Mirror the native-ID index so intrinsic lookup remains direct without
     // making every DOM node pay a cross-library object-footprint tax. The
