@@ -1098,6 +1098,15 @@ void native_document::layout_children(dom_node& parent)
             horizontal_axis ? node.style.width : node.style.height,
             available);
     };
+    const auto positioned_auto_start_margin = [](float available, float start, float end,
+        float size, float start_margin, float end_margin, bool start_auto, bool end_auto,
+        bool horizontal_axis) {
+        if (!start_auto) return start_margin;
+        const auto free = available - start - end - size - (end_auto ? 0.0F : end_margin);
+        // CSS absolute positioning permits negative auto margins vertically.
+        // In the horizontal LTR case, excess width overflows at the right edge.
+        return end_auto ? (horizontal_axis && free < 0 ? 0.0F : free * 0.5F) : free;
+    };
     const auto layout_positioned_grid_child = [&](dom_node& child) {
         auto* containing_node = body_;
         if (child.style.position == position_mode::absolute) {
@@ -1152,11 +1161,11 @@ void native_document::layout_children(dom_node& parent)
             ? resolve_length(child, child.style.right, containing.width, 0) : 0.0F;
         const auto bottom = has_bottom
             ? resolve_length(child, child.style.bottom, containing.height, 0) : 0.0F;
-        const auto margin_left = resolve_length(
+        auto margin_left = resolve_length(
             child, child.style.margin_left, containing.width, 0);
         const auto margin_right = resolve_length(
             child, child.style.margin_right, containing.width, 0);
-        const auto margin_top = resolve_length(
+        auto margin_top = resolve_length(
             child, child.style.margin_top, containing.height, 0);
         const auto margin_bottom = resolve_length(
             child, child.style.margin_bottom, containing.height, 0);
@@ -1203,6 +1212,12 @@ void native_document::layout_children(dom_node& parent)
         };
         assigned.width = constrain_positioned_size(true, assigned.width);
         assigned.height = constrain_positioned_size(false, assigned.height);
+        if (has_left && has_right) margin_left = positioned_auto_start_margin(
+            containing.width, left, right, assigned.width, margin_left, margin_right,
+            child.style.margin_left_auto, child.style.margin_right_auto, true);
+        if (has_top && has_bottom) margin_top = positioned_auto_start_margin(
+            containing.height, top, bottom, assigned.height, margin_top, margin_bottom,
+            child.style.margin_top_auto, child.style.margin_bottom_auto, false);
         assigned.x = has_left
             ? containing.x + left + margin_left
             : has_right
@@ -2909,7 +2924,7 @@ void native_document::layout_children(dom_node& parent)
             const auto bottom = has_bottom
                 ? resolve_length(*child, child->style.bottom, containing.height, 0)
                 : 0;
-            const auto margin_left = resolve_length(
+            auto margin_left = resolve_length(
                 *child,
                 child->style.margin_left,
                 containing.width,
@@ -2919,7 +2934,7 @@ void native_document::layout_children(dom_node& parent)
                 child->style.margin_right,
                 containing.width,
                 0);
-            const auto margin_top = resolve_length(
+            auto margin_top = resolve_length(
                 *child,
                 child->style.margin_top,
                 containing.height,
@@ -2956,6 +2971,12 @@ void native_document::layout_children(dom_node& parent)
                 false,
                 assigned.height,
                 containing.height);
+            if (has_left && has_right) margin_left = positioned_auto_start_margin(
+                containing.width, left, right, assigned.width, margin_left, margin_right,
+                child->style.margin_left_auto, child->style.margin_right_auto, true);
+            if (has_top && has_bottom) margin_top = positioned_auto_start_margin(
+                containing.height, top, bottom, assigned.height, margin_top, margin_bottom,
+                child->style.margin_top_auto, child->style.margin_bottom_auto, false);
             const auto flex_static_main_offset = [&] {
                 // An auto-inset out-of-flow child keeps the position its
                 // margin box would have occupied in normal flow. `cursor` is

@@ -2224,3 +2224,26 @@ These are native geometry/command-order assertions, not a presented-pixel proof.
 Modal out-of-flow layout/default styles, backdrop, focus entry/restoration,
 showModal and complete events remain pending; Kestrel BOX remains unqualified.
 Cross-frame clipping and modal pointer-capture behavior remain unqualified.
+
+### Positioned auto margins for centered dialogs (2026-09-08)
+
+Both ordinary and grid out-of-flow layout paths now distribute available space
+to auto margins when both opposing insets are specified, after size constraints
+are applied. Equal auto margins center the box; a single auto start margin
+absorbs remaining space after the authored end margin. Oversized boxes preserve
+negative vertical margins; horizontal overflow follows the modeled LTR rule.
+This supports the positioning behavior needed by dialog defaults without
+encoding centering as a Kestrel-specific offset.
+
+Native layout tests cover fixed boxes in block and grid parents at three
+viewport sizes, a single auto margin and oversized geometry. Both native
+suites passed (12.81 seconds). The unchanged Kestrel resize probe exited 0 with
+WebGPU active and zero logged errors at all four sizes. Its canvas metrics
+remain 1110x1006, 1432x1228, 862x1228 and 1112x1228 at DPR 2. In particular,
+canvas CSS height still remains 614 after shrinking from the large window:
+this regression run does not resolve or qualify the outstanding app resize
+layout issue. Modal defaults, focus, showModal and BOX remain pending. RTL,
+vertical writing modes and full positioned-layout conformance remain unqualified.
+The sizing rules are based on
+[CSS positioned layout](https://www.w3.org/TR/css-position-3/#abspos-margins)
+and the existing horizontal LTR model.

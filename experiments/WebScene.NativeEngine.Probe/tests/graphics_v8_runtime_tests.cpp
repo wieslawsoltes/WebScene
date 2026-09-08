@@ -190,6 +190,34 @@ void test_runtime_webgpu_document_policy() {
     require(decisions==std::vector<std::string>{"about:blank","https://graphics.test/allowed","https://graphics.test/denied"},"Document policy URL sequence incorrect");
 #endif
 }
+void test_positioned_auto_margins() {
+    using namespace webscene_native;
+    for(auto display : {display_mode::block,display_mode::grid}) {
+        native_document document;
+        auto& parent=document.create_element("div");
+        auto& box=document.create_element("div");
+        require(document.append_child(document.body(),parent)&&document.append_child(parent,box),"Auto margin fixture failed");
+        parent.style.display=display;
+        box.style.position=position_mode::fixed;
+        box.style.width={40,length_unit::pixels};box.style.height={20,length_unit::pixels};
+        box.style.left=box.style.right=box.style.top=box.style.bottom={0,length_unit::pixels};
+        box.style.margin_left_auto=box.style.margin_right_auto=true;
+        box.style.margin_top_auto=box.style.margin_bottom_auto=true;
+        for(const auto size : {std::pair{200.F,100.F},std::pair{300.F,180.F},std::pair{100.F,60.F}}) {
+            document.layout(size.first,size.second);
+            require(std::abs(box.layout.x-(size.first-40)/2)<0.01F
+                &&std::abs(box.layout.y-(size.second-20)/2)<0.01F,"Positioned auto margins did not center across resize");
+        }
+        box.style.margin_right_auto=false;box.style.margin_right={10,length_unit::pixels};
+        document.mark_dirty();document.layout(200,100);
+        require(std::abs(box.layout.x-150)<0.01F,"Single auto margin did not absorb remaining width");
+        box.style.margin_right_auto=true;box.style.margin_right={};
+        box.style.width={240,length_unit::pixels};box.style.height={140,length_unit::pixels};
+        document.mark_dirty();document.layout(200,100);
+        require(std::abs(box.layout.x)<0.01F&&std::abs(box.layout.y+20)<0.01F,"Oversized positioned auto margins failed");
+    }
+}
+
 void test_native_modal_ordering() {
     webscene_native::native_document document;
     auto& scope=document.body();
@@ -783,6 +811,7 @@ int main() {
             test_compilation_info_snapshot();
             test_inline_canvas_intrinsic_layout();
             test_runtime_webgpu_document_policy();
+            test_positioned_auto_margins();
             test_native_modal_ordering();
             test_runtime_webgpu_installation();
             webscene_native::native_document document;
