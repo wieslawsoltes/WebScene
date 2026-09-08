@@ -107,9 +107,9 @@ internal sealed class WebGpuDocumentProbeApp : Application
                         {
                             Console.WriteLine("Kestrel style diagnostics: " + await view.EvaluateTextAsync("""
                                 (()=>({theme:document.documentElement.getAttribute('data-theme'),nodes:
-                                  ['explorer-list','viewport','scene','layers-tab','objects-tab'].map(id=>{
-                                    const n=document.getElementById(id),s=getComputedStyle(n),r=n.getBoundingClientRect();
-                                    return {id,background:s.backgroundColor,color:s.color,display:s.display,rect:[r.x,r.y,r.width,r.height]};
+                                  Array.from(document.querySelectorAll('#explorer-list,#explorer-list *,#viewport,#scene,#layers-tab,#objects-tab')).slice(0,40).map(n=>{
+                                    const s=getComputedStyle(n),r=n.getBoundingClientRect();
+                                    return {id:n.id,tag:n.tagName,classes:n.className,background:s.backgroundColor,color:s.color,display:s.display,rect:[r.x,r.y,r.width,r.height]};
                                   })}))()
                                 """));
                         }

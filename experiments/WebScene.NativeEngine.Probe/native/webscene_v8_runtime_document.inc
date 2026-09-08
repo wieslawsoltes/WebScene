@@ -1027,8 +1027,34 @@
         }
     }
 
+    static std::vector<std::string> parsed_inline_stylesheets(const dom_node& root)
+    {
+        std::vector<std::string> result;
+        const auto visit = [&](const auto& self, const dom_node& node) -> void {
+            // Tree construction handles raw text, comments and template contents.
+            // Never scan script strings for markup belonging to another document.
+            if (node.tag == "style") {
+                auto text = node.text_content;
+                for (const auto* child : node.children)
+                    if (child != nullptr && child->tag == "#text") text += child->text_content;
+                result.push_back(std::move(text));
+                return;
+            }
+            if (node.tag == "template") return;
+            for (const auto* child : node.children) if (child != nullptr) self(self, *child);
+        };
+        visit(visit, root);
+        return result;
+    }
+
     static std::vector<std::string> parse_inline_stylesheets(const std::string& html)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        native_document parsed;
+        const auto status = parse_html_document(parsed, parsed.body(), html);
+        if (!status) return {};
+        return parsed_inline_stylesheets(parsed.body());
+#else
         std::vector<std::string> result;
         size_t cursor = 0U;
         while (true) {
@@ -1042,6 +1068,7 @@
             cursor = close + 8U;
         }
         return result;
+#endif
     }
 
     static std::string extract_element_contents(const std::string& html, const std::string& tag)

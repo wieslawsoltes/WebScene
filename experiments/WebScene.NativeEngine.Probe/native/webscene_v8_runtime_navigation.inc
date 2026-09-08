@@ -283,7 +283,11 @@
         css_variables.clear();
         important_css_variables.clear();
 
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        for (auto stylesheet : parsed_inline_stylesheets(html_element)) {
+#else
         for (auto stylesheet : parse_inline_stylesheets(html)) {
+#endif
             add_stylesheet(std::move(stylesheet), document_base_address);
         }
         for (const auto& href : stylesheets) {

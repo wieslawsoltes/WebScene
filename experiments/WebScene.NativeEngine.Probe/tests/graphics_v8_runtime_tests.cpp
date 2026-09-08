@@ -147,6 +147,27 @@ void test_scene_acquisition_v3() {
     require(view->cpu_view->header.revision==revision,"retained scene did not survive engine disposal");
     webscene_scene_release_v3(view);
 }
+void test_navigation_stylesheet_raw_text_isolation() {
+    webscene_native::native_document document;
+    webscene_native::v8_dom_runtime runtime(document,
+        []{return webscene_native::v8_dom_runtime::viewport_metrics{640,480,1,0};},
+        {},[](uint32_t,const std::string&,const auto&,const std::string&,int64_t,auto& response){
+            response.content=R"HTML(<!doctype html><html><head>
+                <style>svg{background:rgb(10,20,30)}button{position:static}</style>
+                <script>const preview='<style>svg{background:white}button{position:fixed}</style>';</script>
+                <!-- <style>svg{background:red}</style> -->
+                <template><style>svg{background:blue}</style></template>
+                </head><body><svg id="icon" width="20" height="20"></svg><button id="control">Control</button></body></html>)HTML";
+            return true;
+        });
+    require(runtime.initialize(),"Stylesheet navigation runtime failed");
+    require(runtime.load_url("https://graphics.test/style-isolation"),"Stylesheet navigation failed");
+    require(runtime.execute(R"JS(
+        if(getComputedStyle(document.getElementById('icon')).backgroundColor!=='rgb(10, 20, 30)')throw new Error('Inert markup activated stylesheet');
+        if(getComputedStyle(document.getElementById('control')).position!=='static')throw new Error('Print preview repositioned document controls');
+    )JS","style-isolation"),"Navigation leaked raw-text/comment/template CSS");
+}
+
 void test_inline_canvas_intrinsic_layout() {
     webscene_native::native_document document;
     webscene_native::v8_dom_runtime runtime(document,
@@ -809,6 +830,7 @@ int main() {
         try {
             test_device_loss_signal();
             test_compilation_info_snapshot();
+            test_navigation_stylesheet_raw_text_isolation();
             test_inline_canvas_intrinsic_layout();
             test_runtime_webgpu_document_policy();
             test_positioned_auto_margins();

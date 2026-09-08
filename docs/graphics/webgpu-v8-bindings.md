@@ -2295,3 +2295,25 @@ initial computed values inspected do not show a light-theme substitution.
 `evidence/kestrel/native-initial-style-diagnostics.json` records the result.
 This is before interaction, does not inspect every element, and does not prove
 painted pixels agree with computed styles. No visual defect is declared fixed.
+
+
+### Fix print-preview styles leaking from script text (2026-09-08)
+
+The navigation loader scanned raw HTML for `<style>` substrings. Kestrel embeds
+print-preview HTML inside JavaScript; its `svg { background:white }` and fixed
+button positioning incorrectly became document styles. Inline stylesheet
+collection now walks the HTML parser's tree, excluding comments, raw script text
+and template contents. Top-level navigation reuses the existing parsed tree;
+iframe stylesheet preloading currently uses a separate temporary parse (an
+avoidable navigation-time cost to consolidate later, not a per-frame cost).
+
+The native navigation regression covers script strings, comments and templates.
+Both native suites passed in 13.14 seconds. The original Kestrel screenshot
+`evidence/kestrel/macos-print-style-leak-fixed.png` verifies restored toolbar and
+button placement and transparent icon backgrounds. The white explorer list,
+resize defects and GPU pan/zoom smoothness are still unresolved.
+
+The local WPT-style contract `html-script-style-text-is-inert.html` is explicitly
+harnessBlocked: the subset adapter itself regex-extracts comment/template styles
+instead of using the real navigation loader. Its failing result is retained in
+`evidence/kestrel/inert-style-harness-blocked.json`; it is not a conformance pass.
