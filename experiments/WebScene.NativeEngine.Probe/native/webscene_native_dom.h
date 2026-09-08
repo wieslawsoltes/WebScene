@@ -1142,13 +1142,13 @@ struct dom_node final {
 
     uint32_t id{0};
     dom_node_kind kind{dom_node_kind::element};
+    // XML documents preserve qualified/tag and attribute name case. HTML nodes
+    // continue to apply the ASCII case-insensitive name rules at the binding.
+    bool xml_mode{false};
     std::string tag;
     std::string id_attribute;
     std::string class_name;
     std::string text_content;
-    // XML documents preserve qualified/tag and attribute name case. HTML nodes
-    // continue to apply the ASCII case-insensitive name rules at the binding.
-    bool xml_mode{false};
     attribute_collection attributes;
     std::string_view namespace_uri() const noexcept
     {
