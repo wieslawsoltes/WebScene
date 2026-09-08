@@ -11,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <memory_resource>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1990,7 +1991,13 @@ private:
     // ever-growing pointer table.
     std::vector<dom_node*> native_id_index_;
     struct modal_dialog_entry final { uint32_t scope_id; uint32_t dialog_id; };
-    std::vector<modal_dialog_entry> modal_dialogs_;
+    // Most documents never open a modal. Keep the container allocation lazy
+    // and its implementation-specific vector footprint out of every document.
+    std::unique_ptr<std::vector<modal_dialog_entry>> modal_dialogs_;
+    std::span<const modal_dialog_entry> modal_dialogs() const noexcept {
+        return modal_dialogs_ ? std::span<const modal_dialog_entry>(*modal_dialogs_)
+                              : std::span<const modal_dialog_entry>{};
+    }
 #if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
     // Mirror the native-ID index so intrinsic lookup remains direct without
     // making every DOM node pay a cross-library object-footprint tax. The

@@ -42,7 +42,7 @@ void native_document::build_scene(
     }
     // Modal roots leave their DOM stacking context and are emitted exactly
     // once, in registration order, after ordinary/fixed document content.
-    for (const auto& entry : modal_dialogs_) {
+    for (const auto& entry : modal_dialogs()) {
         if (entry.dialog_id > native_id_index_.size()) continue;
         const auto* modal = native_id_index_[entry.dialog_id - 1U];
         if (modal == nullptr || !display_tree_allows_render(*this, *modal)) continue;

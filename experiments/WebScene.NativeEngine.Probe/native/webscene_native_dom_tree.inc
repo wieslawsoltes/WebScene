@@ -591,7 +591,7 @@ size_t native_document::erase_detached_subtrees(
         }
         if (shadow_dom_storage_->node_data.empty()) shadow_dom_storage_.reset();
     }
-    std::erase_if(modal_dialogs_, [&](const auto& entry) {
+    if (modal_dialogs_) std::erase_if(*modal_dialogs_, [&](const auto& entry) {
         return entry.scope_id > native_id_index_.size() || entry.dialog_id > native_id_index_.size()
             || native_id_index_[entry.scope_id - 1U] == nullptr
             || native_id_index_[entry.dialog_id - 1U] == nullptr;
@@ -642,10 +642,11 @@ bool native_document::register_modal_dialog(dom_node& scope, dom_node& dialog)
     auto* ancestor = &dialog;
     while (ancestor != nullptr && ancestor != &scope) ancestor = composed_parent(*ancestor);
     if (ancestor == nullptr) return false;
-    for (const auto& entry : modal_dialogs_) {
+    for (const auto& entry : modal_dialogs()) {
         if (entry.dialog_id == dialog.id) return entry.scope_id == scope.id;
     }
-    modal_dialogs_.push_back({scope.id, dialog.id});
+    if (!modal_dialogs_) modal_dialogs_ = std::make_unique<std::vector<modal_dialog_entry>>();
+    modal_dialogs_->push_back({scope.id, dialog.id});
     mark_dirty();
     return true;
 }
@@ -654,14 +655,14 @@ void native_document::unregister_modal_dialog(const dom_node& dialog)
 {
     if (dialog.id == 0 || dialog.id > native_id_index_.size()
         || native_id_index_[dialog.id - 1U] != &dialog) return;
-    if (std::erase_if(modal_dialogs_, [&](const auto& entry) {
+    if (modal_dialogs_ && std::erase_if(*modal_dialogs_, [&](const auto& entry) {
             return entry.dialog_id == dialog.id;
         }) != 0) mark_dirty();
 }
 
 void native_document::unregister_modal_subtree(const dom_node& root)
 {
-    if (std::erase_if(modal_dialogs_, [&](const auto& entry) {
+    if (modal_dialogs_ && std::erase_if(*modal_dialogs_, [&](const auto& entry) {
             const auto within = [&](uint32_t id) {
                 const auto* candidate = id <= native_id_index_.size() ? native_id_index_[id - 1U] : nullptr;
                 while (candidate != nullptr && candidate != &root) candidate = composed_parent(*candidate);
@@ -673,10 +674,10 @@ void native_document::unregister_modal_subtree(const dom_node& root)
 
 const dom_node* native_document::active_modal_dialog(const dom_node& scope) const noexcept
 {
-    if (modal_dialogs_.empty()) return nullptr;
+    if (modal_dialogs().empty()) return nullptr;
     if (scope.id == 0 || scope.id > native_id_index_.size()
         || native_id_index_[scope.id - 1U] != &scope) return nullptr;
-    for (auto entry = modal_dialogs_.rbegin(); entry != modal_dialogs_.rend(); ++entry) {
+    for (auto entry = modal_dialogs().rbegin(); entry != modal_dialogs().rend(); ++entry) {
         if (entry->scope_id != scope.id || entry->dialog_id > native_id_index_.size()) continue;
         const auto* dialog = native_id_index_[entry->dialog_id - 1U];
         if (dialog == nullptr) continue;
@@ -689,15 +690,15 @@ const dom_node* native_document::active_modal_dialog(const dom_node& scope) cons
 
 bool native_document::is_modal_dialog(const dom_node& node) const noexcept
 {
-    if (modal_dialogs_.empty() || node.id == 0 || node.id > native_id_index_.size()
+    if (modal_dialogs().empty() || node.id == 0 || node.id > native_id_index_.size()
         || native_id_index_[node.id - 1U] != &node) return false;
-    return std::any_of(modal_dialogs_.begin(), modal_dialogs_.end(),
+    return std::any_of(modal_dialogs().begin(), modal_dialogs().end(),
         [&](const auto& entry) { return entry.dialog_id == node.id; });
 }
 
 bool native_document::is_in_modal_layer(const dom_node& node) const noexcept
 {
-    if (modal_dialogs_.empty()) return false;
+    if (modal_dialogs().empty()) return false;
     for (auto* ancestor = &node; ancestor != nullptr; ancestor = composed_parent(*ancestor)) {
         if (is_modal_dialog(*ancestor)) return true;
     }
@@ -713,8 +714,8 @@ bool native_document::is_inert(const dom_node& node) const noexcept
     bool escaped_ancestors = false;
     for (auto* ancestor = &node; ancestor != nullptr; ancestor = composed_parent(*ancestor)) {
         if (!escaped_ancestors && ancestor->attributes.contains("inert")) attribute_inert = true;
-        if (modal_dialogs_.empty()) continue;
-        for (const auto& entry : modal_dialogs_) {
+        if (modal_dialogs().empty()) continue;
+        for (const auto& entry : modal_dialogs()) {
             if (entry.dialog_id == ancestor->id) escaped_ancestors = true;
         }
         if (const auto* modal = active_modal_dialog(*ancestor)) {
@@ -911,7 +912,7 @@ dom_node* native_document::hit_test_node(
 
 void native_document::clear()
 {
-    modal_dialogs_.clear();
+    modal_dialogs_.reset();
     retained_export_canvas_id_ = 0U;
     shadow_dom_storage_.reset();
     nodes_.clear();
