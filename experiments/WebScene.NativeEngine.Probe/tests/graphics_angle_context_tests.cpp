@@ -1,11 +1,13 @@
 #include "graphics/angle_context.h"
 #include "graphics/angle_display.h"
 #include <GLES2/gl2.h>
+#include <GLES2/gl2ext_angle.h>
 #include <iostream>
 #include <array>
+#include <source_location>
 #include <string_view>
 using namespace webscene::graphics;
-void require(bool value) { if (!value) throw std::runtime_error("requirement failed"); }
+void require(bool value, std::source_location where=std::source_location::current()) { if (!value) throw std::runtime_error("requirement failed at line "+std::to_string(where.line())); }
 // Diagnostic readback proves storage isolation; it is not presentation transport.
 GLuint make_texture(const std::array<GLubyte,4>& pixel) {
     GLuint texture=0;glGenTextures(1,&texture);glBindTexture(GL_TEXTURE_2D,texture);
@@ -74,6 +76,41 @@ int main(int argc, char** argv) {
         verify_texture(retained_texture,red);
         glDeleteTextures(1,&retained_texture);
     }
+    for (const bool nested : {false,true}) {
+        angle_context lost(lease,config,major);
+        angle_context::scope surviving(first);
+        const auto previous=eglGetCurrentContext();
+        {
+            angle_context::scope losing(lost);
+            require(!lost.is_lost());
+            using lose_proc=void (GL_APIENTRY *)(GLenum,GLenum);
+            const auto lose=reinterpret_cast<lose_proc>(eglGetProcAddress("glLoseContextCHROMIUM"));
+            require(lose!=nullptr);
+            using request_proc=void (GL_APIENTRY *)(const GLchar*);
+            const auto request=reinterpret_cast<request_proc>(eglGetProcAddress("glRequestExtensionANGLE"));
+            require(request!=nullptr);
+            // WebGL-compatible contexts expose this diagnostic extension only
+            // after requesting it. Reset notification is configured by the owner.
+            require(glGetError()==GL_NO_ERROR);
+            request("GL_CHROMIUM_lose_context");
+            require(glGetError()==GL_NO_ERROR);
+            if (nested) {
+                {
+                    angle_context::scope same_context(lost);
+                    lose(GL_GUILTY_CONTEXT_RESET_EXT,GL_INNOCENT_CONTEXT_RESET_EXT);
+                }
+                // A nested scope must not restore its own now-lost context.
+                require(lost.is_lost() && eglGetCurrentContext()==EGL_NO_CONTEXT);
+            } else {
+                lose(GL_GUILTY_CONTEXT_RESET_EXT,GL_INNOCENT_CONTEXT_RESET_EXT);
+            }
+        }
+        require(lost.is_lost() && eglGetCurrentContext()==previous);
+        bool rejected=false;
+        try { angle_context::scope invalid(lost); } catch(const std::runtime_error&) { rejected=true; }
+        require(rejected && eglGetCurrentContext()==previous && !first.poll_loss());
+        const auto texture=make_texture(green);verify_texture(texture,green);glDeleteTextures(1,&texture);
+    }
     require(eglGetCurrentContext()==EGL_NO_CONTEXT);
-    std::cout << "ANGLE isolated contexts, nested restoration and execution-thread checks passed\n";
+    std::cout << "ANGLE isolated contexts, loss rejection, nested restoration and execution-thread checks passed\n";
 }
