@@ -896,6 +896,53 @@ int main() {
         }
         if(!compiled)return 1;
     }
+    // Keep another adopted device alive across the sibling ForceLoss.
+    auto isolation_adapter=std::make_shared<result>();
+    auto isolation_adapter_ticket=mailbox->reserve(40,second_owner).value();
+    service.instance().RequestAdapter(&options,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,isolation_adapter_ticket,isolation_adapter](wgpu::RequestAdapterStatus status,wgpu::Adapter adapter,wgpu::StringView) {
+            isolation_adapter->adapter=std::move(adapter);
+            mailbox->publish(isolation_adapter_ticket,status==wgpu::RequestAdapterStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
+    bool isolation_adapter_done=false;
+    const auto isolation_adapter_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    while (!isolation_adapter_done && std::chrono::steady_clock::now()<isolation_adapter_deadline) {
+        service.pump([&](auto record) {
+            if (record.operation!=40 || record.status!=completion_status::success)
+                throw std::runtime_error("isolation adapter request failed");
+            isolation_adapter_done=true;
+        });
+        if (!isolation_adapter_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    }
+    if (!isolation_adapter_done || !isolation_adapter->adapter) return 1;
+    auto isolation_native=std::make_shared<device_result>();
+    auto isolation_ticket=mailbox->reserve(41,second_owner).value();
+    wgpu::DeviceDescriptor isolation_descriptor{};
+    auto isolation_loss=std::make_shared<device_loss_signal>(wake);
+    device_loss_signal::configure(isolation_descriptor,isolation_loss);
+    isolation_adapter->adapter.RequestDevice(&isolation_descriptor,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,isolation_ticket,isolation_native](wgpu::RequestDeviceStatus status,wgpu::Device device,wgpu::StringView message) {
+            if(status!=wgpu::RequestDeviceStatus::Success && message.data) std::cerr << "Isolation device request: " << std::string_view(message.data,message.length) << "\n";
+            isolation_native->device=std::move(device);
+            mailbox->publish(isolation_ticket,status==wgpu::RequestDeviceStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
+    const auto isolation_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    bool isolation_done=false;
+    while (!isolation_done && std::chrono::steady_clock::now()<isolation_deadline) {
+        service.pump([&](auto record) {
+            if (record.operation!=41 || record.status!=completion_status::success)
+                throw std::runtime_error("native device request failed");
+            isolation_done=true;
+        });
+        if (!isolation_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    }
+    if (!isolation_done || !isolation_native->device) return 1;
+    auto isolation_owned=root.adopt_device(isolation_adapter->adapter,isolation_native->device,isolation_loss);
+    resource_owner isolation_owner{};
+    root.with_device(isolation_owned,[&](auto& device) { isolation_owner=device.owner(); });
+    if (root.live_devices()!=2 || second_owner==isolation_owner) return 1;
     auto loss_ticket=mailbox->reserve(22,second_owner).value();
     auto loss_buffer=second_native->device.CreateBuffer(&map_descriptor);
     struct loss_map_result { bool called{},accepted{}; };
@@ -931,6 +978,36 @@ int main() {
     if (!loss_delivered || !lost_rejected || !loss_map->called || loss_map->accepted
         || mailbox->metrics().occupied!=0 || mailbox->metrics().native_pending!=0) return 1;
     loss_buffer.Destroy();
+    root.with_device(isolation_owned,[](auto& device) { (void)device.native(); });
+    auto isolated_buffer=isolation_native->device.CreateBuffer(&map_descriptor);
+    std::vector<uint32_t> isolated_upload(1024,0x13579bdfu);
+    isolation_native->device.GetQueue().WriteBuffer(isolated_buffer,0,isolated_upload.data(),4096);
+    std::fill(isolated_upload.begin(),isolated_upload.end(),0u);
+    auto isolated_ticket=mailbox->reserve(42,isolation_owner).value();
+    isolated_buffer.MapAsync(wgpu::MapMode::Read,0,4096,wgpu::CallbackMode::AllowProcessEvents,
+        [mailbox,isolated_ticket](wgpu::MapAsyncStatus status,wgpu::StringView) {
+            mailbox->publish(isolated_ticket,status==wgpu::MapAsyncStatus::Success
+                ? completion_status::success : completion_status::failed);
+        });
+    bool isolated_done=false;
+    const auto isolated_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    while (!isolated_done && std::chrono::steady_clock::now()<isolated_deadline) {
+        service.pump([&](auto record) {
+            if (record.operation!=42 || record.status!=completion_status::success)
+                throw std::runtime_error("surviving device failed after sibling forced loss");
+            isolated_done=true;
+        });
+        if (!isolated_done) wake->wait_for(std::chrono::milliseconds(1),[] { return false; });
+    }
+    if (!isolated_done) return 1;
+    const auto* isolated_uploaded=static_cast<const uint32_t*>(isolated_buffer.GetConstMappedRange(0,4096));
+    if (!isolated_uploaded) return 1;
+    for (size_t i=0;i<1024;++i) if (isolated_uploaded[i]!=0x13579bdfu) return 1;
+    isolated_buffer.Unmap();
+    isolated_buffer.Destroy();
+    if(isolation_loss->lost.load(std::memory_order_acquire)) return 1;
+    root.destroy_device(isolation_owned);
+    if(root.live_devices()!=1 || mailbox->metrics().occupied!=0) return 1;
     auto releases=root.command_endpoint(2,0);
     auto release=graphics_service::deferred_device_release(second_owned);
     std::thread finalizer([&] {
