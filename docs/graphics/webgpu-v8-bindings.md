@@ -2029,3 +2029,20 @@ This extends real-app evidence beyond startup but is a scripted DOM-event smoke
 test. It does not prove native pointer delivery, editing, export, shaded mesh
 rendering (the sample drawing is flat), or correct UI layout. The existing
 clipping/toolbar/layer presentation defects remain visible.
+
+### Original Kestrel native-input editing (2026-09-08)
+
+The --edit-kestrel probe option focuses the original command field, sends text
+through NativeSceneSurface.SubmitText, and queues native Enter down/up events.
+It creates a line, undoes it, redoes it, and undoes it again. Each step asserts
+its expected object count relative to the initial document. Observed counts
+were 265 → 266 → 265 → 266 → 265; every stage reported WebGPU and zero logged
+errors, and --verify-kestrel exited 0. The probe build passed. Measurements and
+command history are in evidence/kestrel/native-command-edits.json.
+
+An earlier attempt using new KeyboardEvent('keydown', {key:'Enter'}) correctly
+failed the count assertion: KeyboardEvent is currently aliased to Event and
+does not preserve key initialization. That standards gap remains open; using
+the native host input route is not a fix for synthetic KeyboardEvent. The
+passing test does not qualify OS hardware event delivery, rendered-pixel
+differences after each edit, export, or the remaining editing tools.

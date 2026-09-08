@@ -103,6 +103,22 @@ internal sealed class WebGpuDocumentProbeApp : Application
                     {
                         await Task.Delay(3000);
                         Console.WriteLine(await view.EvaluateTextAsync("({ready:document.documentElement.dataset.ready,backend:document.getElementById('engine-label')?.textContent,history:document.getElementById('command-history')?.textContent,errors:document.querySelectorAll('#command-history .history-error').length,gpu:!!navigator.gpu})"));
+                        if (arguments.Contains("--edit-kestrel"))
+                        {
+                            var baseline = int.Parse(await view.EvaluateTextAsync("Number(document.getElementById('object-count').textContent)"));
+                            foreach (var step in new[] { ("LINE 0,0 1000,1000 ENTER", 1), ("UNDO", 0), ("REDO", 1), ("UNDO", 0) })
+                            {
+                                await view.EvaluateTextAsync("(()=>{const c=document.getElementById('command-input');c.value='';c.focus();})()");
+                                var surface = (NativeSceneSurface)view.Content!;
+                                if (surface.SubmitText(step.Item1) == 0 || surface.SubmitKey(7, 13) == 0 || surface.SubmitKey(8, 13) == 0)
+                                    throw new InvalidOperationException("Kestrel native command input was not accepted.");
+                                await Task.Delay(750);
+                                Console.WriteLine("Kestrel edit: " + await view.EvaluateTextAsync("({objects:Number(document.getElementById('object-count').textContent),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length,history:document.getElementById('command-history').textContent})"));
+                                var count = int.Parse(await view.EvaluateTextAsync("Number(document.getElementById('object-count').textContent)"));
+                                if (count != baseline + step.Item2)
+                                    throw new InvalidOperationException($"Kestrel command {step.Item1} expected {baseline + step.Item2} objects, got {count}.");
+                            }
+                        }
                         if (arguments.Contains("--exercise-kestrel"))
                         {
                             foreach (var step in new[] { ("iso", "shaded-edges"), ("front", "shaded"), ("iso", "xray"), ("top", "wireframe"), ("iso", "shaded-edges") })
