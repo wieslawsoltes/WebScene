@@ -230,6 +230,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 var baseline = view.CapturePerformanceSnapshot();
                                 var traceStarted = System.Diagnostics.Stopwatch.GetTimestamp();
                                 var started = System.Diagnostics.Stopwatch.StartNew();
+                                var submittedMoves = new List<object>(80);
                                 if (surface.SubmitPointerButton(2, x, y, 2, true) == 0)
                                     throw new InvalidOperationException("Kestrel pan press was rejected.");
                                 pressed = true;
@@ -237,8 +238,11 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 {
                                     var distance = step <= 40 ? step * 4 : (80 - step) * 4;
                                     // Kind 1 routes a move with the right-button bit through the native queue.
-                                    if (surface.SubmitPointerButton(1, x + distance, y + distance / 4.0, 2, true) == 0)
+                                    var submittedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                                    var sequence = surface.SubmitPointerButton(1, x + distance, y + distance / 4.0, 2, true);
+                                    if (sequence == 0)
                                         throw new InvalidOperationException("Kestrel pan move was rejected.");
+                                    submittedMoves.Add(new { sequence, submittedAt, step, x = x + distance, y = y + distance / 4.0 });
                                     await Task.Delay(16);
                                 }
                                 if (surface.SubmitPointerButton(3, x, y, 2, false) == 0)
@@ -253,6 +257,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 {
                                     timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
                                     traceStarted,
+                                    submittedMoves,
                                     publications = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted),
                                     renderedScenes = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted),
                                     // Recorded at the end of OnRender, before platform presentation.

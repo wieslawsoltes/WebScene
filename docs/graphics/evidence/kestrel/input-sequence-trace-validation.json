@@ -1,0 +1,2665 @@
+{
+  "physicalPresentationVerified": false,
+  "latencyComparisonValid": false,
+  "runs": [
+    {
+      "run": "webscene-input-timing-pan",
+      "workloadValidated": false,
+      "error": "System.InvalidOperationException: Invalid Kestrel pan workload: missing gesture boundary or application error.",
+      "submittedMoveCount": 80,
+      "sequenceAndTimestampOrderVerified": true,
+      "timeline": {
+        "timestampFrequency": 1000000000,
+        "traceStarted": 92657889599041,
+        "submittedMoves": [
+          {
+            "sequence": 639244586769224940,
+            "submittedAt": 92657889704000,
+            "step": 1,
+            "x": 629,
+            "y": 437.5
+          },
+          {
+            "sequence": 639244586769224941,
+            "submittedAt": 92657906873250,
+            "step": 2,
+            "x": 633,
+            "y": 438.5
+          },
+          {
+            "sequence": 639244586769224942,
+            "submittedAt": 92657923972250,
+            "step": 3,
+            "x": 637,
+            "y": 439.5
+          },
+          {
+            "sequence": 639244586769224943,
+            "submittedAt": 92657941061708,
+            "step": 4,
+            "x": 641,
+            "y": 440.5
+          },
+          {
+            "sequence": 639244586769224944,
+            "submittedAt": 92657958177916,
+            "step": 5,
+            "x": 645,
+            "y": 441.5
+          },
+          {
+            "sequence": 639244586769224945,
+            "submittedAt": 92657975315250,
+            "step": 6,
+            "x": 649,
+            "y": 442.5
+          },
+          {
+            "sequence": 639244586769224946,
+            "submittedAt": 92657992428666,
+            "step": 7,
+            "x": 653,
+            "y": 443.5
+          },
+          {
+            "sequence": 639244586769224947,
+            "submittedAt": 92658009524500,
+            "step": 8,
+            "x": 657,
+            "y": 444.5
+          },
+          {
+            "sequence": 639244586769224948,
+            "submittedAt": 92658026740291,
+            "step": 9,
+            "x": 661,
+            "y": 445.5
+          },
+          {
+            "sequence": 639244586769224949,
+            "submittedAt": 92658043828500,
+            "step": 10,
+            "x": 665,
+            "y": 446.5
+          },
+          {
+            "sequence": 639244586769224950,
+            "submittedAt": 92658060627625,
+            "step": 11,
+            "x": 669,
+            "y": 447.5
+          },
+          {
+            "sequence": 639244586769224951,
+            "submittedAt": 92658077725041,
+            "step": 12,
+            "x": 673,
+            "y": 448.5
+          },
+          {
+            "sequence": 639244586769224952,
+            "submittedAt": 92658094811458,
+            "step": 13,
+            "x": 677,
+            "y": 449.5
+          },
+          {
+            "sequence": 639244586769224953,
+            "submittedAt": 92658112373833,
+            "step": 14,
+            "x": 681,
+            "y": 450.5
+          },
+          {
+            "sequence": 639244586769224954,
+            "submittedAt": 92658129432208,
+            "step": 15,
+            "x": 685,
+            "y": 451.5
+          },
+          {
+            "sequence": 639244586769224955,
+            "submittedAt": 92658146482583,
+            "step": 16,
+            "x": 689,
+            "y": 452.5
+          },
+          {
+            "sequence": 639244586769224956,
+            "submittedAt": 92658163524083,
+            "step": 17,
+            "x": 693,
+            "y": 453.5
+          },
+          {
+            "sequence": 639244586769224957,
+            "submittedAt": 92658180594541,
+            "step": 18,
+            "x": 697,
+            "y": 454.5
+          },
+          {
+            "sequence": 639244586769224958,
+            "submittedAt": 92658197644416,
+            "step": 19,
+            "x": 701,
+            "y": 455.5
+          },
+          {
+            "sequence": 639244586769224959,
+            "submittedAt": 92658214697750,
+            "step": 20,
+            "x": 705,
+            "y": 456.5
+          },
+          {
+            "sequence": 639244586769224960,
+            "submittedAt": 92658231754833,
+            "step": 21,
+            "x": 709,
+            "y": 457.5
+          },
+          {
+            "sequence": 639244586769224961,
+            "submittedAt": 92658248816166,
+            "step": 22,
+            "x": 713,
+            "y": 458.5
+          },
+          {
+            "sequence": 639244586769224962,
+            "submittedAt": 92658265260750,
+            "step": 23,
+            "x": 717,
+            "y": 459.5
+          },
+          {
+            "sequence": 639244586769224963,
+            "submittedAt": 92658282323375,
+            "step": 24,
+            "x": 721,
+            "y": 460.5
+          },
+          {
+            "sequence": 639244586769224964,
+            "submittedAt": 92658299421625,
+            "step": 25,
+            "x": 725,
+            "y": 461.5
+          },
+          {
+            "sequence": 639244586769224965,
+            "submittedAt": 92658316491375,
+            "step": 26,
+            "x": 729,
+            "y": 462.5
+          },
+          {
+            "sequence": 639244586769224966,
+            "submittedAt": 92658333532541,
+            "step": 27,
+            "x": 733,
+            "y": 463.5
+          },
+          {
+            "sequence": 639244586769224967,
+            "submittedAt": 92658350601208,
+            "step": 28,
+            "x": 737,
+            "y": 464.5
+          },
+          {
+            "sequence": 639244586769224968,
+            "submittedAt": 92658367653125,
+            "step": 29,
+            "x": 741,
+            "y": 465.5
+          },
+          {
+            "sequence": 639244586769224969,
+            "submittedAt": 92658384723166,
+            "step": 30,
+            "x": 745,
+            "y": 466.5
+          },
+          {
+            "sequence": 639244586769224970,
+            "submittedAt": 92658400937625,
+            "step": 31,
+            "x": 749,
+            "y": 467.5
+          },
+          {
+            "sequence": 639244586769224971,
+            "submittedAt": 92658417192416,
+            "step": 32,
+            "x": 753,
+            "y": 468.5
+          },
+          {
+            "sequence": 639244586769224972,
+            "submittedAt": 92658434230791,
+            "step": 33,
+            "x": 757,
+            "y": 469.5
+          },
+          {
+            "sequence": 639244586769224973,
+            "submittedAt": 92658451305416,
+            "step": 34,
+            "x": 761,
+            "y": 470.5
+          },
+          {
+            "sequence": 639244586769224974,
+            "submittedAt": 92658468351083,
+            "step": 35,
+            "x": 765,
+            "y": 471.5
+          },
+          {
+            "sequence": 639244586769224975,
+            "submittedAt": 92658484558916,
+            "step": 36,
+            "x": 769,
+            "y": 472.5
+          },
+          {
+            "sequence": 639244586769224976,
+            "submittedAt": 92658501763625,
+            "step": 37,
+            "x": 773,
+            "y": 473.5
+          },
+          {
+            "sequence": 639244586769224977,
+            "submittedAt": 92658519553791,
+            "step": 38,
+            "x": 777,
+            "y": 474.5
+          },
+          {
+            "sequence": 639244586769224978,
+            "submittedAt": 92658536035500,
+            "step": 39,
+            "x": 781,
+            "y": 475.5
+          },
+          {
+            "sequence": 639244586769224979,
+            "submittedAt": 92658553156250,
+            "step": 40,
+            "x": 785,
+            "y": 476.5
+          },
+          {
+            "sequence": 639244586769224980,
+            "submittedAt": 92658569640916,
+            "step": 41,
+            "x": 781,
+            "y": 475.5
+          },
+          {
+            "sequence": 639244586769224981,
+            "submittedAt": 92658586687458,
+            "step": 42,
+            "x": 777,
+            "y": 474.5
+          },
+          {
+            "sequence": 639244586769224982,
+            "submittedAt": 92658602918541,
+            "step": 43,
+            "x": 773,
+            "y": 473.5
+          },
+          {
+            "sequence": 639244586769224983,
+            "submittedAt": 92658619965125,
+            "step": 44,
+            "x": 769,
+            "y": 472.5
+          },
+          {
+            "sequence": 639244586769224984,
+            "submittedAt": 92658637020333,
+            "step": 45,
+            "x": 765,
+            "y": 471.5
+          },
+          {
+            "sequence": 639244586769224985,
+            "submittedAt": 92658653291083,
+            "step": 46,
+            "x": 761,
+            "y": 470.5
+          },
+          {
+            "sequence": 639244586769224986,
+            "submittedAt": 92658670417208,
+            "step": 47,
+            "x": 757,
+            "y": 469.5
+          },
+          {
+            "sequence": 639244586769224987,
+            "submittedAt": 92658688704125,
+            "step": 48,
+            "x": 753,
+            "y": 468.5
+          },
+          {
+            "sequence": 639244586769224988,
+            "submittedAt": 92658705396583,
+            "step": 49,
+            "x": 749,
+            "y": 467.5
+          },
+          {
+            "sequence": 639244586769224989,
+            "submittedAt": 92658722336416,
+            "step": 50,
+            "x": 745,
+            "y": 466.5
+          },
+          {
+            "sequence": 639244586769224990,
+            "submittedAt": 92658739394750,
+            "step": 51,
+            "x": 741,
+            "y": 465.5
+          },
+          {
+            "sequence": 639244586769224991,
+            "submittedAt": 92658756563291,
+            "step": 52,
+            "x": 737,
+            "y": 464.5
+          },
+          {
+            "sequence": 639244586769224992,
+            "submittedAt": 92658773622666,
+            "step": 53,
+            "x": 733,
+            "y": 463.5
+          },
+          {
+            "sequence": 639244586769224993,
+            "submittedAt": 92658790683208,
+            "step": 54,
+            "x": 729,
+            "y": 462.5
+          },
+          {
+            "sequence": 639244586769224994,
+            "submittedAt": 92658807793375,
+            "step": 55,
+            "x": 725,
+            "y": 461.5
+          },
+          {
+            "sequence": 639244586769224995,
+            "submittedAt": 92658824877166,
+            "step": 56,
+            "x": 721,
+            "y": 460.5
+          },
+          {
+            "sequence": 639244586769224996,
+            "submittedAt": 92658841989625,
+            "step": 57,
+            "x": 717,
+            "y": 459.5
+          },
+          {
+            "sequence": 639244586769224997,
+            "submittedAt": 92658858449375,
+            "step": 58,
+            "x": 713,
+            "y": 458.5
+          },
+          {
+            "sequence": 639244586769224998,
+            "submittedAt": 92658875567250,
+            "step": 59,
+            "x": 709,
+            "y": 457.5
+          },
+          {
+            "sequence": 639244586769224999,
+            "submittedAt": 92658891815208,
+            "step": 60,
+            "x": 705,
+            "y": 456.5
+          },
+          {
+            "sequence": 639244586769225000,
+            "submittedAt": 92658908135875,
+            "step": 61,
+            "x": 701,
+            "y": 455.5
+          },
+          {
+            "sequence": 639244586769225001,
+            "submittedAt": 92658925188583,
+            "step": 62,
+            "x": 697,
+            "y": 454.5
+          },
+          {
+            "sequence": 639244586769225002,
+            "submittedAt": 92658942260000,
+            "step": 63,
+            "x": 693,
+            "y": 453.5
+          },
+          {
+            "sequence": 639244586769225003,
+            "submittedAt": 92658958620583,
+            "step": 64,
+            "x": 689,
+            "y": 452.5
+          },
+          {
+            "sequence": 639244586769225004,
+            "submittedAt": 92658975148666,
+            "step": 65,
+            "x": 685,
+            "y": 451.5
+          },
+          {
+            "sequence": 639244586769225005,
+            "submittedAt": 92658991838833,
+            "step": 66,
+            "x": 681,
+            "y": 450.5
+          },
+          {
+            "sequence": 639244586769225006,
+            "submittedAt": 92659008912500,
+            "step": 67,
+            "x": 677,
+            "y": 449.5
+          },
+          {
+            "sequence": 639244586769225007,
+            "submittedAt": 92659025992666,
+            "step": 68,
+            "x": 673,
+            "y": 448.5
+          },
+          {
+            "sequence": 639244586769225008,
+            "submittedAt": 92659042086791,
+            "step": 69,
+            "x": 669,
+            "y": 447.5
+          },
+          {
+            "sequence": 639244586769225009,
+            "submittedAt": 92659058377833,
+            "step": 70,
+            "x": 665,
+            "y": 446.5
+          },
+          {
+            "sequence": 639244586769225010,
+            "submittedAt": 92659075498791,
+            "step": 71,
+            "x": 661,
+            "y": 445.5
+          },
+          {
+            "sequence": 639244586769225011,
+            "submittedAt": 92659092548250,
+            "step": 72,
+            "x": 657,
+            "y": 444.5
+          },
+          {
+            "sequence": 639244586769225012,
+            "submittedAt": 92659109602583,
+            "step": 73,
+            "x": 653,
+            "y": 443.5
+          },
+          {
+            "sequence": 639244586769225013,
+            "submittedAt": 92659127086125,
+            "step": 74,
+            "x": 649,
+            "y": 442.5
+          },
+          {
+            "sequence": 639244586769225014,
+            "submittedAt": 92659143953083,
+            "step": 75,
+            "x": 645,
+            "y": 441.5
+          },
+          {
+            "sequence": 639244586769225015,
+            "submittedAt": 92659160992958,
+            "step": 76,
+            "x": 641,
+            "y": 440.5
+          },
+          {
+            "sequence": 639244586769225016,
+            "submittedAt": 92659178041833,
+            "step": 77,
+            "x": 637,
+            "y": 439.5
+          },
+          {
+            "sequence": 639244586769225017,
+            "submittedAt": 92659195121625,
+            "step": 78,
+            "x": 633,
+            "y": 438.5
+          },
+          {
+            "sequence": 639244586769225018,
+            "submittedAt": 92659212124666,
+            "step": 79,
+            "x": 629,
+            "y": 437.5
+          },
+          {
+            "sequence": 639244586769225019,
+            "submittedAt": 92659229185833,
+            "step": 80,
+            "x": 625,
+            "y": 436.5
+          }
+        ],
+        "publications": [
+          {
+            "Timestamp": 92657890849666,
+            "Revision": 70,
+            "ConsumedInputSequence": 639244586769224939,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92657902291833,
+            "Revision": 71,
+            "ConsumedInputSequence": 639244586769224940,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92657917114875,
+            "Revision": 72,
+            "ConsumedInputSequence": 639244586769224941,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92657960841500,
+            "Revision": 73,
+            "ConsumedInputSequence": 639244586769224943,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92657981366791,
+            "Revision": 74,
+            "ConsumedInputSequence": 639244586769224945,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658022861333,
+            "Revision": 75,
+            "ConsumedInputSequence": 639244586769224947,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658032045833,
+            "Revision": 76,
+            "ConsumedInputSequence": 639244586769224948,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658067115208,
+            "Revision": 77,
+            "ConsumedInputSequence": 639244586769224950,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658101744916,
+            "Revision": 78,
+            "ConsumedInputSequence": 639244586769224952,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658136133708,
+            "Revision": 79,
+            "ConsumedInputSequence": 639244586769224954,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658170052000,
+            "Revision": 80,
+            "ConsumedInputSequence": 639244586769224956,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658203350833,
+            "Revision": 81,
+            "ConsumedInputSequence": 639244586769224958,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658241564166,
+            "Revision": 82,
+            "ConsumedInputSequence": 639244586769224960,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658271139458,
+            "Revision": 83,
+            "ConsumedInputSequence": 639244586769224962,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658301248458,
+            "Revision": 84,
+            "ConsumedInputSequence": 639244586769224963,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658317391958,
+            "Revision": 85,
+            "ConsumedInputSequence": 639244586769224964,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658350218000,
+            "Revision": 86,
+            "ConsumedInputSequence": 639244586769224966,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658365240916,
+            "Revision": 87,
+            "ConsumedInputSequence": 639244586769224967,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658399528750,
+            "Revision": 88,
+            "ConsumedInputSequence": 639244586769224969,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658415204166,
+            "Revision": 89,
+            "ConsumedInputSequence": 639244586769224970,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658450911250,
+            "Revision": 90,
+            "ConsumedInputSequence": 639244586769224972,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658465108791,
+            "Revision": 91,
+            "ConsumedInputSequence": 639244586769224973,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658498735291,
+            "Revision": 92,
+            "ConsumedInputSequence": 639244586769224975,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658515011541,
+            "Revision": 93,
+            "ConsumedInputSequence": 639244586769224976,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658550446458,
+            "Revision": 94,
+            "ConsumedInputSequence": 639244586769224978,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658565407625,
+            "Revision": 95,
+            "ConsumedInputSequence": 639244586769224979,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658602873958,
+            "Revision": 96,
+            "ConsumedInputSequence": 639244586769224981,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658621102708,
+            "Revision": 97,
+            "ConsumedInputSequence": 639244586769224982,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658651833458,
+            "Revision": 98,
+            "ConsumedInputSequence": 639244586769224984,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658671517500,
+            "Revision": 99,
+            "ConsumedInputSequence": 639244586769224985,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658702121958,
+            "Revision": 100,
+            "ConsumedInputSequence": 639244586769224987,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658715927666,
+            "Revision": 101,
+            "ConsumedInputSequence": 639244586769224988,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658749790333,
+            "Revision": 102,
+            "ConsumedInputSequence": 639244586769224990,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658765025541,
+            "Revision": 103,
+            "ConsumedInputSequence": 639244586769224991,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658801142916,
+            "Revision": 104,
+            "ConsumedInputSequence": 639244586769224993,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658816227708,
+            "Revision": 105,
+            "ConsumedInputSequence": 639244586769224994,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658850143708,
+            "Revision": 106,
+            "ConsumedInputSequence": 639244586769224996,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658865236208,
+            "Revision": 107,
+            "ConsumedInputSequence": 639244586769224997,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658902254958,
+            "Revision": 108,
+            "ConsumedInputSequence": 639244586769224999,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658915129458,
+            "Revision": 109,
+            "ConsumedInputSequence": 639244586769225000,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658949735625,
+            "Revision": 110,
+            "ConsumedInputSequence": 639244586769225002,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92658964806750,
+            "Revision": 111,
+            "ConsumedInputSequence": 639244586769225003,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659003477125,
+            "Revision": 112,
+            "ConsumedInputSequence": 639244586769225005,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659027183958,
+            "Revision": 113,
+            "ConsumedInputSequence": 639244586769225006,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659036017083,
+            "Revision": 114,
+            "ConsumedInputSequence": 639244586769225007,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659074304208,
+            "Revision": 115,
+            "ConsumedInputSequence": 639244586769225009,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659093590500,
+            "Revision": 116,
+            "ConsumedInputSequence": 639244586769225010,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659101070250,
+            "Revision": 117,
+            "ConsumedInputSequence": 639244586769225011,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659137566083,
+            "Revision": 118,
+            "ConsumedInputSequence": 639244586769225013,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659168384291,
+            "Revision": 119,
+            "ConsumedInputSequence": 639244586769225015,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659201031541,
+            "Revision": 120,
+            "ConsumedInputSequence": 639244586769225017,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659235930458,
+            "Revision": 121,
+            "ConsumedInputSequence": 639244586769225019,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659249581333,
+            "Revision": 122,
+            "ConsumedInputSequence": 639244586769225020,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659279888083,
+            "Revision": 123,
+            "ConsumedInputSequence": 639244586769225020,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92659332155916,
+            "Revision": 124,
+            "ConsumedInputSequence": 639244586769225021,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          }
+        ],
+        "renderedScenes": [
+          {
+            "Timestamp": 92657898205375,
+            "Revision": 70,
+            "ConsumedInputSequence": 639244586769224939,
+            "AcceptedTimestamp": 92657894034666
+          },
+          {
+            "Timestamp": 92657951814375,
+            "Revision": 72,
+            "ConsumedInputSequence": 639244586769224941,
+            "AcceptedTimestamp": 92657948387166
+          },
+          {
+            "Timestamp": 92658013254375,
+            "Revision": 74,
+            "ConsumedInputSequence": 639244586769224945,
+            "AcceptedTimestamp": 92658009715500
+          },
+          {
+            "Timestamp": 92658060843916,
+            "Revision": 76,
+            "ConsumedInputSequence": 639244586769224948,
+            "AcceptedTimestamp": 92658057626958
+          },
+          {
+            "Timestamp": 92658095141375,
+            "Revision": 77,
+            "ConsumedInputSequence": 639244586769224950,
+            "AcceptedTimestamp": 92658092314166
+          },
+          {
+            "Timestamp": 92658129664500,
+            "Revision": 78,
+            "ConsumedInputSequence": 639244586769224952,
+            "AcceptedTimestamp": 92658127412333
+          },
+          {
+            "Timestamp": 92658161172500,
+            "Revision": 79,
+            "ConsumedInputSequence": 639244586769224954,
+            "AcceptedTimestamp": 92658158837666
+          },
+          {
+            "Timestamp": 92658194313958,
+            "Revision": 80,
+            "ConsumedInputSequence": 639244586769224956,
+            "AcceptedTimestamp": 92658192033500
+          },
+          {
+            "Timestamp": 92658229255458,
+            "Revision": 81,
+            "ConsumedInputSequence": 639244586769224958,
+            "AcceptedTimestamp": 92658227037041
+          },
+          {
+            "Timestamp": 92658261202500,
+            "Revision": 82,
+            "ConsumedInputSequence": 639244586769224960,
+            "AcceptedTimestamp": 92658258841708
+          },
+          {
+            "Timestamp": 92658294781875,
+            "Revision": 83,
+            "ConsumedInputSequence": 639244586769224962,
+            "AcceptedTimestamp": 92658292554041
+          },
+          {
+            "Timestamp": 92658343865000,
+            "Revision": 85,
+            "ConsumedInputSequence": 639244586769224964,
+            "AcceptedTimestamp": 92658341192208
+          },
+          {
+            "Timestamp": 92658392867166,
+            "Revision": 87,
+            "ConsumedInputSequence": 639244586769224967,
+            "AcceptedTimestamp": 92658390339500
+          },
+          {
+            "Timestamp": 92658444611083,
+            "Revision": 89,
+            "ConsumedInputSequence": 639244586769224970,
+            "AcceptedTimestamp": 92658442253416
+          },
+          {
+            "Timestamp": 92658492723666,
+            "Revision": 91,
+            "ConsumedInputSequence": 639244586769224973,
+            "AcceptedTimestamp": 92658490137333
+          },
+          {
+            "Timestamp": 92658544156291,
+            "Revision": 93,
+            "ConsumedInputSequence": 639244586769224976,
+            "AcceptedTimestamp": 92658541758000
+          },
+          {
+            "Timestamp": 92658594235583,
+            "Revision": 95,
+            "ConsumedInputSequence": 639244586769224979,
+            "AcceptedTimestamp": 92658590974750
+          },
+          {
+            "Timestamp": 92658645090166,
+            "Revision": 97,
+            "ConsumedInputSequence": 639244586769224982,
+            "AcceptedTimestamp": 92658642490416
+          },
+          {
+            "Timestamp": 92658695551125,
+            "Revision": 99,
+            "ConsumedInputSequence": 639244586769224985,
+            "AcceptedTimestamp": 92658693167458
+          },
+          {
+            "Timestamp": 92658743119875,
+            "Revision": 101,
+            "ConsumedInputSequence": 639244586769224988,
+            "AcceptedTimestamp": 92658740394083
+          },
+          {
+            "Timestamp": 92658794863708,
+            "Revision": 103,
+            "ConsumedInputSequence": 639244586769224991,
+            "AcceptedTimestamp": 92658792482125
+          },
+          {
+            "Timestamp": 92658843688958,
+            "Revision": 105,
+            "ConsumedInputSequence": 639244586769224994,
+            "AcceptedTimestamp": 92658840809583
+          },
+          {
+            "Timestamp": 92658895622333,
+            "Revision": 107,
+            "ConsumedInputSequence": 639244586769224997,
+            "AcceptedTimestamp": 92658893090708
+          },
+          {
+            "Timestamp": 92658943452875,
+            "Revision": 109,
+            "ConsumedInputSequence": 639244586769225000,
+            "AcceptedTimestamp": 92658940827541
+          },
+          {
+            "Timestamp": 92658996242958,
+            "Revision": 111,
+            "ConsumedInputSequence": 639244586769225003,
+            "AcceptedTimestamp": 92658993694291
+          },
+          {
+            "Timestamp": 92659029071833,
+            "Revision": 112,
+            "ConsumedInputSequence": 639244586769225005,
+            "AcceptedTimestamp": 92659026205208
+          },
+          {
+            "Timestamp": 92659065992208,
+            "Revision": 114,
+            "ConsumedInputSequence": 639244586769225007,
+            "AcceptedTimestamp": 92659063616833
+          },
+          {
+            "Timestamp": 92659094961625,
+            "Revision": 115,
+            "ConsumedInputSequence": 639244586769225009,
+            "AcceptedTimestamp": 92659092696458
+          },
+          {
+            "Timestamp": 92659131251791,
+            "Revision": 117,
+            "ConsumedInputSequence": 639244586769225011,
+            "AcceptedTimestamp": 92659128935000
+          },
+          {
+            "Timestamp": 92659162123791,
+            "Revision": 118,
+            "ConsumedInputSequence": 639244586769225013,
+            "AcceptedTimestamp": 92659159737083
+          },
+          {
+            "Timestamp": 92659194848625,
+            "Revision": 119,
+            "ConsumedInputSequence": 639244586769225015,
+            "AcceptedTimestamp": 92659192597125
+          },
+          {
+            "Timestamp": 92659227267708,
+            "Revision": 120,
+            "ConsumedInputSequence": 639244586769225017,
+            "AcceptedTimestamp": 92659224834500
+          },
+          {
+            "Timestamp": 92659276275375,
+            "Revision": 122,
+            "ConsumedInputSequence": 639244586769225020,
+            "AcceptedTimestamp": 92659273704916
+          },
+          {
+            "Timestamp": 92659311700291,
+            "Revision": 123,
+            "ConsumedInputSequence": 639244586769225020,
+            "AcceptedTimestamp": 92659309287083
+          },
+          {
+            "Timestamp": 92659361564375,
+            "Revision": 124,
+            "ConsumedInputSequence": 639244586769225021,
+            "AcceptedTimestamp": 92659359078375
+          }
+        ],
+        "drawCallbackCompletions": [
+          92657897821250,
+          92657951809125,
+          92658013250000,
+          92658060841333,
+          92658095138583,
+          92658129662791,
+          92658161170833,
+          92658194309916,
+          92658229245875,
+          92658261197291,
+          92658294778541,
+          92658343859833,
+          92658392862666,
+          92658444606208,
+          92658492718250,
+          92658544151958,
+          92658594233625,
+          92658645084041,
+          92658695537000,
+          92658743113625,
+          92658794859125,
+          92658843681666,
+          92658895617291,
+          92658943447166,
+          92658996237125,
+          92659029066500,
+          92659065990458,
+          92659094957208,
+          92659131246208,
+          92659162109708,
+          92659194845750,
+          92659227262291,
+          92659276263875,
+          92659311690458,
+          92659361559458
+        ],
+        "physicalPresentationVerified": false
+      }
+    },
+    {
+      "run": "webscene-input-timing-pan-retry",
+      "workloadValidated": false,
+      "error": "System.InvalidOperationException: Invalid Kestrel pan workload: missing gesture boundary or application error.",
+      "submittedMoveCount": 80,
+      "sequenceAndTimestampOrderVerified": true,
+      "timeline": {
+        "timestampFrequency": 1000000000,
+        "traceStarted": 92690186500125,
+        "submittedMoves": [
+          {
+            "sequence": 639244587092247793,
+            "submittedAt": 92690186649041,
+            "step": 1,
+            "x": 629,
+            "y": 437.5
+          },
+          {
+            "sequence": 639244587092247794,
+            "submittedAt": 92690203902500,
+            "step": 2,
+            "x": 633,
+            "y": 438.5
+          },
+          {
+            "sequence": 639244587092247795,
+            "submittedAt": 92690221020166,
+            "step": 3,
+            "x": 637,
+            "y": 439.5
+          },
+          {
+            "sequence": 639244587092247796,
+            "submittedAt": 92690238120208,
+            "step": 4,
+            "x": 641,
+            "y": 440.5
+          },
+          {
+            "sequence": 639244587092247797,
+            "submittedAt": 92690255208416,
+            "step": 5,
+            "x": 645,
+            "y": 441.5
+          },
+          {
+            "sequence": 639244587092247798,
+            "submittedAt": 92690272303666,
+            "step": 6,
+            "x": 649,
+            "y": 442.5
+          },
+          {
+            "sequence": 639244587092247799,
+            "submittedAt": 92690289446458,
+            "step": 7,
+            "x": 653,
+            "y": 443.5
+          },
+          {
+            "sequence": 639244587092247800,
+            "submittedAt": 92690306648333,
+            "step": 8,
+            "x": 657,
+            "y": 444.5
+          },
+          {
+            "sequence": 639244587092247801,
+            "submittedAt": 92690323512875,
+            "step": 9,
+            "x": 661,
+            "y": 445.5
+          },
+          {
+            "sequence": 639244587092247802,
+            "submittedAt": 92690340651708,
+            "step": 10,
+            "x": 665,
+            "y": 446.5
+          },
+          {
+            "sequence": 639244587092247803,
+            "submittedAt": 92690357737958,
+            "step": 11,
+            "x": 669,
+            "y": 447.5
+          },
+          {
+            "sequence": 639244587092247804,
+            "submittedAt": 92690374286708,
+            "step": 12,
+            "x": 673,
+            "y": 448.5
+          },
+          {
+            "sequence": 639244587092247805,
+            "submittedAt": 92690391393375,
+            "step": 13,
+            "x": 677,
+            "y": 449.5
+          },
+          {
+            "sequence": 639244587092247806,
+            "submittedAt": 92690408659541,
+            "step": 14,
+            "x": 681,
+            "y": 450.5
+          },
+          {
+            "sequence": 639244587092247807,
+            "submittedAt": 92690425770833,
+            "step": 15,
+            "x": 685,
+            "y": 451.5
+          },
+          {
+            "sequence": 639244587092247808,
+            "submittedAt": 92690442880958,
+            "step": 16,
+            "x": 689,
+            "y": 452.5
+          },
+          {
+            "sequence": 639244587092247809,
+            "submittedAt": 92690459723416,
+            "step": 17,
+            "x": 693,
+            "y": 453.5
+          },
+          {
+            "sequence": 639244587092247810,
+            "submittedAt": 92690476821375,
+            "step": 18,
+            "x": 697,
+            "y": 454.5
+          },
+          {
+            "sequence": 639244587092247811,
+            "submittedAt": 92690493346958,
+            "step": 19,
+            "x": 701,
+            "y": 455.5
+          },
+          {
+            "sequence": 639244587092247812,
+            "submittedAt": 92690510470708,
+            "step": 20,
+            "x": 705,
+            "y": 456.5
+          },
+          {
+            "sequence": 639244587092247813,
+            "submittedAt": 92690527460291,
+            "step": 21,
+            "x": 709,
+            "y": 457.5
+          },
+          {
+            "sequence": 639244587092247814,
+            "submittedAt": 92690544190125,
+            "step": 22,
+            "x": 713,
+            "y": 458.5
+          },
+          {
+            "sequence": 639244587092247815,
+            "submittedAt": 92690561371666,
+            "step": 23,
+            "x": 717,
+            "y": 459.5
+          },
+          {
+            "sequence": 639244587092247816,
+            "submittedAt": 92690578498291,
+            "step": 24,
+            "x": 721,
+            "y": 460.5
+          },
+          {
+            "sequence": 639244587092247817,
+            "submittedAt": 92690595650250,
+            "step": 25,
+            "x": 725,
+            "y": 461.5
+          },
+          {
+            "sequence": 639244587092247818,
+            "submittedAt": 92690612735041,
+            "step": 26,
+            "x": 729,
+            "y": 462.5
+          },
+          {
+            "sequence": 639244587092247819,
+            "submittedAt": 92690629697041,
+            "step": 27,
+            "x": 733,
+            "y": 463.5
+          },
+          {
+            "sequence": 639244587092247820,
+            "submittedAt": 92690646806291,
+            "step": 28,
+            "x": 737,
+            "y": 464.5
+          },
+          {
+            "sequence": 639244587092247821,
+            "submittedAt": 92690663886500,
+            "step": 29,
+            "x": 741,
+            "y": 465.5
+          },
+          {
+            "sequence": 639244587092247822,
+            "submittedAt": 92690681029083,
+            "step": 30,
+            "x": 745,
+            "y": 466.5
+          },
+          {
+            "sequence": 639244587092247823,
+            "submittedAt": 92690697295458,
+            "step": 31,
+            "x": 749,
+            "y": 467.5
+          },
+          {
+            "sequence": 639244587092247824,
+            "submittedAt": 92690714365583,
+            "step": 32,
+            "x": 753,
+            "y": 468.5
+          },
+          {
+            "sequence": 639244587092247825,
+            "submittedAt": 92690731514958,
+            "step": 33,
+            "x": 757,
+            "y": 469.5
+          },
+          {
+            "sequence": 639244587092247826,
+            "submittedAt": 92690748587833,
+            "step": 34,
+            "x": 761,
+            "y": 470.5
+          },
+          {
+            "sequence": 639244587092247827,
+            "submittedAt": 92690765669000,
+            "step": 35,
+            "x": 765,
+            "y": 471.5
+          },
+          {
+            "sequence": 639244587092247828,
+            "submittedAt": 92690782744791,
+            "step": 36,
+            "x": 769,
+            "y": 472.5
+          },
+          {
+            "sequence": 639244587092247829,
+            "submittedAt": 92690799829083,
+            "step": 37,
+            "x": 773,
+            "y": 473.5
+          },
+          {
+            "sequence": 639244587092247830,
+            "submittedAt": 92690816902875,
+            "step": 38,
+            "x": 777,
+            "y": 474.5
+          },
+          {
+            "sequence": 639244587092247831,
+            "submittedAt": 92690833940625,
+            "step": 39,
+            "x": 781,
+            "y": 475.5
+          },
+          {
+            "sequence": 639244587092247832,
+            "submittedAt": 92690850985791,
+            "step": 40,
+            "x": 785,
+            "y": 476.5
+          },
+          {
+            "sequence": 639244587092247833,
+            "submittedAt": 92690868038041,
+            "step": 41,
+            "x": 781,
+            "y": 475.5
+          },
+          {
+            "sequence": 639244587092247834,
+            "submittedAt": 92690885105666,
+            "step": 42,
+            "x": 777,
+            "y": 474.5
+          },
+          {
+            "sequence": 639244587092247835,
+            "submittedAt": 92690901153250,
+            "step": 43,
+            "x": 773,
+            "y": 473.5
+          },
+          {
+            "sequence": 639244587092247836,
+            "submittedAt": 92690918227291,
+            "step": 44,
+            "x": 769,
+            "y": 472.5
+          },
+          {
+            "sequence": 639244587092247837,
+            "submittedAt": 92690935361208,
+            "step": 45,
+            "x": 765,
+            "y": 471.5
+          },
+          {
+            "sequence": 639244587092247838,
+            "submittedAt": 92690952409000,
+            "step": 46,
+            "x": 761,
+            "y": 470.5
+          },
+          {
+            "sequence": 639244587092247839,
+            "submittedAt": 92690969449375,
+            "step": 47,
+            "x": 757,
+            "y": 469.5
+          },
+          {
+            "sequence": 639244587092247840,
+            "submittedAt": 92690986587375,
+            "step": 48,
+            "x": 753,
+            "y": 468.5
+          },
+          {
+            "sequence": 639244587092247841,
+            "submittedAt": 92691003640083,
+            "step": 49,
+            "x": 749,
+            "y": 467.5
+          },
+          {
+            "sequence": 639244587092247842,
+            "submittedAt": 92691020678791,
+            "step": 50,
+            "x": 745,
+            "y": 466.5
+          },
+          {
+            "sequence": 639244587092247843,
+            "submittedAt": 92691037383375,
+            "step": 51,
+            "x": 741,
+            "y": 465.5
+          },
+          {
+            "sequence": 639244587092247844,
+            "submittedAt": 92691053828958,
+            "step": 52,
+            "x": 737,
+            "y": 464.5
+          },
+          {
+            "sequence": 639244587092247845,
+            "submittedAt": 92691070886416,
+            "step": 53,
+            "x": 733,
+            "y": 463.5
+          },
+          {
+            "sequence": 639244587092247846,
+            "submittedAt": 92691087932666,
+            "step": 54,
+            "x": 729,
+            "y": 462.5
+          },
+          {
+            "sequence": 639244587092247847,
+            "submittedAt": 92691104128833,
+            "step": 55,
+            "x": 725,
+            "y": 461.5
+          },
+          {
+            "sequence": 639244587092247848,
+            "submittedAt": 92691121176916,
+            "step": 56,
+            "x": 721,
+            "y": 460.5
+          },
+          {
+            "sequence": 639244587092247849,
+            "submittedAt": 92691138297958,
+            "step": 57,
+            "x": 717,
+            "y": 459.5
+          },
+          {
+            "sequence": 639244587092247850,
+            "submittedAt": 92691155354208,
+            "step": 58,
+            "x": 713,
+            "y": 458.5
+          },
+          {
+            "sequence": 639244587092247851,
+            "submittedAt": 92691172405041,
+            "step": 59,
+            "x": 709,
+            "y": 457.5
+          },
+          {
+            "sequence": 639244587092247852,
+            "submittedAt": 92691189563708,
+            "step": 60,
+            "x": 705,
+            "y": 456.5
+          },
+          {
+            "sequence": 639244587092247853,
+            "submittedAt": 92691207279916,
+            "step": 61,
+            "x": 701,
+            "y": 455.5
+          },
+          {
+            "sequence": 639244587092247854,
+            "submittedAt": 92691224355208,
+            "step": 62,
+            "x": 697,
+            "y": 454.5
+          },
+          {
+            "sequence": 639244587092247855,
+            "submittedAt": 92691241488625,
+            "step": 63,
+            "x": 693,
+            "y": 453.5
+          },
+          {
+            "sequence": 639244587092247856,
+            "submittedAt": 92691258537583,
+            "step": 64,
+            "x": 689,
+            "y": 452.5
+          },
+          {
+            "sequence": 639244587092247857,
+            "submittedAt": 92691275350250,
+            "step": 65,
+            "x": 685,
+            "y": 451.5
+          },
+          {
+            "sequence": 639244587092247858,
+            "submittedAt": 92691292407916,
+            "step": 66,
+            "x": 681,
+            "y": 450.5
+          },
+          {
+            "sequence": 639244587092247859,
+            "submittedAt": 92691309484083,
+            "step": 67,
+            "x": 677,
+            "y": 449.5
+          },
+          {
+            "sequence": 639244587092247860,
+            "submittedAt": 92691326531000,
+            "step": 68,
+            "x": 673,
+            "y": 448.5
+          },
+          {
+            "sequence": 639244587092247861,
+            "submittedAt": 92691343613166,
+            "step": 69,
+            "x": 669,
+            "y": 447.5
+          },
+          {
+            "sequence": 639244587092247862,
+            "submittedAt": 92691360773833,
+            "step": 70,
+            "x": 665,
+            "y": 446.5
+          },
+          {
+            "sequence": 639244587092247863,
+            "submittedAt": 92691377849833,
+            "step": 71,
+            "x": 661,
+            "y": 445.5
+          },
+          {
+            "sequence": 639244587092247864,
+            "submittedAt": 92691394154625,
+            "step": 72,
+            "x": 657,
+            "y": 444.5
+          },
+          {
+            "sequence": 639244587092247865,
+            "submittedAt": 92691410451875,
+            "step": 73,
+            "x": 653,
+            "y": 443.5
+          },
+          {
+            "sequence": 639244587092247866,
+            "submittedAt": 92691427544875,
+            "step": 74,
+            "x": 649,
+            "y": 442.5
+          },
+          {
+            "sequence": 639244587092247867,
+            "submittedAt": 92691444587541,
+            "step": 75,
+            "x": 645,
+            "y": 441.5
+          },
+          {
+            "sequence": 639244587092247868,
+            "submittedAt": 92691461018666,
+            "step": 76,
+            "x": 641,
+            "y": 440.5
+          },
+          {
+            "sequence": 639244587092247869,
+            "submittedAt": 92691478081875,
+            "step": 77,
+            "x": 637,
+            "y": 439.5
+          },
+          {
+            "sequence": 639244587092247870,
+            "submittedAt": 92691495123708,
+            "step": 78,
+            "x": 633,
+            "y": 438.5
+          },
+          {
+            "sequence": 639244587092247872,
+            "submittedAt": 92691512188166,
+            "step": 79,
+            "x": 629,
+            "y": 437.5
+          },
+          {
+            "sequence": 639244587092247876,
+            "submittedAt": 92691529243791,
+            "step": 80,
+            "x": 625,
+            "y": 436.5
+          }
+        ],
+        "publications": [
+          {
+            "Timestamp": 92690196078625,
+            "Revision": 34,
+            "ConsumedInputSequence": 639244587092247792,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690221553708,
+            "Revision": 35,
+            "ConsumedInputSequence": 639244587092247794,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690241847458,
+            "Revision": 36,
+            "ConsumedInputSequence": 639244587092247795,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690282607958,
+            "Revision": 37,
+            "ConsumedInputSequence": 639244587092247798,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690299508666,
+            "Revision": 38,
+            "ConsumedInputSequence": 639244587092247799,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690336718541,
+            "Revision": 39,
+            "ConsumedInputSequence": 639244587092247801,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690348925875,
+            "Revision": 40,
+            "ConsumedInputSequence": 639244587092247802,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690384966750,
+            "Revision": 41,
+            "ConsumedInputSequence": 639244587092247804,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690399134333,
+            "Revision": 42,
+            "ConsumedInputSequence": 639244587092247805,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690441740750,
+            "Revision": 43,
+            "ConsumedInputSequence": 639244587092247807,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690460682583,
+            "Revision": 44,
+            "ConsumedInputSequence": 639244587092247808,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690468648041,
+            "Revision": 45,
+            "ConsumedInputSequence": 639244587092247809,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690505811583,
+            "Revision": 46,
+            "ConsumedInputSequence": 639244587092247811,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690533930208,
+            "Revision": 47,
+            "ConsumedInputSequence": 639244587092247813,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690568827625,
+            "Revision": 48,
+            "ConsumedInputSequence": 639244587092247815,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690606880333,
+            "Revision": 49,
+            "ConsumedInputSequence": 639244587092247817,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690636003208,
+            "Revision": 50,
+            "ConsumedInputSequence": 639244587092247819,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690671313125,
+            "Revision": 51,
+            "ConsumedInputSequence": 639244587092247821,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690704298791,
+            "Revision": 52,
+            "ConsumedInputSequence": 639244587092247823,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690741802250,
+            "Revision": 53,
+            "ConsumedInputSequence": 639244587092247825,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690770762500,
+            "Revision": 54,
+            "ConsumedInputSequence": 639244587092247827,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690804614833,
+            "Revision": 55,
+            "ConsumedInputSequence": 639244587092247829,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690835303250,
+            "Revision": 56,
+            "ConsumedInputSequence": 639244587092247830,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690851877791,
+            "Revision": 57,
+            "ConsumedInputSequence": 639244587092247831,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690886408750,
+            "Revision": 58,
+            "ConsumedInputSequence": 639244587092247833,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690899796125,
+            "Revision": 59,
+            "ConsumedInputSequence": 639244587092247834,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690934530166,
+            "Revision": 60,
+            "ConsumedInputSequence": 639244587092247836,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690948421166,
+            "Revision": 61,
+            "ConsumedInputSequence": 639244587092247837,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690982488208,
+            "Revision": 62,
+            "ConsumedInputSequence": 639244587092247839,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92690998825583,
+            "Revision": 63,
+            "ConsumedInputSequence": 639244587092247840,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691035370916,
+            "Revision": 64,
+            "ConsumedInputSequence": 639244587092247842,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691048754875,
+            "Revision": 65,
+            "ConsumedInputSequence": 639244587092247843,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691083734041,
+            "Revision": 66,
+            "ConsumedInputSequence": 639244587092247845,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691098722250,
+            "Revision": 67,
+            "ConsumedInputSequence": 639244587092247846,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691134632083,
+            "Revision": 68,
+            "ConsumedInputSequence": 639244587092247848,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691148710208,
+            "Revision": 69,
+            "ConsumedInputSequence": 639244587092247849,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691186271708,
+            "Revision": 70,
+            "ConsumedInputSequence": 639244587092247851,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691208269375,
+            "Revision": 71,
+            "ConsumedInputSequence": 639244587092247852,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691235763666,
+            "Revision": 72,
+            "ConsumedInputSequence": 639244587092247854,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691259715875,
+            "Revision": 73,
+            "ConsumedInputSequence": 639244587092247855,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691268168291,
+            "Revision": 74,
+            "ConsumedInputSequence": 639244587092247856,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691303545166,
+            "Revision": 75,
+            "ConsumedInputSequence": 639244587092247858,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691316140125,
+            "Revision": 76,
+            "ConsumedInputSequence": 639244587092247859,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691349914625,
+            "Revision": 77,
+            "ConsumedInputSequence": 639244587092247861,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691384799666,
+            "Revision": 78,
+            "ConsumedInputSequence": 639244587092247863,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691419688291,
+            "Revision": 79,
+            "ConsumedInputSequence": 639244587092247865,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691452659750,
+            "Revision": 80,
+            "ConsumedInputSequence": 639244587092247867,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691486202708,
+            "Revision": 81,
+            "ConsumedInputSequence": 639244587092247869,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691510245083,
+            "Revision": 82,
+            "ConsumedInputSequence": 639244587092247870,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691536651625,
+            "Revision": 83,
+            "ConsumedInputSequence": 639244587092247875,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691542820375,
+            "Revision": 84,
+            "ConsumedInputSequence": 639244587092247876,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691561268416,
+            "Revision": 85,
+            "ConsumedInputSequence": 639244587092247879,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691584830125,
+            "Revision": 86,
+            "ConsumedInputSequence": 639244587092247883,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691618122541,
+            "Revision": 87,
+            "ConsumedInputSequence": 639244587092247887,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691641945375,
+            "Revision": 88,
+            "ConsumedInputSequence": 639244587092247888,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691665810708,
+            "Revision": 89,
+            "ConsumedInputSequence": 639244587092247892,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691678086958,
+            "Revision": 90,
+            "ConsumedInputSequence": 639244587092247894,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691697545000,
+            "Revision": 91,
+            "ConsumedInputSequence": 639244587092247896,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691711441125,
+            "Revision": 92,
+            "ConsumedInputSequence": 639244587092247898,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691728045458,
+            "Revision": 93,
+            "ConsumedInputSequence": 639244587092247900,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691744862708,
+            "Revision": 94,
+            "ConsumedInputSequence": 639244587092247902,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691761556333,
+            "Revision": 95,
+            "ConsumedInputSequence": 639244587092247904,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691778117125,
+            "Revision": 96,
+            "ConsumedInputSequence": 639244587092247907,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691794780250,
+            "Revision": 97,
+            "ConsumedInputSequence": 639244587092247909,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691811388291,
+            "Revision": 98,
+            "ConsumedInputSequence": 639244587092247911,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691828055583,
+            "Revision": 99,
+            "ConsumedInputSequence": 639244587092247913,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691844703916,
+            "Revision": 100,
+            "ConsumedInputSequence": 639244587092247915,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691861425708,
+            "Revision": 101,
+            "ConsumedInputSequence": 639244587092247917,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691878121166,
+            "Revision": 102,
+            "ConsumedInputSequence": 639244587092247919,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691894769291,
+            "Revision": 103,
+            "ConsumedInputSequence": 639244587092247921,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691911762625,
+            "Revision": 104,
+            "ConsumedInputSequence": 639244587092247923,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          },
+          {
+            "Timestamp": 92691934505750,
+            "Revision": 105,
+            "ConsumedInputSequence": 639244587092247924,
+            "ViewportWidth": 1280,
+            "ViewportHeight": 800
+          }
+        ],
+        "renderedScenes": [
+          {
+            "Timestamp": 92690216026000,
+            "Revision": 34,
+            "ConsumedInputSequence": 639244587092247792,
+            "AcceptedTimestamp": 92690210891583
+          },
+          {
+            "Timestamp": 92690272599833,
+            "Revision": 36,
+            "ConsumedInputSequence": 639244587092247795,
+            "AcceptedTimestamp": 92690269609916
+          },
+          {
+            "Timestamp": 92690329878916,
+            "Revision": 38,
+            "ConsumedInputSequence": 639244587092247799,
+            "AcceptedTimestamp": 92690326714166
+          },
+          {
+            "Timestamp": 92690378216291,
+            "Revision": 40,
+            "ConsumedInputSequence": 639244587092247802,
+            "AcceptedTimestamp": 92690374933833
+          },
+          {
+            "Timestamp": 92690432330041,
+            "Revision": 42,
+            "ConsumedInputSequence": 639244587092247805,
+            "AcceptedTimestamp": 92690429539583
+          },
+          {
+            "Timestamp": 92690462272083,
+            "Revision": 43,
+            "ConsumedInputSequence": 639244587092247807,
+            "AcceptedTimestamp": 92690459368166
+          },
+          {
+            "Timestamp": 92690498436416,
+            "Revision": 45,
+            "ConsumedInputSequence": 639244587092247809,
+            "AcceptedTimestamp": 92690496141541
+          },
+          {
+            "Timestamp": 92690527526458,
+            "Revision": 46,
+            "ConsumedInputSequence": 639244587092247811,
+            "AcceptedTimestamp": 92690525062375
+          },
+          {
+            "Timestamp": 92690562048458,
+            "Revision": 47,
+            "ConsumedInputSequence": 639244587092247813,
+            "AcceptedTimestamp": 92690559488833
+          },
+          {
+            "Timestamp": 92690597592916,
+            "Revision": 48,
+            "ConsumedInputSequence": 639244587092247815,
+            "AcceptedTimestamp": 92690595029916
+          },
+          {
+            "Timestamp": 92690628919375,
+            "Revision": 49,
+            "ConsumedInputSequence": 639244587092247817,
+            "AcceptedTimestamp": 92690626286458
+          },
+          {
+            "Timestamp": 92690662223625,
+            "Revision": 50,
+            "ConsumedInputSequence": 639244587092247819,
+            "AcceptedTimestamp": 92690659777208
+          },
+          {
+            "Timestamp": 92690695386083,
+            "Revision": 51,
+            "ConsumedInputSequence": 639244587092247821,
+            "AcceptedTimestamp": 92690692960166
+          },
+          {
+            "Timestamp": 92690729875541,
+            "Revision": 52,
+            "ConsumedInputSequence": 639244587092247823,
+            "AcceptedTimestamp": 92690727564333
+          },
+          {
+            "Timestamp": 92690761935833,
+            "Revision": 53,
+            "ConsumedInputSequence": 639244587092247825,
+            "AcceptedTimestamp": 92690759548166
+          },
+          {
+            "Timestamp": 92690795620083,
+            "Revision": 54,
+            "ConsumedInputSequence": 639244587092247827,
+            "AcceptedTimestamp": 92690793028208
+          },
+          {
+            "Timestamp": 92690828889541,
+            "Revision": 55,
+            "ConsumedInputSequence": 639244587092247829,
+            "AcceptedTimestamp": 92690826364125
+          },
+          {
+            "Timestamp": 92690879492708,
+            "Revision": 57,
+            "ConsumedInputSequence": 639244587092247831,
+            "AcceptedTimestamp": 92690877048833
+          },
+          {
+            "Timestamp": 92690926641208,
+            "Revision": 59,
+            "ConsumedInputSequence": 639244587092247834,
+            "AcceptedTimestamp": 92690923685958
+          },
+          {
+            "Timestamp": 92690976218375,
+            "Revision": 61,
+            "ConsumedInputSequence": 639244587092247837,
+            "AcceptedTimestamp": 92690973672500
+          },
+          {
+            "Timestamp": 92691029059416,
+            "Revision": 63,
+            "ConsumedInputSequence": 639244587092247840,
+            "AcceptedTimestamp": 92691026522208
+          },
+          {
+            "Timestamp": 92691077181875,
+            "Revision": 65,
+            "ConsumedInputSequence": 639244587092247843,
+            "AcceptedTimestamp": 92691074379083
+          },
+          {
+            "Timestamp": 92691128289083,
+            "Revision": 67,
+            "ConsumedInputSequence": 639244587092247846,
+            "AcceptedTimestamp": 92691125867750
+          },
+          {
+            "Timestamp": 92691177270208,
+            "Revision": 69,
+            "ConsumedInputSequence": 639244587092247849,
+            "AcceptedTimestamp": 92691174297666
+          },
+          {
+            "Timestamp": 92691229085208,
+            "Revision": 71,
+            "ConsumedInputSequence": 639244587092247852,
+            "AcceptedTimestamp": 92691226712375
+          },
+          {
+            "Timestamp": 92691261827208,
+            "Revision": 72,
+            "ConsumedInputSequence": 639244587092247854,
+            "AcceptedTimestamp": 92691258555791
+          },
+          {
+            "Timestamp": 92691297238166,
+            "Revision": 74,
+            "ConsumedInputSequence": 639244587092247856,
+            "AcceptedTimestamp": 92691294893125
+          },
+          {
+            "Timestamp": 92691343409166,
+            "Revision": 76,
+            "ConsumedInputSequence": 639244587092247859,
+            "AcceptedTimestamp": 92691340773750
+          },
+          {
+            "Timestamp": 92691378424416,
+            "Revision": 77,
+            "ConsumedInputSequence": 639244587092247861,
+            "AcceptedTimestamp": 92691376057083
+          },
+          {
+            "Timestamp": 92691413002416,
+            "Revision": 78,
+            "ConsumedInputSequence": 639244587092247863,
+            "AcceptedTimestamp": 92691410635208
+          },
+          {
+            "Timestamp": 92691444706666,
+            "Revision": 79,
+            "ConsumedInputSequence": 639244587092247865,
+            "AcceptedTimestamp": 92691442384250
+          },
+          {
+            "Timestamp": 92691479026833,
+            "Revision": 80,
+            "ConsumedInputSequence": 639244587092247867,
+            "AcceptedTimestamp": 92691476432041
+          },
+          {
+            "Timestamp": 92691526621208,
+            "Revision": 82,
+            "ConsumedInputSequence": 639244587092247870,
+            "AcceptedTimestamp": 92691523785250
+          },
+          {
+            "Timestamp": 92691575165333,
+            "Revision": 84,
+            "ConsumedInputSequence": 639244587092247876,
+            "AcceptedTimestamp": 92691571948291
+          },
+          {
+            "Timestamp": 92691613211458,
+            "Revision": 86,
+            "ConsumedInputSequence": 639244587092247883,
+            "AcceptedTimestamp": 92691610433416
+          },
+          {
+            "Timestamp": 92691661955166,
+            "Revision": 88,
+            "ConsumedInputSequence": 639244587092247888,
+            "AcceptedTimestamp": 92691659440500
+          },
+          {
+            "Timestamp": 92691695188041,
+            "Revision": 90,
+            "ConsumedInputSequence": 639244587092247894,
+            "AcceptedTimestamp": 92691692951041
+          },
+          {
+            "Timestamp": 92691713113541,
+            "Revision": 91,
+            "ConsumedInputSequence": 639244587092247896,
+            "AcceptedTimestamp": 92691710788916
+          },
+          {
+            "Timestamp": 92691729576791,
+            "Revision": 92,
+            "ConsumedInputSequence": 639244587092247898,
+            "AcceptedTimestamp": 92691727482791
+          },
+          {
+            "Timestamp": 92691746371291,
+            "Revision": 93,
+            "ConsumedInputSequence": 639244587092247900,
+            "AcceptedTimestamp": 92691744131208
+          },
+          {
+            "Timestamp": 92691762941375,
+            "Revision": 94,
+            "ConsumedInputSequence": 639244587092247902,
+            "AcceptedTimestamp": 92691760863791
+          },
+          {
+            "Timestamp": 92691779501416,
+            "Revision": 95,
+            "ConsumedInputSequence": 639244587092247904,
+            "AcceptedTimestamp": 92691777484791
+          },
+          {
+            "Timestamp": 92691796122041,
+            "Revision": 96,
+            "ConsumedInputSequence": 639244587092247907,
+            "AcceptedTimestamp": 92691794120791
+          },
+          {
+            "Timestamp": 92691812678375,
+            "Revision": 97,
+            "ConsumedInputSequence": 639244587092247909,
+            "AcceptedTimestamp": 92691810786833
+          },
+          {
+            "Timestamp": 92691829638666,
+            "Revision": 98,
+            "ConsumedInputSequence": 639244587092247911,
+            "AcceptedTimestamp": 92691827509416
+          },
+          {
+            "Timestamp": 92691846264500,
+            "Revision": 99,
+            "ConsumedInputSequence": 639244587092247913,
+            "AcceptedTimestamp": 92691844117375
+          },
+          {
+            "Timestamp": 92691863000333,
+            "Revision": 100,
+            "ConsumedInputSequence": 639244587092247915,
+            "AcceptedTimestamp": 92691860816791
+          },
+          {
+            "Timestamp": 92691879926666,
+            "Revision": 101,
+            "ConsumedInputSequence": 639244587092247917,
+            "AcceptedTimestamp": 92691877499333
+          },
+          {
+            "Timestamp": 92691896565541,
+            "Revision": 102,
+            "ConsumedInputSequence": 639244587092247919,
+            "AcceptedTimestamp": 92691894128000
+          },
+          {
+            "Timestamp": 92691913505041,
+            "Revision": 103,
+            "ConsumedInputSequence": 639244587092247921,
+            "AcceptedTimestamp": 92691910827291
+          },
+          {
+            "Timestamp": 92691930271083,
+            "Revision": 104,
+            "ConsumedInputSequence": 639244587092247923,
+            "AcceptedTimestamp": 92691927513458
+          },
+          {
+            "Timestamp": 92691947278000,
+            "Revision": 105,
+            "ConsumedInputSequence": 639244587092247924,
+            "AcceptedTimestamp": 92691944191000
+          }
+        ],
+        "drawCallbackCompletions": [
+          92690215526750,
+          92690272598291,
+          92690275164916,
+          92690329875125,
+          92690378207416,
+          92690432325916,
+          92690462268750,
+          92690498435291,
+          92690527521666,
+          92690562043083,
+          92690597588541,
+          92690628916208,
+          92690662218291,
+          92690695382625,
+          92690729871916,
+          92690761931500,
+          92690795617041,
+          92690828886875,
+          92690879491500,
+          92690926624750,
+          92690976217166,
+          92691029054500,
+          92691077180333,
+          92691128284958,
+          92691177266041,
+          92691229081791,
+          92691261823625,
+          92691297234666,
+          92691343404791,
+          92691378423250,
+          92691412989000,
+          92691444702666,
+          92691479022791,
+          92691526617791,
+          92691575158208,
+          92691613207166,
+          92691661952791,
+          92691695185833,
+          92691713112375,
+          92691729576083,
+          92691746370416,
+          92691762940583,
+          92691779500541,
+          92691796121416,
+          92691812677708,
+          92691829637916,
+          92691846264041,
+          92691862999750,
+          92691879926041,
+          92691896564708,
+          92691913504458,
+          92691930270458,
+          92691947276208
+        ],
+        "physicalPresentationVerified": false
+      }
+    }
+  ]
+}

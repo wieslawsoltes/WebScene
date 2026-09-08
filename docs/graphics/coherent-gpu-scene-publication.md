@@ -534,3 +534,13 @@ input-to-publication timing and callback delivery without assuming every tick
 has application GPU work. Trace logging was removed and the probe rebuilt.
 Evidence: `evidence/kestrel/compositor-demand-trace.json`; timing remains affected
 by tracing and does not qualify physical presentation.
+
+The pan probe now records each injected move's native sequence, monotonic
+submission timestamp and coordinates in its composition timeline. Both initial
+and retry runs captured exactly 80 strictly increasing input sequences with
+ordered timestamps, but failed workload validation because of additional input.
+Neither run is used for a latency comparison. This also exercises the probe's
+nonzero failure exit instead of allowing startup success to mask contamination.
+Future sequence-to-scene correlation must be described as consumed-input progress,
+not proof that each coalesced move was individually drawn. Evidence:
+`evidence/kestrel/input-sequence-trace-validation.json`.
