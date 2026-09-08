@@ -10,6 +10,34 @@ void test_native_gpu_scene_leases()
             throw std::runtime_error(message);
         }
     };
+    // Producer dependency ownership must follow every retained image and consumer,
+    // even after the originating scene/snapshot has gone away.
+    {
+        struct provider final : webscene::graphics::image_provider_lifetime {};
+        struct dependency final : webscene_gpu_producer_dependencies {
+            size_t count() const noexcept override { return 0; }
+            bool metal_event(size_t,void*& event,uint64_t& value) const override {
+                event=nullptr;value=0;return false;
+            }
+        };
+        webscene::graphics::owned_image_pool pool(std::make_shared<provider>());
+        auto writer=pool.acquire();
+        writer->set_metadata({1,1,1,1,1,1,16,16});
+        writer->begin();auto pixels=writer->publish();writer->complete();writer.reset();
+        auto owner=std::make_shared<dependency>();
+        std::weak_ptr<dependency> lifetime=owner;
+        auto source=std::make_unique<webscene_gpu_image_lease_v3>(std::move(*pixels),owner);
+        owner.reset();
+        webscene_gpu_image_lease_v3* retained=nullptr;
+        require(webscene_gpu_image_retain_v3(source.get(),&retained)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+        source.reset();require(!lifetime.expired() && retained->dependencies);
+        webscene_gpu_image_consumer_v3* consumer=nullptr;
+        require(webscene_gpu_image_begin_consumer_v3(retained,&consumer)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+        webscene_gpu_image_release_v3(retained);
+        require(!lifetime.expired() && consumer->dependencies);
+        webscene_gpu_image_complete_consumer_v3(consumer);
+        require(lifetime.expired());
+    }
     // Exercise the production commit boundary with deliberately delayed outputs.
     // This constructor disables the worker only in this test executable.
     {

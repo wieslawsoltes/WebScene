@@ -1,16 +1,27 @@
 #pragma once
 #include "owned_image_pool.h"
 #include "../webscene_native_engine.h"
+// Backend-owned completion dependencies. Native pointers remain borrowed from
+// this retained owner and must never be exposed to JavaScript.
+struct webscene_gpu_producer_dependencies {
+    virtual ~webscene_gpu_producer_dependencies()=default;
+    virtual size_t count() const noexcept=0;
+    virtual bool metal_event(size_t index,void*& event,uint64_t& value) const=0;
+};
 // Native-only implementation of the opaque C handles. Never expose to JS.
 struct webscene_gpu_image_lease_v3 {
     webscene::graphics::owned_image_pool::retained value;
-    explicit webscene_gpu_image_lease_v3(webscene::graphics::owned_image_pool::retained image)
-        : value(std::move(image)) {}
+    std::shared_ptr<const webscene_gpu_producer_dependencies> dependencies;
+    explicit webscene_gpu_image_lease_v3(webscene::graphics::owned_image_pool::retained image,
+        std::shared_ptr<const webscene_gpu_producer_dependencies> producer={})
+        : value(std::move(image)),dependencies(std::move(producer)) {}
 };
 struct webscene_gpu_image_consumer_v3 {
     webscene::graphics::owned_image_pool::consumer value;
-    explicit webscene_gpu_image_consumer_v3(webscene::graphics::owned_image_pool::consumer image)
-        : value(std::move(image)) {}
+    std::shared_ptr<const webscene_gpu_producer_dependencies> dependencies;
+    explicit webscene_gpu_image_consumer_v3(webscene::graphics::owned_image_pool::consumer image,
+        std::shared_ptr<const webscene_gpu_producer_dependencies> producer={})
+        : value(std::move(image)),dependencies(std::move(producer)) {}
 };
 
 // Engine-thread-only dependency for an immutable scene capture. Backends own

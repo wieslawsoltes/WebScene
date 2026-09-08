@@ -1340,7 +1340,7 @@ webscene_scene_acquire_status webscene_gpu_image_retain_v3(
     try {
         auto retained=image->value.retain();
         if (!retained) return WEBSCENE_SCENE_ACQUIRE_BACKPRESSURE;
-        *result=new webscene_gpu_image_lease_v3(std::move(*retained));
+        *result=new webscene_gpu_image_lease_v3(std::move(*retained),image->dependencies);
         return WEBSCENE_SCENE_ACQUIRE_SUCCESS;
     } catch (const std::bad_alloc&) { return WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY; }
       catch (...) { return WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR; }
@@ -1379,7 +1379,7 @@ webscene_scene_acquire_status webscene_gpu_image_begin_consumer_v3(
         try {
             auto consumer=image->value.begin_consumer();
             if (!consumer) { ::operator delete(storage); return WEBSCENE_SCENE_ACQUIRE_BACKPRESSURE; }
-            *result=new (storage) webscene_gpu_image_consumer_v3(std::move(*consumer));
+            *result=new (storage) webscene_gpu_image_consumer_v3(std::move(*consumer),image->dependencies);
         } catch (...) { ::operator delete(storage); throw; }
         return WEBSCENE_SCENE_ACQUIRE_SUCCESS;
     } catch (const std::bad_alloc&) { return WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY; }
