@@ -39,6 +39,12 @@ internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
     private static extern IntPtr SendObject(IntPtr receiver,IntPtr selector,IntPtr argument);
     [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="objc_msgSend")]
     private static extern void SendVoid(IntPtr receiver,IntPtr selector);
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="objc_msgSend")]
+    private static extern IntPtr SendNoArg(IntPtr receiver,IntPtr selector);
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="objc_msgSend")]
+    private static extern void WaitEvent(IntPtr receiver,IntPtr selector,IntPtr sharedEvent,ulong value);
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint="objc_msgSend")]
+    private static extern void SignalEvent(IntPtr receiver,IntPtr selector,ulong value);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate byte CreateFixture(out NativeGpuImageLeaseV3 image);
     private NativeGpuImageLeaseV3? _fixture;
@@ -67,7 +73,7 @@ internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
                 ?? throw new NotSupportedException("No Skia drawing lease");
             using var lease=feature.Lease();
             string hostName;
-            IntPtr metalDevice;
+            IntPtr metalDevice, metalQueue;
             using (var platform=lease.TryLeasePlatformGraphicsApi()
                 ?? throw new NotSupportedException("No platform graphics lease"))
             {
@@ -89,21 +95,22 @@ internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
                     if(!wrapped.IsValid || wrapped.Width!=16 || wrapped.Height!=16)
                         throw new InvalidOperationException("Metal backend wrapper invalid");
                 } finally { SendVoid(texture,Selector("release")); }
-                metalDevice=device;
+                metalDevice=device; metalQueue=queue;
                 hostName=host.GetType().FullName!;
             }
-            if (_fixture is not null) VerifyFixturePixels(lease,metalDevice);
+            if (_fixture is not null) VerifyFixturePixels(lease,metalDevice,metalQueue);
             lease.SkCanvas.Clear(SkiaSharp.SKColors.Teal);
             Completed.TrySetResult(JsonSerializer.Serialize(new {
                 host=hostName, metalDeviceAvailable=true,
                 metalQueueAvailable=true, skiaGpuContextAvailable=true, metalTextureWrapperVerified=true,
                 dawnIOSurfaceImportVerified=Environment.GetCommandLineArgs().Contains("--metal-fixture"),
                 metalSampledPixelsVerified=Environment.GetCommandLineArgs().Contains("--metal-fixture"),
+                metalConsumerFenceVerified=Environment.GetCommandLineArgs().Contains("--metal-fixture"),
                 diagnosticReadbacks=Environment.GetCommandLineArgs().Contains("--metal-fixture")?1:0,
                 producerInteropVerified=false, physicalPresentationVerified=false }));
         } catch(Exception error) { Completed.TrySetException(error); }
     }
-    private void VerifyFixturePixels(ISkiaSharpApiLease lease,IntPtr device)
+    private void VerifyFixturePixels(ISkiaSharpApiLease lease,IntPtr device,IntPtr queue)
     {
         if(NativeGpuImageConsumerV3.Acquire(_fixture!,out var consumer)!=NativeSceneAcquireStatus.Success || consumer is null)
             throw new InvalidOperationException("Fixture consumer acquisition failed");
@@ -130,9 +137,34 @@ internal sealed class MetalHostProbeControl : Control, ICustomDrawOperation
                     throw new InvalidOperationException($"Metal sampled pixel mismatch at {x},{y}: {color}");
             }
         } finally {
-            // Diagnostic-only synchronous completion, including failed reads.
-            // Production retirement must use an asynchronous consumer fence.
-            lease.GrContext!.Flush(true,true);
+            lease.GrContext!.Flush(true,false);
+            NativeMetalConsumerFence fence;
+            using(var platform=lease.TryLeasePlatformGraphicsApi()
+                ?? throw new NotSupportedException("No Metal platform lease for retirement"))
+            {
+                var delayed=SendNoArg(device,Selector("newSharedEvent"));
+                if(delayed==IntPtr.Zero) throw new InvalidOperationException("Diagnostic event allocation failed");
+                try {
+                    var work=SendNoArg(queue,Selector("commandBuffer"));
+                    WaitEvent(work,Selector("encodeWaitForEvent:value:"),delayed,1);
+                    SendVoid(work,Selector("commit"));
+                    fence=NativeMetalConsumerFence.Insert(queue);
+                    System.Threading.Thread.Sleep(30);
+                    if(fence.TryComplete()) throw new InvalidOperationException("Retirement overtook delayed GPU work");
+                } finally {
+                    SignalEvent(delayed,Selector("setSignaledValue:"),1);
+                    SendVoid(delayed,Selector("release"));
+                }
+            }
+            // Bounded diagnostic polling only. Production must revisit on a later
+            // compositor opportunity while retaining the image and consumer.
+            var deadline=System.Diagnostics.Stopwatch.StartNew();
+            while(!fence.TryComplete()) {
+                if(deadline.Elapsed>TimeSpan.FromSeconds(5))
+                    throw new TimeoutException("Metal consumer retirement remained pending; ownership retained");
+                System.Threading.Thread.Sleep(1);
+            }
+            if(!fence.TryComplete()) throw new InvalidOperationException("Completed fence regressed");
             imported?.Dispose(); consumer.Complete(); _fixture!.Dispose(); _fixture=null;
         }
     }
