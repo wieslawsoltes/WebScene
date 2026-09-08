@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { lineProject, referenceCases } from "./reference-workloads.mjs";
-import { hardwareAssessment, archiveReferenceHarness } from "./capture-chrome-reference.mjs";
+import { hardwareAssessment, archiveReferenceHarness, validateReferenceUi } from "./capture-chrome-reference.mjs";
 import { analyzePresentation, supportedChromeRevision } from "./presentation-trace.mjs";
 
 test("seeded line input has stable bytes and complete unique entities", () => {
@@ -95,4 +95,14 @@ test("reference archive retains exact harness bytes after the source changes", a
     assert.equal(archive.files[name].sha256, archive.hashes[name]);
     assert.equal(archive.files[name].bytes, stored.length);
   }
+});
+
+
+test("reference capture rejects active commands and visible transient UI", () => {
+  const neutral = { tool: null, bannerHidden: true, suggestionsHidden: true, fileMenuHidden: true };
+  assert.doesNotThrow(() => validateReferenceUi(neutral));
+  assert.throws(() => validateReferenceUi({ ...neutral, tool: "erase" }), /not neutral/);
+  for (const key of ["bannerHidden", "suggestionsHidden", "fileMenuHidden"])
+    assert.throws(() => validateReferenceUi({ ...neutral, [key]: false }), /not neutral/);
+  assert.throws(() => validateReferenceUi({}), /not neutral/);
 });

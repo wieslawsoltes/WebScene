@@ -95,7 +95,24 @@ async function settleUi(page) {
   await settled(page);
 }
 
+export function validateReferenceUi(state) {
+  if (!state || state.tool !== null || state.bannerHidden !== true
+      || state.suggestionsHidden !== true || state.fileMenuHidden !== true) {
+    throw new Error(`Reference UI is not neutral: ${JSON.stringify(state)}`);
+  }
+}
+
+async function referenceUiState(page) {
+  const state = await evaluate(page, `({tool:kestrel.tool?.id ?? null,
+    bannerHidden:document.getElementById('tool-banner').hidden,
+    suggestionsHidden:document.getElementById('command-suggestions').hidden,
+    fileMenuHidden:document.getElementById('file-menu').hidden})`);
+  validateReferenceUi(state);
+  return state;
+}
+
 async function snapshot(page, output, name, clip) {
+  const uiBefore = await referenceUiState(page);
   const capture = await page.send("Page.captureScreenshot", { format: "png", fromSurface: true,
     captureBeyondViewport: false, clip: { ...clip, scale: 1 } });
   const bytes = Buffer.from(capture.data, "base64");
@@ -109,7 +126,8 @@ async function snapshot(page, output, name, clip) {
     await writeFile(path.join(output, layerName), layerBytes);
     layers[layer] = { file: layerName, sha256: sha(layerBytes), width: layerBytes.readUInt32BE(16), height: layerBytes.readUInt32BE(20) };
   }
-  return { file: name, sha256: sha(bytes), width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20),
+  const uiAfter = await referenceUiState(page);
+  return { uiBefore, uiAfter, file: name, sha256: sha(bytes), width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20),
     layers, purpose: "Diagnostic reference capture outside the timed interaction; not a presentation path" };
 }
 
