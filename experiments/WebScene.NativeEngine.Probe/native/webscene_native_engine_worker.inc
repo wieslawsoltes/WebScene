@@ -1092,15 +1092,14 @@
                     != starting_component_ready;
             scene_pending = scene_pending || changed;
             const auto now = std::chrono::steady_clock::now();
-            // A resize and its host RAF are one browser rendering opportunity.
-            // Do not defer that completed boundary behind a producer-only phase:
-            // macOS live resize may not deliver another compositor callback until
-            // the following display slot.
-            const auto resize_frame_boundary =
-                resize_applied && host_frame_applied;
+            // Every host RAF is a display-driven rendering opportunity, including
+            // pointer-driven sidebar resize and pan. A separate producer timer
+            // must not postpone a completed batch until after its display slot.
+            // GPU completion and mailbox admission still gate publication.
+            const auto host_frame_boundary = host_frame_applied;
             if (scene_pending
                 && host_visible_.load(std::memory_order_acquire)
-                && (resize_frame_boundary || now >= next_scene_publication)) {
+                && (host_frame_boundary || now >= next_scene_publication)) {
                 const auto publication=publish_scene();
                 if (publication!=publication_result::deferred) {
                     scene_pending = publication==publication_result::published
@@ -1144,7 +1143,7 @@
                     } else {
                         next_scene_publication += scene_interval;
                     }
-                    if (resize_frame_boundary) {
+                    if (host_frame_boundary) {
                         next_scene_publication = now + scene_interval;
                     }
                     continue;

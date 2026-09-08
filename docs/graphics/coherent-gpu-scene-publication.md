@@ -686,3 +686,7 @@ The native-navigation inert-style candidate also passes against the rebuilt grap
 The local historical Chrome matrix contains 32 runs and 224 referenced image/trace files; all referenced SHA-256 values match the files. However, its recorded capture-script hash matches neither the current script nor a version found in that file’s Git history. That historical source provenance remains incomplete. Hash integrity alone does not establish reproducibility or durable archival qualification.
 
 Future captures now retain the exact four harness source files and both generated 10k/100k project inputs alongside their hashes, relative paths and byte lengths. A regression verifies that archived source bytes and hashes remain consistent after the original source is changed. All six reference unit tests pass. This improves future capture evidence; no new hardware matrix was captured, and it does not repair the historical missing source or qualify physical 60fps.
+
+### Attempt publication at every host frame boundary
+
+Ordinary host RAF boundaries now bypass the producer-only 16ms publication timer, as paired native resize frames already did. GPU completion, immutable capture validation and mailbox admission remain unchanged. Both native suites pass. The unchanged original Kestrel sidebar workload validates at 792×878, DPR 2, but produced only 12 scene draws in this run. This does not establish a performance improvement or physical 60fps; resize redraw starvation remains unresolved. Full probe evidence: `evidence/kestrel/all-host-frame-publication.json`.
