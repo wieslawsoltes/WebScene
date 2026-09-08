@@ -2656,6 +2656,9 @@
             const auto submitted=canvas.context->has_current_texture();
             canvas.context->end_frame(present);
             if(submitted) {
+                // A reset inside this RAF batch may occur after frame admission.
+                // Its replacement output now owns the publication dependency.
+                canvas.bitmap_reset_awaiting_frame=false;
                 auto& output=canvas.node->mutable_canvas().gpu_snapshot;
                 output.reset();
                 if(present) {

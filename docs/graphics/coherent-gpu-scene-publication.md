@@ -595,3 +595,16 @@ before a queued redraw can publish are the next ordering concern. Preserve input
 sequence barriers and bounded coherent capture when correcting this; simply
 bypassing the hold would restore intermediate blank canvases. Temporary logging
 was removed. Evidence: `evidence/kestrel/sidebar-publication-deferrals.json`.
+
+A reset performed after host-frame admission could leave its hold active even
+when the same RAF batch submitted the replacement output. Finishing a submitted
+canvas now clears that hold; the captured GPU dependency governs publication.
+The regression resets inside RAF, obtains a replacement texture, queues another
+RAF, and verifies publication is not held for that unrelated next callback.
+Runtime tests pass. Original sidebar geometry/startup checks pass with 13 rendered
+scenes, 51 RAF callbacks and 94 compositor callbacks, so the broader continuous
+resize starvation remains unresolved. Evidence:
+`evidence/kestrel/within-frame-resize-hold.json`.
+The WebGPU canvas reference confirms configure clears the drawing buffer; this
+change preserves reset semantics and changes only readiness tracking:
+https://gpuweb.github.io/types/interfaces/GPUCanvasContext

@@ -831,6 +831,23 @@ void test_runtime_webgpu_installation() {
     require(runtime.pump_animation_frame_task(),"Nested resize RAF failed");
     require(runtime.execute("domGPUCanvas.height=3;requestAnimationFrame(()=>{});domGPUContext.unconfigure();","gpu-resize-unconfigure"),"Resize unconfigure setup failed");
     require(!runtime.has_open_gpu_output(),"Unconfigured canvas held a resize redraw boundary");
+    runtime.signal_animation_frame(164);
+    require(runtime.pump_animation_frame_task(),"Unconfigured resize callback failed");
+    require(runtime.execute(R"JS(
+        domGPUContext.configure({device:installedDevice,format:navigator.gpu.getPreferredCanvasFormat()});
+        requestAnimationFrame(()=>{
+            domGPUCanvas.width=14;
+            domGPUContext.getCurrentTexture();
+            requestAnimationFrame(()=>{});
+        });
+    )JS","gpu-reset-within-frame"),"Within-frame reset setup failed");
+    runtime.signal_animation_frame(180);
+    require(runtime.pump_animation_frame_task(),"Within-frame reset redraw failed");
+    require(!runtime.has_open_gpu_output(),"Submitted replacement retained the resize hold");
+    runtime.signal_animation_frame(196);
+    require(runtime.pump_animation_frame_task(),"Following frame callback failed");
+    require(runtime.execute("domGPUContext.unconfigure();","gpu-reset-within-frame-cleanup"),"Within-frame reset cleanup failed");
+
 
 #endif
     require(runtime.load_url("https://graphics.test/webgpu-next"),"WebGPU navigation failed");
