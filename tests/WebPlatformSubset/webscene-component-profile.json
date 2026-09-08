@@ -1065,6 +1065,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/css-grid-auto-row-shrink.html",
+      "type": "testharness",
+      "capabilities": ["css-grid", "automatic-minimum-size", "dynamic-layout"],
+      "evidence": ["kestrel-stale-canvas-height-after-resize"],
+      "reason": "Auto grid rows must shrink to definite available height when item minimums permit; preserve visible content and authored minimums. Local regression pending cross-RID qualification."
+    },
+    {
       "path": "contracts/css-border-functional-color-width.html",
       "type": "testharness",
       "capabilities": ["border-shorthand", "functional-color"],

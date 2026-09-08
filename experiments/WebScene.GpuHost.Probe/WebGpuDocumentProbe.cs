@@ -253,7 +253,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 desktop.MainWindow.Width = size.Item1;
                                 desktop.MainWindow.Height = size.Item2;
                                 await Task.Delay(750);
-                                Console.WriteLine("Kestrel resize: " + await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
+                                Console.WriteLine("Kestrel resize: " + await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();const ancestors=[];for(let n=c.parentElement;n;n=n.parentElement){const b=n.getBoundingClientRect(),s=getComputedStyle(n);ancestors.push({id:n.id,tag:n.tagName,rect:[b.x,b.y,b.width,b.height],height:s.height,minHeight:s.minHeight,display:s.display,flex:s.flex,gridTemplateRows:s.gridTemplateRows});}return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],ancestors,dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
                             }
                         }
                         if (arguments.Contains("--verify-kestrel"))

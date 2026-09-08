@@ -2045,6 +2045,7 @@ void native_document::layout_children(dom_node& parent)
         const auto row_count = std::max<size_t>(
             occupied.size(), parent_grid.template_rows.size());
         std::vector<float> row_heights(row_count, 0.0F);
+        std::vector<float> row_minimums(row_count, 0.0F);
         const auto contains_wrapping_flex = [&](const auto& self,
                                                 const dom_node& node) -> bool {
             if (is_flex_container(node.style.display) && node.style.flex_wrap) {
@@ -2094,6 +2095,26 @@ void native_document::layout_children(dom_node& parent)
             auto authored = definite_height
                 ? outer_authored_size(*item.node, false, content.height)
                 : intrinsic_size(*item.node, false, content.height);
+            const auto record_contribution = [&](float contribution) {
+                auto minimum = contribution;
+                if (!definite_height) {
+                    const auto& style = item.node->style;
+                    const auto scrollable = style.overflow_y == overflow_mode::hidden
+                        || style.overflow_y == overflow_mode::automatic
+                        || style.overflow_y == overflow_mode::scroll;
+                    if (is_specified(style.min_height) || scrollable) {
+                        const auto padding = resolve_vertical_padding(*item.node, style.padding_top, content.height, 0)
+                            + resolve_vertical_padding(*item.node, style.padding_bottom, content.height, 0)
+                            + resolve_length(*item.node, style.border_top_width, content.height, 0)
+                            + resolve_length(*item.node, style.border_bottom_width, content.height, 0);
+                        const auto authored_minimum = is_specified(style.min_height)
+                            ? resolve_length(*item.node, style.min_height, content.height, 0) : 0.0F;
+                        minimum = std::max(padding, authored_minimum + (style.border_box ? 0.0F : padding));
+                    }
+                }
+                row_minimums[item.row] = std::max(row_minimums[item.row], minimum + margins);
+                row_heights[item.row] = std::max(row_heights[item.row], contribution + margins);
+            };
             if (!definite_height) {
                 // Block-axis intrinsic sizing alone only sees an unwrapped
                 // line-height. Grid row sizing, however, happens after the
@@ -2129,8 +2150,7 @@ void native_document::layout_children(dom_node& parent)
                 const auto has_wrapping_flex = !wraps_at_used_width
                     && contains_wrapping_flex(contains_wrapping_flex, *item.node);
                 if (!wraps_at_used_width && !has_wrapping_flex) {
-                    row_heights[item.row] = std::max(
-                        row_heights[item.row], authored + margins);
+                    record_contribution(authored);
                     continue;
                 }
                 if (item.node->style.grid().subgrid_columns) {
@@ -2180,7 +2200,16 @@ void native_document::layout_children(dom_node& parent)
                             item.node->scroll_content_height,
                             flow_bounds.second - flow_bounds.first)));
             }
-            row_heights[item.row] = std::max(row_heights[item.row], authored + margins);
+            record_contribution(authored);
+        }
+        const auto single_auto_row = row_count == 1U
+            && (parent_grid.template_rows.empty()
+                || parent_grid.template_rows[0].kind == grid_track::sizing::automatic);
+        if (single_auto_row && parent.used_height_is_definite) {
+            // An auto track's max-content growth limit is not its minimum.
+            // Scrollable items and explicit min-height can allow the row to
+            // shrink, including after a larger previously arranged viewport.
+            row_heights[0] = std::max(row_minimums[0], std::min(row_heights[0], content.height));
         }
         const auto total_row_gap = row_count > 0
             ? row_gap * static_cast<float>(row_count - 1U) : 0.0F;
@@ -2195,8 +2224,7 @@ void native_document::layout_children(dom_node& parent)
                     row_heights[row],
                     fractional_row_space * track.fraction / fractional_row_weight);
             }
-        } else if (row_count == 1U
-            && parent_grid.template_rows.empty()
+        } else if (single_auto_row
             && committed_height < content.height) {
             // The common one-row implicit grid case stretches its auto row to
             // the definite container height. Keep this compatibility path
@@ -2269,7 +2297,7 @@ void native_document::layout_children(dom_node& parent)
                     column_offsets[item.column] + margin_left,
                     row_offsets[item.row] + margin_top,
                     width,
-                    height});
+                    height}, true); // The resolved grid area supplies the stretched block size.
             };
             arrange(item.node);
         }
