@@ -1988,6 +1988,7 @@
 
     bool is_effectively_visible_for_focus(const dom_node* node)
     {
+        if (node != nullptr && document.is_inert(*node)) return false;
         auto visibility_resolved = false;
         auto visibility_hidden = false;
         for (auto* current_node = node; current_node != nullptr;
@@ -2295,6 +2296,9 @@
 
     bool dispatch_keyboard_or_text(const webscene_input_event& input)
     {
+        if (active_element != nullptr && document.is_inert(*active_element)) {
+            if (!set_active_element(nullptr, input)) return false;
+        }
         auto* target = active_element == nullptr ? &active_root() : active_element;
         if (input.kind == WEBSCENE_INPUT_KEY_UP) {
             pending_text_input_from_keydown = false;
@@ -2316,7 +2320,7 @@
                 target = find_node_by_native_id(active_root(), target_id);
                 if (target == nullptr) return true;
             }
-            if (!is_text_control(target)) return true;
+            if (!is_text_control(target) || document.is_inert(*target)) return true;
             bool prevented = false;
             if (!dispatch_input_event_type(input, "beforeinput", *target, &prevented)) return false;
             if (prevented) return true;

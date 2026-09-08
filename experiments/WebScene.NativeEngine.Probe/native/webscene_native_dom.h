@@ -1557,6 +1557,7 @@ public:
     dom_node* find_by_native_id(uint32_t id) noexcept;
     dom_node* find_by_id(const std::string& id) noexcept;
     std::vector<dom_node*> query_selector_all(dom_node& root, const std::string& selector);
+    bool is_inert(const dom_node& node) const noexcept;
     dom_node* hit_test(dom_node& root, float x, float y);
     void clear();
     void layout(float viewport_width, float viewport_height);

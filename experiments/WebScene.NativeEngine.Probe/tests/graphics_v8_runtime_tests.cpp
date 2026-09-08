@@ -414,6 +414,44 @@ void test_runtime_webgpu_installation() {
         if(!rejected)throw new Error('close receiver validation');
         closingDialog.remove();
     )JS","dialog-close-result"),"Dialog close result failed");
+    const bool inert_setup_ok=runtime.execute(R"JS(
+        globalThis.inertHost=document.createElement('div');
+        inertHost.innerHTML='<input id="inert-input" style="position:fixed;left:0;top:0;width:30px;height:20px"><button id="inert-button" style="position:fixed;left:0;top:22px;width:30px;height:20px">Inside</button>';
+        document.body.append(inertHost);
+        globalThis.outsideInert=document.createElement('button');outsideInert.textContent='Outside';document.body.append(outsideInert);
+        outsideInert.focus();
+        inertHost.inert=true;
+        if(!inertHost.hasAttribute('inert')||!inertHost.inert||document.getElementById('inert-input').inert)throw new Error('inert reflection');
+        document.getElementById('inert-input').focus();
+        if(document.activeElement!==outsideInert)throw new Error('inert focus accepted');
+        const shadowHost=document.createElement('div');inertHost.append(shadowHost);
+        const shadow=shadowHost.attachShadow({mode:'open'});shadow.innerHTML='<button>Shadow</button>';
+        shadow.querySelector('button').focus();
+        if(document.activeElement!==outsideInert)throw new Error('inert shadow focus accepted');
+        inertHost.inert=false;
+        document.getElementById('inert-input').focus();
+        if(document.activeElement!==document.getElementById('inert-input'))throw new Error('removing inert did not restore focus');
+        inertHost.setAttribute('inert','');
+        inertHost.getBoundingClientRect();
+    )JS","inert-input-setup");
+    if(!inert_setup_ok)throw std::runtime_error("Inert setup failed: "+runtime.last_error());
+    auto* inert_input=document.find_by_id("inert-input");
+    auto* inert_button=document.find_by_id("inert-button");
+    require(inert_input&&inert_button&&document.is_inert(*inert_input),"Native inert state missing");
+    require(document.hit_test(document.body(),5,5)!=inert_input,"Inert fixed input remained hit-testable");
+    require(document.hit_test(document.body(),5,25)!=inert_button,"Inert fixed button remained hit-testable");
+    webscene_input_event inert_text{};inert_text.kind=WEBSCENE_INPUT_TEXT;inert_text.x=65;
+    require(runtime.dispatch_input(inert_text),"Inert text dispatch failed");
+    webscene_input_event inert_tab{};inert_tab.kind=WEBSCENE_INPUT_KEY_DOWN;inert_tab.x=9;
+    require(runtime.dispatch_input(inert_tab),"Inert Tab dispatch failed");
+    require(runtime.execute("if(document.activeElement!==outsideInert)throw new Error('Tab selected inert control');","inert-tab"),"Inert Tab validation failed");
+    require(runtime.execute(R"JS(
+        if(document.getElementById('inert-input').value!=='')throw new Error('inert input was edited');
+        inertHost.removeAttribute('inert');
+        inertHost.getBoundingClientRect();
+    )JS","inert-text"),"Inert text validation failed");
+    require(document.hit_test(document.body(),5,5)==inert_input,"Removing inert did not restore hit testing");
+    require(runtime.execute("inertHost.remove();outsideInert.remove();","inert-cleanup"),"Inert cleanup failed");
     require(runtime.execute(R"JS(
         if(installedDevice.createBindGroupLayout.length!==1)throw new Error('binding layout arity');
         globalThis.bindingLayout=installedDevice.createBindGroupLayout({label:'camera',entries:new Set([{binding:0,visibility:1,buffer:{}}])});

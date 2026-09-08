@@ -2145,3 +2145,30 @@ painting, focus restoration, inert background input, Escape/close-watcher
 integration, beforetoggle/toggle events and complete reentrancy/conformance
 coverage are outstanding. Kestrel's original BOX workflow remains blocked at
 showModal; these closing primitives do not establish a working modal workflow.
+
+### Inert input foundation for modal dialogs (2026-09-08)
+
+HTMLElement.inert now reflects the boolean attribute. Native document hit
+testing rejects inert elements and their composed-tree descendants, including
+fixed-position descendants tested separately from normal flow. Runtime focus
+selection excludes these nodes for programmatic focus and Tab navigation.
+Native text dispatch stops editing a control that has become inert, including
+the retained target of a preceding keydown. The shared native is_inert query
+walks composed ancestors, so shadow content inherits the host's inert state.
+
+Tests cover reflection without falsely reflecting inherited state, ordinary
+and shadow focus rejection, fixed-position input/button hit rejection,
+restoration after attribute removal and native text/Tab input. Both native
+suites passed (12.78 seconds); the additional Tab regression passed in the
+GPU runtime suite (0.68 seconds). Generated bindings are consistent.
+The unchanged original Kestrel edit probe also exited 0: LINE, UNDO, REDO,
+UNDO produced object counts 266,265,266,265 with WebGPU active and zero logged
+errors at each step. This is command-state regression evidence, not new
+presented-pixel or modal qualification.
+
+The implementation is an input prerequisite, not complete inert conformance.
+Modal escape from ancestor inertness will be connected to top-layer state;
+accessibility, find-in-page, selection, immediate focus fixup on mutation and
+pointer-capture transitions remain unqualified. showModal and the original
+BOX workflow remain outstanding. See the
+[HTML inert subtree requirements](https://html.spec.whatwg.org/multipage/interaction.html#inert-subtrees).

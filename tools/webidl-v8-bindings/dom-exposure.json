@@ -226,6 +226,7 @@
       "attributes": [
         { "name": "style", "getter": "get_style" },
         { "name": "dataset", "getter": "get_dataset" },
+        { "name": "inert", "getter": "get_inert", "setter": "set_inert" },
         { "name": "innerText", "getter": "get_inner_text", "setter": "set_text_content" },
         { "name": "content", "getter": "get_template_content" },
         { "name": "clientWidth", "getter": "get_client_width" },

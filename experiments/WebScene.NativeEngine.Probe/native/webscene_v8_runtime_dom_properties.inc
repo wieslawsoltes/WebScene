@@ -1867,6 +1867,19 @@
         node->dialog_state->return_value = std::move(result);
     }
 
+    static void get_inert(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        get_boolean_attribute(info, "inert");
+    }
+
+    static void set_inert(
+        v8::Local<v8::Name>, v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        set_boolean_attribute(value, info, "inert");
+    }
+
     static void get_hidden(
         v8::Local<v8::Name>,
         const v8::PropertyCallbackInfo<v8::Value>& info)

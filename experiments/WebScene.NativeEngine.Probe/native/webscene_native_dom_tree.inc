@@ -625,6 +625,14 @@ std::vector<dom_node*> native_document::query_selector_all(
     return result;
 }
 
+bool native_document::is_inert(const dom_node& node) const noexcept
+{
+    for (auto* ancestor = &node; ancestor != nullptr; ancestor = composed_parent(*ancestor)) {
+        if (ancestor->attributes.contains("inert")) return true;
+    }
+    return false;
+}
+
 dom_node* native_document::hit_test(dom_node& root, float x, float y)
 {
     const auto nearest_element = [this](dom_node* hit) {
@@ -708,7 +716,7 @@ dom_node* native_document::hit_test_node(
     bool inherited_pointer_events_none,
     bool ignore_own_clip) noexcept
 {
-    if (!node.visible || node.style.display == display_mode::none) return nullptr;
+    if (!node.visible || node.style.display == display_mode::none || is_inert(node)) return nullptr;
     const auto visibility_hidden = node.style.visibility_specified
         ? node.style.visibility_hidden
         : inherited_visibility_hidden;
