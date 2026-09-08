@@ -413,3 +413,13 @@ presentation. Evidence is retained in
 changes, the probe must distinguish its injected workload from other routed input
 and invalidate contaminated runs automatically. Existing interactive windows were
 preserved. Native engine and graphics runtime tests passed (11.58s and 1.82s).
+
+The pan probe now clears warmup observations immediately before measurement and
+validates the gesture boundaries and delivered moves as an ordered subsequence of
+the 80 injected right-button moves. Coalesced moves are allowed; extra, reordered,
+or wrong-button events fail the probe before startup verification can report an
+overall successful run. Matching coordinates cannot establish provenance for an
+identical external event. A rebuilt probe completed with 51 delivered moves,
+37 application callbacks, 43 rendered scenes, one blocked publication and zero
+script errors. See `evidence/kestrel/validated-pan-workload.json`. This establishes
+a usable workload trace only, not presentation timing or sustained performance.

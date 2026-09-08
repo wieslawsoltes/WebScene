@@ -226,6 +226,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 using var center = System.Text.Json.JsonDocument.Parse(await view.EvaluateTextAsync("(()=>{const r=document.getElementById('viewport').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()"));
                                 x = center.RootElement[0].GetDouble();
                                 y = center.RootElement[1].GetDouble();
+                                await view.EvaluateTextAsync("globalThis.kestrelPanProbe.events=[];globalThis.kestrelPanProbe.frames=[]");
                                 var baseline = view.CapturePerformanceSnapshot();
                                 var started = System.Diagnostics.Stopwatch.StartNew();
                                 if (surface.SubmitPointerButton(2, x, y, 2, true) == 0)
@@ -245,7 +246,10 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 await Task.Delay(500);
                                 var after = view.CapturePerformanceSnapshot();
                                 Console.WriteLine("Kestrel pan performance: " + System.Text.Json.JsonSerializer.Serialize(new { elapsedMilliseconds = started.Elapsed.TotalMilliseconds, baseline, after, delta = after.Since(baseline) }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
-                                Console.WriteLine("Kestrel pan diagnostics: " + await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;return {events:p.events,captures:p.captures,frames:p.frames,panning:document.getElementById('viewport').classList.contains('panning'),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
+                                var panDiagnostics = await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;return {events:p.events,captures:p.captures,frames:p.frames,panning:document.getElementById('viewport').classList.contains('panning'),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
+                                Console.WriteLine("Kestrel pan diagnostics: " + panDiagnostics);
+                                ValidatePanWorkload(panDiagnostics, x, y);
+                                Console.WriteLine("Kestrel pan workload validated (physical presentation remains unqualified).");
                             }
                             finally
                             {
@@ -298,4 +302,44 @@ internal sealed class WebGpuDocumentProbeApp : Application
         }
         base.OnFrameworkInitializationCompleted();
     }
+
+    private static void ValidatePanWorkload(string diagnostics, double x, double y)
+    {
+        using var parsed = System.Text.Json.JsonDocument.Parse(diagnostics);
+        var root = parsed.RootElement;
+        var events = root.GetProperty("events").EnumerateArray().ToArray();
+        if (root.GetProperty("errors").GetInt32() != 0 || root.GetProperty("panning").GetBoolean()
+            || events.Length < 3 || events[0].GetProperty("type").GetString() != "pointerdown"
+            || events[^1].GetProperty("type").GetString() != "pointerup")
+            throw new InvalidOperationException("Invalid Kestrel pan workload: missing gesture boundary or application error.");
+        static bool At(System.Text.Json.JsonElement e, double px, double py) =>
+            Math.Abs(e.GetProperty("x").GetDouble() - px) < 0.1
+            && Math.Abs(e.GetProperty("y").GetDouble() - py) < 0.1;
+        if (!At(events[0], x, y) || !At(events[^1], x, y)
+            || events[0].GetProperty("button").GetInt32() != 2
+            || events[^1].GetProperty("button").GetInt32() != 2)
+            throw new InvalidOperationException("Invalid Kestrel pan workload: unexpected gesture boundary.");
+        // Coalescing may omit moves, but delivered moves must remain an ordered
+        // subsequence of the injected path. This detects extra routed input;
+        // it does not prove the provenance of identical-coordinate input.
+        var nextStep = 1;
+        foreach (var e in events.Skip(1).Take(events.Length - 2))
+        {
+            if (e.GetProperty("type").GetString() != "pointermove"
+                || e.GetProperty("buttons").GetInt32() != 2)
+                throw new InvalidOperationException("Invalid Kestrel pan workload: unexpected pointer event.");
+            var matched = false;
+            while (nextStep <= 80)
+            {
+                var step = nextStep++;
+                var distance = step <= 40 ? step * 4 : (80 - step) * 4;
+                if (!At(e, x + distance, y + distance / 4.0)) continue;
+                matched = true;
+                break;
+            }
+            if (!matched)
+                throw new InvalidOperationException("Invalid Kestrel pan workload: moves differ from injected path; discard performance comparison.");
+        }
+    }
+
 }
