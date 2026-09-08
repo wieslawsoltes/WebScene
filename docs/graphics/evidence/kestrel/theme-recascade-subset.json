@@ -1,0 +1,48 @@
+{
+  "schema": "webscene-wpt-subset-result-v3",
+  "profile": "webscene-component-1",
+  "profileSha256": "52e16847a409688d6229b2ffd5b99ed14b505b99fd8e56861ffae187aacff57c",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "engine": "native",
+  "nativeEngineIdentity": "abi=3;sha256=3d61bda1b7b46c42159bbeb392e3d9f465e2cf334c971ee63f19a8d418768eef",
+  "chromiumIdentity": null,
+  "startedAt": "2026-09-08T07:46:41.353528+00:00",
+  "duration": "00:00:00.1863388",
+  "selection": "candidate",
+  "summary": {
+    "tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "timedOut": 0,
+    "harnessErrors": 0,
+    "subtests": 2,
+    "subtestsPassed": 2,
+    "subtestsFailed": 0
+  },
+  "results": [
+    {
+      "path": "contracts/css-root-theme-interaction-recascade.html",
+      "type": "testharness",
+      "status": "PASS",
+      "duration": "00:00:00.1841078",
+      "message": null,
+      "subtests": [
+        {
+          "name": "Conditional root custom properties track theme and descendant state changes",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        },
+        {
+          "name": "Pointer hover resolves the active root theme",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        }
+      ],
+      "artifacts": null,
+      "chromiumOracle": null
+    }
+  ]
+}

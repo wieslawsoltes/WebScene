@@ -2247,3 +2247,20 @@ vertical writing modes and full positioned-layout conformance remain unqualified
 The sizing rules are based on
 [CSS positioned layout](https://www.w3.org/TR/css-position-3/#abspos-margins)
 and the existing horizontal LTR model.
+
+
+### White UI investigation: theme and hover reduction (2026-09-08)
+
+Added the local candidate contract `css-root-theme-interaction-recascade.html`
+to exercise Kestrel's dark defaults, conditional light root variables, descendant
+class and focus changes, and testdriver pointer hover while switching themes.
+Both subtests pass against the current macOS native V8 library. The unchanged
+pinned upstream `css/selectors/hover-002.html` also passes both subtests.
+Machine-readable results are in `evidence/kestrel/theme-recascade-subset.json`
+and `evidence/kestrel/upstream-hover-subset.json`.
+
+This rules out the reduced computed-style theme scenario as a reproduction; it
+is not evidence that the reported white painted regions or canvas flicker are
+fixed. Full Kestrel painting, GPU image presentation, and resize remain under
+investigation. The new contract is local coverage, not an upstream WPT import,
+and remains candidate pending broader qualification.

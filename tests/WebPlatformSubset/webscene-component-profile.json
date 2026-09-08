@@ -1065,6 +1065,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/css-root-theme-interaction-recascade.html",
+      "type": "testharness",
+      "capabilities": ["css-custom-properties", "attribute-selector", "focus-pseudo-class"],
+      "evidence": ["kestrel-white-ui-investigation"],
+      "reason": "Reduced Kestrel dark/light theme and interaction recascade regression. This local contract does not establish upstream WPT or pixel presentation conformance."
+    },
+    {
       "path": "contracts/scroll-static-absolute-containing-block.html",
       "type": "testharness",
       "capabilities": ["absolute-containing-block-scroll-offset", "static-overflow-descendant-overlay"],
