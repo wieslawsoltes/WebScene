@@ -510,3 +510,14 @@ counts nevertheless do not support presenter admission failure as this run's
 explanation. Investigate compositor callback cadence and host scheduling next.
 All temporary tracing was removed and the probe rebuilt successfully. Evidence:
 `evidence/kestrel/acquisition-reasons-trace.json`.
+
+Callback-cadence audit corrects the inference from draw intervals: the traced run
+had 74 compositor animation callbacks over 1.853s (~39.94 callbacks/s), but only
+20 rendered scenes. Slow draw intervals therefore do not establish an equally
+slow native vsync timer. Across four captured runs compositor rates vary roughly
+33–52 callbacks/s; application and draw rates differ further. These intervals
+include settling and are not FPS qualifications. The probe uses the ordinary
+Avalonia UsePlatformDetect configuration without a custom render timer override.
+Before altering that configuration, correlate individual compositor ticks with
+native publication availability and frame demand. Evidence:
+`evidence/kestrel/callback-cadence-audit.json`.
