@@ -324,9 +324,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 export async function archiveReferenceHarness(output, sourceDirectory = here) {
   const hashes = {}, files = {};
   await mkdir(path.join(output, "harness"), { recursive: true });
-  for (const name of ["capture-chrome-reference.mjs", "chrome-session.mjs", "reference-workloads.mjs", "presentation-trace.mjs"]) {
+  for (const name of ["capture-chrome-reference.mjs", "chrome-session.mjs", "reference-workloads.mjs", "presentation-trace.mjs",
+    "prepare-kestrel.py", "../WebPlatformSubset/chrome/cdp-client.mjs"]) {
     const bytes = await readFile(path.join(sourceDirectory, name));
-    const file = `harness/${name}`;
+    const file = path.posix.join("harness/tests/GraphicsCompatibility", name);
+    await mkdir(path.dirname(path.join(output, file)), { recursive: true });
     await writeFile(path.join(output, file), bytes);
     hashes[name] = sha(bytes);
     files[name] = { file, sha256: hashes[name], bytes: bytes.length };

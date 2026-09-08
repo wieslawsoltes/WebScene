@@ -12,7 +12,8 @@ def verify(root):
     if evidence.get('status') != 'captured':
         raise ValueError('Reference capture is incomplete or unavailable')
     required = {'capture-chrome-reference.mjs', 'chrome-session.mjs',
-                'reference-workloads.mjs', 'presentation-trace.mjs'}
+                'reference-workloads.mjs', 'presentation-trace.mjs',
+                'prepare-kestrel.py', '../WebPlatformSubset/chrome/cdp-client.mjs'}
     if set(evidence.get('harnessFiles', {})) != required:
         raise ValueError('Exact harness archive is missing')
     checked = set()

@@ -84,10 +84,14 @@ test("reference archive retains exact harness bytes after the source changes", a
   t.after(() => rm(root, { recursive: true, force: true }));
   const source = path.join(root, "source"), output = path.join(root, "capture");
   await mkdir(source);
-  const names = ["capture-chrome-reference.mjs", "chrome-session.mjs", "reference-workloads.mjs", "presentation-trace.mjs"];
-  for (const name of names) await writeFile(path.join(source, name), `// original ${name}\r\n`);
+  const names = ["capture-chrome-reference.mjs", "chrome-session.mjs", "reference-workloads.mjs", "presentation-trace.mjs",
+    "prepare-kestrel.py", "../WebPlatformSubset/chrome/cdp-client.mjs"];
+  for (const name of names) {
+    await mkdir(path.dirname(path.join(source, name)), { recursive: true });
+    await writeFile(path.join(source, name), `// original ${name}\r\n`);
+  }
   const archive = await archiveReferenceHarness(output, source);
-  await writeFile(path.join(source, names[0]), "// changed after capture");
+  for (const name of names) await writeFile(path.join(source, name), "// changed after capture");
   for (const name of names) {
     const stored = await readFile(path.join(output, archive.files[name].file));
     assert.equal(stored.toString(), `// original ${name}\r\n`);

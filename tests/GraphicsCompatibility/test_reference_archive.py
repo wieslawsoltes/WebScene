@@ -15,23 +15,33 @@ class ArchiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             names = ['capture-chrome-reference.mjs', 'chrome-session.mjs',
-                     'reference-workloads.mjs', 'presentation-trace.mjs']
+                     'reference-workloads.mjs', 'presentation-trace.mjs',
+                     'prepare-kestrel.py', '../WebPlatformSubset/chrome/cdp-client.mjs']
             digest = hashlib.sha256(b'source').hexdigest()
             for name in names:
-                (root / name).write_bytes(b'source')
+                target = root / 'harness/tests/GraphicsCompatibility' / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b'source')
             data = {'status': 'captured', 'harness': dict.fromkeys(names, digest),
-                    'harnessFiles': {n: {'file': n, 'sha256': digest, 'bytes': 6} for n in names}}
+                    'harnessFiles': {n: {'file': str(Path('harness/tests/GraphicsCompatibility') / n), 'sha256': digest, 'bytes': 6} for n in names}}
             def save():
                 (root / 'reference.json').write_text(json.dumps(data))
             save()
-            self.assertEqual(archive.verify(root)['referencedFiles'], 4)
-            (root / names[0]).write_bytes(b'changed')
+            self.assertEqual(archive.verify(root)['referencedFiles'], 6)
+            helper = data['harnessFiles'].pop(names[-1])
+            save()
+            with self.assertRaisesRegex(ValueError, 'harness archive is missing'):
+                archive.verify(root)
+            data['harnessFiles'][names[-1]] = helper
+            save()
+            target = root / data['harnessFiles'][names[0]]['file']
+            target.write_bytes(b'changed')
             with self.assertRaisesRegex(ValueError, 'hash mismatch'):
                 archive.verify(root)
-            (root / names[0]).unlink()
+            target.unlink()
             with self.assertRaises(FileNotFoundError):
                 archive.verify(root)
-            (root / names[0]).write_bytes(b'source')
+            target.write_bytes(b'source')
             data['harnessFiles'][names[0]]['file'] = '../outside'
             save()
             with self.assertRaisesRegex(ValueError, 'escapes'):

@@ -60,3 +60,5 @@ python3 -m unittest discover -s tests/GraphicsCompatibility -p test_reference_ar
 ```
 
 This rejects incomplete captures, missing harness sources, missing or changed referenced artifacts, and paths outside the archive. It checks archive integrity only; it does not establish full matrix coverage, pixel correctness, hardware qualification or performance. Preserve the complete directory, including its exact harness sources and generated inputs.
+
+New captures retain all six capture-tool sources, including the fixture preparation script and imported CDP client, under `harness/tests/` with their relative paths preserved. The integrity verifier now requires these helpers. Earlier four-source captures retain their historical verification results but fail this strengthened source-completeness requirement; do not silently relabel those archives as complete. Reproduction still uses the repository and verified original fixture, not the archived scripts as a standalone package.
