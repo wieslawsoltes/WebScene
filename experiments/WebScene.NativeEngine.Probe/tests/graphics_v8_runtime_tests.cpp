@@ -817,6 +817,21 @@ void test_runtime_webgpu_installation() {
     require(runtime.pump_animation_frame_task()&&runtime.has_pending_animation_frame_task(),"First GPU RAF lost remaining rendering work");
     require(runtime.pump_animation_frame_task()&&!runtime.has_pending_animation_frame_task(),"GPU RAF group did not finish");
     require(runtime.execute("domGPUContext.unconfigure();","gpu-raf-cleanup"),"GPU RAF cleanup failed");
+    require(runtime.execute(R"JS(
+        domGPUContext.configure({device:installedDevice,format:navigator.gpu.getPreferredCanvasFormat()});
+        domGPUCanvas.width=12;
+    )JS","gpu-resize-no-redraw"),"Resize setup failed");
+    require(!runtime.has_open_gpu_output(),"Bitmap reset without redraw indefinitely held scene publication");
+    require(runtime.execute("requestAnimationFrame(()=>requestAnimationFrame(()=>{}));","gpu-resize-redraw"),"Resize redraw setup failed");
+    require(runtime.has_open_gpu_output(),"Queued resize redraw allowed an intermediate blank scene");
+    runtime.signal_animation_frame(132);
+    require(runtime.pump_animation_frame_task(),"Resize opportunity failed");
+    require(!runtime.has_open_gpu_output(),"Resize without drawing held publication beyond its rendering opportunity");
+    runtime.signal_animation_frame(148);
+    require(runtime.pump_animation_frame_task(),"Nested resize RAF failed");
+    require(runtime.execute("domGPUCanvas.height=3;requestAnimationFrame(()=>{});domGPUContext.unconfigure();","gpu-resize-unconfigure"),"Resize unconfigure setup failed");
+    require(!runtime.has_open_gpu_output(),"Unconfigured canvas held a resize redraw boundary");
+
 #endif
     require(runtime.load_url("https://graphics.test/webgpu-next"),"WebGPU navigation failed");
     require(runtime.execute("if('gpu' in navigator||'GPUBufferUsage' in globalThis||'GPUDeviceLostInfo' in globalThis||'GPUError' in globalThis||'GPUValidationError' in globalThis||'GPUOutOfMemoryError' in globalThis||'GPUInternalError' in globalThis)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");

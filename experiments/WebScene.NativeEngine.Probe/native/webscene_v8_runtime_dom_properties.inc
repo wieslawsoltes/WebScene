@@ -1515,7 +1515,13 @@
         canvas.gpu_snapshot.reset();
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
         const auto gpu=self.gpu_canvases.find(self.wrapper_key(node));
-        if(gpu!=self.gpu_canvases.end())gpu->second.context->resize(canvas.backing.width(),canvas.backing.height());
+        if(gpu!=self.gpu_canvases.end()) {
+            gpu->second.context->resize(canvas.backing.width(),canvas.backing.height());
+            // ResizeObserver may reset the bitmap and queue a redraw for the
+            // next host RAF. Keep the preceding coherent scene until that
+            // opportunity, rather than publishing an intermediate blank canvas.
+            gpu->second.bitmap_reset_awaiting_frame=true;
+        }
 #endif
         advance_canvas_generation(node,false);
         canvas.commands.clear();

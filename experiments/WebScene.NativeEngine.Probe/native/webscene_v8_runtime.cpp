@@ -237,6 +237,7 @@ struct v8_dom_runtime::implementation final {
         dom_node* node;
         std::shared_ptr<webscene::graphics::dawn_iosurface_canvas_host> provider;
         std::unique_ptr<webscene::graphics::v8_webgpu_canvas_context> context;
+        bool bitmap_reset_awaiting_frame=false;
     };
     std::unordered_map<uint64_t,gpu_canvas_entry> gpu_canvases;
     bool gpu_rendering_opportunity=false;
@@ -4559,6 +4560,7 @@ void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
     for(auto& [key,canvas]:impl_->gpu_canvases)
         if(canvas.context->is_configured()&&!canvas.context->has_current_texture()&&!canvas.provider->can_acquire())
             return;
+    for(auto& [key,canvas]:impl_->gpu_canvases)canvas.bitmap_reset_awaiting_frame=false;
     if(impl_->webgpu)impl_->gpu_rendering_opportunity=true;
 #endif
     if (impl_->is_text_control(impl_->active_element)
@@ -4724,7 +4726,9 @@ bool v8_dom_runtime::has_open_gpu_output() const
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
     if(impl_->gpu_rendering_opportunity)return true;
     for(const auto& [key,canvas]:impl_->gpu_canvases)
-        if(canvas.context->has_current_texture())return true;
+        if(canvas.context->has_current_texture()
+            || (canvas.bitmap_reset_awaiting_frame && canvas.context->is_configured()
+                && impl_->has_waiting_animation_frame_task()))return true;
 #endif
     return false;
 }

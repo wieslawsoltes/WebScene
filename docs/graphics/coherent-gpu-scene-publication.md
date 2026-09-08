@@ -544,3 +544,16 @@ nonzero failure exit instead of allowing startup success to mask contamination.
 Future sequence-to-scene correlation must be described as consumed-input progress,
 not proof that each coalesced move was individually drawn. Evidence:
 `evidence/kestrel/input-sequence-trace-validation.json`.
+
+User recording (8.27s, 60Hz capture) shows the drawing/grid disappearing during
+window resize while surrounding HTML remains. Kestrel's ResizeObserver resets the
+bitmap and queues invalidate() through RAF. The native engine could publish the
+cleared canvas between that observer and its next rendering opportunity. Bitmap
+reset now records a one-opportunity hold, effective only while configured and a
+RAF callback is waiting. Host-frame admission clears the hold; normal GPU output
+capture/completion takes over. A callback that draws nothing cannot indefinitely
+retain the preceding scene, nor can unconfigure or absence of RAF.
+Runtime regressions for these boundaries pass, and all four unchanged Kestrel
+resize geometry checkpoints pass. This is a candidate fix for the recorded
+flicker; a new physical capture still needs to verify it and HTML/canvas 60fps.
+Evidence: `evidence/kestrel/resize-redraw-boundary.json`.
