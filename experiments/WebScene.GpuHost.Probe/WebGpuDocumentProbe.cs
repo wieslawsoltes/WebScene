@@ -261,6 +261,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                     submittedMoves,
                                     publications = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted),
                                     renderedScenes = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted),
+                                    scheduling = surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted),
                                     // Recorded at the end of OnRender, before platform presentation.
                                     drawCallbackCompletions = surface.PresentationTimestamps.Where(timestamp => timestamp >= traceStarted),
                                     physicalPresentationVerified = false
@@ -316,6 +317,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                     originalWidth, width, initialGeometry = setup.RootElement, baseline, after, delta = after.Since(baseline), submittedMoves,
                                     publications = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted),
                                     renderedScenes = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted),
+                                    scheduling = surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted),
                                     physicalPresentationVerified = false
                                 }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
                                 Console.WriteLine("Kestrel sidebar workload validated (physical presentation remains unqualified).");

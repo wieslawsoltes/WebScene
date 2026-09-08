@@ -713,6 +713,8 @@ internal sealed unsafe class NativeSceneCompositionHandler
         {
             Interlocked.Increment(ref AnimationFrameCount);
         }
+        _renderObserver.RecordScheduling("frame", _publicationMailbox.PendingCount,
+            _appliedRevision, _gpuPresenter?.HasPendingRetirements == true);
         var frameTimestamp = Stopwatch.GetTimestamp();
         var frameTimestampMilliseconds =
             frameTimestamp * 1000.0 / Stopwatch.Frequency;
@@ -910,6 +912,9 @@ internal sealed unsafe class NativeSceneCompositionHandler
         options.ConsumerCapabilities = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability
             | (_gpuPresenter?.SupportsProducerGpuWaits == true ? NativeWebSceneApi.ProducerGpuWaitCapability : 0UL);
         var status = NativeSceneLeaseV3.Acquire(_engine, in options, true, out var scene);
+        if (_performanceInstrumentation.IsEnabled)
+            _renderObserver.RecordScheduling("acquire:" + status, _publicationMailbox.PendingCount,
+            _appliedRevision, _gpuPresenter?.HasPendingRetirements == true);
         if (status is NativeSceneAcquireStatus.Empty or NativeSceneAcquireStatus.Backpressure) return false;
         if (status != NativeSceneAcquireStatus.Success || scene is null) throw new InvalidOperationException($"GPU scene acquisition failed: {status}");
         using (scene)
@@ -923,6 +928,8 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 var monitoring = _performanceInstrumentation.IsEnabled;
                 var started = monitoring ? Stopwatch.GetTimestamp() : 0;
                 var applied = _gpuPresenter!.ApplyScene(scene, _renderer);
+                if (monitoring) _renderObserver.RecordScheduling("apply:" + applied, _publicationMailbox.PendingCount,
+                    view->Header.Revision, _gpuPresenter.HasPendingRetirements);
                 if (applied == NativeGpuSceneApplyResult.Backpressure) return;
                 _publicationMailbox.TryConsume();
                 if (applied != NativeGpuSceneApplyResult.Applied)

@@ -89,12 +89,16 @@ internal sealed class NativePerformanceInstrumentation
     }
 }
 
+public readonly record struct NativeSceneSchedulingSample(
+    long Timestamp, string Stage, long PendingPublications, ulong Revision, bool PendingRetirements);
+
 internal sealed class NativeSceneRenderObserver
 {
     private const uint SceneComponentReady = 4;
     private readonly object _viewportGate = new();
     private readonly List<int> _renderedViewportHeights = [];
     private readonly Queue<NativeSceneRenderSample> _renderedScenes = new(4096);
+    private readonly Queue<NativeSceneSchedulingSample> _scheduling = new(4096);
     private readonly Queue<long> _presentations = new(4096);
     private readonly NativePerformanceInstrumentation _instrumentation;
     private long _renderedSceneCount;
@@ -158,6 +162,21 @@ internal sealed class NativeSceneRenderObserver
             {
                 return _presentations.ToArray();
             }
+        }
+    }
+
+    public NativeSceneSchedulingSample[] SchedulingSamples
+    {
+        get { lock (_viewportGate) return _scheduling.ToArray(); }
+    }
+
+    public void RecordScheduling(string stage, long pending, ulong revision, bool retiring)
+    {
+        if (!_instrumentation.IsEnabled) return;
+        lock (_viewportGate)
+        {
+            if (_scheduling.Count == 4096) _scheduling.Dequeue();
+            _scheduling.Enqueue(new(Stopwatch.GetTimestamp(), stage, pending, revision, retiring));
         }
     }
 

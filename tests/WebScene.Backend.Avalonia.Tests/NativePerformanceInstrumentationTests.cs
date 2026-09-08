@@ -16,12 +16,14 @@ public sealed class NativePerformanceInstrumentationTests
             ViewportHeight = 480
         };
 
+        observer.RecordScheduling("frame", 2, 7, false);
         observer.RecordPresented();
         observer.RecordRendered(header);
 
         Assert.False(instrumentation.IsEnabled);
         Assert.Equal(1, observer.RenderedSceneCount);
         Assert.NotEqual(0, observer.FirstRenderedSceneTimestamp);
+        Assert.Empty(observer.SchedulingSamples);
         Assert.Empty(observer.Presentations);
         Assert.Empty(observer.RenderedScenes);
         Assert.Empty(observer.RenderedViewportHeights);
@@ -42,6 +44,12 @@ public sealed class NativePerformanceInstrumentationTests
 
         observer.RecordPresented();
         observer.RecordRendered(header);
+
+        for (var i = 0; i < 4100; ++i)
+            observer.RecordScheduling("frame", i % 3, (ulong)i, false);
+        Assert.Equal(4096, observer.SchedulingSamples.Length);
+        Assert.Equal(4UL, observer.SchedulingSamples[0].Revision);
+        Assert.Equal(4099UL, observer.SchedulingSamples[^1].Revision);
 
         Assert.True(instrumentation.IsEnabled);
         Assert.Single(observer.Presentations);

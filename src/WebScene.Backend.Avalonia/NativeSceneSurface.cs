@@ -378,6 +378,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     public long[] RenderedSceneTimestamps
         => _renderObserver.RenderedSceneTimestamps;
 
+    public NativeSceneSchedulingSample[] SchedulingSamples => _renderObserver.SchedulingSamples;
+
     public NativeSceneRenderSample[] RenderedScenes
         => _renderObserver.RenderedScenes;
 
