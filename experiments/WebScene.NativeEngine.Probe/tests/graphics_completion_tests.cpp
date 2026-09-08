@@ -137,5 +137,41 @@ int main() {
     }
     require(stress.metrics().admitted==16000 && stress.metrics().delivered==16000);
     require(stress.metrics().high_water==16 && stress.metrics().saturated_reservations==1000);
+    // Shutdown can detach the wake target while the driver still owns mailbox
+    // tickets. Exercise both callback retirement orders across fresh mailboxes.
+    for(uint64_t round=0;round<500;++round) {
+        auto shutdown_wake=std::make_shared<wake_counter>();
+        std::weak_ptr<completion_wake> weak_wake=shutdown_wake;
+        auto closing=std::make_shared<completion_mailbox>(16,shutdown_wake);
+        std::vector<completion_ticket> tickets;
+        for(uint64_t index=0;index<16;++index)
+            tickets.push_back(closing->reserve(index,a).value());
+        std::atomic<bool> start{false};
+        std::thread driver([closing,&tickets,&start] {
+            while(!start.load(std::memory_order_acquire)) std::this_thread::yield();
+            for(auto ticket:tickets) {
+                closing->publish(ticket,completion_status::device_lost);
+                std::this_thread::yield();
+            }
+        });
+        start.store(true,std::memory_order_release);
+        closing->close();
+        shutdown_wake.reset();
+        require(!closing->reserve(99,b));
+        bool seen[16]{};
+        size_t delivered=0;
+        while(closing->drain_one([&](auto record) {
+            require(record.operation<16 && !seen[record.operation]);
+            seen[record.operation]=true;++delivered;
+            require(record.status==completion_status::cancelled);
+        })) {}
+        require(delivered==16);
+        driver.join();
+        require(weak_wake.expired());
+        require(!closing->has_ready() && !closing->has_pending());
+        const auto metrics=closing->metrics();
+        require(metrics.native_pending==0 && metrics.occupied==0 && metrics.delivered==16);
+        for(auto ticket:tickets) require(!closing->publish(ticket,completion_status::success));
+    }
     std::cout << "completion capacity, engine affinity, isolation and late-callback cancellation passed\n";
 }
