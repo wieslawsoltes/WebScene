@@ -39,8 +39,11 @@ internal sealed class NativeMetalRetainedGpuImage : INativeRetainedGpuImage
             var status=NativeGpuImageConsumerV3.Acquire(source,out result._consumer);
             if(status==NativeSceneAcquireStatus.Backpressure) return null;
             if(status!=NativeSceneAcquireStatus.Success) throw new InvalidOperationException($"Metal consumer acquisition failed: {status}");
-            try { result._texture=NativeMetalIOSurfaceTexture.Import(device,result._consumer!); }
-            catch { result._consumer!.Complete(); throw; }
+            try {
+                result._texture=NativeMetalIOSurfaceTexture.Import(device,result._consumer!);
+                NativeMetalProducerWait.Submit(queue,result._consumer!);
+            }
+            catch { result._texture?.Dispose(); result._consumer!.Complete(); throw; }
         }
         try {
             using var backend=NativeMetalBackendTexture.Create(result._texture.Width,result._texture.Height,result._texture.Handle);

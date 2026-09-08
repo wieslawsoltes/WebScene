@@ -197,6 +197,42 @@ public sealed class NativeGpuSceneInteropTests
         Assert.Equal(0, alive());
     }
 
+    [IOSurfaceFixtureFact]
+    public void MetalDependencyBorrowDefersCompletionAndSurvivesCallbackFailure()
+    {
+        NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
+        // Keep fixture code loaded: native provider vtables may outlive this method
+        // if a test fails. Unloading code before releasing a provider is unsafe.
+        var library = NativeLibrary.Load(Environment.GetEnvironmentVariable("WEBSCENE_TEST_GPU_FIXTURE_LIBRARY")!);
+        var create = Marshal.GetDelegateForFunctionPointer<CreateIOSurface>(
+            NativeLibrary.GetExport(library, "webscene_test_create_iosurface"));
+        var alive = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(
+            NativeLibrary.GetExport(library, "webscene_test_iosurface_alive"));
+        Assert.Equal(1, create(out var image));
+        Assert.Equal(NativeSceneAcquireStatus.Success, NativeGpuImageConsumerV3.Acquire(image, out var consumer));
+        image.Dispose();
+        Assert.NotNull(consumer);
+        consumer.WithMetalEvents(events =>
+        {
+            Assert.Empty(events); // Completion-certified fixture has no producer dependencies.
+            Task.Run(consumer.Complete).GetAwaiter().GetResult();
+            Assert.Equal(1, alive()); // Completion must not free the borrowed native object.
+            Assert.Throws<InvalidOperationException>(() => consumer.WithMetalEvents(_ => { }));
+        });
+        Assert.Equal(0, alive());
+        Assert.Throws<InvalidOperationException>(consumer.Complete);
+
+        Assert.Equal(1, create(out image));
+        Assert.Equal(NativeSceneAcquireStatus.Success, NativeGpuImageConsumerV3.Acquire(image, out var retry));
+        image.Dispose();
+        Assert.NotNull(retry);
+        Assert.Throws<ApplicationException>(() => retry.WithMetalEvents(_ => throw new ApplicationException("Import failed")));
+        Assert.Equal(1, alive()); // An importer exception cannot certify GPU completion.
+        retry.WithMetalEvents(_ => { });
+        retry.Complete();
+        Assert.Equal(0, alive());
+    }
+
     [Fact]
     public void LayoutMatchesNativeSceneAndImageAbi()
     {

@@ -86,6 +86,11 @@ public static unsafe partial class NativeWebSceneApi
     internal static extern void GpuImageCompleteConsumerV3(IntPtr consumer);
     [DllImport(LibraryName, EntryPoint = "webscene_gpu_image_get_iosurface_v3", CallingConvention = CallingConvention.Cdecl)]
     internal static extern byte GpuImageGetIOSurfaceV3(IntPtr consumer, ref NativeGpuIOSurfaceViewV3 view);
+    [DllImport(LibraryName, EntryPoint="webscene_gpu_image_dependency_count_v3", CallingConvention=CallingConvention.Cdecl)]
+    internal static extern byte GpuImageDependencyCountV3(IntPtr consumer,out uint count);
+    [DllImport(LibraryName, EntryPoint="webscene_gpu_image_get_metal_event_v3", CallingConvention=CallingConvention.Cdecl)]
+    internal static extern byte GpuImageGetMetalEventV3(IntPtr consumer,uint index,ref NativeGpuMetalEventViewV3 view);
+
 
 }
 
@@ -236,6 +241,15 @@ public static unsafe partial class NativeWebSceneApi
 // Explicit GPU completion ownership: deliberately neither IDisposable nor a
 // finalizable SafeHandle. The presenter must retain this wrapper until its GPU
 // completion path calls Complete; GC cannot certify that GPU use has ended.
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativeGpuMetalEventViewV3
+{
+    internal uint StructSize, Version;
+    internal IntPtr BorrowedSharedEvent;
+    internal ulong SignaledValue;
+    internal static NativeGpuMetalEventViewV3 Empty => new() { StructSize=(uint)Marshal.SizeOf<NativeGpuMetalEventViewV3>(), Version=3 };
+}
+
 internal sealed class NativeGpuImageConsumerV3
 {
     private readonly object _gate = new();
@@ -292,6 +306,36 @@ internal sealed class NativeGpuImageConsumerV3
                 if (_completionRequested && _borrows == 0) { retired = _handle; _handle = IntPtr.Zero; }
             }
             if (retired != IntPtr.Zero) NativeWebSceneApi.GpuImageCompleteConsumerV3(retired);
+        }
+    }
+
+    // Event pointers are borrowed only for this callback. Consumer completion
+    // requested concurrently or reentrantly waits for this borrow to leave.
+    internal void WithMetalEvents(Action<NativeGpuMetalEventViewV3[]> use)
+    {
+        ArgumentNullException.ThrowIfNull(use);
+        IntPtr pointer;
+        lock(_gate) {
+            if(_completionRequested) throw new InvalidOperationException("GPU consumer already completed.");
+            ++_borrows; pointer=_handle;
+        }
+        try {
+            if(NativeWebSceneApi.GpuImageDependencyCountV3(pointer,out var count)==0)
+                throw new InvalidOperationException("Producer dependency lookup failed.");
+            var events=new NativeGpuMetalEventViewV3[checked((int)count)];
+            for(uint i=0;i<count;++i) {
+                events[i]=NativeGpuMetalEventViewV3.Empty;
+                if(NativeWebSceneApi.GpuImageGetMetalEventV3(pointer,i,ref events[i])==0 || events[i].BorrowedSharedEvent==IntPtr.Zero)
+                    throw new InvalidOperationException("Producer Metal event lookup failed.");
+            }
+            use(events);
+        } finally {
+            IntPtr retired=IntPtr.Zero;
+            lock(_gate) {
+                --_borrows;
+                if(_completionRequested && _borrows==0) { retired=_handle;_handle=IntPtr.Zero; }
+            }
+            if(retired!=IntPtr.Zero) NativeWebSceneApi.GpuImageCompleteConsumerV3(retired);
         }
     }
 
