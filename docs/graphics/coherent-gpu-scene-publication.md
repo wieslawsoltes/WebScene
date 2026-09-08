@@ -363,3 +363,53 @@ The Ganesh fixture completes 32 frames and retirement with zero explicit transpo
 copies (eight diagnostic readbacks; physical presentation not certified).
 Evidence: `evidence/kestrel/consumer-retirement-after-draw.json`. No temporary
 trace code or separate-context polling experiment remains in the implementation.
+
+### Vsync/mailbox integration audit (2026-09-08)
+
+The macOS Avalonia path already sends its compositor frame timestamp through
+`NativeSceneComposition.OnAnimationFrameUpdate` to native frame input.
+`v8_dom_runtime::signal_animation_frame` admits the RAF batch only when configured
+GPU canvases have available storage. Finishing that rendering opportunity submits
+current textures and captures versioned image dependencies. Scene publication
+uses the existing bounded acknowledgement mailbox, including the staged scene's
+CPU/GPU coherence checks. GPU completion wakes the native worker; it does not
+constitute a new display vsync or permission to invoke another RAF batch.
+
+There is still a separate producer timing gate: the worker permits ordinary scene
+publication only after `next_scene_publication`, advanced on a fixed 16ms cadence.
+Only paired resize/host-frame boundaries currently bypass that gate. This is an
+observed architectural mismatch with display-driven scheduling, not yet proof of
+the remaining pan bottleneck. A ready GPU dependency may encounter this gate
+before entering the compositor mailbox. Completion-to-publication delay must be
+measured separately from actual GPU execution and consumer fence collection.
+
+Next scheduling verification must cover completed ordinary host-frame batches,
+asynchronous GPU completion after that batch, full-mailbox acknowledgement,
+multiple canvases, resize, and idle behavior. Publication eligibility should
+follow completed rendering opportunities and mailbox capacity without adding an
+independent display clock. Completion must never run future RAF callbacks, expose
+partial CPU/GPU scenes, introduce unbounded queued frames, or block the compositor.
+Retain a bounded fallback for non-frame-driven document updates. Qualify against
+actual presented-frame intervals on the user's monitors; application RAF counts
+and the nominal 16ms interval do not establish sustained 60fps.
+
+Follow-up control-flow inspection narrows the suspected gate: a deferred capture
+or commit does not advance `next_scene_publication`. An ordinary staged scene was
+therefore captured after the gate had already opened, and its later GPU completion
+normally retries against that same expired deadline. Simply exempting staged
+scenes from the gate would not remove the ordinary pan delay; that trial was
+removed before retention. The remaining question is delay *before initial scene
+capture*, and whether ordinary host-frame completion should bypass the producer
+phase as paired resize already does. This correction supersedes any inference
+above that every GPU-completion retry incurs another 16ms wait.
+
+The next unchanged-Kestrel run completed with zero application errors, but
+recorded 185 pointer moves for the scheduled 80-move workload. It is not a valid
+controlled baseline. Both attached LG displays report 3840x2160, logical
+1920x1080 at 60Hz. The run observed 89 blocked publication attempts and 56
+published scenes over 1.859s including settling; neither counter measures physical
+presentation. Evidence is retained in
+`evidence/kestrel/vsync-current-pan-investigation.json`. Before comparing scheduling
+changes, the probe must distinguish its injected workload from other routed input
+and invalidate contaminated runs automatically. Existing interactive windows were
+preserved. Native engine and graphics runtime tests passed (11.58s and 1.82s).
