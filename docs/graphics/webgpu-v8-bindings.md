@@ -2013,3 +2013,19 @@ later shrink steps; complete resize/layout behavior needs investigation. Live
 drag smoothness, interaction, editing, export, all render paths, native uncaptured
 errors, WebGL fallback and cross-platform qualification remain open. Measurements
 and original-document hash are recorded in first-render-and-resize.json.
+
+### Original Kestrel view transitions (2026-09-08)
+
+The --exercise-kestrel probe option dispatches change events through the original
+view and visual-style controls. It samples iso/shaded-edges, front/shaded,
+iso/xray, top/wireframe and iso/shaded-edges, with 750 ms between changes.
+All five stages reported WebGPU and zero application errors. A separate run
+with --verify-kestrel passed the startup/error-history gate. The final isometric
+viewport was visually inspected and is visibly different from the top view.
+Evidence is in view-transitions.json and macos-isometric-webgpu.png. The original
+archive document is still extracted without modifications.
+
+This extends real-app evidence beyond startup but is a scripted DOM-event smoke
+test. It does not prove native pointer delivery, editing, export, shaded mesh
+rendering (the sample drawing is flat), or correct UI layout. The existing
+clipping/toolbar/layer presentation defects remain visible.

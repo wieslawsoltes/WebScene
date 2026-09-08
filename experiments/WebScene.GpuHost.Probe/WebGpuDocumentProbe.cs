@@ -103,6 +103,15 @@ internal sealed class WebGpuDocumentProbeApp : Application
                     {
                         await Task.Delay(3000);
                         Console.WriteLine(await view.EvaluateTextAsync("({ready:document.documentElement.dataset.ready,backend:document.getElementById('engine-label')?.textContent,history:document.getElementById('command-history')?.textContent,errors:document.querySelectorAll('#command-history .history-error').length,gpu:!!navigator.gpu})"));
+                        if (arguments.Contains("--exercise-kestrel"))
+                        {
+                            foreach (var step in new[] { ("iso", "shaded-edges"), ("front", "shaded"), ("iso", "xray"), ("top", "wireframe"), ("iso", "shaded-edges") })
+                            {
+                                await view.EvaluateTextAsync($"(()=>{{const v=document.getElementById('view-select'),s=document.getElementById('style-select');v.value='{step.Item1}';v.dispatchEvent(new Event('change',{{bubbles:true}}));s.value='{step.Item2}';s.dispatchEvent(new Event('change',{{bubbles:true}}));}})()");
+                                await Task.Delay(750);
+                                Console.WriteLine("Kestrel view: " + await view.EvaluateTextAsync("({view:document.getElementById('view-select').value,style:document.getElementById('style-select').value,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length,history:document.getElementById('command-history').textContent})"));
+                            }
+                        }
                         if (arguments.Contains("--resize-kestrel"))
                         {
                             foreach (var size in new[] { (980, 680), (1440, 900), (1100, 740), (1280, 800) })
