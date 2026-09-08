@@ -1511,6 +1511,30 @@ public static class NativeTextShaping
             ? 1.014f
             : 1f;
 
+    // Match the process-lifetime system font resolution policy used by Typefaces,
+    // but bound negative family probes so arbitrary CSS cannot grow this cache.
+    private static readonly ConcurrentDictionary<string, bool> InstalledFontFamilies =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly object InstalledFontFamilyGate = new();
+
+    private static bool IsInstalledFontFamily(string family)
+    {
+        if (InstalledFontFamilies.TryGetValue(family, out var installed)) return installed;
+        using var typeface = SKTypeface.FromFamilyName(family);
+        installed = typeface is not null && string.Equals(typeface.FamilyName, family,
+            StringComparison.OrdinalIgnoreCase);
+        lock (InstalledFontFamilyGate)
+        {
+            if (!InstalledFontFamilies.ContainsKey(family))
+            {
+                if (InstalledFontFamilies.Count >= 256) InstalledFontFamilies.Clear();
+                InstalledFontFamilies.TryAdd(family, installed);
+            }
+        }
+        return installed;
+    }
+
     internal static bool UsesMacSystemUiMetrics(
         string familyList,
         WebTypefaceRegistry? registry)
@@ -1537,9 +1561,7 @@ public static class NativeTextShaping
                 return false;
             }
 
-            using var installed = SKTypeface.FromFamilyName(family);
-            if (installed is not null
-                && string.Equals(installed.FamilyName, family, StringComparison.OrdinalIgnoreCase))
+            if (IsInstalledFontFamily(family))
             {
                 return false;
             }

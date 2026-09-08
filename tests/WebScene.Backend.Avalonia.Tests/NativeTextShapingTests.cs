@@ -944,6 +944,22 @@ public sealed class NativeTextShapingTests
     }
 
     [Fact]
+    public void CachedMissingSystemFamilyDoesNotHideNewDocumentWebFont()
+    {
+        var family = "WebScene Missing Family " + Guid.NewGuid().ToString("N");
+        var list = family + ", system-ui";
+        using var document = NativeTextShaping.CreateWebTypefaceRegistry();
+        using var otherDocument = NativeTextShaping.CreateWebTypefaceRegistry();
+        Assert.True(NativeTextShaping.UsesMacSystemUiMetrics(list, document));
+        Assert.True(NativeTextShaping.UsesMacSystemUiMetrics(list.ToUpperInvariant(), document));
+        var (data, _) = FindDistinctPlatformFonts();
+        Assert.True(document.Register(family, data));
+        Assert.False(NativeTextShaping.UsesMacSystemUiMetrics(list, document));
+        Assert.False(NativeTextShaping.UsesMacSystemUiMetrics(list.ToUpperInvariant(), document));
+        Assert.True(NativeTextShaping.UsesMacSystemUiMetrics(list, otherDocument));
+    }
+
+    [Fact]
     public void WebTypefacesAreSharedByContentButIsolatedByDocumentFamilyMap()
     {
         var (firstData, secondData) = FindDistinctPlatformFonts();
