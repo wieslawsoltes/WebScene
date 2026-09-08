@@ -826,6 +826,18 @@ struct text_layout_fragment final {
     std::string text;
 };
 
+// One immutable dependency binding captured with the CPU scene. Resolving it
+// never consults the live DOM or substitutes a newer canvas output.
+struct gpu_canvas_scene_binding final {
+    uint32_t node_id{};
+    webscene::graphics::image_metadata metadata;
+    std::shared_ptr<webscene_gpu_image_snapshot> pending;
+    std::shared_ptr<const webscene_gpu_image_lease_v3> completed;
+    std::shared_ptr<const webscene_gpu_image_lease_v3> resolve() const {
+        return pending ? pending->resolve() : completed;
+    }
+};
+
 struct canvas_node_data final {
     webscene::graphics::canvas_backing backing;
     std::shared_ptr<const webscene_gpu_image_lease_v3> gpu_image;
@@ -1571,10 +1583,11 @@ public:
     void build_scene(
         std::vector<webscene_scene_command>& commands,
         std::vector<webscene_scene_string>& strings,
-        std::vector<char>& string_bytes, bool ordered_canvas = false) const;
+        std::vector<char>& string_bytes, bool ordered_canvas = false, bool capture_gpu_outputs = false) const;
     // Engine-thread publication: validates document ownership and backing version,
     // then requests a scene without forcing style/layout work.
     void publish_gpu_canvas_image(dom_node& node,std::shared_ptr<const webscene_gpu_image_lease_v3> image);
+    void build_gpu_canvas_bindings(std::vector<gpu_canvas_scene_binding>& bindings) const;
     void build_gpu_canvas_images(std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images) const;
     void build_canvas_layouts(std::vector<webscene_canvas_layout>& layouts) const;
     void build_canvas_display_lists(
@@ -1939,7 +1952,8 @@ private:
         const dom_node* paint_target = nullptr,
         const node_style::pseudo_element* paint_pseudo_target = nullptr,
         bool ordered_canvas = false,
-        bool paint_modal_root = false) const;
+        bool paint_modal_root = false,
+        bool capture_gpu_outputs = false) const;
     static bool matches_selector(const dom_node& node, const std::string& selector);
     static void collect_matches(
         dom_node& node,

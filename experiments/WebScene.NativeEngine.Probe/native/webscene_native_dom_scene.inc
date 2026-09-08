@@ -1,13 +1,13 @@
 void native_document::build_scene(
     std::vector<webscene_scene_command>& commands,
     std::vector<webscene_scene_string>& strings,
-    std::vector<char>& string_bytes, bool ordered_canvas) const
+    std::vector<char>& string_bytes, bool ordered_canvas, bool capture_gpu_outputs) const
 {
     commands.clear();
     commands.reserve(nodes_.size());
     strings.clear();
     string_bytes.clear();
-    append_scene(*body_, commands, strings, string_bytes, false, true, false, nullptr, nullptr, ordered_canvas);
+    append_scene(*body_, commands, strings, string_bytes, false, true, false, nullptr, nullptr, ordered_canvas, false, capture_gpu_outputs);
     std::vector<dom_node*> fixed;
     for (auto* child : composed_children(*body_)) {
         collect_outermost_fixed_positioned_nodes(*this, *child, fixed);
@@ -38,7 +38,7 @@ void native_document::build_scene(
             strings,
             string_bytes,
             inherited_visibility_hidden,
-            false, false, nullptr, nullptr, ordered_canvas);
+            false, false, nullptr, nullptr, ordered_canvas, false, capture_gpu_outputs);
     }
     // Modal roots leave their DOM stacking context and are emitted exactly
     // once, in registration order, after ordinary/fixed document content.
@@ -54,7 +54,7 @@ void native_document::build_scene(
             if ((*ancestor)->style.visibility_specified) hidden = (*ancestor)->style.visibility_hidden;
         }
         append_scene(*modal, commands, strings, string_bytes, hidden,
-            false, false, nullptr, nullptr, ordered_canvas, true);
+            false, false, nullptr, nullptr, ordered_canvas, true, capture_gpu_outputs);
     }
 }
 
@@ -67,6 +67,25 @@ void native_document::publish_gpu_canvas_image(dom_node& node,
     const bool changed=canvas.gpu_image!=image;
     canvas.publish_gpu_image(std::move(image));
     if (changed) mark_scene_changed();
+}
+
+void native_document::build_gpu_canvas_bindings(
+    std::vector<gpu_canvas_scene_binding>& bindings) const
+{
+    bindings.clear();
+    for(const auto& node:nodes_) {
+        if(node->tag!="canvas" || !is_connected(*node) || !node->visible
+            || !display_tree_allows_render(*this,*node))continue;
+        const auto& canvas=node->canvas();
+        if(!canvas.gpu_snapshot&&!canvas.gpu_image)continue;
+        const auto metadata=canvas.gpu_snapshot ? canvas.gpu_snapshot->describe()
+            : canvas.gpu_image->value.describe();
+        if(metadata.canvas!=canvas.backing.identity()
+            || metadata.allocation_generation!=canvas.backing.allocation_generation()
+            || !canvas.backing.accepts_completed_content(metadata.content_serial))continue;
+        bindings.push_back({node->id,metadata,canvas.gpu_snapshot,
+            canvas.gpu_snapshot ? nullptr : canvas.gpu_image});
+    }
 }
 
 void native_document::build_gpu_canvas_images(
@@ -235,7 +254,8 @@ void native_document::append_scene(
     const dom_node* paint_target,
     const node_style::pseudo_element* paint_pseudo_target,
     bool ordered_canvas,
-    bool paint_modal_root) const
+    bool paint_modal_root,
+    bool capture_gpu_outputs) const
 {
     if (!paint_modal_root && is_modal_dialog(node)) return;
     const auto elevated_target = paint_target == &node;
@@ -1241,8 +1261,9 @@ void native_document::append_scene(
         append_pseudo(node.style.after_pseudo());
     }
     const auto& canvas = node.canvas();
-    const auto gpu_metadata=canvas.gpu_image
-        ? std::optional(canvas.gpu_image->value.describe()) : std::nullopt;
+    const auto gpu_metadata=capture_gpu_outputs && canvas.gpu_snapshot
+        ? std::optional(canvas.gpu_snapshot->describe())
+        : canvas.gpu_image ? std::optional(canvas.gpu_image->value.describe()) : std::nullopt;
     const bool paints_gpu=gpu_metadata
         && gpu_metadata->allocation_generation==canvas.backing.allocation_generation()
         && canvas.backing.accepts_completed_content(gpu_metadata->content_serial);
@@ -1705,7 +1726,7 @@ void native_document::append_scene(
                 defer_fixed_descendants,
                 true,
                 paint_target,
-                paint_pseudo_target, ordered_canvas);
+                paint_pseudo_target, ordered_canvas, false, capture_gpu_outputs);
         } else if (entry.pseudo != nullptr) {
             if (!pseudo_only && entry.z_index > 0) continue;
             append_pseudo(*entry.pseudo);
@@ -1744,7 +1765,7 @@ void native_document::append_scene(
             // Walk only this branch. Ancestors retain overflow clips and
             // visibility inheritance but do not duplicate backgrounds or SVGs.
             append_scene(*branch, commands, strings, string_bytes,
-                visibility_hidden, defer_fixed_descendants, true, target, entry.pseudo, ordered_canvas);
+                visibility_hidden, defer_fixed_descendants, true, target, entry.pseudo, ordered_canvas, false, capture_gpu_outputs);
         }
     }
     if (clip_contents) {

@@ -877,6 +877,31 @@ int main() {
             image_writer->complete();
             auto canvas_image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image_frame)); image_frame.reset();
             document.layout(640,480);
+            // The first submitted image can be pending while its CPU paint
+            // commands are captured. Never substitute live canvas state later.
+            {
+            struct delayed_image final : webscene_gpu_image_snapshot {
+                std::shared_ptr<const webscene_gpu_image_lease_v3> image;
+                bool ready=false;
+                explicit delayed_image(std::shared_ptr<const webscene_gpu_image_lease_v3> value):image(std::move(value)) {}
+                image_metadata describe()const override{return image->value.describe();}
+                status state()const override{return ready?status::ready:status::pending;}
+                std::shared_ptr<const webscene_gpu_image_lease_v3> resolve()override{return ready?image:nullptr;}
+            };
+            auto delayed=std::make_shared<delayed_image>(canvas_image);
+            canvas_node->mutable_canvas().gpu_snapshot=delayed;
+            std::vector<webscene_native::gpu_canvas_scene_binding> bindings;
+            document.build_gpu_canvas_bindings(bindings);
+            require(bindings.size()==1&&!bindings[0].resolve(),"Pending canvas binding escaped readiness gate");
+            std::vector<webscene_scene_command> pending_paint;
+            std::vector<webscene_scene_string> pending_strings;
+            std::vector<char> pending_bytes;
+            document.build_scene(pending_paint,pending_strings,pending_bytes,true,true);
+            require(std::any_of(pending_paint.begin(),pending_paint.end(),[&](const auto& command){return command.kind==WEBSCENE_SCENE_COMMAND_GPU_IMAGE&&command.node_id==canvas_node->id;}),"First pending image had no GPU paint placeholder");
+            canvas_node->mutable_canvas().gpu_snapshot.reset();
+            delayed->ready=true;
+            require(bindings[0].resolve()==canvas_image,"Frozen binding consulted replacement live canvas state");
+            }
             const auto before_publication=document.scene_generation();
             document.publish_gpu_canvas_image(*canvas_node,canvas_image);
             require(document.scene_generation()==before_publication+1 && !document.dirty(),

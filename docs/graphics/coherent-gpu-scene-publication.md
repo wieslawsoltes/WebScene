@@ -168,3 +168,23 @@ The scene builder still consumes completed `gpu_image` state. Pending-image
 command representation, frozen CPU scene capture and atomic commit remain
 mandatory. Failed/pressure-rejected capture also needs explicit staged-scene
 failure handling at that integration point; no coherence claim is made yet.
+
+
+## Pending image scene representation (2026-09-08)
+
+`native_document::build_gpu_canvas_bindings()` captures node identity, immutable
+image metadata and either its completion snapshot or an existing completed lease.
+The binding resolves its captured dependency without consulting live canvas state.
+`build_scene(..., ordered_canvas=true, capture_gpu_outputs=true)` emits GPU paint
+placeholders for pending first images, propagating the capture mode through normal,
+fixed, modal and elevated paint traversal. The default published-scene path is
+unchanged until engine capture/commit integration is complete.
+
+A controlled delayed-image regression verifies that a first pending image has a
+paint placeholder but no resolvable image, then clears the live canvas reference
+and completes the captured dependency: it must resolve the original allocation.
+The pre-existing pool-release assertion remains intact. Native engine tests pass
+(11.77s); GPU runtime tests pass after scoping the test capture to release its
+owned reference (0.75s). This tests dependency capture, not atomic publication of
+the full A/B/C scene sequence. The engine still needs bounded staging, failure and
+generation invalidation, dirty-work preservation and atomic commit.
