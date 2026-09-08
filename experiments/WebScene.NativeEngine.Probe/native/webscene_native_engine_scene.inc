@@ -13,9 +13,6 @@
     {
         scene_publication_attempts_.fetch_add(1, std::memory_order_relaxed);
         const auto publication_started = std::chrono::steady_clock::now();
-        auto next = std::make_shared<scene>();
-        next->commands.reserve(command_count_ + 4U);
-
         uint64_t hash = 1469598103934665603ULL;
         const auto width = static_cast<float>(viewport_width_);
         const auto height = static_cast<float>(viewport_height_);
@@ -88,6 +85,10 @@
                 acknowledged_scene = acknowledgement_->value;
             }
         }
+        // Waiting on a captured GPU output or a full consumer mailbox requires
+        // no new scene storage. Allocate only after admission succeeds.
+        auto next = std::make_shared<scene>();
+        next->commands.reserve(command_count_ + 4U);
         uint32_t scene_flags = base_revision == 0 ? scene_flag_checkpoint : 0U;
         const auto collect_runtime_work_metrics =
             runtime_work_metrics_enabled_.load(std::memory_order_relaxed);

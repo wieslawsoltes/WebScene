@@ -203,7 +203,14 @@ internal sealed class WebGpuDocumentProbeApp : Application
                         {
                             await view.EvaluateTextAsync("""
                                 (()=>{
-                                  const p=globalThis.kestrelPanProbe={events:[],captures:[]};
+                                  const p=globalThis.kestrelPanProbe={events:[],captures:[],frames:[]};
+                                  p.originalRaf=window.requestAnimationFrame;
+                                  p.raf=callback=>p.originalRaf.call(window,function(timestamp){
+                                    const start=performance.now();
+                                    try{return callback.call(this,timestamp);}
+                                    finally{p.frames.push({timestamp,start,duration:performance.now()-start});}
+                                  });
+                                  window.requestAnimationFrame=p.raf;
                                   p.event=e=>p.events.push({type:e.type,x:e.clientX,y:e.clientY,button:e.button,buttons:e.buttons,time:performance.now(),panning:document.getElementById('viewport').classList.contains('panning')});
                                   p.capture=e=>p.captures.push(e.type);
                                   for(const name of ['pointerdown','pointermove','pointerup'])document.addEventListener(name,p.event);
@@ -238,12 +245,12 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 await Task.Delay(500);
                                 var after = view.CapturePerformanceSnapshot();
                                 Console.WriteLine("Kestrel pan performance: " + System.Text.Json.JsonSerializer.Serialize(new { elapsedMilliseconds = started.Elapsed.TotalMilliseconds, baseline, after, delta = after.Since(baseline) }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
-                                Console.WriteLine("Kestrel pan diagnostics: " + await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;return {events:p.events,captures:p.captures,panning:document.getElementById('viewport').classList.contains('panning'),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
+                                Console.WriteLine("Kestrel pan diagnostics: " + await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;return {events:p.events,captures:p.captures,frames:p.frames,panning:document.getElementById('viewport').classList.contains('panning'),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
                             }
                             finally
                             {
                                 if (pressed) surface.SubmitPointerButton(3, x, y, 2, false);
-                                await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;for(const n of ['pointerdown','pointermove','pointerup'])document.removeEventListener(n,p.event);for(const n of ['gotpointercapture','lostpointercapture'])document.removeEventListener(n,p.capture);delete globalThis.kestrelPanProbe;})()");
+                                await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;if(window.requestAnimationFrame===p.raf)window.requestAnimationFrame=p.originalRaf;for(const n of ['pointerdown','pointermove','pointerup'])document.removeEventListener(n,p.event);for(const n of ['gotpointercapture','lostpointercapture'])document.removeEventListener(n,p.capture);delete globalThis.kestrelPanProbe;})()");
                             }
                         }
                         if (arguments.Contains("--resize-kestrel"))

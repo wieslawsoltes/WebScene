@@ -298,3 +298,21 @@ These tests use controlled native completion snapshots; they do not stall a
 hardware queue or prove physical presentation timing. Browser-comparable pan
 performance, live resize timing, device-loss recovery, cross-platform interop and
 all other epic gates remain required.
+
+
+## Retry allocation and callback timing (2026-09-08)
+
+Scene allocation and initial command reservation now happen only after GPU
+opportunity/staged-capture checks and consumer-mailbox admission. A deferred
+commit no longer creates and discards a second scene on each retry. Native engine
+and GPU runtime suites pass (14.76 seconds together).
+
+The native pan probe temporarily wraps requestAnimationFrame to record callback
+wall time while preserving callback receiver, return value and cancellation ID.
+Cleanup restores the original function. The observed run had 0.83ms median and
+5.30ms p95 callback duration, but only 30 callbacks inside the native counter
+interval. Instrumentation recorded 31 samples including setup/settle. This directs
+subsequent investigation toward frame admission, producer completion and consumer
+retirement; it does not identify GPU execution as the bottleneck. Evidence:
+`evidence/kestrel/native-pan-callback-timing.json`. The existing interactive demo
+remained open, so this is investigative evidence rather than an isolated benchmark.
