@@ -16,6 +16,9 @@ private:
     std::optional<owned_image_pool::retained> image_;
     wgpu::Future future_{}, validation_future_{};
     producer_completion_gate completion_;
+    // Own EndAccess fences and timeline values beyond the submitting stack.
+    // Snapshot ownership also keeps these dependencies alive for a GPU consumer.
+    wgpu::SharedTextureMemoryEndAccessState handoff_;
     bool present_=true;
     void finish(bool queue,bool valid,const std::shared_ptr<completion_wake>& wake) {
         bool notify=false;
@@ -57,6 +60,11 @@ public:
             return image_->describe();
         }
         status state() const { return submission_->state(); }
+        // Immutable after publish_submitted/submit returns. Does not certify image
+        // readiness; a future asynchronous consumer must encode all dependencies.
+        const wgpu::SharedTextureMemoryEndAccessState& producer_handoff() const noexcept {
+            return submission_->handoff_;
+        }
         std::optional<owned_image_pool::retained> take_ready() {
             const auto current=state();
             if(current!=status::ready&&current!=status::consumed)return {};
@@ -104,6 +112,7 @@ public:
         const bool ended=shared->end(end);
         const bool expired=ended&&shared->expire_texture();
         const bool valid=expired&&(!present||end.initialized);
+        result->handoff_=std::move(end);
         result->future_=device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
             [result,pending,shared,device,device_lifetime,wake,valid,present](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
                 pending->producer.complete();
@@ -167,6 +176,7 @@ public:
         wgpu::SharedTextureMemoryEndAccessState end;
         const bool ended=shared->end(end);
         const bool expired=ended && shared->expire_texture();
+        result->handoff_=std::move(end);
         result->future_=queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
             [result,pending,shared,device,device_lifetime,wake,ended,expired]
             (wgpu::QueueWorkDoneStatus completed,wgpu::StringView) {

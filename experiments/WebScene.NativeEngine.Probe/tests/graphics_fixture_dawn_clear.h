@@ -107,6 +107,18 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
     auto captured=submitted ? submitted->capture_snapshot() : nullptr;
     if(!captured)return {};
     const auto captured_metadata=captured->describe();
+    // EndAccess's local output has been destroyed. Captured ownership must retain
+    // every exported Metal event/value, independently of callback completion.
+    const auto& handoff=captured->producer_handoff();
+    if(!handoff.initialized || !handoff.fenceCount ||
+        handoff.fenceCount!=handoff.signaledValueCount) return {};
+    for(size_t i=0;i<handoff.fenceCount;++i) {
+        wgpu::SharedFenceMTLSharedEventExportInfo metal;
+        wgpu::SharedFenceExportInfo info;info.nextInChain=&metal;
+        handoff.fences[i].ExportInfo(&info);
+        if(info.type!=wgpu::SharedFenceType::MTLSharedEvent || !metal.sharedEvent) return {};
+    }
+
     if (!submitted || !wait(submitted->completion_future()) || !wait(submitted->validation_future()) ||
         ready_wake->count.load()!=1 || error->load()) return {};
     if(shared->begin(access)||!shared->expire_texture())return {};

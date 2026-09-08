@@ -1,0 +1,18 @@
+{
+  "route": "Dawn-IOSurface-CGL-Ganesh",
+  "renderedFrames": 32,
+  "imports": 2,
+  "gpuRetirementCompleted": true,
+  "explicitTransportCopies": 0,
+  "diagnosticReadbacks": 8,
+  "physicalPresentationVerified": false,
+  "detachedBeforeRetirement": false,
+  "retainedEndAccessChecks": [
+    "initialized output",
+    "nonempty fence array",
+    "matching fence/value counts",
+    "each retained fence exports MTLSharedEvent with nonnull event after publishing function returns"
+  ],
+  "nativeSuitesPassed": 2,
+  "asynchronousConsumerEnabled": false
+}
