@@ -500,3 +500,13 @@ pass on net8/net10, with no skips; Ganesh completes 32 frames and retirement wit
 zero explicit transport copies. A validated Kestrel run measured 63.41ms median
 publication-to-draw latency, so this resource-lifetime simplification is not an
 established performance fix. Evidence: `evidence/kestrel/unimported-scene-release.json`.
+
+Temporary acquisition-reason tracing in a validated pan observed 35 native
+acquisitions and 35 successful presenter applications during the measured window.
+There were no recorded empty/backpressure outcomes or outstanding-draw gate
+rejections. Draw callback intervals had median 78.76ms. Synchronous trace output
+can affect timing, so the value is not a performance qualification; the reason
+counts nevertheless do not support presenter admission failure as this run's
+explanation. Investigate compositor callback cadence and host scheduling next.
+All temporary tracing was removed and the probe rebuilt successfully. Evidence:
+`evidence/kestrel/acquisition-reasons-trace.json`.
