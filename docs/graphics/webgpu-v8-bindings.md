@@ -1856,3 +1856,19 @@ The unchanged Kestrel document (SHA256
 0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563)
 now gets past createBindGroup and reports “d.createPipelineLayout is not a
 function”. Its startup probe still exits 1 with Canvas 2D compatibility fallback.
+
+### Explicit pipeline layouts (2026-09-08)
+
+GPUDevice exposes createPipelineLayout with an owned label, iterable nullable
+bind-group layouts and immediateSize conversion. Native layout references are
+retained across later getters. Render-pipeline descriptors and shader compilation
+hints now recognize the distinct GPUPipelineLayout wrapper. Tests cover getter
+order, labels, arity, missing/wrong layout values, invalid sizes, throwing getters,
+nullable entries and explicit render-pipeline creation. The native runtime suite
+passes. These checks do not establish complete validation or conformance.
+
+Unchanged Kestrel now advances to “d.popErrorScope is not a function”. Its
+startup verification still exits 1 with Canvas 2D fallback; asynchronous error
+scope delivery is next. Validation errors collected in its pushed scope have
+not yet been exposed by the JavaScript API, so advancing through the creation
+calls alone does not prove its pipelines are valid.

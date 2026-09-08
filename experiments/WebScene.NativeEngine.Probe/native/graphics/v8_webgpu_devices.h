@@ -1,6 +1,8 @@
 #pragma once
 #include "v8_webgpu_buffers.h"
 #include "v8_webgpu_bind_groups.h"
+#include "v8_webgpu_pipeline_layouts.h"
+#include "v8_webgpu_pipeline_layout_descriptor.h"
 #include "v8_webgpu_bind_group_descriptor.h"
 #include "v8_webgpu_bind_group_layouts.h"
 #include "v8_webgpu_bind_group_layout_descriptor.h"
@@ -32,6 +34,7 @@ class v8_webgpu_devices {
         resource_handle<dawn_device> device;
         std::unique_ptr<v8_webgpu_buffers> buffers;
         std::unique_ptr<v8_webgpu_shaders> shaders;
+        std::unique_ptr<v8_webgpu_pipeline_layouts> pipeline_layouts;
         std::unique_ptr<v8_webgpu_bind_groups> binding_groups;
         std::unique_ptr<v8_webgpu_bind_group_layouts> binding_layouts;
         std::unique_ptr<v8_webgpu_render_pipelines> pipelines;
@@ -129,6 +132,30 @@ class v8_webgpu_devices {
             fail(isolate,"Bind-group-layout wrapper capacity exhausted");
         }catch(const std::exception&){fail(isolate,"Bind-group-layout creation failed");}
     }
+    static void create_pipeline_layout(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if(!receiver(info))return;
+        auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
+        if(!info.Length()){fail(isolate,"createPipelineLayout requires a descriptor");return;}
+        try {
+            webgpu_pipeline_layout_descriptor descriptor;
+            if(!read_webgpu_pipeline_layout_descriptor(isolate,context,info[0],descriptor))return;
+            auto* item=receiver(info);if(!item)return;
+            resource_handle<wgpu::PipelineLayout> handle;
+            descriptor.with_native([&](const auto& native){
+                item->service->with_device(item->device,[&](auto& owned){handle=owned.create_pipeline_layout(native);});
+            });
+            v8::Local<v8::Object> wrapper;
+            try {
+                if(item->pipeline_layouts->wrap(context,*item->service,item->device,handle,info.This(),descriptor.label).ToLocal(&wrapper)){
+                    info.GetReturnValue().Set(wrapper);return;
+                }
+            }catch(...){
+                item->service->with_device(item->device,[&](auto& owned){owned.release_pipeline_layout(handle);});throw;
+            }
+            item->service->with_device(item->device,[&](auto& owned){owned.release_pipeline_layout(handle);});
+            fail(isolate,"Pipeline-layout wrapper capacity exhausted");
+        }catch(const std::exception&){fail(isolate,"Pipeline-layout creation failed");}
+    }
     static void create_bind_group(const v8::FunctionCallbackInfo<v8::Value>& info) {
         if(!receiver(info))return;
         auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
@@ -159,11 +186,13 @@ class v8_webgpu_devices {
         if (!info.Length()) { fail(isolate,"createShaderModule requires a descriptor"); return; }
         try {
             webgpu_shader_descriptor converted;
-            // Pipeline-layout wrappers are not exposed yet. Compilation hints
-            // are converted for their observable WebIDL effects, then ignored
-            // as optional optimization hints by this backend.
+            // Compilation hints are converted for observable WebIDL effects;
+            // native shader compilation does not require these optional hints.
             if (!read_webgpu_shader_descriptor(isolate,context,info[0],converted,
-                [](v8::Local<v8::Value>) { return std::optional<wgpu::PipelineLayout>{}; })) return;
+                [](v8::Local<v8::Value> value) -> std::optional<wgpu::PipelineLayout> {
+                    if(!v8_webgpu_pipeline_layouts::is_instance(value))return {};
+                    return v8_webgpu_pipeline_layouts::native_reference(value);
+                })) return;
             auto* item=receiver(info); if (!item) return; // Coercion can reenter.
             wgpu::ShaderSourceWGSL source{};
             source.code=wgpu::StringView(converted.code.data(),converted.code.size());
@@ -195,10 +224,11 @@ class v8_webgpu_devices {
         if (!info.Length()) { fail(isolate,"createRenderPipeline requires a descriptor"); return; }
         try {
             webgpu_render_descriptor converted;
-            // Explicit GPUPipelineLayout wrappers remain unexposed; the
-            // internal surface currently accepts the automatic layout branch.
             if (!read_webgpu_render_descriptor(isolate,context,info[0],converted,
-                [](v8::Local<v8::Value>) { return std::optional<wgpu::PipelineLayout>{}; })) return;
+                [](v8::Local<v8::Value> value) -> std::optional<wgpu::PipelineLayout> {
+                    if(!v8_webgpu_pipeline_layouts::is_instance(value))return {};
+                    return v8_webgpu_pipeline_layouts::native_reference(value);
+                })) return;
             auto* item=receiver(info); if (!item) return; // Coercion can reenter.
             resource_handle<wgpu::RenderPipeline> pipeline;
             converted.with_native([&](const auto& descriptor) {
@@ -342,6 +372,8 @@ public:
         auto prototype=v8::ObjectTemplate::New(isolate);
         auto create=v8::FunctionTemplate::New(isolate,create_buffer); create->SetLength(1);
         prototype->Set(isolate,"createBuffer",create);
+        auto layout_create=v8::FunctionTemplate::New(isolate,create_pipeline_layout);layout_create->SetLength(1);
+        prototype->Set(isolate,"createPipelineLayout",layout_create);
         auto group_create=v8::FunctionTemplate::New(isolate,create_bind_group);group_create->SetLength(1);
         prototype->Set(isolate,"createBindGroup",group_create);
         auto binding_create=v8::FunctionTemplate::New(isolate,create_bind_group_layout);binding_create->SetLength(1);
@@ -374,6 +406,7 @@ public:
             item->encoders.reset();
             item->textures.reset();
             item->pipelines.reset();
+            item->pipeline_layouts.reset();
             item->binding_groups.reset();
             item->binding_layouts.reset();
             item->shaders.reset();
@@ -439,6 +472,7 @@ public:
         item->label=std::move(initial_label);
         item->service=&service; item->device=device; item->releases=service.release_endpoint();
         item->buffers=std::make_unique<v8_webgpu_buffers>(isolate_,context,buffer_capacity_,dom_exception_.Get(isolate_));
+        item->pipeline_layouts=std::make_unique<v8_webgpu_pipeline_layouts>(isolate_,context);
         item->binding_groups=std::make_unique<v8_webgpu_bind_groups>(isolate_,context);
         item->binding_layouts=std::make_unique<v8_webgpu_bind_group_layouts>(isolate_,context);
         item->shaders=std::make_unique<v8_webgpu_shaders>(isolate_,context);

@@ -242,6 +242,30 @@ void test_runtime_webgpu_installation() {
         }
     )JS","binding-group"),"Bind group creation failed");
     require(runtime.execute(R"JS(
+        {
+            if(installedDevice.createPipelineLayout.length!==1)throw new Error('pipeline layout arity');
+            const order=[];
+            const descriptor=new Proxy({label:'explicit layout',bindGroupLayouts:new Set([bindingLayout]),immediateSize:0},
+                {get(target,key){order.push(key);return target[key]}});
+            const layout=installedDevice.createPipelineLayout(descriptor);
+            if(order.join(',')!=='label,bindGroupLayouts,immediateSize')throw new Error('pipeline layout conversion order');
+            if(Object.prototype.toString.call(layout)!=='[object GPUPipelineLayout]'||layout.label!=='explicit layout')throw new Error('pipeline layout wrapper');
+            layout.label='updated';if(layout.label!=='updated')throw new Error('pipeline layout label');
+            installedDevice.createPipelineLayout({bindGroupLayouts:[null,undefined]});
+            for(const bad of [{},{bindGroupLayouts:[{}]},{bindGroupLayouts:[layout]},
+                {bindGroupLayouts:[],immediateSize:-1},{bindGroupLayouts:[],immediateSize:Infinity}]) {
+                let rejected=false;try{installedDevice.createPipelineLayout(bad)}catch(e){rejected=e instanceof TypeError}
+                if(!rejected)throw new Error('invalid pipeline layout accepted');
+            }
+            const sentinel={};let propagated=false;
+            try{installedDevice.createPipelineLayout({get bindGroupLayouts(){throw sentinel}})}catch(e){propagated=e===sentinel}
+            if(!propagated)throw new Error('pipeline layout getter exception lost');
+            const module=installedDevice.createShaderModule({code:'@vertex fn main()->@builtin(position) vec4f{return vec4f(0,0,0,1);}',compilationHints:[{entryPoint:'main',layout}]});
+            const pipeline=installedDevice.createRenderPipeline({layout,vertex:{module},primitive:{topology:'point-list'}});
+            if(Object.prototype.toString.call(pipeline)!=='[object GPURenderPipeline]')throw new Error('explicit pipeline creation');
+        }
+    )JS","pipeline-layout"),"Pipeline layout creation failed");
+    require(runtime.execute(R"JS(
         const namespaces={GPUBufferUsage:{MAP_READ:1,MAP_WRITE:2,COPY_SRC:4,COPY_DST:8,INDEX:16,VERTEX:32,UNIFORM:64,STORAGE:128,INDIRECT:256,QUERY_RESOLVE:512},
           GPUTextureUsage:{COPY_SRC:1,COPY_DST:2,TEXTURE_BINDING:4,STORAGE_BINDING:8,RENDER_ATTACHMENT:16,TRANSIENT_ATTACHMENT:32},
           GPUMapMode:{READ:1,WRITE:2},GPUShaderStage:{VERTEX:1,FRAGMENT:2,COMPUTE:4},GPUColorWrite:{RED:1,GREEN:2,BLUE:4,ALPHA:8,ALL:15}};
