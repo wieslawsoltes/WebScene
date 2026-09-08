@@ -2097,3 +2097,27 @@ The native-engine and GPU runtime suites passed (12.55 seconds combined).
 This is a layout prerequisite only: showModal/close, modal top-layer painting,
 focus and inert input behavior remain outstanding, and the original Kestrel
 solid-creation workflow remains unqualified.
+
+### Native dialog interface dependency (2026-09-08)
+
+HTML dialog nodes now use a generated HTMLDialogElement interface inheriting
+HTMLElement. The open property reflects its boolean attribute, including
+recascade on assignment. Native, lazily allocated dialog state stores
+returnValue independently of attributes and JS wrappers; cloning starts with
+the default empty return value. DOMString conversion preserves NUL and lone
+surrogates and propagates conversion failures without changing the old value.
+The generated DOM interfaces now expose the standard configurable, non-writable,
+non-enumerable Symbol.toStringTag on their prototypes.
+
+Regression coverage checks interface inheritance/tag descriptors, receiver
+brands, open reflection and geometry, returnValue independence, conversion
+failure, string roundtrip and clone behavior. Native-engine and GPU runtime
+suites passed (12.82 seconds combined); generated binding consistency passed.
+The unchanged Kestrel SHA256 remains
+0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563.
+The real mesh probe starts with WebGPU active and zero startup errors, then
+exits 1 at the missing showModal method with modal.open false. No geometry was
+injected and no hidden form submitted. Modal top-layer rendering, focus/inert
+input, show/close/cancel events and complete dialog semantics remain pending.
+The API/state distinction follows the
+[HTML dialog specification](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element).

@@ -306,6 +306,18 @@
       "constants": []
     },
     {
+      "name": "HTMLDialogElement",
+      "template": "html_dialog_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "HTMLElement",
+      "attributes": [
+        { "name": "open", "getter": "get_dialog_open", "setter": "set_dialog_open" },
+        { "name": "returnValue", "getter": "get_dialog_return_value", "setter": "set_dialog_return_value" }
+      ],
+      "methods": [],
+      "constants": []
+    },
+    {
       "name": "HTMLFormElement",
       "template": "html_form_element_template",
       "constructor": "illegal_dom_constructor",

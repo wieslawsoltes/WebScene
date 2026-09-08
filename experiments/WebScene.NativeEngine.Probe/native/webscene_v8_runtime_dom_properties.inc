@@ -1783,6 +1783,43 @@
         set_boolean_attribute(value, info, "readonly");
     }
 
+    static void get_dialog_open(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr) return;
+        info.GetReturnValue().Set(node->attributes.contains("open"));
+    }
+
+    static void set_dialog_open(
+        v8::Local<v8::Name>, v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        set_boolean_attribute(value, info, "open");
+    }
+
+    static void get_dialog_return_value(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr) return;
+        info.GetReturnValue().Set(js_dom_string(info.GetIsolate(),
+            node->dialog_state == nullptr ? std::string{} : node->dialog_state->return_value));
+    }
+
+    static void set_dialog_return_value(
+        v8::Local<v8::Name>, v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr) return;
+        v8::Local<v8::String> converted;
+        if (!value->ToString(info.GetIsolate()->GetCurrentContext()).ToLocal(&converted)) return;
+        auto result = to_wtf8(info.GetIsolate(), converted);
+        if (node->dialog_state == nullptr) node->dialog_state = std::make_unique<dom_node::dialog_data>();
+        node->dialog_state->return_value = std::move(result);
+    }
+
     static void get_hidden(
         v8::Local<v8::Name>,
         const v8::PropertyCallbackInfo<v8::Value>& info)

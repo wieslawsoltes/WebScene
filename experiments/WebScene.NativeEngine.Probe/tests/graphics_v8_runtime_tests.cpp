@@ -343,10 +343,32 @@ void test_runtime_webgpu_installation() {
     const bool dialog_layout_ok=runtime.execute(R"JS(
         {
             const dialog=document.createElement('dialog');dialog.textContent='Dialog contents';document.body.appendChild(dialog);
+            if(!(dialog instanceof HTMLDialogElement)||!(dialog instanceof HTMLElement)||Object.prototype.toString.call(dialog)!=='[object HTMLDialogElement]')throw new Error('dialog interface missing: '+[dialog instanceof HTMLDialogElement,dialog instanceof HTMLElement,Object.prototype.toString.call(dialog)]);
+            const tag=Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype,Symbol.toStringTag);
+            if(tag.value!=='HTMLDialogElement'||tag.writable||tag.enumerable||!tag.configurable)throw new Error('dialog tag descriptor');
+            if(dialog.open!==false||dialog.returnValue!=='')throw new Error('dialog initial state');
+            dialog.returnValue=42;
+            if(dialog.returnValue!=='42'||dialog.hasAttribute('returnValue'))throw new Error('dialog returnValue incorrectly reflected');
+            dialog.setAttribute('returnValue','authored');
+            if(dialog.returnValue!=='42')throw new Error('attribute changed returnValue');
+            let rejected=false;try{dialog.returnValue=Symbol()}catch(e){rejected=e instanceof TypeError}
+            if(!rejected||dialog.returnValue!=='42')throw new Error('dialog DOMString conversion');
+            const getter=Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype,'open').get;
+            rejected=false;try{getter.call(document.createElement('div'))}catch(e){rejected=e instanceof TypeError}
+            if(!rejected)throw new Error('dialog getter brand');
+            dialog.returnValue='a\0\ud800z';
+            if(dialog.returnValue!=='a\0\ud800z')throw new Error('dialog DOMString roundtrip');
+            if(dialog.cloneNode().returnValue!=='')throw new Error('dialog clone copied internal state');
             if(getComputedStyle(dialog).display!=='none'||dialog.getBoundingClientRect().height!==0)throw new Error('closed dialog participates in layout');
-            dialog.setAttribute('open','');
+            dialog.open=true;
+            if(!dialog.hasAttribute('open'))throw new Error('open did not reflect');
             if(getComputedStyle(dialog).display==='none'||dialog.getBoundingClientRect().height<=0)throw new Error('open dialog stayed hidden');
             dialog.removeAttribute('open');
+            if(dialog.open!==false)throw new Error('open getter ignored attribute removal');
+            dialog.open='nonempty';
+            if(!dialog.open)throw new Error('open truthy conversion');
+            dialog.open=0;
+            if(dialog.hasAttribute('open'))throw new Error('open false did not remove attribute');
             if(getComputedStyle(dialog).display!=='none'||dialog.getBoundingClientRect().height!==0)throw new Error('closing dialog retained its box');
             dialog.style.display='block';
             if(getComputedStyle(dialog).display!=='block')throw new Error('author display did not override dialog default');

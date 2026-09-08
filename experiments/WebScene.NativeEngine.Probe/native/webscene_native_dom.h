@@ -1007,6 +1007,10 @@ struct dom_node final {
         float column_gap{0};
     };
 
+    struct dialog_data final {
+        std::string return_value;
+    };
+
     struct form_control_data final {
         std::string value;
         size_t selection_start{0};
@@ -1279,6 +1283,9 @@ struct dom_node final {
     }
 
     std::unique_ptr<form_control_data> form_control_state;
+    // Dialog state is independent of authored attributes and survives wrapper GC.
+    std::unique_ptr<dialog_data> dialog_state;
+
     const replaced_image_data& replaced_image() const noexcept
     {
         static const replaced_image_data empty;

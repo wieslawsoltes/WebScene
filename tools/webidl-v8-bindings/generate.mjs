@@ -186,6 +186,9 @@ for (const value of manifest.interfaces) {
   line(`    auto ${local} = v8::FunctionTemplate::New(isolate, ${value.constructor});`);
   line(`    ${local}->SetClassName(js_string(isolate, \"${value.name}\"));`);
   line(`    ${local}->SetInterfaceName(js_string(isolate, \"${value.name}\"));`);
+  line(`    ${local}->PrototypeTemplate()->Set(`);
+  line(`        v8::Symbol::GetToStringTag(isolate), js_string(isolate, "${value.name}"),`);
+  line(`        static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum));`);
   if (value.parent) {
     line(`    ${local}->Inherit(generated_${safe(value.parent)}_template);`);
   }
