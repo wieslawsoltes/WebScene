@@ -608,3 +608,13 @@ resize starvation remains unresolved. Evidence:
 The WebGPU canvas reference confirms configure clears the drawing buffer; this
 change preserves reset semantics and changes only readiness tracking:
 https://gpuweb.github.io/types/interfaces/GPUCanvasContext
+
+Live Chrome reference audit confirms WebGPU is active. The existing reference tab
+was 792x878 CSS pixels at DPR2 with a 175px explorer, unlike the native 1280x800,
+DPR2, 222px explorer. A temporary fresh comparison tab with a 1280x800 viewport
+override reported DPR1, so it still did not match native pixel load; backend was
+WebGPU and application errors were zero. The override was reset and temporary tab
+closed, preserving the user's original reference tab. Do not derive a native /
+Chrome performance ratio from these mismatched conditions. A comparison harness
+must verify settled canvas dimensions as well as viewport, DPR and application
+state before measuring identical interaction workloads.
