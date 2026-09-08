@@ -376,13 +376,16 @@ void test_native_gpu_scene_leases()
     const webscene_scene_view_v3* premature=nullptr;
     require(acquire_scene_value_v3(removed,acknowledgement,0,&premature)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
     require(!webscene_scene_acknowledge_v3(premature) && acknowledgement->revision==0);
+    require(acknowledgement->presentation_images.empty());
     webscene_scene_release_v3(premature);
     require(webscene_scene_acknowledge_v3(view) && acknowledgement->pending_scenes.size()==1);
+    require(acknowledgement->presentation_images==first->gpu_images);
     webscene_scene_release_v3(view); first.reset();
     // A later ordered scene drops the GPU image. Both independent CPU retention and
     // already-submitted consumer work must survive acknowledgement of removal.
     require(acquire_scene_value_v3(removed,acknowledgement,0,&view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
     require(webscene_scene_gpu_image_count_v3(view)==0 && webscene_scene_acknowledge_v3(view));
+    require(acknowledgement->presentation_images.empty());
     webscene_scene_release_v3(view); removed.reset();
     auto stale=std::make_shared<scene>();
     stale->header.revision=3; stale->header.base_revision=1; // Current base is 2.
@@ -391,6 +394,7 @@ void test_native_gpu_scene_leases()
     const webscene_scene_view_v3* stale_view=nullptr;
     require(acquire_scene_value_v3(stale,acknowledgement,WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES,&stale_view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
     require(!webscene_scene_acknowledge_v3(stale_view) && acknowledgement->revision==2);
+    require(acknowledgement->presentation_images.empty());
     acknowledgement->reset_for_checkpoint(); // Same reset used by the engine API.
     require(acknowledgement->pending_scenes.empty() && acknowledgement->revision==0);
     require(webscene_scene_gpu_image_count_v3(stale_view)==1);
@@ -401,7 +405,22 @@ void test_native_gpu_scene_leases()
     acknowledgement->pending_scenes.push_back(recovery);
     require(acquire_scene_value_v3(recovery,acknowledgement,WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES,&view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
     require(webscene_scene_acknowledge_v3(view) && acknowledgement->revision==4);
+    require(acknowledgement->presentation_images==recovery->gpu_images);
     require(!webscene_scene_acknowledge_v3(stale_view));
+    // An image-only diff updates presentation ownership without replacing the
+    // retained DOM comparison snapshot. It must not keep using that old table.
+    auto image_only=std::make_shared<scene>();
+    image_only->header.revision=5; image_only->header.base_revision=4;
+    image_only->gpu_images.push_back(std::make_shared<webscene_gpu_image_lease_v3>(retained->value.retain().value()));
+    acknowledgement->pending_scenes.push_back(image_only);
+    const webscene_scene_view_v3* image_only_view=nullptr;
+    require(acquire_scene_value_v3(image_only,acknowledgement,WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES,&image_only_view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+    require(webscene_scene_acknowledge_v3(image_only_view));
+    require(acknowledgement->value==recovery && acknowledgement->presentation_images==image_only->gpu_images);
+    acknowledgement->reset_for_checkpoint();
+    require(acknowledgement->presentation_images.empty());
+    require(webscene_scene_gpu_image_count_v3(image_only_view)==1);
+    webscene_scene_release_v3(image_only_view); image_only.reset();
     webscene_scene_release_v3(stale_view); stale.reset();
     webscene_scene_release_v3(view); recovery.reset(); acknowledgement.reset(); pool.reset();
     webscene_gpu_image_info_v3 info{}; info.struct_size=sizeof(info); info.version=3;

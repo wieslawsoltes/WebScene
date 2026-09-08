@@ -194,7 +194,7 @@ struct acknowledgement_state final {
     void reset_for_checkpoint() {
         std::lock_guard lock(mutex);
         revision=0; dom_hash=0; viewport_width=0; viewport_height=0;
-        layer_versions.clear(); value.reset(); pending_scenes.clear();
+        layer_versions.clear(); value.reset(); presentation_images.clear(); pending_scenes.clear();
     }
     std::mutex mutex;
     uint64_t revision{0};
@@ -203,6 +203,9 @@ struct acknowledgement_state final {
     float viewport_height{0};
     std::unordered_map<uint32_t, canvas_layer_version> layer_versions;
     std::shared_ptr<const scene> value;
+    // Latest compositor-accepted image set, including image-only diffs. This is
+    // separate from the DOM comparison snapshot and from live drawing storage.
+    std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> presentation_images;
     std::deque<std::shared_ptr<const scene>> pending_scenes;
     std::atomic<uint64_t> acknowledged_scenes{0};
     std::atomic<uint64_t> total_acknowledgement_nanoseconds{0};
@@ -683,6 +686,10 @@ struct webscene_scene_lease final {
                 != value->header.revision) {
             return false;
         }
+        // Allocate before changing acknowledged state so failure cannot publish
+        // a partial transition. Rejected/stale acknowledgements never get here.
+        auto presentation_images = value->gpu_images;
+        acknowledgement->presentation_images.swap(presentation_images);
         acknowledgement->revision = value->header.revision;
         acknowledgement->dom_hash = value->dom_hash;
         acknowledgement->viewport_width = value->header.viewport_width;

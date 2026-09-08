@@ -837,3 +837,9 @@ Implementation requirements for WebScene:
 - Compare unchanged Kestrel against Chrome for sidebar resize, including changed CSS dimensions and bitmap dimensions. Measure native publication progress and physical presentation; retaining an image alone does not establish 60fps.
 
 The existing whole-scene bitmap-reset hold remains in place until this presentation-resource model and its lifetime/visual tests are implemented. This avoids replacing the measured stall with an unqualified blank-frame workaround.
+
+### Track compositor-accepted image ownership independently
+
+The native acknowledgement state now retains the most recently accepted scene image set independently of its DOM comparison snapshot. Ordered acknowledgement updates this set even for image-only diffs; stale or premature acknowledgements cannot replace it. Removal replaces it with an empty set, and checkpoint reset releases it. Retained scene/image/consumer leases remain independent owners. This is the ownership prerequisite for resize presentation retention; no fallback image selection or removal of the whole-scene resize gate is enabled yet.
+
+Both targeted native suites pass (13.88s). The scene lease regression verifies accepted-image tracking across image-only diffs while retaining the preceding DOM snapshot, rejected acknowledgement stability, removal/reset, and continued validity of outstanding scene leases.
