@@ -1,0 +1,27 @@
+{
+  "sources": [
+    {
+      "name": "gpu_canvas_context",
+      "url": "https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/modules/webgpu/gpu_canvas_context.cc",
+      "sha256": "54a6bd062ca84cd860b1a8b909f805501c5ff931177a6227bbbc0cebd7040796"
+    },
+    {
+      "name": "swap_buffer_provider",
+      "url": "https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/platform/graphics/gpu/webgpu_swap_buffer_provider.cc",
+      "sha256": "fadd272dd6df5bad58dbef192383f51d5fab80d176521ca66d12f518766c18e5"
+    },
+    {
+      "name": "texture_layer",
+      "url": "https://chromium.googlesource.com/chromium/src/+/main/cc/layers/texture_layer.cc",
+      "sha256": "7ecb16da23a7da047e74c8429e6f2025289d9aaf868d179eb8066242b6fc04fa"
+    }
+  ],
+  "observations": [
+    "GPUCanvasContext::Reshape calls ReplaceDrawingBuffer(false) and updates the texture dimensions.",
+    "ReplaceDrawingBuffer(false) discards current drawing storage without neutering the swap buffer provider.",
+    "ExportCurrentSharedImage returns null when there is no current buffer; PrepareTransferableResource then returns false.",
+    "TextureLayer updates its transferable resource only when PrepareTransferableResource returns true."
+  ],
+  "inference": "The existing compositor resource is distinct from the current resized drawing buffer; WebScene should model these separately instead of holding the whole scene.",
+  "qualification": "Source inspection; not a browser pixel or performance test."
+}
