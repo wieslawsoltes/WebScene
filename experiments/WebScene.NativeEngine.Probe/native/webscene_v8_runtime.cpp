@@ -4643,7 +4643,16 @@ bool v8_dom_runtime::install_webgpu(std::shared_ptr<webscene::graphics::completi
             !global->Get(context,js_string(impl_->isolate,"DOMException")).ToLocal(&exception)||!exception->IsFunction())
             throw std::logic_error("WebGPU requires installed Navigator and DOMException");
         impl_->webgpu=std::make_unique<webscene::graphics::v8_webgpu_realm>(impl_->isolate,context,service,
-            exception.As<v8::Function>(),interop);
+            exception.As<v8::Function>(),interop,wgpu::BackendType::Undefined,wgpu::TextureFormat::BGRA8Unorm
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+            ,impl_->event_target_template.Get(impl_->isolate),[self=impl_.get()](v8::Local<v8::Object> object) {
+                if(self->next_standalone_event_target_id==UINT32_MAX)throw std::length_error("EventTarget identity exhausted");
+                auto key=v8::Private::ForApi(self->isolate,js_string(self->isolate,"WebScene.EventTarget.identity"));
+                return object->SetPrivate(self->context.Get(self->isolate),key,
+                    v8::Integer::NewFromUnsigned(self->isolate,self->next_standalone_event_target_id++)).FromMaybe(false);
+            }
+#endif
+            );
         auto getter=v8::Function::New(context,[](const v8::FunctionCallbackInfo<v8::Value>& info) {
             info.GetReturnValue().Set(info.Data());
         },impl_->webgpu->object()).ToLocalChecked();

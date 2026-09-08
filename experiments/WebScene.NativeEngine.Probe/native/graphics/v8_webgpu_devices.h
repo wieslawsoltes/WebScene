@@ -58,6 +58,7 @@ class v8_webgpu_devices {
     v8_webgpu_supported_features features_factory_;
     v8_webgpu_limits limits_factory_;
     v8_webgpu_adapter_info info_factory_;
+    std::function<bool(v8::Local<v8::Object>)> initialize_event_target_;
     size_t buffer_capacity_;
     std::vector<std::unique_ptr<entry>> entries_;
     static void fail(v8::Isolate* isolate,const char* message) {
@@ -386,12 +387,15 @@ class v8_webgpu_devices {
     }
 public:
     v8_webgpu_devices(v8::Isolate* isolate,v8::Local<v8::Context> context,
-        v8::Local<v8::Function> dom_exception,size_t capacity=64,size_t buffer_capacity=1024)
-        :isolate_(isolate),errors_factory_(isolate,context),features_factory_(isolate,context),limits_factory_(isolate,context),info_factory_(isolate,context),buffer_capacity_(buffer_capacity),entries_(capacity) {
+        v8::Local<v8::Function> dom_exception,size_t capacity=64,size_t buffer_capacity=1024,
+        v8::Local<v8::FunctionTemplate> event_target={},std::function<bool(v8::Local<v8::Object>)> initialize_event_target={})
+        :isolate_(isolate),errors_factory_(isolate,context),features_factory_(isolate,context),limits_factory_(isolate,context),info_factory_(isolate,context),initialize_event_target_(std::move(initialize_event_target)),buffer_capacity_(buffer_capacity),entries_(capacity) {
         check_scope();
         if (dom_exception.IsEmpty()) throw std::invalid_argument("Trusted DOMException constructor is required");
         realm_.Reset(isolate,context); dom_exception_.Reset(isolate,dom_exception);
-        auto instance=v8::ObjectTemplate::New(isolate); instance->SetInternalFieldCount(2); instance_.Reset(isolate,instance);
+        auto type=v8::FunctionTemplate::New(isolate);
+        if(!event_target.IsEmpty())type->Inherit(event_target);
+        auto instance=type->InstanceTemplate();instance->SetInternalFieldCount(2);instance_.Reset(isolate,instance);
         auto prototype=v8::ObjectTemplate::New(isolate);
         auto create=v8::FunctionTemplate::New(isolate,create_buffer); create->SetLength(1);
         prototype->Set(isolate,"createBuffer",create);
@@ -419,7 +423,12 @@ public:
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"features"),v8::FunctionTemplate::New(isolate,features));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"queue"),v8::FunctionTemplate::New(isolate,queue));
         prototype->Set(isolate,"destroy",v8::FunctionTemplate::New(isolate,destroy));
-        prototype_.Reset(isolate,prototype->NewInstance(context).ToLocalChecked());
+        auto prototype_object=prototype->NewInstance(context).ToLocalChecked();
+        if(!event_target.IsEmpty()) {
+            auto parent=event_target->GetFunction(context).ToLocalChecked()->Get(context,v8::String::NewFromUtf8Literal(isolate,"prototype")).ToLocalChecked();
+            if(!prototype_object->SetPrototype(context,parent).FromMaybe(false))throw std::runtime_error("GPUDevice EventTarget inheritance failed");
+        }
+        prototype_.Reset(isolate,prototype_object);
     }
     v8_webgpu_devices(const v8_webgpu_devices&)=delete;
     v8_webgpu_devices& operator=(const v8_webgpu_devices&)=delete;
@@ -494,6 +503,7 @@ public:
         v8::Local<v8::Object> wrapper;
         if (!instance_.Get(isolate_)->NewInstance(context).ToLocal(&wrapper)
             || !wrapper->SetPrototype(context,prototype_.Get(isolate_)).FromMaybe(false)) return {};
+        if(initialize_event_target_&&!initialize_event_target_(wrapper))return {};
         auto item=std::make_unique<entry>();
         item->label=std::move(initial_label);
         item->service=&service; item->device=device; item->releases=service.release_endpoint();

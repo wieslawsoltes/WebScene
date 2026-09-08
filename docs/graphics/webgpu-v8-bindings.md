@@ -1897,3 +1897,31 @@ function”. Startup still exits 1 with Canvas 2D fallback. GPUDevice EventTarge
 uncaptured error events and device-loss delivery remain outstanding. Exhaustive
 teardown races, allocation-failure behavior and WebIDL/CTS conformance remain
 qualification work; passing these tests does not close those requirements.
+
+### GPUDevice EventTarget integration (2026-09-08)
+
+The normal generated-DOM runtime passes its native EventTarget template into
+the GPUDevice factory. Device wrappers inherit that template and prototype,
+while a private target identity connects them to the existing listener registry.
+This avoids duplicating event dispatch and keeps the GPU ownership fields
+separate from DOM node identity. Standalone dispatch skips DOM-node unwrapping;
+the generated identity helper also checks internal-field value types before
+reading them. The generator source and checked-in output were updated together.
+
+GPU runtime tests cover EventTarget inheritance, target/currentTarget/this,
+duplicate registration, removal, once and isolation from window listeners.
+The runtime suite and generated-binding checks pass. Native uncaptured-error
+events, onuncapturederror and comprehensive listener lifetime/DOM conformance
+qualification are still outstanding. Internal factories without a host
+EventTarget template retain their previous restricted surface.
+
+The unchanged Kestrel startup test now gets through addEventListener and fails
+on d.lost.then: the device-loss promise is not exposed yet. The probe reports
+Canvas 2D compatibility and exits 1. This remains a failed real-app acceptance
+test, not a completed WebGPU application run.
+
+The broader native-engine suite initially failed its detached-DOM GC deadline
+(before=622, after=657). A rebuilt prior-commit baseline passed; rebuilding the
+current changes and rerunning both native-engine and GPU runtime suites also
+passed (12.44 seconds combined). No GC assertion was weakened. The initial
+failure remains unresolved intermittent evidence, not a proven GC fix.

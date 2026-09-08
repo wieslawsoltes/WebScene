@@ -202,6 +202,31 @@ void test_runtime_webgpu_installation() {
     }
     require(document.find_by_id("gpu-installed-ready")!=nullptr,"Installed GPU did not create a device");
     require(runtime.execute(R"JS(
+        {
+            if(!(installedDevice instanceof EventTarget))throw new Error('GPUDevice EventTarget inheritance');
+            let calls=0;
+            function listener(event){
+                if(this!==installedDevice||event.target!==installedDevice||event.currentTarget!==installedDevice)throw new Error('GPUDevice event target');
+                ++calls;
+            }
+            installedDevice.addEventListener('probe',listener);
+            installedDevice.addEventListener('probe',listener);
+            installedDevice.dispatchEvent(new Event('probe'));
+            if(calls!==1)throw new Error('GPUDevice duplicate listener');
+            installedDevice.removeEventListener('probe',listener);
+            installedDevice.dispatchEvent(new Event('probe'));
+            if(calls!==1)throw new Error('GPUDevice listener removal');
+            installedDevice.addEventListener('probe',listener,{once:true});
+            installedDevice.dispatchEvent(new Event('probe'));installedDevice.dispatchEvent(new Event('probe'));
+            if(calls!==2)throw new Error('GPUDevice once listener');
+            let windowCalls=0;const windowListener=()=>++windowCalls;
+            window.addEventListener('probe',windowListener);
+            installedDevice.dispatchEvent(new Event('probe'));
+            window.removeEventListener('probe',windowListener);
+            if(windowCalls)throw new Error('GPUDevice dispatched to window');
+        }
+    )JS","device-events"),"GPUDevice EventTarget integration failed");
+    require(runtime.execute(R"JS(
         if(installedDevice.createBindGroupLayout.length!==1)throw new Error('binding layout arity');
         globalThis.bindingLayout=installedDevice.createBindGroupLayout({label:'camera',entries:new Set([{binding:0,visibility:1,buffer:{}}])});
         if(Object.prototype.toString.call(bindingLayout)!=='[object GPUBindGroupLayout]'||bindingLayout.label!=='camera')throw new Error('binding layout wrapper');

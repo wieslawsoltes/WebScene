@@ -1472,6 +1472,9 @@
             : generated_standalone_event_target_id(info.GetIsolate(), receiver);
 #endif
         auto* target = receiver.IsEmpty() || receiver_is_document
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+            || standalone_target_id.has_value()
+#endif
             ? nullptr
             : unwrap_node(receiver);
         auto target_value = target != nullptr

@@ -121,9 +121,15 @@ static std::optional<uint32_t> generated_standalone_event_target_id(
     v8::Isolate* isolate,
     v8::Local<v8::Object> receiver)
 {
+    if (receiver.IsEmpty()) return std::nullopt;
+    v8::Local<v8::Value> identity;
+    auto key = v8::Private::ForApi(isolate, js_string(isolate, "WebScene.EventTarget.identity"));
+    if (receiver->GetPrivate(isolate->GetCurrentContext(), key).ToLocal(&identity) && identity->IsUint32())
+        return identity.As<v8::Uint32>()->Value();
     if (receiver.IsEmpty() || receiver->InternalFieldCount() < 2) {
         return std::nullopt;
     }
+    if (!receiver->GetInternalField(1)->IsValue()) return std::nullopt;
     auto value = receiver->GetInternalField(1).As<v8::Value>();
     if (!value->IsUint32()) return std::nullopt;
     return value->Uint32Value(isolate->GetCurrentContext()).FromMaybe(0U);
