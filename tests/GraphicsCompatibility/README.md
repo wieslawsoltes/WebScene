@@ -31,3 +31,21 @@ The document viewport is 1920×1080 CSS pixels. The CAD canvas occupies the rema
 `reference.json` records browser revision, system GPU identity, non-fallback adapter evidence, fixture and harness hashes, camera state, inputs, errors, retained buffer checks, CPU submission samples, and per-file hashes. Each run saves before/after composite and canvas-layer PNGs plus a compressed Chromium trace. Repeatability compares exact PNG bytes separately for composition, GPU content and overlay; inspect any differences before accepting reference pixels.
 
 Presentation analysis uses Chromium `PipelineReporter` termination timestamps whose source has been verified to consume platform presentation feedback at the recorded Chrome revision. It does not treat rAF callbacks or CPU submission time as presentation. Unknown Chrome revisions, incomplete traces or missing hardware evidence remain unavailable; verify the new Chromium source contract before extending the analyzer's revision allowlist. Reported frame-state counts describe Chromium reporters and must not be relabelled as Kestrel dropped frames. A `captured` result means evidence acquisition succeeded, not that WebScene compatibility or the epic's performance gates passed.
+
+### Analyze native Kestrel pan timing
+
+Capture the probe's stdout/stderr when running `--pan-kestrel --verify-kestrel`,
+then run:
+
+```sh
+python3 tests/GraphicsCompatibility/analyze-kestrel-pan.py /path/to/probe.log
+python3 -m unittest discover -s tests/GraphicsCompatibility -p test_pan_analysis.py
+```
+
+The analyzer requires the pan-workload validation marker, matches publication and
+rendered revision timestamps, and separates acceptance wait from draw-callback
+work. Missing acceptance samples remain unavailable. If input sequence samples
+are present it reports progress to a published consumption watermark; coalesced
+inputs need not each be drawn. These distributions include the probe's settling
+period and never establish physical presentation FPS. Logs rejected by workload
+validation must not be used for performance comparisons.
