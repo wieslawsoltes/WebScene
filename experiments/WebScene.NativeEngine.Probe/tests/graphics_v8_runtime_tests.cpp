@@ -1177,8 +1177,15 @@ int main() {
                          for(const call of [()=>adapterDeviceProbe.createTexture(),()=>adapterDeviceProbe.createTexture({size:[],format:'rgba8unorm',usage:16}),()=>texture.createView.call({}),()=>texture.destroy.call({})]) {
                              let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid texture call');
                          }
-                         const shader=adapterDeviceProbe.createShaderModule({code:'@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));return vec4f(p[i],0,1);} @fragment fn fs()->@location(0) vec4f {return vec4f(1,0,0,1);}'});
-                         const pipeline=adapterDeviceProbe.createRenderPipeline({layout:'auto',vertex:{module:shader,entryPoint:'vs'},fragment:{module:shader,entryPoint:'fs',targets:[{format:'rgba8unorm'}]}});
+                         const shader=adapterDeviceProbe.createShaderModule({code:'@vertex fn vs(@location(0) p:vec2f)->@builtin(position) vec4f {return vec4f(p,0,1);} @group(0) @binding(0) var<uniform> color:vec4f; @fragment fn fs()->@location(0) vec4f {return color;}'});
+                         const vertices=adapterDeviceProbe.createBuffer({size:32,usage:32,mappedAtCreation:true});
+                         new Float32Array(vertices.getMappedRange()).set([-1,-1,3,-1,-1,3],2);vertices.unmap();
+                         const uniform=adapterDeviceProbe.createBuffer({size:512,usage:64,mappedAtCreation:true});
+                         new Float32Array(uniform.getMappedRange()).set([1,0,0,1],64);uniform.unmap();
+                         const bindingLayout=adapterDeviceProbe.createBindGroupLayout({entries:[{binding:0,visibility:2,buffer:{hasDynamicOffset:true}}]});
+                         const layout=adapterDeviceProbe.createPipelineLayout({bindGroupLayouts:[bindingLayout]});
+                         const group=adapterDeviceProbe.createBindGroup({layout:bindingLayout,entries:[{binding:0,resource:{buffer:uniform,size:16}}]});
+                         const pipeline=adapterDeviceProbe.createRenderPipeline({layout,vertex:{module:shader,entryPoint:'vs',buffers:[{arrayStride:8,attributes:[{format:'float32x2',offset:0,shaderLocation:0}]}]},fragment:{module:shader,entryPoint:'fs',targets:[{format:'rgba8unorm'}]}});
                          const drawEncoder=adapterDeviceProbe.createCommandEncoder();
                          let shapeRejected=false;try{drawEncoder.beginRenderPass({colorAttachments:[{view,loadOp:'clear',storeOp:'store',clearValue:[0,0]}]})}catch(e){shapeRejected=e instanceof TypeError}if(!shapeRejected)throw new Error('clear color shape');
                          const pass=drawEncoder.beginRenderPass({label:'triangle pass',colorAttachments:[{view,loadOp:'clear',storeOp:'store',clearValue:[0,0,0,1]}]});
@@ -1186,7 +1193,33 @@ int main() {
                          for(const call of [()=>pass.draw(),()=>pass.draw(-1),()=>pass.draw(1n),()=>pass.setPipeline({}),()=>pass.end.call({})]) {
                              let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid pass call');
                          }
-                         pass.setPipeline(pipeline);pass.draw(3);pass.end();
+                         if(pass.setBindGroup.length!==2)throw new Error('setBindGroup arity');
+                         for(const call of [()=>pass.setBindGroup(),()=>pass.setBindGroup(-1,group),()=>pass.setBindGroup(0,{}),
+                             ()=>pass.setBindGroup(0,group,[-1]),()=>pass.setBindGroup(0,group,new Uint32Array(1),0),
+                             ()=>pass.setBindGroup(0,group,[],0,1)]) {
+                             let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid bind group call');
+                         }
+                         for(const [start,count] of [[2,0],[0,2]]) {
+                             let rejected=false;try{pass.setBindGroup(0,group,new Uint32Array(1),start,count)}catch(e){rejected=e instanceof RangeError}
+                             if(!rejected)throw new Error('dynamic offset bounds accepted');
+                         }
+                         const bindingSentinel={};let bindingException=false;
+                         try{pass.setBindGroup(0,group,{[Symbol.iterator](){throw bindingSentinel}})}catch(e){bindingException=e===bindingSentinel}
+                         if(!bindingException)throw new Error('binding iterator exception lost');
+                         if(pass.setVertexBuffer.length!==2)throw new Error('setVertexBuffer arity');
+                         for(const call of [()=>pass.setVertexBuffer(),()=>pass.setVertexBuffer(-1,vertices),()=>pass.setVertexBuffer(0,{}),
+                             ()=>pass.setVertexBuffer(0,vertices,-1),()=>pass.setVertexBuffer(0,vertices,0,1n)]) {
+                             let rejected=false;try{call()}catch(e){rejected=e instanceof TypeError}if(!rejected)throw new Error('invalid vertex buffer call');
+                         }
+                         pass.setVertexBuffer(0,null);
+                         pass.setVertexBuffer(0,vertices,8,24);
+                         pass.setPipeline(pipeline);
+                         pass.setBindGroup(0,null);
+                         pass.setBindGroup(0,group,new Set([256]));pass.draw(3);
+                         const dynamic=new Uint32Array([77,256,88]);
+                         pass.setBindGroup(0,group,dynamic.subarray(1),0,1);pass.draw(3);
+                         const sharedDynamic=new Uint32Array(new SharedArrayBuffer(8));sharedDynamic[1]=256;
+                         pass.setBindGroup(0,group,sharedDynamic,1,1);pass.draw(3);pass.end();
                          const drawCommands=drawEncoder.finish({label:'triangle commands'});
                          if(drawCommands.label!=='triangle commands')throw new Error('recorded draw commands');
                          for(const call of [()=>adapterDeviceProbe.queue.submit(),()=>adapterDeviceProbe.queue.submit([{}]),()=>adapterDeviceProbe.queue.submit.call({},[])]) {

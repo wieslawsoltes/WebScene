@@ -90,7 +90,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
             var view = new NativeWebSceneView(true, url => url == uri || url == path);
             desktop.MainWindow = new Window
             {
-                Width = 400, Height = 240, Title = kestrel ? "Kestrel in WebScene" : "WebScene WebGPU document", Content = view
+                Width = kestrel ? 1280 : 400, Height = kestrel ? 800 : 240, Title = kestrel ? "Kestrel in WebScene" : "WebScene WebGPU document", Content = view
             };
             desktop.MainWindow.Opened += async (_, _) =>
             {
@@ -103,6 +103,16 @@ internal sealed class WebGpuDocumentProbeApp : Application
                     {
                         await Task.Delay(3000);
                         Console.WriteLine(await view.EvaluateTextAsync("({ready:document.documentElement.dataset.ready,backend:document.getElementById('engine-label')?.textContent,history:document.getElementById('command-history')?.textContent,errors:document.querySelectorAll('#command-history .history-error').length,gpu:!!navigator.gpu})"));
+                        if (arguments.Contains("--resize-kestrel"))
+                        {
+                            foreach (var size in new[] { (980, 680), (1440, 900), (1100, 740), (1280, 800) })
+                            {
+                                desktop.MainWindow.Width = size.Item1;
+                                desktop.MainWindow.Height = size.Item2;
+                                await Task.Delay(750);
+                                Console.WriteLine("Kestrel resize: " + await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
+                            }
+                        }
                         if (arguments.Contains("--verify-kestrel"))
                         {
                             var webGpuReady = await view.EvaluateTextAsync("document.documentElement.dataset.ready==='true'&&document.getElementById('engine-label').textContent.startsWith('WebGPU')&&document.querySelectorAll('#command-history .history-error').length===0");

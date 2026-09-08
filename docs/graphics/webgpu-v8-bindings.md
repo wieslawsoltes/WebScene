@@ -1980,3 +1980,36 @@ qualification and standards conformance remain outstanding.
 Unchanged Kestrel now advances to “pass.setBindGroup is not a function”. The
 probe still reports one application render error and exits 1. WebGPU backend
 selection alone remains insufficient for Kestrel acceptance.
+
+### Render-pass bindings and first original Kestrel render (2026-09-08)
+
+GPURenderPassEncoder now exposes setBindGroup (iterable offsets and the shared
+Uint32Array range overload) and setVertexBuffer. Conversion retains native
+resources across getters, enforces numeric ranges, snapshots dynamic offsets,
+and rechecks backing stores after coercion. Typed ranges reject out-of-bounds
+access with RangeError; nullable bindings and default vertex ranges are passed
+to Dawn. Native layout, usage and command-state validation remains in Dawn.
+
+The existing diagnostic pixel test now gets vertex positions from a buffer at
+a nonzero byte offset and red fragment color from a uniform binding at dynamic
+offset 256. It exercises Set iteration, typed subranges and shared offsets, and
+checks the rendered red pixels. Invalid interfaces, numeric/range conversion and
+iterator exceptions are also covered. The GPU runtime suite passes.
+
+The unchanged Kestrel document now passes its startup/initial-render check with
+WebGPU selected and zero logged application errors. The actual floor plan was
+visually inspected in NativeWebSceneView; screenshots are in
+[evidence/kestrel/macos-first-webgpu.png](evidence/kestrel/macos-first-webgpu.png)
+and [evidence/kestrel/macos-resized-webgpu.png](evidence/kestrel/macos-resized-webgpu.png).
+The host now opens Kestrel at 1280x800. The --resize-kestrel probe option samples
+980x680, 1440x900, 1100x740 and 1280x800 with 750 ms settling intervals. All four
+reported WebGPU and zero application errors; canvas backing dimensions matched
+2x the reported CSS dimensions. The final floor plan remained visible.
+
+This is initial real-app rendering evidence, not full Kestrel acceptance. The
+screenshots show UI layout/clipping defects and missing/incorrect toolbar and
+layer presentation. Canvas height also remained at 614 CSS pixels during the
+later shrink steps; complete resize/layout behavior needs investigation. Live
+drag smoothness, interaction, editing, export, all render paths, native uncaptured
+errors, WebGL fallback and cross-platform qualification remain open. Measurements
+and original-document hash are recorded in first-render-and-resize.json.
