@@ -1561,6 +1561,8 @@ public:
     void unregister_modal_dialog(const dom_node& dialog);
     void unregister_modal_subtree(const dom_node& root);
     const dom_node* active_modal_dialog(const dom_node& scope) const noexcept;
+    bool is_modal_dialog(const dom_node& node) const noexcept;
+    bool is_in_modal_layer(const dom_node& node) const noexcept;
     bool is_inert(const dom_node& node) const noexcept;
     dom_node* hit_test(dom_node& root, float x, float y);
     void clear();
@@ -1935,7 +1937,8 @@ private:
         bool defer_positive_descendants = false,
         const dom_node* paint_target = nullptr,
         const node_style::pseudo_element* paint_pseudo_target = nullptr,
-        bool ordered_canvas = false) const;
+        bool ordered_canvas = false,
+        bool paint_modal_root = false) const;
     static bool matches_selector(const dom_node& node, const std::string& selector);
     static void collect_matches(
         dom_node& node,

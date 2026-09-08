@@ -201,21 +201,67 @@ void test_native_modal_ordering() {
     require(document.append_child(scope,host)&&document.append_child(host,first)
         &&document.append_child(first,control)&&document.append_child(scope,second)
         &&document.append_child(scope,background),"Modal fixture tree failed");
+    for(auto* dialog : {&first,&second}) {
+        dialog->style.position=webscene_native::position_mode::fixed;
+        dialog->style.left={0,webscene_native::length_unit::pixels};
+        dialog->style.top={0,webscene_native::length_unit::pixels};
+        dialog->style.width={60,webscene_native::length_unit::pixels};
+        dialog->style.height={40,webscene_native::length_unit::pixels};
+    }
+    control.style.width={10,webscene_native::length_unit::pixels};
+    control.style.height={10,webscene_native::length_unit::pixels};
+    background.style.position=webscene_native::position_mode::fixed;
+    background.style.left={0,webscene_native::length_unit::pixels};
+    background.style.top={0,webscene_native::length_unit::pixels};
+    background.style.width={100,webscene_native::length_unit::pixels};
+    background.style.height={100,webscene_native::length_unit::pixels};
+    background.style.z_index=1000000;
+    first.style.background_rgba=0x112233FF;
+    second.style.background_rgba=0x445566FF;
+    background.style.background_rgba=0x778899FF;
+    document.layout(200,200);
+    const auto hit_x=control.layout.x+control.layout.width/2;
+    const auto hit_y=control.layout.y+control.layout.height/2;
     host.attributes["inert"]="";
     require(document.is_inert(control),"Baseline inherited inert state missing");
     require(document.register_modal_dialog(scope,first),"First modal registration failed");
     require(document.active_modal_dialog(scope)==&first&&!document.is_inert(control)
         &&document.is_inert(background),"Modal did not escape inert ancestor or block background");
+    require(document.hit_test(scope,hit_x,hit_y)==&control,"Active modal control was not hit above background");
+    require(document.hit_test(scope,150,150)==nullptr,"Modal background remained hit-testable");
     first.attributes["inert"]="";
     require(document.is_inert(control),"Explicit modal inert state was escaped");
+    require(document.hit_test(scope,hit_x,hit_y)==nullptr,"Explicitly inert modal accepted pointer input");
     first.attributes.erase("inert");
     require(document.register_modal_dialog(scope,second),"Second modal registration failed");
     require(document.active_modal_dialog(scope)==&second&&document.is_inert(control)
         &&!document.is_inert(second),"Second modal ordering failed");
+    require(document.hit_test(scope,hit_x,hit_y)==&second,"Top modal lost pointer ordering");
+    for(bool ordered_canvas : {false,true}) {
+        std::vector<webscene_scene_command> commands;
+        std::vector<webscene_scene_string> strings;
+        std::vector<char> bytes;
+        document.build_scene(commands,strings,bytes,ordered_canvas);
+        const auto painted_index=[&](const auto& node) {
+            size_t index=commands.size();unsigned count=0;
+            for(size_t i=0;i<commands.size();++i) {
+                if(commands[i].node_id==node.id&&commands[i].rgba==node.style.background_rgba
+                    &&(commands[i].kind==1||commands[i].kind==7||commands[i].kind==9||commands[i].kind==10)) {
+                    index=i;++count;
+                }
+            }
+            require(count==1,"Modal/background painted zero or multiple times");
+            return index;
+        };
+        require(painted_index(background)<painted_index(first)&&painted_index(first)<painted_index(second),
+            "Modal paint order did not override document z-index");
+    }
+
     require(document.register_modal_dialog(scope,first)&&document.active_modal_dialog(scope)==&second,
         "Duplicate modal registration changed ordering");
     document.unregister_modal_dialog(second);
     require(document.active_modal_dialog(scope)==&first&&!document.is_inert(control),"Previous modal was not restored");
+    require(document.hit_test(scope,hit_x,hit_y)==&control,"Previous modal pointer routing was not restored");
     auto& innerScope=document.create_element("div");
     auto& innerDialog=document.create_element("dialog");
     require(document.append_child(scope,innerScope)&&document.append_child(innerScope,innerDialog)

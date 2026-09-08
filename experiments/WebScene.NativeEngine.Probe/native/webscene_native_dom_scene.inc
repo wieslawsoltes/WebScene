@@ -19,7 +19,7 @@ void native_document::build_scene(
             return left->paint_z_index < right->paint_z_index;
         });
     for (const auto* fixed_node : fixed) {
-        if (!display_tree_allows_render(*this, *fixed_node)) continue;
+        if (is_in_modal_layer(*fixed_node) || !display_tree_allows_render(*this, *fixed_node)) continue;
         auto inherited_visibility_hidden = false;
         std::vector<const dom_node*> ancestors;
         for (auto* ancestor = composed_parent(*fixed_node);
@@ -39,6 +39,22 @@ void native_document::build_scene(
             string_bytes,
             inherited_visibility_hidden,
             false, false, nullptr, nullptr, ordered_canvas);
+    }
+    // Modal roots leave their DOM stacking context and are emitted exactly
+    // once, in registration order, after ordinary/fixed document content.
+    for (const auto& entry : modal_dialogs_) {
+        if (entry.dialog_id > native_id_index_.size()) continue;
+        const auto* modal = native_id_index_[entry.dialog_id - 1U];
+        if (modal == nullptr || !display_tree_allows_render(*this, *modal)) continue;
+        bool hidden = false;
+        std::vector<const dom_node*> ancestors;
+        for (auto* ancestor = composed_parent(*modal); ancestor != nullptr;
+             ancestor = composed_parent(*ancestor)) ancestors.push_back(ancestor);
+        for (auto ancestor = ancestors.rbegin(); ancestor != ancestors.rend(); ++ancestor) {
+            if ((*ancestor)->style.visibility_specified) hidden = (*ancestor)->style.visibility_hidden;
+        }
+        append_scene(*modal, commands, strings, string_bytes, hidden,
+            false, false, nullptr, nullptr, ordered_canvas, true);
     }
 }
 
@@ -218,8 +234,10 @@ void native_document::append_scene(
     bool defer_positive_descendants,
     const dom_node* paint_target,
     const node_style::pseudo_element* paint_pseudo_target,
-    bool ordered_canvas) const
+    bool ordered_canvas,
+    bool paint_modal_root) const
 {
+    if (!paint_modal_root && is_modal_dialog(node)) return;
     const auto elevated_target = paint_target == &node;
     const auto pseudo_only = elevated_target && paint_pseudo_target != nullptr;
     if (paint_target == &node) paint_target = nullptr;
@@ -338,7 +356,7 @@ void native_document::append_scene(
             // backgrounds must be emitted after retained chart canvases, just
             // like their text and SVG foreground commands.
         }
-        return node.paints_after_retained_canvas || fixed_layer || outermost_z_index > 0;
+        return is_in_modal_layer(node) || node.paints_after_retained_canvas || fixed_layer || outermost_z_index > 0;
     }();
     struct resolved_radii final {
         float top_left;

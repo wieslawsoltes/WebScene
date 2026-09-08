@@ -673,6 +673,7 @@ void native_document::unregister_modal_subtree(const dom_node& root)
 
 const dom_node* native_document::active_modal_dialog(const dom_node& scope) const noexcept
 {
+    if (modal_dialogs_.empty()) return nullptr;
     if (scope.id == 0 || scope.id > native_id_index_.size()
         || native_id_index_[scope.id - 1U] != &scope) return nullptr;
     for (auto entry = modal_dialogs_.rbegin(); entry != modal_dialogs_.rend(); ++entry) {
@@ -684,6 +685,23 @@ const dom_node* native_document::active_modal_dialog(const dom_node& scope) cons
         }
     }
     return nullptr;
+}
+
+bool native_document::is_modal_dialog(const dom_node& node) const noexcept
+{
+    if (modal_dialogs_.empty() || node.id == 0 || node.id > native_id_index_.size()
+        || native_id_index_[node.id - 1U] != &node) return false;
+    return std::any_of(modal_dialogs_.begin(), modal_dialogs_.end(),
+        [&](const auto& entry) { return entry.dialog_id == node.id; });
+}
+
+bool native_document::is_in_modal_layer(const dom_node& node) const noexcept
+{
+    if (modal_dialogs_.empty()) return false;
+    for (auto* ancestor = &node; ancestor != nullptr; ancestor = composed_parent(*ancestor)) {
+        if (is_modal_dialog(*ancestor)) return true;
+    }
+    return false;
 }
 
 bool native_document::is_inert(const dom_node& node) const noexcept
@@ -710,6 +728,9 @@ bool native_document::is_inert(const dom_node& node) const noexcept
 
 dom_node* native_document::hit_test(dom_node& root, float x, float y)
 {
+    if (const auto* modal = active_modal_dialog(root)) {
+        return hit_test(*const_cast<dom_node*>(modal), x, y);
+    }
     const auto nearest_element = [this](dom_node* hit) {
         while (hit != nullptr && hit->tag == "#text") hit = composed_parent(*hit);
         return hit;
@@ -791,6 +812,11 @@ dom_node* native_document::hit_test_node(
     bool inherited_pointer_events_none,
     bool ignore_own_clip) noexcept
 {
+    // A scope is itself inert while blocked. Enter its active modal before
+    // pruning the scope, otherwise no control in that dialog could be hit.
+    if (const auto* modal = active_modal_dialog(node)) {
+        return hit_test(*const_cast<dom_node*>(modal), x, y);
+    }
     if (!node.visible || node.style.display == display_mode::none || is_inert(node)) return nullptr;
     const auto visibility_hidden = node.style.visibility_specified
         ? node.style.visibility_hidden

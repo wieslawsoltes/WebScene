@@ -2198,3 +2198,29 @@ modal paint ordering, out-of-flow layout, hit-test routing into the active
 modal, backdrop, focus entry/restoration and event integration must use this
 state before modal opening is exposed. Cross-frame visual/input behavior and
 full conformance/performance remain unqualified.
+
+### Native modal paint and hit ordering (2026-09-08)
+
+Hit testing now enters an active modal before rejecting its blocked scope as
+inert. This routes controls inside the modal above ordinary/fixed background
+controls, while hits outside its bounds currently return no target. Nested
+scope traversal uses the same routing. Explicit inertness of the modal still
+rejects input, and removing the top registration restores the previous modal's
+hit targets.
+
+Scene building omits registered modal roots from normal DOM and fixed-layer
+passes, then emits them once in registration order. Modal content participates
+in the foreground paint layer used with retained canvases. Ancestor visibility
+inheritance is retained; ordinary ancestor stacking/clip commands do not wrap
+the modal's separate paint pass. Empty modal stacks have an early return on
+the hot lookup path.
+
+Native regression fixtures lay out overlapping controls and verify routing
+above a background with z-index 1000000, blocked background hits, explicit
+inertness and restoration. Serialized scene checks assert exactly one background
+command per modal and background < first modal < second modal in both ordered
+canvas and legacy scene modes. Both native suites passed (12.82 seconds).
+These are native geometry/command-order assertions, not a presented-pixel proof.
+Modal out-of-flow layout/default styles, backdrop, focus entry/restoration,
+showModal and complete events remain pending; Kestrel BOX remains unqualified.
+Cross-frame clipping and modal pointer-capture behavior remain unqualified.
