@@ -2661,6 +2661,13 @@
                 if(present) {
                     auto ticket=canvas.provider->capture_latest_submission();
                     if(ticket)output=std::make_shared<webscene::graphics::dawn_scene_image_snapshot>(std::move(ticket));
+                    else {
+                        const auto& backing=canvas.node->canvas().backing;
+                        output=std::make_shared<webscene_failed_gpu_image_snapshot>(webscene::graphics::image_metadata{
+                            backing.identity(),0,backing.allocation_generation(),backing.content_serial(),
+                            0,0,backing.width(),backing.height()});
+                    }
+                    document.mark_scene_changed();
                 }
             }
         }

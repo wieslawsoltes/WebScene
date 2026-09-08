@@ -223,3 +223,32 @@ and vary CPU commands; they do not establish full multi-version rendered A/B/C
 coherence or exercise the runtime capture checkpoint. Consumer predecessor
 validation and queue insertion now share one lock to prevent a checkpoint reset
 from intervening between them.
+
+
+## Missing output and native right-button pan (2026-09-08)
+
+A submitted output that cannot produce a retention ticket now installs an
+explicit failed snapshot carrying the current canvas version. Scene capture
+cannot fall back to the older completed image. Submitted output capture also
+marks the document generation changed, including first pending images and failed
+outputs that will never reach the ordinary ready queue. The commit regression
+checks failed dependency selection in the presence of an old image, whole-scene
+rejection and successful replacement. Its canvas now allocates its own backing
+before metadata capture; this corrects an earlier fixture identity mistake.
+Native engine tests pass (12.55s); GPU runtime tests pass after that fixture
+correction (0.89s). Device-loss recovery remains a broader outstanding gate.
+
+The unchanged Kestrel probe adds `--pan-kestrel`, driving eighty right-button
+moves through the native input queue, out and back, with requested 16ms spacing.
+The recorded run delivered 74 moves and coalesced six, entered Kestrel's own
+panning state for every delivered move and exited on release, with no dropped
+inputs or application errors. It invoked 43 app animation callbacks but rendered
+66 scenes and performed 119 layout passes, with nine blocked publications.
+Median observed move spacing was 20.53ms; maximum was 37.04ms. These include host
+scheduling/coalescing and are not GPU execution or physical presentation timings.
+
+Evidence: `evidence/kestrel/native-right-button-pan.json`. No pointer capture
+events were observed, so capture-event conformance remains unqualified. The next
+performance investigation should separate input/RAF/layout scheduling, producer
+completion and consumer retirement. Browser timings, presented-frame coherence
+and resize qualification remain required.

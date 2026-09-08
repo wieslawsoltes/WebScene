@@ -23,3 +23,14 @@ struct webscene_gpu_image_snapshot {
     virtual status state() const=0;
     virtual std::shared_ptr<const webscene_gpu_image_lease_v3> resolve()=0;
 };
+
+// A submitted opportunity whose exact output could not be retained must remain
+// an explicit failed dependency. Absence would incorrectly reuse an older image.
+struct webscene_failed_gpu_image_snapshot final : webscene_gpu_image_snapshot {
+    const webscene::graphics::image_metadata metadata;
+    explicit webscene_failed_gpu_image_snapshot(webscene::graphics::image_metadata value)
+        : metadata(value) {}
+    webscene::graphics::image_metadata describe() const override { return metadata; }
+    status state() const override { return status::failed; }
+    std::shared_ptr<const webscene_gpu_image_lease_v3> resolve() override { return {}; }
+};

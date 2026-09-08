@@ -199,6 +199,53 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelZoomProbe;p.resize.disconnect();p.mutations.disconnect();document.removeEventListener('wheel',p.wheel);delete globalThis.kestrelZoomProbe;})()");
                             }
                         }
+                        if (arguments.Contains("--pan-kestrel"))
+                        {
+                            await view.EvaluateTextAsync("""
+                                (()=>{
+                                  const p=globalThis.kestrelPanProbe={events:[],captures:[]};
+                                  p.event=e=>p.events.push({type:e.type,x:e.clientX,y:e.clientY,button:e.button,buttons:e.buttons,time:performance.now(),panning:document.getElementById('viewport').classList.contains('panning')});
+                                  p.capture=e=>p.captures.push(e.type);
+                                  for(const name of ['pointerdown','pointermove','pointerup'])document.addEventListener(name,p.event);
+                                  for(const name of ['gotpointercapture','lostpointercapture'])document.addEventListener(name,p.capture);
+                                })()
+                                """);
+                            var surface = (NativeSceneSurface)view.Content!;
+                            double x = 0, y = 0;
+                            var pressed = false;
+                            try
+                            {
+                                await Task.Delay(250);
+                                using var center = System.Text.Json.JsonDocument.Parse(await view.EvaluateTextAsync("(()=>{const r=document.getElementById('viewport').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()"));
+                                x = center.RootElement[0].GetDouble();
+                                y = center.RootElement[1].GetDouble();
+                                var baseline = view.CapturePerformanceSnapshot();
+                                var started = System.Diagnostics.Stopwatch.StartNew();
+                                if (surface.SubmitPointerButton(2, x, y, 2, true) == 0)
+                                    throw new InvalidOperationException("Kestrel pan press was rejected.");
+                                pressed = true;
+                                for (var step = 1; step <= 80; ++step)
+                                {
+                                    var distance = step <= 40 ? step * 4 : (80 - step) * 4;
+                                    // Kind 1 routes a move with the right-button bit through the native queue.
+                                    if (surface.SubmitPointerButton(1, x + distance, y + distance / 4.0, 2, true) == 0)
+                                        throw new InvalidOperationException("Kestrel pan move was rejected.");
+                                    await Task.Delay(16);
+                                }
+                                if (surface.SubmitPointerButton(3, x, y, 2, false) == 0)
+                                    throw new InvalidOperationException("Kestrel pan release was rejected.");
+                                pressed = false;
+                                await Task.Delay(500);
+                                var after = view.CapturePerformanceSnapshot();
+                                Console.WriteLine("Kestrel pan performance: " + System.Text.Json.JsonSerializer.Serialize(new { elapsedMilliseconds = started.Elapsed.TotalMilliseconds, baseline, after, delta = after.Since(baseline) }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
+                                Console.WriteLine("Kestrel pan diagnostics: " + await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;return {events:p.events,captures:p.captures,panning:document.getElementById('viewport').classList.contains('panning'),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
+                            }
+                            finally
+                            {
+                                if (pressed) surface.SubmitPointerButton(3, x, y, 2, false);
+                                await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;for(const n of ['pointerdown','pointermove','pointerup'])document.removeEventListener(n,p.event);for(const n of ['gotpointercapture','lostpointercapture'])document.removeEventListener(n,p.capture);delete globalThis.kestrelPanProbe;})()");
+                            }
+                        }
                         if (arguments.Contains("--resize-kestrel"))
                         {
                             foreach (var size in new[] { (980, 680), (1440, 900), (1100, 740), (1280, 800) })

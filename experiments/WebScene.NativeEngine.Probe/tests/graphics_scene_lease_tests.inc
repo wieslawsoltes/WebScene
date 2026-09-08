@@ -1,8 +1,15 @@
 // White-box fixture compiled only into the graphics runtime test executable.
 // Exercises the production acquisition core and exported scene/lease operations.
+#include <source_location>
 void test_native_gpu_scene_leases()
 {
-    const auto require=[](bool value) { if (!value) throw std::runtime_error("GPU scene lease requirement failed"); };
+    const auto require=[](bool value, std::source_location location=std::source_location::current()) {
+        if (!value) {
+            const auto message="GPU scene lease requirement failed at line " + std::to_string(location.line());
+            std::fprintf(stderr,"%s\n",message.c_str());
+            throw std::runtime_error(message);
+        }
+    };
     // Exercise the production commit boundary with deliberately delayed outputs.
     // This constructor disables the worker only in this test executable.
     {
@@ -20,7 +27,7 @@ void test_native_gpu_scene_leases()
         };
         auto& canvas=engine.document_.create_element("canvas");
         require(engine.document_.append_child(engine.document_.body(),canvas));
-        const auto& backing=canvas.canvas().backing;
+        const auto& backing=canvas.mutable_canvas().backing;
         auto writer=pool.acquire();
         writer->set_metadata({backing.identity(),100,backing.allocation_generation(),backing.content_serial(),1,1,backing.width(),backing.height()});
         writer->begin();auto retained=writer->publish();writer->complete();writer.reset();
@@ -57,14 +64,27 @@ void test_native_gpu_scene_leases()
         auto failed=make_capture(4,3);output->completion=webscene_gpu_image_snapshot::status::failed;
         require(commit(failed)==result::discarded && engine.latest_->header.revision==3);
         output->completion=webscene_gpu_image_snapshot::status::ready;
+        auto missing=make_capture(4,3);
+        auto missing_output=std::make_shared<webscene_failed_gpu_image_snapshot>(output->describe());
+        canvas.mutable_canvas().gpu_snapshot=missing_output;
+        canvas.mutable_canvas().gpu_image=output->image; // Older completed image must not be substituted.
+        engine.document_.layout(engine.viewport_width_,engine.viewport_height_);
+        engine.document_.build_gpu_canvas_bindings(missing->gpu_bindings);
+        require(missing->gpu_bindings.size()==1 && missing->gpu_bindings[0].pending==missing_output);
+        require(!missing->gpu_bindings[0].resolve());
+        require(commit(missing)==result::discarded && engine.latest_->header.revision==3);
+        canvas.mutable_canvas().gpu_snapshot=output;
+        auto recovery=make_capture(4,3);
+        require(commit(recovery)==result::published && engine.latest_->header.revision==4);
+        engine.acknowledgement_->pending_scenes.clear();engine.acknowledgement_->revision=4;
         auto stale=make_capture(5,2);
-        require(commit(stale)==result::deferred && !engine.staged_scene_ && engine.latest_->header.revision==3);
-        auto resized=make_capture(6,3);engine.viewport_width_+=1;
-        require(commit(resized)==result::deferred && engine.latest_->header.revision==3);
+        require(commit(stale)==result::deferred && !engine.staged_scene_ && engine.latest_->header.revision==4);
+        auto resized=make_capture(6,4);engine.viewport_width_+=1;
+        require(commit(resized)==result::deferred && engine.latest_->header.revision==4);
         engine.viewport_width_-=1;
-        auto reset=make_capture(7,3);
+        auto reset=make_capture(7,4);
         canvas.mutable_canvas().backing.reset_bitmap(backing.width(),backing.height());
-        require(commit(reset)==result::deferred && engine.latest_->header.revision==3);
+        require(commit(reset)==result::deferred && engine.latest_->header.revision==4);
     }
     // Ordered Canvas2D placement is independently negotiated, including a diff
     // whose unchanged command payload has been stripped after capability hashing.
