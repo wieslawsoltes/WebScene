@@ -43,7 +43,12 @@
         // Commit still validates resets, viewport, completion and mailbox capacity.
         if(staged_scene_)return commit_captured_scene(staged_scene_,publication_started);
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
-        if(runtime_ && runtime_->has_open_gpu_output())return publication_result::deferred;
+        if(runtime_) {
+            std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> images;
+            { std::lock_guard lock(acknowledgement_->mutex); images=acknowledgement_->presentation_images; }
+            runtime_->update_gpu_presentation_images(images);
+            if(runtime_->has_open_gpu_output())return publication_result::deferred;
+        }
 #endif
         uint64_t base_revision = 0;
         uint64_t acknowledged_dom_hash = 0;

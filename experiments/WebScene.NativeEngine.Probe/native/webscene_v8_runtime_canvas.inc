@@ -2659,6 +2659,8 @@
                 // A reset inside this RAF batch may occur after frame admission.
                 // Its replacement output now owns the publication dependency.
                 canvas.bitmap_reset_awaiting_frame=false;
+                canvas.presentation_resize_pending=false;
+                canvas.node->mutable_canvas().gpu_presentation_image.reset();
                 auto& output=canvas.node->mutable_canvas().gpu_snapshot;
                 output.reset();
                 if(present) {
@@ -2720,7 +2722,13 @@
                     return metadata;
                 });
                 host.invalidate=[self,node] {
-                    auto& canvas=node->mutable_canvas();canvas.backing.reset_bitmap(canvas.backing.width(),canvas.backing.height());canvas.gpu_image.reset();canvas.gpu_snapshot.reset();self->document.mark_scene_changed();
+                    auto& canvas=node->mutable_canvas();canvas.backing.reset_bitmap(canvas.backing.width(),canvas.backing.height());canvas.gpu_image.reset();canvas.gpu_snapshot.reset();canvas.gpu_presentation_image.reset();
+                    const auto known=self->gpu_canvases.find(self->wrapper_key(*node));
+                    if(known!=self->gpu_canvases.end()) {
+                        known->second.presentation_resize_pending=false;
+                        known->second.presentation_generation_floor=canvas.backing.allocation_generation();
+                    }
+                    self->document.mark_scene_changed();
                 };
                 auto controller=std::make_unique<v8_webgpu_canvas_context>(info.GetIsolate(),context,info.This(),exception,width,height,std::move(host));
                 auto object=controller->object();

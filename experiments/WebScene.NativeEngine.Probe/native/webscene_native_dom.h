@@ -833,6 +833,7 @@ struct gpu_canvas_scene_binding final {
     webscene::graphics::image_metadata metadata;
     std::shared_ptr<webscene_gpu_image_snapshot> pending;
     std::shared_ptr<const webscene_gpu_image_lease_v3> completed;
+    uint64_t presentation_generation{};
     std::shared_ptr<const webscene_gpu_image_lease_v3> resolve() const {
         return pending ? pending->resolve() : completed;
     }
@@ -842,6 +843,7 @@ struct canvas_node_data final {
     webscene::graphics::canvas_backing backing;
     std::shared_ptr<const webscene_gpu_image_lease_v3> gpu_image;
     std::shared_ptr<webscene_gpu_image_snapshot> gpu_snapshot;
+    std::shared_ptr<const webscene_gpu_image_lease_v3> gpu_presentation_image;
     void publish_gpu_image(std::shared_ptr<const webscene_gpu_image_lease_v3> image) {
         if (!image) throw std::invalid_argument("missing GPU canvas image");
         const auto m=image->value.describe();

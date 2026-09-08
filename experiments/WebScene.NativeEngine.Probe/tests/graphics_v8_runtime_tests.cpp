@@ -801,7 +801,14 @@ void test_runtime_webgpu_installation() {
     require(published_node->canvas().backing.accepts_completed_content(published->value.describe().content_serial),
         "Acquiring the next frame invalidated completed canvas content");
     document.publish_gpu_canvas_image(*published_node,published);
+    require(runtime.execute("domGPUCanvas.width=10;globalThis.presentationRaf=requestAnimationFrame(()=>{});","gpu-presentation-resize"),"Presentation resize setup failed");
+    runtime.update_gpu_presentation_images({published});
+    require(published_node->canvas().gpu_presentation_image==published,
+        "Resize did not retain its compositor-accepted image");
+    require(!runtime.has_open_gpu_output(),"Retained presentation image still blocked shell publication");
     require(runtime.execute("domGPUContext.unconfigure();","gpu-unconfigure"),"GPU unconfigure failed");
+    require(!published_node->canvas().gpu_presentation_image,"Unconfigure retained presentation fallback");
+    require(runtime.execute("cancelAnimationFrame(presentationRaf);","gpu-presentation-cleanup"),"Presentation RAF cleanup failed");
     bool invalidated_image_rejected=false;
     try { document.publish_gpu_canvas_image(*published_node,published); }
     catch(const std::invalid_argument&) { invalidated_image_rejected=true; }
@@ -822,6 +829,10 @@ void test_runtime_webgpu_installation() {
         domGPUCanvas.width=12;
     )JS","gpu-resize-no-redraw"),"Resize setup failed");
     require(!runtime.has_open_gpu_output(),"Bitmap reset without redraw indefinitely held scene publication");
+    runtime.update_gpu_presentation_images({published});
+    require(!published_node->canvas().gpu_presentation_image,
+        "Resize resurrected a compositor image from an earlier configuration");
+
     require(runtime.execute("requestAnimationFrame(()=>requestAnimationFrame(()=>{}));","gpu-resize-redraw"),"Resize redraw setup failed");
     require(runtime.has_open_gpu_output(),"Queued resize redraw allowed an intermediate blank scene");
     runtime.signal_animation_frame(132);

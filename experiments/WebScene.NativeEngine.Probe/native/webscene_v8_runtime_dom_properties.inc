@@ -1521,6 +1521,7 @@
             // next host RAF. Keep the preceding coherent scene until that
             // opportunity, rather than publishing an intermediate blank canvas.
             gpu->second.bitmap_reset_awaiting_frame=true;
+            gpu->second.presentation_resize_pending=true;
         }
 #endif
         advance_canvas_generation(node,false);

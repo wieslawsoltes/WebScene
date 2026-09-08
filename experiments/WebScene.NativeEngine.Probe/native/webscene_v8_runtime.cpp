@@ -238,6 +238,8 @@ struct v8_dom_runtime::implementation final {
         std::shared_ptr<webscene::graphics::dawn_iosurface_canvas_host> provider;
         std::unique_ptr<webscene::graphics::v8_webgpu_canvas_context> context;
         bool bitmap_reset_awaiting_frame=false;
+        bool presentation_resize_pending=false;
+        uint64_t presentation_generation_floor=0;
     };
     std::unordered_map<uint64_t,gpu_canvas_entry> gpu_canvases;
     bool gpu_rendering_opportunity=false;
@@ -4721,13 +4723,34 @@ webscene::graphics::graphics_service& v8_dom_runtime::initialize_graphics(
 }
 #endif
 
+void v8_dom_runtime::update_gpu_presentation_images(
+    const std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images)
+{
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+    for(auto& [key,entry]:impl_->gpu_canvases) {
+        auto& canvas=entry.node->mutable_canvas();
+        std::shared_ptr<const webscene_gpu_image_lease_v3> retained;
+        if(entry.presentation_resize_pending && entry.context->is_configured()
+            && !canvas.gpu_image && !canvas.gpu_snapshot) {
+            for(const auto& image:images)
+                if(image->value.describe().canvas==canvas.backing.identity()
+                    && image->value.describe().allocation_generation>=entry.presentation_generation_floor){retained=image;break;}
+        }
+        if(canvas.gpu_presentation_image!=retained) {
+            canvas.gpu_presentation_image=std::move(retained);
+            impl_->document.mark_scene_changed();
+        }
+    }
+#endif
+}
+
 bool v8_dom_runtime::has_open_gpu_output() const
 {
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
     if(impl_->gpu_rendering_opportunity)return true;
     for(const auto& [key,canvas]:impl_->gpu_canvases)
         if(canvas.context->has_current_texture()
-            || (canvas.bitmap_reset_awaiting_frame && canvas.context->is_configured()
+            || (canvas.bitmap_reset_awaiting_frame && !canvas.node->canvas().gpu_presentation_image && canvas.context->is_configured()
                 && impl_->has_waiting_animation_frame_task()))return true;
 #endif
     return false;

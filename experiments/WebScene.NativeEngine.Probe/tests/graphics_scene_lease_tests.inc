@@ -102,6 +102,36 @@ void test_native_gpu_scene_leases()
         require(pending->state()==webscene_gpu_image_snapshot::status::pending);
         require(engine.latest_->gpu_images[0]->requires_producer_wait);
     }
+    // A presentation binding may retain an old bitmap only through its explicit
+    // owner and the generation of the resized canvas that captured it.
+    {
+        webscene_engine engine(nullptr);
+        struct provider final : webscene::graphics::image_provider_lifetime {};
+        webscene::graphics::owned_image_pool pool(std::make_shared<provider>());
+        auto& node=engine.document_.create_element("canvas");
+        require(engine.document_.append_child(engine.document_.body(),node));
+        auto& canvas=node.mutable_canvas();
+        require(canvas.backing.claim_context(webscene::graphics::canvas_context_mode::webgpu));
+        auto writer=pool.acquire();
+        writer->set_metadata({canvas.backing.identity(),100,canvas.backing.allocation_generation(),
+            canvas.backing.content_serial(),1,1,canvas.backing.width(),canvas.backing.height()});
+        writer->begin();auto image=writer->publish();writer->complete();writer.reset();
+        auto retained=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image));image.reset();
+        canvas.backing.reset_bitmap(640,480);
+        canvas.gpu_presentation_image=retained;
+        webscene_native::gpu_canvas_scene_binding binding{node.id,retained->value.describe(),{},retained,
+            canvas.backing.allocation_generation()};
+        require(engine.document_.validate_gpu_canvas_binding(binding));
+        auto ordinary=binding;ordinary.presentation_generation=0;
+        require(!engine.document_.validate_gpu_canvas_binding(ordinary));
+        canvas.backing.reset_bitmap(800,600);
+        require(!engine.document_.validate_gpu_canvas_binding(binding));
+        binding.presentation_generation=canvas.backing.allocation_generation();
+        require(engine.document_.validate_gpu_canvas_binding(binding));
+        canvas.gpu_presentation_image.reset();
+        require(!engine.document_.validate_gpu_canvas_binding(binding));
+        require(binding.resolve()==retained); // Immutable capture still owns its pixels.
+    }
     // Exercise the production commit boundary with deliberately delayed outputs.
     // This constructor disables the worker only in this test executable.
     {

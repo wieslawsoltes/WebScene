@@ -87,6 +87,12 @@ bool native_document::validate_gpu_canvas_binding(const gpu_canvas_scene_binding
         ? nullptr : native_id_index_[binding.node_id-1];
     if(!node || node->tag!="canvas" || !is_connected(*node))return false;
     const auto& backing=node->canvas().backing;
+    if(binding.presentation_generation) {
+        return binding.completed && !binding.pending
+            && node->canvas().gpu_presentation_image==binding.completed
+            && backing.identity()==binding.metadata.canvas
+            && backing.allocation_generation()==binding.presentation_generation;
+    }
     return backing.identity()==binding.metadata.canvas
         && backing.allocation_generation()==binding.metadata.allocation_generation
         && backing.accepts_completed_content(binding.metadata.content_serial)
@@ -101,7 +107,15 @@ void native_document::build_gpu_canvas_bindings(
         if(node->tag!="canvas" || !is_connected(*node) || !node->visible
             || !display_tree_allows_render(*this,*node))continue;
         const auto& canvas=node->canvas();
-        if(!canvas.gpu_snapshot&&!canvas.gpu_image)continue;
+        if(!canvas.gpu_snapshot&&!canvas.gpu_image) {
+            if(canvas.gpu_presentation_image) {
+                const auto metadata=canvas.gpu_presentation_image->value.describe();
+                if(metadata.canvas==canvas.backing.identity())
+                    bindings.push_back({node->id,metadata,nullptr,canvas.gpu_presentation_image,
+                        canvas.backing.allocation_generation()});
+            }
+            continue;
+        }
         const auto metadata=canvas.gpu_snapshot ? canvas.gpu_snapshot->describe()
             : canvas.gpu_image->value.describe();
         if(metadata.canvas!=canvas.backing.identity()
@@ -1288,9 +1302,11 @@ void native_document::append_scene(
     const auto gpu_metadata=capture_gpu_outputs && canvas.gpu_snapshot
         ? std::optional(canvas.gpu_snapshot->describe())
         : canvas.gpu_image ? std::optional(canvas.gpu_image->value.describe()) : std::nullopt;
-    const bool paints_gpu=gpu_metadata
+    const bool presentation_gpu=capture_gpu_outputs && !gpu_metadata && canvas.gpu_presentation_image
+        && canvas.gpu_presentation_image->value.describe().canvas==canvas.backing.identity();
+    const bool paints_gpu=presentation_gpu || (gpu_metadata
         && gpu_metadata->allocation_generation==canvas.backing.allocation_generation()
-        && canvas.backing.accepts_completed_content(gpu_metadata->content_serial);
+        && canvas.backing.accepts_completed_content(gpu_metadata->content_serial));
     if (paint_self && node.tag=="canvas" && paints_gpu) {
         // Native DOM output carries the node ID. Publication resolves it to the
         // scene-local image index before exposing the command to consumers.

@@ -19,6 +19,8 @@ enum class webgpu_canvas_interop;
 }
 #endif
 
+struct webscene_gpu_image_lease_v3;
+
 namespace webscene_native {
 
 class native_document;
@@ -271,6 +273,7 @@ public:
     bool dispatch_resize();
     bool deliver_resize_observers();
     bool has_open_gpu_output() const;
+    void update_gpu_presentation_images(const std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images);
     bool refresh_media_environment();
     bool set_visible(bool visible);
     bool dispatch_input(const webscene_input_event& event);
