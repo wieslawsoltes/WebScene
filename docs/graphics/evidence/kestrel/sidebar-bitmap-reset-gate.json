@@ -1,0 +1,16 @@
+{
+  "validated": true,
+  "gateCounts": {
+    "bitmap-reset-awaiting-frame": 224
+  },
+  "finalWidth": 342,
+  "publishedScenes": 10,
+  "layoutPasses": 165,
+  "maximumDrawGapMilliseconds": 502.534,
+  "temporaryInstrumentationRemoved": true,
+  "physicalPresentationVerified": false,
+  "limitations": [
+    "Diagnostic logging can perturb timing; use counts for gate attribution, not a performance comparison.",
+    "Only has_open_gpu_output reasons were traced; other publication deferral branches were not counted."
+  ]
+}
