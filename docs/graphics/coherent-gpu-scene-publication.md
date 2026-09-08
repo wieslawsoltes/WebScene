@@ -466,3 +466,14 @@ explicit discard. This checks undrawn ownership, not imported GPU fence executio
 The focused suite passes 23 tests each on net8/net10 with no skips. The bounded
 consumer change is retained for further performance and physical-render testing;
 its single-run latency result remains unqualified.
+
+Post-change GPU fixture verification completes 32 frames, two imports and GPU
+retirement with zero explicit transport copies (eight diagnostic readbacks).
+A repeated validated pan measured 34.06ms median publication-to-draw latency,
+so the earlier 28.42ms sample must not be treated as an established speedup.
+Kestrel resize verification now fails on application errors, nonpositive/nonfinite
+CSS size or DPR, bitmap/DPR mismatch exceeding one pixel, or viewport/workbench
+height disagreement. All four settled checkpoints pass in the rebuilt probe.
+This adds an unchanged-application regression gate alongside the existing grid
+WPT contracts; it does not qualify physical resize smoothness. Evidence:
+`evidence/kestrel/mailbox-resize-verification.json`.

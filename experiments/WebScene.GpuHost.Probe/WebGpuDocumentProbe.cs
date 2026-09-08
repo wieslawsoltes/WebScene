@@ -275,7 +275,9 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 desktop.MainWindow.Width = size.Item1;
                                 desktop.MainWindow.Height = size.Item2;
                                 await Task.Delay(750);
-                                Console.WriteLine("Kestrel resize: " + await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();const ancestors=[];for(let n=c.parentElement;n;n=n.parentElement){const b=n.getBoundingClientRect(),s=getComputedStyle(n);ancestors.push({id:n.id,tag:n.tagName,rect:[b.x,b.y,b.width,b.height],height:s.height,minHeight:s.minHeight,display:s.display,flex:s.flex,gridTemplateRows:s.gridTemplateRows});}return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],ancestors,dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
+                                var resizeDiagnostics = await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();const ancestors=[];for(let n=c.parentElement;n;n=n.parentElement){const b=n.getBoundingClientRect(),s=getComputedStyle(n);ancestors.push({id:n.id,tag:n.tagName,rect:[b.x,b.y,b.width,b.height],height:s.height,minHeight:s.minHeight,display:s.display,flex:s.flex,gridTemplateRows:s.gridTemplateRows});}return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],ancestors,dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
+                                Console.WriteLine("Kestrel resize: " + resizeDiagnostics);
+                                ValidateResizeGeometry(resizeDiagnostics);
                             }
                         }
                         if (arguments.Contains("--verify-kestrel"))
@@ -312,6 +314,29 @@ internal sealed class WebGpuDocumentProbeApp : Application
             desktop.Exit += (_, _) => File.Delete(path);
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static void ValidateResizeGeometry(string diagnostics)
+    {
+        using var parsed = System.Text.Json.JsonDocument.Parse(diagnostics);
+        var root = parsed.RootElement;
+        var css = root.GetProperty("css");
+        var bitmap = root.GetProperty("canvas");
+        var dpr = root.GetProperty("dpr").GetDouble();
+        if (root.GetProperty("errors").GetInt32() != 0 || !double.IsFinite(dpr) || dpr <= 0)
+            throw new InvalidOperationException("Kestrel resize reported an application error or invalid scale.");
+        for (var axis = 0; axis < 2; ++axis)
+        {
+            var size = css[axis].GetDouble();
+            if (!double.IsFinite(size) || size <= 0
+                || Math.Abs(bitmap[axis].GetDouble() - size * dpr) > 1)
+                throw new InvalidOperationException("Kestrel canvas bitmap does not match its resized CSS dimensions and DPR.");
+        }
+        var ancestors = root.GetProperty("ancestors").EnumerateArray().ToArray();
+        var viewport = ancestors.Single(node => node.GetProperty("id").GetString() == "viewport").GetProperty("rect");
+        var workbench = ancestors.Single(node => node.GetProperty("id").GetString() == "workbench").GetProperty("rect");
+        if (Math.Abs(viewport[3].GetDouble() - workbench[3].GetDouble()) > 1)
+            throw new InvalidOperationException("Kestrel viewport no longer tracks the resized workbench height.");
     }
 
     private static void ValidatePanWorkload(string diagnostics, double x, double y)
