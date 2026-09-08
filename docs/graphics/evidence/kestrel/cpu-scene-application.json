@@ -1,0 +1,152 @@
+{
+  "runs": {
+    "baseline": {
+      "validated": true,
+      "stageCounts": {
+        "frame": 100,
+        "acquire:Success": 51,
+        "apply:images-retained": 51,
+        "apply:cpu-applied": 51,
+        "apply:replaced": 51,
+        "apply:Applied": 51,
+        "acquire:Empty": 2
+      },
+      "stageDurationsMilliseconds": {
+        "apply:images-retained": {
+          "count": 51,
+          "median": 0.009583,
+          "maximum": 0.041291
+        },
+        "apply:cpu-applied": {
+          "count": 51,
+          "median": 16.916167,
+          "maximum": 21.166542
+        },
+        "apply:replaced": {
+          "count": 51,
+          "median": 0.002666,
+          "maximum": 0.019417
+        },
+        "apply:Applied": {
+          "count": 51,
+          "median": 0.007083,
+          "maximum": 0.028125
+        }
+      },
+      "analysis": {
+        "physicalPresentationVerified": false,
+        "publicationToAcceptance": {
+          "count": 35,
+          "medianMilliseconds": 26.514083,
+          "p95Milliseconds": 31.56925,
+          "maximumMilliseconds": 34.658875
+        },
+        "acceptanceToDrawCallbackEnd": {
+          "count": 35,
+          "medianMilliseconds": 0.795042,
+          "p95Milliseconds": 1.106959,
+          "maximumMilliseconds": 1.733125
+        },
+        "publicationToDrawCallbackEnd": {
+          "count": 35,
+          "medianMilliseconds": 27.293625,
+          "p95Milliseconds": 32.469375,
+          "maximumMilliseconds": 35.604375
+        },
+        "inputToPublishedConsumptionWatermark": {
+          "count": 80,
+          "medianMilliseconds": 14.965792,
+          "p95Milliseconds": 32.548792,
+          "maximumMilliseconds": 38.463416
+        },
+        "unmatchedInputCount": 0,
+        "limitations": [
+          "Draw callback completion is not physical presentation.",
+          "A consumption watermark does not prove each coalesced move was drawn.",
+          "Measurement includes settling; no FPS qualification is derived."
+        ]
+      }
+    },
+    "sharedShapers": {
+      "validated": true,
+      "stageCounts": {
+        "frame": 109,
+        "acquire:Success": 53,
+        "apply:images-retained": 53,
+        "apply:cpu-applied": 53,
+        "apply:replaced": 53,
+        "apply:Applied": 53,
+        "acquire:Empty": 1
+      },
+      "stageDurationsMilliseconds": {
+        "apply:images-retained": {
+          "count": 53,
+          "median": 0.011583,
+          "maximum": 0.033416
+        },
+        "apply:cpu-applied": {
+          "count": 53,
+          "median": 15.413291,
+          "maximum": 19.584917
+        },
+        "apply:replaced": {
+          "count": 53,
+          "median": 0.002167,
+          "maximum": 0.004958
+        },
+        "apply:Applied": {
+          "count": 53,
+          "median": 0.006,
+          "maximum": 0.044333
+        }
+      },
+      "analysis": {
+        "physicalPresentationVerified": false,
+        "publicationToAcceptance": {
+          "count": 33,
+          "medianMilliseconds": 25.524625,
+          "p95Milliseconds": 30.575458,
+          "maximumMilliseconds": 31.203333
+        },
+        "acceptanceToDrawCallbackEnd": {
+          "count": 33,
+          "medianMilliseconds": 0.769167,
+          "p95Milliseconds": 1.116334,
+          "maximumMilliseconds": 1.632625
+        },
+        "publicationToDrawCallbackEnd": {
+          "count": 33,
+          "medianMilliseconds": 26.274166,
+          "p95Milliseconds": 31.554666,
+          "maximumMilliseconds": 31.92725
+        },
+        "inputToPublishedConsumptionWatermark": {
+          "count": 80,
+          "medianMilliseconds": 14.3288125,
+          "p95Milliseconds": 30.780584,
+          "maximumMilliseconds": 38.169583
+        },
+        "unmatchedInputCount": 0,
+        "limitations": [
+          "Draw callback completion is not physical presentation.",
+          "A consumption watermark does not prove each coalesced move was drawn.",
+          "Measurement includes settling; no FPS qualification is derived."
+        ]
+      }
+    }
+  },
+  "tests": {
+    "net8.0": {
+      "passed": 16,
+      "failed": 0
+    },
+    "net10.0": {
+      "passed": 16,
+      "failed": 0
+    }
+  },
+  "limitations": [
+    "One validated run per variant; not a statistically qualified performance improvement.",
+    "Physical presentation and sustained 60 FPS remain unverified."
+  ]
+}

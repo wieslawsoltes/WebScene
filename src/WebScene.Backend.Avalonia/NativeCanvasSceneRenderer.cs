@@ -514,7 +514,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             && layer.StringCount <= view->StringCount - layer.StringOffset;
 
     private (SKPicture Backdrop, SKPicture Overlay) CompileDom(NativeSceneView* view,
-        int startIndex = 0, int endIndex = -1, bool mergePaintOrder = false)
+        int startIndex = 0, int endIndex = -1, bool mergePaintOrder = false,
+        Dictionary<string, SKShaper>? sharedShapers = null)
     {
         using var backdropRecorder = new SKPictureRecorder();
         using var overlayRecorder = new SKPictureRecorder();
@@ -538,7 +539,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             Style = SKPaintStyle.Fill,
             TextAlign = SKTextAlign.Left
         };
-        var textShapers = new Dictionary<string, SKShaper>(StringComparer.Ordinal);
+        var textShapers = sharedShapers ?? new Dictionary<string, SKShaper>(StringComparer.Ordinal);
         try
         {
             var end = endIndex < 0 ? commands.Length : endIndex;
@@ -727,10 +728,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         }
         finally
         {
-            foreach (var shaper in textShapers.Values)
-            {
-                shaper.Dispose();
-            }
+            if (sharedShapers is null)
+                foreach (var shaper in textShapers.Values) shaper.Dispose();
         }
         return (backdropRecorder.EndRecording(), overlayRecorder.EndRecording());
     }
@@ -3517,6 +3516,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private List<OrderedGpuPaint> CompileOrderedGpuDom(NativeSceneView* view)
     {
         var result = new List<OrderedGpuPaint>();
+        var shapers = new Dictionary<string, SKShaper>(StringComparer.Ordinal);
         var commands = new ReadOnlySpan<SceneCommand>(view->Commands, checked((int)view->Header.CommandCount));
         var start = 0;
         try
@@ -3527,7 +3527,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     continue;
                 if (start < index)
                 {
-                    var pictures = CompileDom(view, start, index, mergePaintOrder: true);
+                    var pictures = CompileDom(view, start, index, mergePaintOrder: true, sharedShapers: shapers);
                     pictures.Overlay.Dispose();
                     result.Add(new(default, default, pictures.Backdrop));
                 }
@@ -3538,6 +3538,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             return result;
         }
         catch { foreach (var entry in result) entry.Picture?.Dispose(); throw; }
+        finally { foreach (var shaper in shapers.Values) shaper.Dispose(); }
     }
     private void DisposeOrderedGpuDom()
     {

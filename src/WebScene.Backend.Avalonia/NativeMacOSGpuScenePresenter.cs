@@ -50,7 +50,7 @@ internal sealed class NativeMacOSGpuScenePresenter
     // Apply under the composition owner's serialization. Image retention is
     // completed before mutating the renderer; acknowledge only after both the
     // renderer and its indexed image bindings have accepted the same version.
-    internal unsafe NativeGpuSceneApplyResult ApplyScene(NativeSceneLeaseV3 scene, NativeCanvasSceneRenderer renderer)
+    internal unsafe NativeGpuSceneApplyResult ApplyScene(NativeSceneLeaseV3 scene, NativeCanvasSceneRenderer renderer, NativeSceneRenderObserver? observer = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(renderer);
@@ -64,6 +64,7 @@ internal sealed class NativeMacOSGpuScenePresenter
             if (view.SceneVersion != 3 || view.StructSize != System.Runtime.InteropServices.Marshal.SizeOf<NativeSceneViewV3>() ||
                 (view.RequiredCapabilities & ~supported) != 0 || !NativeSceneViewValidation.IsValid((NativeSceneView*)view.CpuView)) return;
             var status = NativeMacOSGpuSceneImages.Acquire(scene, out var images);
+            observer?.RecordScheduling("apply:images-retained", 0, ((NativeSceneView*)view.CpuView)->Header.Revision, HasPendingRetirements);
             if (status == NativeSceneAcquireStatus.Backpressure) { result = NativeGpuSceneApplyResult.Backpressure; return; }
             if (status != NativeSceneAcquireStatus.Success || images is null)
                 throw new InvalidOperationException($"Scene image retention failed: {status}");
@@ -75,8 +76,10 @@ internal sealed class NativeMacOSGpuScenePresenter
                         ((view.RequiredCapabilities & NativeWebSceneApi.GpuImageCapability) == 0 || command.Rgba >= images.ImageCount)) return;
                 if (!renderer.ApplyDiff((NativeSceneView*)view.CpuView, orderedGpuImages: (view.RequiredCapabilities & supported) != 0))
                 { result = NativeGpuSceneApplyResult.RejectedDiff; return; }
+                observer?.RecordScheduling("apply:cpu-applied", 0, cpu->Header.Revision, HasPendingRetirements);
                 if (!TryReplace(images)) throw new InvalidOperationException("Scene replacement lost its serialized admission slot.");
                 images = null; // Presenter now owns the bindings used by this renderer version.
+                observer?.RecordScheduling("apply:replaced", 0, cpu->Header.Revision, HasPendingRetirements);
                 result = scene.Acknowledge() ? NativeGpuSceneApplyResult.Applied : NativeGpuSceneApplyResult.AcknowledgementFailed;
             }
             finally { images?.DiscardUnprepared(); }

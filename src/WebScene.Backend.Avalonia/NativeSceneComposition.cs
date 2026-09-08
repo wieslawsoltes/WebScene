@@ -927,7 +927,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 if (!NativeSceneViewValidation.IsValid(view) || view->Header.Revision <= _appliedRevision) return;
                 var monitoring = _performanceInstrumentation.IsEnabled;
                 var started = monitoring ? Stopwatch.GetTimestamp() : 0;
-                var applied = _gpuPresenter!.ApplyScene(scene, _renderer);
+                var applied = _gpuPresenter!.ApplyScene(scene, _renderer, monitoring ? _renderObserver : null);
                 if (monitoring) _renderObserver.RecordScheduling("apply:" + applied, _publicationMailbox.PendingCount,
                     view->Header.Revision, _gpuPresenter.HasPendingRetirements);
                 if (applied == NativeGpuSceneApplyResult.Backpressure) return;
