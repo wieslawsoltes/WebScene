@@ -316,6 +316,8 @@
         { "name": "returnValue", "getter": "get_dialog_return_value", "setter": "set_dialog_return_value" }
       ],
       "methods": [
+        { "name": "show", "callback": "dialog_show", "length": 0 },
+        { "name": "showModal", "callback": "dialog_show_modal", "length": 0 },
         { "name": "close", "callback": "dialog_close", "length": 0 },
         { "name": "requestClose", "callback": "dialog_request_close", "length": 0 }
       ],

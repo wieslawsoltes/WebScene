@@ -1453,7 +1453,8 @@
             event->Set(local_context, js_string(isolate, name), v8::Number::New(isolate, value)).Check();
         };
         const auto type_view = std::string_view(type);
-        const auto bubbles = type_view != "close"
+        const auto bubbles = type_view != "beforetoggle"
+            && type_view != "close"
             && type_view != "cancel"
             && type_view != "blur"
             && type_view != "focus"
@@ -1480,6 +1481,11 @@
         event->Set(local_context, js_string(isolate, "bubbles"), v8::Boolean::New(isolate, bubbles)).Check();
         event->Set(local_context, js_string(isolate, "cancelable"), v8::Boolean::New(isolate, cancelable)).Check();
         event->Set(local_context, js_string(isolate, "defaultPrevented"), v8::False(isolate)).Check();
+        if (type_view == "beforetoggle") {
+            event->Set(local_context, js_string(isolate, "oldState"), js_string(isolate, "closed")).Check();
+            event->Set(local_context, js_string(isolate, "newState"), js_string(isolate, "open")).Check();
+            event->Set(local_context, js_string(isolate, "source"), v8::Null(isolate)).Check();
+        }
         if (type_view == "submit") {
             event->Set(
                 local_context,

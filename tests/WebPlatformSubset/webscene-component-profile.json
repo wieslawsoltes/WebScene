@@ -9,6 +9,13 @@
   },
   "required": [
     {
+      "path": "contracts/dialog-opening-lifecycle.html",
+      "type": "testharness",
+      "capabilities": ["dialog-opening", "dialog-modal-focus", "dialog-beforetoggle"],
+      "evidence": ["kestrel-original-box-command"],
+      "reason": "Native dialog opening regression; does not assert complete ToggleEvent or popover interoperability."
+    },
+    {
       "path": "contracts/youtube-embed-fallback.html",
       "type": "testharness",
       "capabilities": ["youtube-embed-fallback", "iframe-layout", "external-navigation"],

@@ -1791,17 +1791,74 @@
         set_boolean_attribute(value, info, "readonly");
     }
 
+    static void open_dialog(const v8::FunctionCallbackInfo<v8::Value>& info, bool modal)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (node->attributes.contains("open")) {
+            if (self->document.is_modal_dialog(*node) != modal)
+                throw_dom_exception(info, "Dialog is already open in a different mode", "InvalidStateError");
+            return;
+        }
+        if (modal && !self->is_connected(*node)) {
+            throw_dom_exception(info, "Modal dialog must be connected", "InvalidStateError");
+            return;
+        }
+        webscene_input_event input{};
+        bool prevented = false;
+        if (!self->dispatch_input_event_type(input, "beforetoggle", *node, &prevented) || prevented) return;
+        // A beforetoggle handler can open, detach or move this dialog.
+        if (node->attributes.contains("open") || (modal && !self->is_connected(*node))) return;
+        if (modal) {
+            auto* root = self->css_cascade_root_for_node(*node);
+            if (!root || !self->document.register_modal_dialog(*root, *node)) {
+                throw_dom_exception(info, "Modal dialog has no active document", "InvalidStateError");
+                return;
+            }
+        }
+        if (!node->dialog_state) node->dialog_state = std::make_unique<dom_node::dialog_data>();
+        node->dialog_state->previously_focused_id = self->active_element ? self->active_element->id : 0;
+        node->attributes["open"] = "";
+        self->recascade_connected_subtree(*node);
+        self->ensure_layout(); // Opening changes the hidden subtree before focus selection.
+        // Dialog focus starts with autofocus, then a focusable descendant,
+        // otherwise the dialog itself. Do not change its authored tabindex.
+        dom_node* first = nullptr;
+        dom_node* autofocus = nullptr;
+        const auto visit = [&](const auto& recurse, dom_node& candidate) -> void {
+            if (candidate.attributes.contains("autofocus")
+                && (&candidate == node || self->is_programmatically_focusable(&candidate)))
+                if (!autofocus) autofocus = &candidate;
+            if (&candidate != node && !first && self->is_programmatically_focusable(&candidate)) first = &candidate;
+            for (auto* child : self->document.composed_children(candidate)) if (child) recurse(recurse, *child);
+        };
+        visit(visit, *node);
+        if (self->is_connected(*node)) self->set_active_element(autofocus ? autofocus : first ? first : node, input);
+    }
+
+    static void dialog_show(const v8::FunctionCallbackInfo<v8::Value>& info) { open_dialog(info, false); }
+    static void dialog_show_modal(const v8::FunctionCallbackInfo<v8::Value>& info) { open_dialog(info, true); }
+
     void close_dialog(dom_node& node, const std::optional<std::string>& result)
     {
         if (!node.attributes.contains("open")) return;
         const auto old_open = node.attributes.at("open");
         detach_attr(node, "open", old_open);
         node.attributes.erase("open");
+        document.unregister_modal_dialog(node);
         if (result) {
             if (!node.dialog_state) node.dialog_state = std::make_unique<dom_node::dialog_data>();
             node.dialog_state->return_value = *result;
         }
         recascade_connected_subtree(node);
+        if (node.dialog_state && node.dialog_state->previously_focused_id) {
+            auto* previous = document.find_by_native_id(node.dialog_state->previously_focused_id);
+            node.dialog_state->previously_focused_id = 0;
+            if (previous && is_connected(*previous) && is_programmatically_focusable(previous)) {
+                webscene_input_event input{};
+                set_active_element(previous, input);
+            }
+        }
         pending_dialog_close_events.push_back(pending_dialog_close_event{
             node.id, v8::Global<v8::Context>(isolate, context_for_node(node)),
             v8::Global<v8::Object>(isolate, wrap_node(node))});

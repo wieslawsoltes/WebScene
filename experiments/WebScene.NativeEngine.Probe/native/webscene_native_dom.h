@@ -1025,6 +1025,7 @@ struct dom_node final {
 
     struct dialog_data final {
         std::string return_value;
+        uint32_t previously_focused_id{};
     };
 
     struct form_control_data final {
