@@ -147,8 +147,27 @@ void test_native_gpu_scene_leases()
         require(engine.publish_scene()==result::deferred);check(1,0xff0000ff);
         auto c=submit(0x0000ffff);
         require(engine.publish_scene()==result::deferred);check(1,0xff0000ff);
+        // A newer admitted GPU opportunity must not block the already captured B.
+        // Its own CPU/GPU state is frozen; C still waits for its rendering boundary.
+        struct publication_wake final : webscene::graphics::completion_wake {
+            void signal() noexcept override {}
+        };
+        engine.runtime_=std::make_unique<webscene_native::v8_dom_runtime>(
+            engine.document_,[]{return webscene_native::v8_dom_runtime::viewport_metrics{800,600,1,0};});
+        require(engine.runtime_->initialize());
+        require(engine.runtime_->install_webgpu(std::make_shared<publication_wake>(),true,
+            webscene::graphics::webgpu_canvas_interop::none));
+        engine.runtime_->signal_animation_frame(16);
+        require(engine.runtime_->has_open_gpu_output());
         b->ready=true;
         require(engine.publish_scene()==result::published);check(2,0x00ff00ff);
+        require(engine.runtime_->has_open_gpu_output());
+        require(!engine.staged_scene_);
+        require(engine.publish_scene()==result::deferred);check(2,0x00ff00ff);
+        require(!engine.staged_scene_); // C cannot be captured before its boundary.
+        require(engine.runtime_->pump_animation_frame_task());
+        require(!engine.runtime_->has_open_gpu_output());
+        engine.runtime_.reset();
         require(engine.published_document_generation_!=engine.document_.scene_generation());
         acknowledge();
         require(engine.publish_scene()==result::deferred);check(2,0x00ff00ff);

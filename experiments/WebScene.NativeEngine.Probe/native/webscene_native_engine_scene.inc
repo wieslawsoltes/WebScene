@@ -37,10 +37,14 @@
             }
 #endif
         }
+        // A staged scene owns an immutable CPU capture and exact GPU dependencies.
+        // Only a new capture must wait for the current rendering opportunity;
+        // unrelated newer GPU work must not hold an already completed capture.
+        // Commit still validates resets, viewport, completion and mailbox capacity.
+        if(staged_scene_)return commit_captured_scene(staged_scene_,publication_started);
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
         if(runtime_ && runtime_->has_open_gpu_output())return publication_result::deferred;
 #endif
-        if(staged_scene_)return commit_captured_scene(staged_scene_,publication_started);
         uint64_t base_revision = 0;
         uint64_t acknowledged_dom_hash = 0;
         float acknowledged_width = 0;
