@@ -15,3 +15,7 @@ The `lines-10000-dpr1-light` before and after composite pairs differ within pixe
 The capture harness now checks that no tool is active and the tool banner, suggestions and file menu are hidden immediately before and after snapshot capture. It rejects contaminated captures rather than removing application UI or accepting those pixels. This does not explain the other cases' separately exported overlay differences.
 
 The new guard passes a targeted two-run `lines-10000-dpr1-light` capture with 30 timed pans per run, and all composite/GPU/overlay before/after hashes match. Archive integrity verifies 20 referenced files. Metadata: `neutral-ui-check.json.gz`; raw archive: `artifacts/chrome-reference-neutral-ui-check`. Seven harness tests pass. This short check does not replace the full matrix or its 180-pan workload.
+
+## Full-workload overlay recheck
+
+A targeted `fixture-dpr1-light` rerun with the neutral-UI guard and two repetitions of the full 180-pan workload completed successfully. All before/after composite, WebGPU and overlay PNG hashes match between repetitions; all 20 referenced archive files pass integrity verification. Metadata: `overlay-recheck.json.gz`; complete local archive: `artifacts/chrome-reference-overlay-recheck`. This does not establish why the earlier exported overlays differed, and does not replace the full matrix. Inspection of the earlier trace event names did not supply direct evidence of Canvas2D readback/backend switching; that hypothesis remains unproven.
