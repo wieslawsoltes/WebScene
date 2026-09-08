@@ -897,3 +897,9 @@ Thus this scripted workload combines size changes before they reach the WebScene
 ### Explicit OpenGL host resize regression
 
 Added `--webgpu-opengl` to force Avalonia OpenGl as the sole rendering mode, removing reliance on platform defaults for host regression evidence. The unchanged Kestrel WebGPU document passes four stepped resize geometries and exits zero under this option. Evidence: `evidence/kestrel/explicit-opengl-resize.json`. A preceding explicit-host sidebar run failed gesture validation and is not counted as passing. This is Dawn WebGPU displayed through the OpenGL compositor host; it does not qualify ANGLE/WebGL API fallback, native drag smoothness, visual flicker or physical FPS.
+
+### Manual performance feedback and explicit OpenGL sidebar recheck
+
+On 2026-09-08, after launching the latest Metal WebGPU Kestrel build, the user reported “performance is now excellent!”. This records qualitative manual feedback only; no physical frame timing or specific monitor/interaction qualification was supplied. The manual application remains open.
+
+A fresh explicit OpenGL compositor-host sidebar run passes the strict gesture validator and startup check with zero application errors (exit zero): 60 submitted moves, width 222 to 342, 55 publications and 53 drawn-scene samples. Full captured timeline and reproduction command: `evidence/kestrel/explicit-opengl-sidebar.json`. This resolves the missing successful explicit-host sidebar workload evidence without treating the previous failed gesture run as passing. It does not establish ANGLE WebGL API fallback or physical 60fps. Epic #23 remains open pending its mandatory cross-platform and baseline gates.
