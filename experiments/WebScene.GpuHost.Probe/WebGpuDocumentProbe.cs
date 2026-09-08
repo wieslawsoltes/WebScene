@@ -329,6 +329,49 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelSidebarProbe;for(const n of ['pointerdown','pointermove','pointerup'])document.removeEventListener(n,p.event);delete globalThis.kestrelSidebarProbe;})()");
                             }
                         }
+                        if (arguments.Contains("--continuous-resize-kestrel"))
+                        {
+                            var surface = (NativeSceneSurface)view.Content!;
+                            var baseline = view.CapturePerformanceSnapshot();
+                            var initialWidth = desktop.MainWindow.Width;
+                            var initialHeight = desktop.MainWindow.Height;
+                            var traceStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                            var submittedSizes = new List<object>(80);
+                            for (var step = 1; step <= 80; ++step)
+                            {
+                                var offset = step <= 40 ? step : 80 - step;
+                                var width = initialWidth + offset * 3;
+                                var height = initialHeight + offset * 2;
+                                desktop.MainWindow.Width = width;
+                                desktop.MainWindow.Height = height;
+                                submittedSizes.Add(new { timestamp = System.Diagnostics.Stopwatch.GetTimestamp(), width, height });
+                                await Task.Delay(16);
+                            }
+                            var inputEnded = System.Diagnostics.Stopwatch.GetTimestamp();
+                            await Task.Delay(750);
+                                var diagnostics = await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();const ancestors=[];for(let n=c.parentElement;n;n=n.parentElement){const b=n.getBoundingClientRect(),s=getComputedStyle(n);ancestors.push({id:n.id,tag:n.tagName,rect:[b.x,b.y,b.width,b.height],height:s.height,minHeight:s.minHeight,display:s.display,flex:s.flex,gridTemplateRows:s.gridTemplateRows});}return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],ancestors,dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
+                            var published = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted).ToArray();
+                            var drawn = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted).ToArray();
+                            Console.WriteLine("Kestrel continuous window resize: " + System.Text.Json.JsonSerializer.Serialize(new {
+                                traceStarted, inputEnded, timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
+                                submittedSizes, diagnostics, baseline, after = view.CapturePerformanceSnapshot(),
+                                publications = published, renderedScenes = drawn,
+                                scheduling = surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted),
+                                physicalPresentationVerified = false, nativeUserDragVerified = false
+                            }));
+                            ValidateResizeGeometry(diagnostics);
+                            using var geometry = System.Text.Json.JsonDocument.Parse(diagnostics);
+                            var finalWindow = geometry.RootElement.GetProperty("window");
+                            if (Math.Abs(finalWindow[0].GetDouble() - initialWidth) > 1 ||
+                                Math.Abs(finalWindow[1].GetDouble() - initialHeight) > 1)
+                                throw new InvalidOperationException("Continuous resize did not restore the initial viewport.");
+                            if (published.Where(sample => sample.Timestamp <= inputEnded)
+                                .Select(sample => (sample.ViewportWidth, sample.ViewportHeight)).Distinct().Count() < 3)
+                                throw new InvalidOperationException("Continuous resize did not publish intermediate viewport sizes.");
+                            if (drawn.Count(sample => sample.Timestamp <= inputEnded) < 3)
+                                throw new InvalidOperationException("Continuous resize did not draw intermediate scenes.");
+                            Console.WriteLine("Kestrel continuous window resize workload validated (physical presentation and native user drag remain unqualified).");
+                        }
                         if (arguments.Contains("--resize-kestrel"))
                         {
                             if (arguments.Contains("--capture-resize-kestrel"))
