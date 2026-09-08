@@ -1747,8 +1747,32 @@ void native_document::layout_children(dom_node& parent)
     const auto implicit_column_grid = parent_grid.auto_flow_column
         && !parent_grid.auto_columns.empty();
     if (is_grid_container(parent.style.display)
-        && (parent_grid.two_columns || implicit_column_grid)) {
+        && (parent_grid.two_columns || implicit_column_grid
+            || !parent_grid.template_columns.empty() || !parent_grid.template_rows.empty())) {
         using grid_track = node_style::grid_data::track;
+        const auto distribute_fractions = [](std::vector<float>& sizes,
+            const std::vector<grid_track>& tracks, float available, float gaps) {
+            auto remaining = available - gaps;
+            std::vector<size_t> flexible;
+            for (size_t index=0;index<sizes.size();++index) {
+                if(index<tracks.size() && tracks[index].fraction>0)flexible.push_back(index);
+                else remaining-=sizes[index];
+            }
+            while(!flexible.empty()) {
+                float weight=0;
+                for(const auto index:flexible)weight+=tracks[index].fraction;
+                const auto fraction=std::max(0.0F,remaining)/std::max(1.0F,weight);
+                bool froze=false;
+                for(auto it=flexible.begin();it!=flexible.end();) {
+                    if(fraction*tracks[*it].fraction<sizes[*it]) {
+                        remaining-=sizes[*it];it=flexible.erase(it);froze=true;
+                    } else ++it;
+                }
+                if(froze)continue;
+                for(const auto index:flexible)sizes[index]=fraction*tracks[index].fraction;
+                break;
+            }
+        };
         struct grid_item final {
             dom_node* node{nullptr};
             size_t row{0};
@@ -1807,7 +1831,7 @@ void native_document::layout_children(dom_node& parent)
         const auto column_count = inherited_subgrid_columns
             ? parent.grid_layout().column_widths.size()
             : std::max<size_t>(
-                implicit_column_grid ? 1U : 2U,
+                parent_grid.two_columns && effective_columns.empty() ? 2U : 1U,
                 effective_columns.size());
         const auto parse_line = [](std::string_view value) -> std::optional<int32_t> {
             const auto first = value.find_first_not_of(" \t\r\n");
@@ -2009,15 +2033,11 @@ void native_document::layout_children(dom_node& parent)
         if (!inherited_subgrid_columns) {
             const auto committed_width = std::accumulate(
                 column_widths.begin(), column_widths.end(), total_gap);
-            const auto fractional_space = std::max(0.0F, content.width - committed_width);
             if (fractional_weight > 0) {
-                for (size_t column = 0; column < effective_columns.size(); ++column) {
-                    const auto& track = effective_columns[column];
-                    if (track.fraction <= 0) continue;
-                    column_widths[column] = std::max(
-                        column_widths[column],
-                        fractional_space * track.fraction / fractional_weight);
-                }
+                // Flexible tracks own their share of the available space,
+                // including their minimum. Freeze undersized shares at that
+                // minimum and recompute the fraction for the remaining tracks.
+                distribute_fractions(column_widths,effective_columns,content.width,total_gap);
             } else if (committed_width < content.width && !column_widths.empty()) {
                 // `justify-content: normal` stretches auto grid tracks, not
                 // fixed tracks. Donating all free space to the final column
@@ -2215,15 +2235,8 @@ void native_document::layout_children(dom_node& parent)
             ? row_gap * static_cast<float>(row_count - 1U) : 0.0F;
         const auto committed_height = std::accumulate(
             row_heights.begin(), row_heights.end(), total_row_gap);
-        const auto fractional_row_space = std::max(0.0F, content.height - committed_height);
         if (fractional_row_weight > 0) {
-            for (size_t row = 0; row < parent_grid.template_rows.size(); ++row) {
-                const auto& track = parent_grid.template_rows[row];
-                if (track.fraction <= 0) continue;
-                row_heights[row] = std::max(
-                    row_heights[row],
-                    fractional_row_space * track.fraction / fractional_row_weight);
-            }
+            distribute_fractions(row_heights,parent_grid.template_rows,content.height,total_row_gap);
         } else if (single_auto_row
             && committed_height < content.height) {
             // The common one-row implicit grid case stretches its auto row to

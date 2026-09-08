@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8">
+<title>Flexible grid tracks distribute space without subtracting their own minimum twice</title>
+<link rel="help" href="https://drafts.csswg.org/css-grid-2/#algo-find-fr-size">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<script>
+function check(axis,extent,tracks,gap,expected) {
+ const grid=document.createElement('div');
+ grid.setAttribute('style','display:grid;width:600px;height:300px;gap:'+gap+'px;'+(axis==='columns'?'width':'height')+':'+extent+'px;grid-template-'+axis+':'+tracks);
+ for(let i=0;i<expected.length;i++)grid.appendChild(document.createElement('div'));
+ document.body.appendChild(grid);
+ try { for(let i=0;i<expected.length;i++)assert_approx_equals(grid.children[i].getBoundingClientRect()[axis==='columns'?'width':'height'],expected[i],0.01,'track '+i); }
+ finally { grid.remove(); }
+}
+test(()=>check('columns',600,'100px minmax(150px,1fr) 100px',10,[100,380,100]),'Flexible minimum is part of the final fraction, with fixed tracks and gaps');
+test(()=>check('columns',400,'minmax(300px,1fr) minmax(20px,1fr)',0,[300,100]),'A frozen minimum redistributes remaining space');
+test(()=>check('columns',600,'minmax(300px,1fr) minmax(0px,2fr)',0,[300,300]),'Unequal fractions recompute after minimum freezing');
+test(()=>check('columns',1000,'minmax(100px,.25fr) 100px',0,[225,100]),'Fractions below one leave their unrequested share unused');
+test(()=>check('columns',250,'minmax(200px,1fr) minmax(100px,1fr)',0,[200,100]),'Minimum sizes overflow instead of becoming negative');
+test(()=>check('rows',300,'minmax(50px,1fr) 50px',0,[250,50]),'Block-axis fractional tracks use the same allocation rule');
+</script>

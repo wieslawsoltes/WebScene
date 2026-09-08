@@ -1065,6 +1065,13 @@
   ],
   "candidate": [
     {
+      "path": "contracts/css-grid-flex-track-minimum.html",
+      "type": "testharness",
+      "capabilities": ["css-grid", "fractional-track-sizing", "minmax"],
+      "evidence": ["kestrel-unused-horizontal-grid-space"],
+      "reason": "Fractional track allocation must include its minimum, freeze constrained tracks and redistribute space. Local regression pending cross-RID qualification."
+    },
+    {
       "path": "contracts/css-grid-auto-row-shrink.html",
       "type": "testharness",
       "capabilities": ["css-grid", "automatic-minimum-size", "dynamic-layout"],
