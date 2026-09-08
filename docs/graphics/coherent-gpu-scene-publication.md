@@ -694,3 +694,15 @@ Ordinary host RAF boundaries now bypass the producer-only 16ms publication timer
 ### Diagnose remaining sidebar publication holds
 
 Temporary branch tracing during the validated original Kestrel sidebar workload recorded 206 open-output deferrals, all caused by bitmap reset awaiting RAF redraw, and 34 unresolved immutable GPU capture deferrals. No mailbox-full, invalidated capture or failed-producer branch was observed. Counts include startup and do not measure time spent; logging perturbs timing. The instrumentation was removed. This narrows further work to resize/redraw scheduling rather than mailbox capacity, without establishing a fix or physical cadence. Evidence: `evidence/kestrel/sidebar-publication-gate-diagnosis.json`.
+
+### Chromium comparison for panning handoff
+
+The current original-Kestrel pan workload validates all 80 submitted move watermarks. Across 35 matched scene samples, publication-to-acceptance median is 23.54ms (p95 32.27ms), versus acceptance-to-draw-callback-end median 2.44ms (p95 3.36ms). These measures include settling and do not establish physical FPS or GPU execution duration. See `evidence/kestrel/current-pan-handoff-latency.json`.
+
+Chromium `WebGPUSwapBufferProvider::ExportCurrentSharedImage` ends texture access, exports the resulting sync token, and retains the swap buffer through a release callback. `PrepareTransferableResource` packages that shared image and token for composition. The inspected export path contains no CPU completion wait. Source: https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/platform/graphics/gpu/webgpu_swap_buffer_provider.cc . This supports investigating asynchronous handoff rather than treating queue completion as the only publication boundary; it does not demonstrate that WebScene can omit synchronization or lifetime tracking.
+
+WebScene currently acquires before invalidation, and its invalidation gate prevents another acquisition until the pending draw. Ordinary publication wakes are suppressed after startup. A newer publication can therefore wait for a subsequent animation callback. Investigate these phases with timestamped evidence before changing wake policy; acquiring inside a clipped draw without expanding damage would be incorrect.
+
+The additional project-owned ResizeObserver/RAF ordering contract passes: the complete RAF batch and its microtask precede observer delivery, and RAF requested by the observer waits for a later opportunity. Combined profile: 2/2 documents, 7/7 subtests. This preserves HTML rendering order while further scheduling work remains open.
+
+Inspected Chromium source SHA-256: `fadd272dd6df5bad58dbef192383f51d5fab80d176521ca66d12f518766c18e5` (retrieved 2026-09-08; main URL is mutable).

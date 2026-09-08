@@ -21,6 +21,15 @@
         "native-engine-large-raf-batch-regression"
       ],
       "reason": "Candidate regression for complete host rendering opportunities; hardware and upstream qualification remain separate."
+    },
+    {
+      "path": "contracts/resize-observer-raf-order.html",
+      "type": "contract",
+      "capabilities": [
+        "resize-observer",
+        "animation-frame-batch-ordering"
+      ],
+      "reason": "Protect browser rendering order while correcting resize redraw starvation; local candidate only."
     }
   ],
   "harnessBlocked": [],
