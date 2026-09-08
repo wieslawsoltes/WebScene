@@ -489,3 +489,14 @@ but this trace locates most observed latency before acceptance, not inside drawi
 Next investigation should distinguish presenter retirement backpressure from
 missed compositor acquisition opportunities. Evidence:
 `evidence/kestrel/acceptance-to-draw-timeline.json`. No physical presentation claim.
+
+Undrawn intermediate scene groups no longer occupy GPU retirement slots when
+ImportedCount is zero. Replacement discards only their CPU source leases; any
+partially or fully imported group still requires the bounded fence-retirement
+path. Admission uses the same condition before mutating the renderer. The native
+IOSurface regression now verifies four consecutive unimported replacements leave
+no retirement queue and release the final source on discard. All 23 focused tests
+pass on net8/net10, with no skips; Ganesh completes 32 frames and retirement with
+zero explicit transport copies. A validated Kestrel run measured 63.41ms median
+publication-to-draw latency, so this resource-lifetime simplification is not an
+established performance fix. Evidence: `evidence/kestrel/unimported-scene-release.json`.

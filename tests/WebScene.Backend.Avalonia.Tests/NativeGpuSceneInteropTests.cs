@@ -241,7 +241,7 @@ public sealed class NativeGpuSceneInteropTests
     }
 
     [IOSurfaceFixtureFact]
-    public void MultipleUndrawnScenesKeepBoundedOwnershipUntilDiscard()
+    public void UndrawnSceneReplacementDoesNotConsumeGpuRetirementSlots()
     {
         NativeWebSceneApi.ConfigureLibraryPath(Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")!);
         var library = NativeLibrary.Load(Environment.GetEnvironmentVariable("WEBSCENE_TEST_GPU_FIXTURE_LIBRARY")!);
@@ -262,12 +262,11 @@ public sealed class NativeGpuSceneInteropTests
             Assert.True(presenter.TryReplace(groups[0]));
             Assert.True(presenter.TryReplace(groups[1]));
             Assert.True(presenter.TryReplace(groups[2]));
-            Assert.False(presenter.TryReplace(groups[3]));
+            Assert.True(presenter.TryReplace(groups[3]));
+            Assert.All(groups.Take(3), group => Assert.True(group.IsRetiring));
+            Assert.False(presenter.HasPendingRetirements);
             Assert.Equal(1, alive());
             Assert.True(presenter.TryDiscardUnprepared());
-            // Rejected replacement still belongs to the caller.
-            Assert.Equal(1, alive());
-            groups[3].DiscardUnprepared();
             Assert.Equal(0, alive());
         }
         finally

@@ -27,9 +27,18 @@ internal sealed class NativeMacOSGpuScenePresenter
         if (ReferenceEquals(_current, images)) return true;
         if (_current is not null)
         {
-            var slot = Array.FindIndex(_retiring, image => image is null);
-            if (slot < 0) return false;
-            _retiring[slot] = _current;
+            if (_current.ImportedCount == 0)
+            {
+                // An intermediate mailbox scene never borrowed a GPU image.
+                // Release its CPU leases without consuming a fence-retirement slot.
+                _current.DiscardUnprepared();
+            }
+            else
+            {
+                var slot = Array.FindIndex(_retiring, image => image is null);
+                if (slot < 0) return false;
+                _retiring[slot] = _current;
+            }
         }
         _current = images;
         _prepared = false;
@@ -43,7 +52,7 @@ internal sealed class NativeMacOSGpuScenePresenter
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(renderer);
-        if (IsStopping || (_current is not null && Array.TrueForAll(_retiring, image => image is not null)))
+        if (IsStopping || ((_current?.ImportedCount ?? 0) != 0 && Array.TrueForAll(_retiring, image => image is not null)))
             return NativeGpuSceneApplyResult.Backpressure;
         var result = NativeGpuSceneApplyResult.InvalidScene;
         scene.WithView(view =>
