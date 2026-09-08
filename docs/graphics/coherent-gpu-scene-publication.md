@@ -869,3 +869,9 @@ UsesMacSystemUiMetrics walked CSS font lists and called SKTypeface.FromFamilyNam
 A new regression warms a missing-family result, registers a document web font under that name, and verifies case-insensitive precedence and isolation from another document. Text/ordered-paint/font tests pass: 68 ordinary tests and two native integration cases per framework (net8.0 and net10.0). The initial native integration skip was explicitly rerun with the native library configured.
 
 One validated unchanged-Kestrel sidebar run reports CPU scene application median 2.93ms, 61 drawn scenes and maximum draw-callback gap 39.09ms. A validated pan run matches 64 scenes and publication-to-draw-callback median 15.21ms. Evidence: `evidence/kestrel/system-font-probe-cache.json`. This is a substantial single-run improvement over the prior roughly 15.6ms CPU application baseline, not statistical or physical 60fps qualification.
+
+### Continuous resize after system-font probe caching
+
+The complete continuous-window-resize probe passes after the font lookup optimization: 106 publications, 101 drawn scenes, 2813ms active update span, median callback gap 33.14ms and maximum 50.56ms. The earlier scripted run had maximum gap 88.04ms. Evidence: `evidence/kestrel/font-cache-continuous-resize.json`. This remains one scripted run with settling, not a statistical comparison, physical FPS measurement or native mouse-drag qualification. The callback spacing still leaves a cadence question after the CPU cost reduction; actual input-update timestamps must be distinguished from compositor and presentation timing.
+
+The authoritative GitHub #23 was rechecked and remains open with its hardware/reproducibility acceptance boxes unchecked. These local macOS performance improvements do not satisfy missing cross-RID native probe, reference or package gates.
