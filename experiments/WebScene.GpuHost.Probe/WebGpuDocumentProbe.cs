@@ -103,6 +103,21 @@ internal sealed class WebGpuDocumentProbeApp : Application
                     {
                         await Task.Delay(3000);
                         Console.WriteLine(await view.EvaluateTextAsync("({ready:document.documentElement.dataset.ready,backend:document.getElementById('engine-label')?.textContent,history:document.getElementById('command-history')?.textContent,errors:document.querySelectorAll('#command-history .history-error').length,gpu:!!navigator.gpu})"));
+                        if (arguments.Contains("--mesh-kestrel"))
+                        {
+                            var baseline = int.Parse(await view.EvaluateTextAsync("Number(document.getElementById('object-count').textContent)"));
+                            await view.EvaluateTextAsync("(()=>{const c=document.getElementById('command-input');c.value='';c.focus();})()");
+                            var surface = (NativeSceneSurface)view.Content!;
+                            if (surface.SubmitText("BOX") == 0 || surface.SubmitKey(7, 13) == 0 || surface.SubmitKey(8, 13) == 0)
+                                throw new InvalidOperationException("Kestrel box command was not accepted.");
+                            await Task.Delay(750);
+                            await view.EvaluateTextAsync("(()=>{const f=document.getElementById('modal-form');for(const [name,value] of Object.entries({x:0,y:0,z:0,width:2000,depth:1500,height:2500}))f.querySelector('[name='+name+']').value=String(value);f.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));})()");
+                            await Task.Delay(1000);
+                            Console.WriteLine("Kestrel mesh: " + await view.EvaluateTextAsync("({objects:Number(document.getElementById('object-count').textContent),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length,modalError:document.getElementById('modal-error').textContent,history:document.getElementById('command-history').textContent})"));
+                            var count = int.Parse(await view.EvaluateTextAsync("Number(document.getElementById('object-count').textContent)"));
+                            if (count != baseline + 1)
+                                throw new InvalidOperationException($"Kestrel box creation expected {baseline + 1} objects, got {count}.");
+                        }
                         if (arguments.Contains("--edit-kestrel"))
                         {
                             var baseline = int.Parse(await view.EvaluateTextAsync("Number(document.getElementById('object-count').textContent)"));

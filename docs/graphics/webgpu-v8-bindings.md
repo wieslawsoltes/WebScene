@@ -2046,3 +2046,19 @@ does not preserve key initialization. That standards gap remains open; using
 the native host input route is not a fix for synthetic KeyboardEvent. The
 passing test does not qualify OS hardware event delivery, rendered-pixel
 differences after each edit, export, or the remaining editing tools.
+
+### Original Kestrel solid-creation blockers (2026-09-08)
+
+The --mesh-kestrel probe submits BOX through native text/key input, fills the
+original primitive form with a 2000x1500x2500 box, submits it, and asserts that
+the document gained one object. It currently fails: the original application
+logs that showModal is not a function, and form submission reports that
+constructing FormData from a form is unsupported. The object count remains
+265 rather than 266 and the probe exits 1. Its managed build passes.
+
+Both blockers were traced to current runtime code: no native dialog showModal
+is exposed, and both main/frame FormData constructors explicitly reject form
+arguments. These must be addressed as real browser-stack dependencies for full
+Kestrel acceptance; the probe does not patch the app or inject geometry through
+its internals. GPU solid rendering is not yet assessed by this failed workflow.
+Evidence is in evidence/kestrel/mesh-creation-blockers.json.
