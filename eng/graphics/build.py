@@ -59,11 +59,11 @@ def checkout(name, directory):
     verify_source(name, directory)
 
 
-def verify_source(name, directory):
+def verify_source(name, directory, env=None):
     source = LOCK["sources"][name]
-    if capture(["git", "-C", directory, "rev-parse", "HEAD"]) != source["revision"]:
+    if capture(["git", "-C", directory, "rev-parse", "HEAD"], env=env) != source["revision"]:
         raise ValueError(f"Revision mismatch: {name}")
-    if capture(["git", "-C", directory, "diff", "HEAD", "--stat"]):
+    if capture(["git", "-C", directory, "diff", "HEAD", "--stat"], env=env):
         raise ValueError(f"Tracked source modifications: {name}")
     if "licenseSha256" in source and sha(directory / source["licenseFile"]) != source["licenseSha256"]:
         raise ValueError(f"License checksum mismatch: {name}")
@@ -82,19 +82,26 @@ def copy_licenses(source, destination):
                     shutil.copy2(path, output)
 
 
-def seal(component, source, sdk, rid, settings, tools):
-    verify_source(component, source)
-    copy_licenses(source, sdk / "licenses")
+def source_graph(source, env=None):
+    """Check dependency bytes under the same Git policy used to check them out."""
     source_graph = {}
     for current, directories, files in os.walk(source):
         if ".git" in directories or ".git" in files:
             directory = Path(current)
-            if capture(["git", "-C", directory, "diff", "HEAD", "--stat"]):
-                raise ValueError(f"Modified transitive dependency: {directory}")
+            changes = capture(["git", "-C", directory, "diff", "HEAD", "--stat"], env=env)
+            if changes:
+                raise ValueError(f"Modified transitive dependency: {directory}\n{changes}")
             source_graph[directory.relative_to(source).as_posix()] = capture(
-                ["git", "-C", directory, "rev-parse", "HEAD"])
+                ["git", "-C", directory, "rev-parse", "HEAD"], env=env)
         directories[:] = [d for d in directories if d not in {".git", "out", "node_modules", "__pycache__"}]
-    (sdk / "build-info/source-graph.json").write_text(json.dumps(source_graph, indent=2) + "\n")
+    return source_graph
+
+
+def seal(component, source, sdk, rid, settings, tools, env=None):
+    verify_source(component, source, env=env)
+    graph = source_graph(source, env=env)
+    copy_licenses(source, sdk / "licenses")
+    (sdk / "build-info/source-graph.json").write_text(json.dumps(graph, indent=2) + "\n")
     files = {p.relative_to(sdk).as_posix(): sha(p) for p in sorted(sdk.rglob("*"))
              if p.is_file() and p.name != "webscene-graphics-package.json"}
     manifest = {
@@ -166,7 +173,9 @@ def angle(args):
     gclient = depot / ("gclient.bat" if os.name == "nt" else "gclient")
     run([gclient, "sync", "--shallow", "--no-history", "--revision",
          "angle@" + LOCK["sources"]["angle"]["revision"]], cwd=workspace, env=env)
-    verify_source("angle", source)
+    verify_source("angle", source, env=env)
+    # Fail before compiling if synchronization produced inconsistent sources.
+    source_graph(source, env=env)
     profile = LOCK["profiles"][args.rid]
     settings = dict(LOCK["angleGn"], target_cpu=profile["cpu"])
     settings["angle_enable_" + profile["angleBackend"].lower()] = True
@@ -216,7 +225,7 @@ def angle(args):
     seal("angle", source, sdk, args.rid, settings,
          {"gn": capture([gn, "--version"], env=env), "ninja": capture(["ninja", "--version"], env=env),
           "clang": capture([clang, "--version"], env=env), "clangSha256": sha(clang),
-          "depotTools": LOCK["sources"]["depot-tools"]["revision"], "host": platform.platform()})
+          "depotTools": LOCK["sources"]["depot-tools"]["revision"], "host": platform.platform()}, env=env)
 
 
 if __name__ == "__main__":
