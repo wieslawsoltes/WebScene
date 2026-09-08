@@ -11,6 +11,8 @@
 #include "graphics/v8_webgpu_shaders.h"
 #include "graphics/webgpu_compilation_info.h"
 #include "graphics/v8_webgpu_render_pipelines.h"
+#include "graphics/v8_webgpu_bind_group_layouts.h"
+#include "graphics/v8_webgpu_pipeline_layouts.h"
 #include "graphics/v8_webgpu_texture_views.h"
 #include "graphics/v8_webgpu_adapters.h"
 #include "graphics/v8_webgpu_discovery.h"
@@ -1475,6 +1477,41 @@ int main() {
                         require(diagnostics->load()==1,"Invalid WGSL did not produce owned Dawn diagnostics");
 
                     }
+                    {
+                        resource_handle<wgpu::BindGroupLayout> binding_handle;
+                        resource_handle<wgpu::PipelineLayout> layout_handle;
+                        adapter_service->with_device(gc_buffer_device,[&](auto& owned){
+                            wgpu::BindGroupLayoutEntry entry{};entry.binding=0;
+                            entry.visibility=wgpu::ShaderStage::Vertex;entry.buffer.type=wgpu::BufferBindingType::Uniform;
+                            wgpu::BindGroupLayoutDescriptor descriptor{};descriptor.entryCount=1;descriptor.entries=&entry;
+                            binding_handle=owned.create_bind_group_layout(descriptor);
+                            owned.with_bind_group_layout(binding_handle,[&](const auto& binding){
+                                bool guarded=false;try{owned.release_bind_group_layout(binding_handle);}catch(const std::logic_error&){guarded=true;}
+                                require(guarded,"Binding layout released inside native access scope");
+                                wgpu::PipelineLayoutDescriptor pipeline{};pipeline.bindGroupLayoutCount=1;pipeline.bindGroupLayouts=&binding;
+                                layout_handle=owned.create_pipeline_layout(pipeline);
+                            });
+                            owned.release_bind_group_layout(binding_handle);
+                            require(owned.live_bind_group_layouts()==0&&owned.live_pipeline_layouts()==1,"Layout handle ownership mismatch");
+                            owned.with_pipeline_layout(layout_handle,[&](const auto& layout){
+                                require(static_cast<bool>(layout),"Pipeline layout lost native dependency");
+                                bool guarded=false;try{owned.release_pipeline_layout(layout_handle);}catch(const std::logic_error&){guarded=true;}
+                                require(guarded,"Pipeline layout released inside native access scope");
+                                guarded=false;try{owned.close();}catch(const std::logic_error&){guarded=true;}
+                                require(guarded,"Device closed inside pipeline layout access scope");
+                            });
+                        });
+                        auto layouts=std::make_unique<v8_webgpu_pipeline_layouts>(isolate,context,1);
+                        auto wrapper=layouts->wrap(context,*adapter_service,gc_buffer_device,layout_handle,device_object).ToLocalChecked();
+                        auto native=v8_webgpu_pipeline_layouts::native_reference(wrapper);
+                        bool wrong=false;try{v8_webgpu_bind_group_layouts::native_reference(wrapper);}catch(const std::invalid_argument&){wrong=true;}
+                        require(wrong,"Layout wrappers accepted the wrong interface brand");
+                        layouts.reset();
+                        adapter_service->with_device(gc_buffer_device,[&](auto& owned){require(owned.live_pipeline_layouts()==1,"Layout wrapper released native resource inline");});
+                        adapter_service->drain_commands();
+                        adapter_service->with_device(gc_buffer_device,[&](auto& owned){require(owned.live_pipeline_layouts()==0,"Deferred pipeline layout release failed");});
+                        require(static_cast<bool>(native),"Retained native layout reference lost");
+                    }
                     auto device_script=v8::String::NewFromUtf8Literal(isolate,R"JS(
                         {
                             if(deviceProbe.createShaderModule.length!==1)throw new Error('shader arity');
@@ -1549,11 +1586,16 @@ int main() {
                             delete globalThis.deviceProbe;
                         }
                     )JS");
+                    size_t shaders_before_device_script=0,pipelines_before_device_script=0;
+                    adapter_service->with_device(gc_buffer_device,[&](auto& owned){
+                        shaders_before_device_script=owned.live_shader_modules();
+                        pipelines_before_device_script=owned.live_render_pipelines();
+                    });
                     v8::Local<v8::Script> device_test;
                     require(v8::Script::Compile(context,device_script).ToLocal(&device_test) && !device_test->Run(context).IsEmpty(),"JavaScript device buffer creation/destruction failed");
                     adapter_service->with_device(gc_buffer_device,[&](auto& owned) {
-                        require(owned.live_shader_modules()==2,"JavaScript shader creation did not adopt exactly one native module");
-                        require(owned.live_render_pipelines()==2,"JavaScript pipeline creation did not adopt exactly one native pipeline");
+                        require(owned.live_shader_modules()==shaders_before_device_script+1,"JavaScript shader creation did not adopt exactly one native module");
+                        require(owned.live_render_pipelines()==pipelines_before_device_script+1,"JavaScript pipeline creation did not adopt exactly one native pipeline");
                     });
                     retired_device_probe.Reset(isolate,device_object);
                     async_buffers.reset();

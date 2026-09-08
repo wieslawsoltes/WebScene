@@ -1793,3 +1793,18 @@ WebIDL harness qualification remain part of the broader conformance work.
 
 Unchanged Kestrel was rerun and exits 1 with "d.createBindGroupLayout is not a
 function". Buffer setup now advances to explicit binding-layout creation.
+
+### Explicit layout native ownership (2026-09-08)
+
+Dawn devices now own bounded bind-group-layout and pipeline-layout tables with
+guarded access, close protection, native-reference conversion, distinct internal
+V8 brands, and deferred release commands. Tests create a uniform-buffer binding
+layout, use it to create a pipeline layout, release the original binding handle,
+and retain the native pipeline layout. They also verify scope guards, wrong-brand
+rejection, and deferred wrapper release. The runtime suite passes. Resource-count
+assertions now compare against their actual pre-script baseline rather than
+assuming earlier queued releases have not run.
+
+JavaScript createBindGroupLayout/createPipelineLayout descriptor conversion and
+exposure remain unimplemented; Kestrel's observed binding-layout failure remains
+open. The two tables currently use the existing pipeline-capacity setting.
