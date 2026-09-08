@@ -100,5 +100,42 @@ int main() {
     auto timings=timed.metrics();
     require(timings.latency_samples==1 && timings.total_latency_ns==timings.max_latency_ns);
     require(timings.pending==0 && timings.ready==0);
+    // Saturate reusable storage while driver completion races owner cancellation.
+    // Delivery stays on this engine thread; every native callback must retire,
+    // even if its logical cancellation was already delivered.
+    completion_mailbox stress(16,wake);
+    for(uint64_t round=0;round<1000;++round) {
+        std::vector<completion_ticket> tickets;
+        for(uint64_t index=0;index<16;++index)
+            tickets.push_back(stress.reserve(round*16+index,index%2 ? b : a).value());
+        require(!stress.reserve(UINT64_MAX,a));
+        std::atomic<bool> start{false};
+        std::thread driver([&] {
+            while(!start.load(std::memory_order_acquire)) std::this_thread::yield();
+            for(auto ticket:tickets) {
+                stress.publish(ticket,completion_status::success);
+                std::this_thread::yield();
+            }
+        });
+        start.store(true,std::memory_order_release);
+        stress.cancel_owner(a);
+        bool seen[16]{};
+        size_t delivered=0;
+        const auto deliver=[&](auto record) {
+            require(record.operation/16==round);
+            const auto index=record.operation%16;
+            require(!seen[index]);seen[index]=true;++delivered;
+            require(record.status==(index%2 ? completion_status::success : completion_status::cancelled));
+        };
+        while(stress.drain_one(deliver)) {}
+        driver.join();
+        while(stress.drain_one(deliver)) {}
+        require(delivered==16);
+        const auto metrics=stress.metrics();
+        require(metrics.pending==0 && metrics.ready==0 && metrics.native_pending==0 && metrics.occupied==0);
+        require(!stress.publish(tickets.front(),completion_status::success));
+    }
+    require(stress.metrics().admitted==16000 && stress.metrics().delivered==16000);
+    require(stress.metrics().high_water==16 && stress.metrics().saturated_reservations==1000);
     std::cout << "completion capacity, engine affinity, isolation and late-callback cancellation passed\n";
 }
