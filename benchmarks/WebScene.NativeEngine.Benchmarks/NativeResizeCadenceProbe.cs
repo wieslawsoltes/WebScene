@@ -191,7 +191,9 @@ internal static class NativeResizeCadenceProbe
             var json = JsonSerializer.Serialize(
                 new
                 {
-                    schema = "webscene-native-resize-cadence-v1",
+                    schema = "webscene-native-resize-cadence-v2",
+                    measurementScope = "headless-cpu-draw-callback",
+                    physicalPresentationVerified = false,
                     sourceKind = ReadOption(args, "--url") is null ? "deterministic-fixture" : "url",
                     composition,
                     certificationTelemetryEnabled = !certificationDiagnostics.StartsWith(
@@ -213,9 +215,9 @@ internal static class NativeResizeCadenceProbe
                         snapshot.ResizeFrames.SubmittedPairs - snapshot.ResizeFrames.AppliedPairs,
                         baseline.ResizeFrames.SubmittedPairs - baseline.ResizeFrames.AppliedPairs),
                     renderedFrames = delta.RenderedScenes,
-                    presentations = presentations.Length,
+                    drawCallbackCompletions = presentations.Length,
                     renderedFramesPerSecond = renderedFps,
-                    presentationFramesPerSecond = presentationFps,
+                    drawCallbackCompletionsPerSecond = presentationFps,
                     layoutPasses = delta.LayoutPasses,
                     layoutPassesPerAppliedResize = delta.LayoutPasses / (double)Math.Max(
                         1UL,
@@ -264,8 +266,8 @@ internal static class NativeResizeCadenceProbe
                         publicationToRenderLatencies),
                     renderLatencyMilliseconds = Summary(renderLatencies),
                     renderIntervalMilliseconds = Summary(renderIntervals),
-                    presentationIntervalMilliseconds = Summary(presentationIntervals),
-                    practicalVsyncGate = new
+                    drawCallbackIntervalMilliseconds = Summary(presentationIntervals),
+                    cpuCadenceGate = new
                     {
                         maximumP95LatencyMilliseconds = 16.7,
                         minimumFramesPerSecond = 58,
@@ -276,6 +278,7 @@ internal static class NativeResizeCadenceProbe
                         ? new
                         {
                             identity = reference.Identity,
+                            comparisonScope = "headless-draw-callback-versus-reference; not physical presentation",
                             referenceFramesPerSecond = reference.FramesPerSecond,
                             nativeFramesPerSecond = presentationFps,
                             framesPerSecondDelta =

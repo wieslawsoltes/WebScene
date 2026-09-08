@@ -17,7 +17,7 @@ def read_samples(directory: pathlib.Path, minimum: int) -> list[dict[str, Any]]:
         raise RuntimeError(
             f"{directory}: expected at least {minimum} JSON samples, found {len(paths)}")
     samples = [json.loads(path.read_text()) for path in paths]
-    if any(sample.get("schema") != "webscene-native-resize-cadence-v1" for sample in samples):
+    if any(sample.get("schema") != "webscene-native-resize-cadence-v2" for sample in samples):
         raise RuntimeError(f"{directory}: contains a non-resize-cadence sample")
     return samples
 
@@ -54,7 +54,8 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=pathlib.Path)
     parser.add_argument("--minimum-samples", type=int, default=10)
     parser.add_argument("--require-material-improvement", action="store_true")
-    parser.add_argument("--require-vsync", action="store_true")
+    parser.add_argument("--require-vsync", action="store_true", help="Require actual presentation evidence; headless samples cannot pass")
+    parser.add_argument("--require-cpu-cadence", action="store_true")
     args = parser.parse_args()
 
     control = read_samples(args.control_dir, args.minimum_samples)
@@ -73,15 +74,15 @@ def main() -> int:
         "renderLatencyMilliseconds.p95",
         "publicationLatencyMilliseconds.p95",
         "publicationToRenderLatencyMilliseconds.p95",
-        "presentationIntervalMilliseconds.p95",
-        "presentationIntervalMilliseconds.maximum",
+        "drawCallbackIntervalMilliseconds.p95",
+        "drawCallbackIntervalMilliseconds.maximum",
         "dispatchMilliseconds.average",
         "normalizedProcessCpuPercent",
         "layoutPassesPerAppliedResize",
     )
     higher_is_better = (
         "renderedFramesPerSecond",
-        "presentationFramesPerSecond",
+        "drawCallbackCompletionsPerSecond",
     )
     metrics: dict[str, Any] = {}
     failures: list[str] = []
@@ -112,17 +113,22 @@ def main() -> int:
     if args.require_material_improvement and not material:
         failures.append("candidate did not meet the material-improvement threshold")
     vsync_passes = sum(
-        sample["practicalVsyncGate"]["passed"] is True for sample in candidate)
-    if args.require_vsync and vsync_passes != len(candidate):
+        sample["cpuCadenceGate"]["passed"] is True for sample in candidate)
+    if args.require_cpu_cadence and vsync_passes != len(candidate):
         failures.append(
-            f"practical vsync gate passed in {vsync_passes}/{len(candidate)} candidate runs")
+            f"CPU cadence gate passed in {vsync_passes}/{len(candidate)} candidate runs")
+
+    if args.require_vsync:
+        failures.append("Physical vsync is not measurable by this headless draw-callback benchmark")
 
     report = {
-        "schema": "webscene-native-resize-comparison-v1",
+        "measurementScope": "headless-cpu-draw-callback",
+        "physicalPresentationVerified": False,
+        "schema": "webscene-native-resize-comparison-v2",
         "controlSamples": len(control),
         "candidateSamples": len(candidate),
         "materialImprovement": material,
-        "candidateVsyncPasses": vsync_passes,
+        "candidateCpuCadencePasses": vsync_passes,
         "metrics": metrics,
         "failures": failures,
         "passed": not failures,
