@@ -1031,6 +1031,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
         {
             canvas.RestoreToCount(save);
         }
+        _gpuPresenter?.PollRetirementsAfterDraw(lease);
         NativePresenterTextDiagnostics.TryCapture(
             lease.SkSurface,
             presenterMatrix,

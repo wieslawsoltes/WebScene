@@ -340,3 +340,26 @@ Trace logging was removed and the native library rebuilt. Evidence:
 `evidence/kestrel/frame-admission-ownership.json`. An earlier trace contained
 extra manual input and is excluded from controlled counts. No frame-rate or
 physical presentation qualification is inferred from this diagnostic run.
+
+
+## Consumer retirement after drawing (2026-09-08)
+
+Fence tracing showed most initial zero-timeout checks were unsignaled and the
+next check collected completion around 20ms later. A trial polling through a
+separately acquired host context before producer-frame submission reduced that
+age but processed fewer frames/moves; it was removed.
+
+The retained implementation instead checks retiring groups again after recording
+the current frame, under the existing Skia graphics lease. It reuses the same
+retirement/fence logic, never waits for GPU completion, and leaves the current
+image group intact. The traced trial's median collection age was 3.57ms with 41
+application RAF callbacks, compared with 20.40ms and 30 callbacks in the initial
+trace. A final run after removing trace code invoked 52 callbacks, delivered 71
+moves and coalesced nine, with zero app errors. These are individual investigative
+runs, not a statistically qualified speedup or browser comparison.
+
+Eleven native GPU interop tests pass on each of .NET 8 and .NET 10, with no skips.
+The Ganesh fixture completes 32 frames and retirement with zero explicit transport
+copies (eight diagnostic readbacks; physical presentation not certified).
+Evidence: `evidence/kestrel/consumer-retirement-after-draw.json`. No temporary
+trace code or separate-context polling experiment remains in the implementation.

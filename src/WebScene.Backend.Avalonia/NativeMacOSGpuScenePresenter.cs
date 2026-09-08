@@ -95,6 +95,13 @@ internal sealed class NativeMacOSGpuScenePresenter
         }
     }
 
+    // Recheck retired groups after recording the current frame, while the
+    // composition owner still holds its graphics lease. Never poll by waiting.
+    internal void PollRetirementsAfterDraw(ISkiaSharpApiLease lease)
+    {
+        if (!IsStopping) DrainRetirements(lease);
+    }
+
     internal bool TryPrepare(ISkiaSharpApiLease lease)
     {
         if (IsStopping) throw new InvalidOperationException("Scene presenter is stopping.");
