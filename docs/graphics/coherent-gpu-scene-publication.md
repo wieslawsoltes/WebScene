@@ -1,7 +1,7 @@
 # Coherent GPU scene publication
 
-Status: implementation design for the confirmed Kestrel split-publication defect;
-not implemented or qualified. This preserves epic #22 scope and its Dawn/Skia
+Status: submission completion-ticket foundation implemented; scene capture/commit
+integration and end-to-end coherence remain unimplemented and unqualified. This preserves epic #22 scope and its Dawn/Skia
 GPU-resident route.
 
 ## Required invariant
@@ -86,3 +86,24 @@ are independent; equal numeric values are not a general correctness condition.
 
 Do not count these requirements as passing until implemented and evidenced. The
 current CSS fixes and startup success do not qualify this presentation change.
+
+
+## Completion-ticket foundation (2026-09-08)
+
+`dawn_iosurface_submission::capture_snapshot()` retains the exact output while
+sharing the submission completion state. The snapshot exposes only metadata
+until both queue completion and handoff validation succeed. Its one-shot
+`take_ready()` also accepts the provider-consumed state, so draining the original
+ready queue does not invalidate a captured scene's ownership. Retention pressure
+returns no ticket; failed or discarded submissions cannot yield an image.
+
+The Dawn fixture captures before its completion waits, drains the ordinary
+reference, and verifies the snapshot still resolves the identical allocation and
+content serial exactly once. The Ganesh window fixture passes 32 frames, two
+imports, eight diagnostic pixel readbacks and GPU retirement, with zero explicit
+transport copies. Native GPU runtime regressions also pass. Evidence:
+`evidence/kestrel/gpu-completion-ticket-fixture.json`.
+
+This fixture does not deterministically delay completion, and does not prove
+pending-scene coherence or physical display timing. The provider/runtime/scene
+capture integration and delayed-producer tests above remain mandatory.

@@ -104,6 +104,9 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
     if(!foreign_rejected||!foreign->color)return {};foreign.reset();
     device->GetQueue().Submit(1,&commands);
     auto submitted=dawn_iosurface_submission::publish_submitted(std::move(frame),*device,shared,storage,ready_wake);
+    auto captured=submitted ? submitted->capture_snapshot() : nullptr;
+    if(!captured)return {};
+    const auto captured_metadata=captured->describe();
     if (!submitted || !wait(submitted->completion_future()) || !wait(submitted->validation_future()) ||
         ready_wake->count.load()!=1 || error->load()) return {};
     if(shared->begin(access)||!shared->expire_texture())return {};
@@ -163,7 +166,17 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
     if(!canvas_provider.idle()||canvas_provider.take_ready()||canvas_provider.busy_images()!=0)return {};
     auto image=submitted->take_ready();
     if (submitted->take_ready()) return {}; // A publication transfers once.
-    if(!image)return {};image.reset();
+    if(!image)return {};
+    if(image->describe().allocation!=captured_metadata.allocation ||
+        image->describe().content_serial!=captured_metadata.content_serial)return {};
+    image.reset();
+    // Draining the ordinary provider reference must not destroy a frozen
+    // scene's exact output. Its completion gate still resolves independently.
+    auto captured_image=captured->take_ready();
+    if(!captured_image || captured->take_ready() ||
+        captured_image->describe().allocation!=captured_metadata.allocation ||
+        captured_image->describe().content_serial!=captured_metadata.content_serial)return {};
+    captured_image.reset();captured.reset();
     host_texture=canvas_provider.acquire(frame.metadata,*device,description,storage);
     if(!host_texture)return {};
     auto host_encoder=device->CreateCommandEncoder();

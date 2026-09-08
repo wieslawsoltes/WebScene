@@ -6,7 +6,7 @@
 namespace webscene::graphics {
 // Nonblocking producer handoff. Only take_ready() can expose the scene image;
 // EndAccess alone never makes an image ready for the presenter.
-class dawn_iosurface_submission final {
+class dawn_iosurface_submission final : public std::enable_shared_from_this<dawn_iosurface_submission> {
 public:
     enum class status { pending, ready, failed, consumed, discarded };
 private:
@@ -36,6 +36,41 @@ public:
         if (status_!=status::ready) return {};
         status_=status::consumed;
         return std::move(image_);
+    }
+    // A captured CPU scene owns an exact output independently of the provider's
+    // destructive ready queue. Metadata is available while pending; the image
+    // itself cannot escape before queue completion AND handoff validation.
+    class snapshot final {
+        std::shared_ptr<dawn_iosurface_submission> submission_;
+        std::optional<owned_image_pool::retained> image_;
+        friend class dawn_iosurface_submission;
+        snapshot(std::shared_ptr<dawn_iosurface_submission> submission,
+            owned_image_pool::retained image)
+            : submission_(std::move(submission)),image_(std::move(image)) {}
+    public:
+        snapshot(const snapshot&)=delete;
+        snapshot& operator=(const snapshot&)=delete;
+        image_metadata describe() const {
+            if(!image_)throw std::logic_error("Captured image already transferred");
+            return image_->describe();
+        }
+        status state() const { return submission_->state(); }
+        std::optional<owned_image_pool::retained> take_ready() {
+            const auto current=state();
+            if(current!=status::ready&&current!=status::consumed)return {};
+            if(!image_)return {};
+            auto result=std::move(image_);
+            image_.reset();
+            return result;
+        }
+    };
+    std::unique_ptr<snapshot> capture_snapshot() {
+        std::lock_guard lock(mutex_);
+        if(!image_ || status_==status::failed || status_==status::discarded
+            || status_==status::consumed)return {};
+        auto retained=image_->retain();
+        if(!retained)return {}; // Retention pressure does not expose a partial scene.
+        return std::unique_ptr<snapshot>(new snapshot(shared_from_this(),std::move(*retained)));
     }
     // Exposed for diagnostic waits only. Ordinary callers poll state or use wake.
     wgpu::Future completion_future() const noexcept { return future_; }
