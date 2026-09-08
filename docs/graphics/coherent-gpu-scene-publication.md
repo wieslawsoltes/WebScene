@@ -477,3 +477,15 @@ height disagreement. All four settled checkpoints pass in the rebuilt probe.
 This adds an unchanged-application regression gate alongside the existing grid
 WPT contracts; it does not qualify physical resize smoothness. Evidence:
 `evidence/kestrel/mailbox-resize-verification.json`.
+
+Render samples now include an optional acceptance timestamp in the same Stopwatch
+clock as publication and draw timestamps. It is sampled after applying and
+acknowledging the revision, only while performance instrumentation is enabled;
+zero means unavailable. Existing positional construction/deconstruction remains
+unchanged. A rebuilt, validated pan run matched 16 rendered revisions and verified
+publication <= acceptance <= draw for each. Median publication-to-acceptance was
+59.77ms; acceptance-to-end-of-draw was 2.99ms. Single-run variability remains high,
+but this trace locates most observed latency before acceptance, not inside drawing.
+Next investigation should distinguish presenter retirement backpressure from
+missed compositor acquisition opportunities. Evidence:
+`evidence/kestrel/acceptance-to-draw-timeline.json`. No physical presentation claim.

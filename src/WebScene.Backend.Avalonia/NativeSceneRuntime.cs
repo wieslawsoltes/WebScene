@@ -177,7 +177,7 @@ internal sealed class NativeSceneRenderObserver
         }
     }
 
-    public void RecordRendered(in SceneHeader header)
+    public void RecordRendered(in SceneHeader header, long acceptedTimestamp = 0)
     {
         var monitoring = _instrumentation.IsEnabled;
         var needsFirstRenderTimestamp =
@@ -210,7 +210,7 @@ internal sealed class NativeSceneRenderObserver
             _renderedScenes.Enqueue(new NativeSceneRenderSample(
                 timestamp,
                 header.Revision,
-                header.ConsumedInputSequence));
+                header.ConsumedInputSequence) { AcceptedTimestamp = acceptedTimestamp });
             if (_renderedViewportHeights.Count == 0
                 || _renderedViewportHeights[^1] != viewportHeight)
             {

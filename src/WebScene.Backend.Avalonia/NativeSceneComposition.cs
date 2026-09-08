@@ -180,7 +180,12 @@ public readonly record struct NativeResizeSubmissionSample(
 public readonly record struct NativeSceneRenderSample(
     long Timestamp,
     ulong Revision,
-    ulong ConsumedInputSequence);
+    ulong ConsumedInputSequence)
+{
+    // Stopwatch timestamp after the compositor accepts this revision; zero
+    // when unavailable. Neither timestamp certifies platform presentation.
+    public long AcceptedTimestamp { get; init; }
+}
 
 internal static class NativeSceneResizeProjection
 {
@@ -459,6 +464,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private bool _animationFrameScheduled;
     private long _liveResizeFrameDeadlineTimestamp;
     private bool _hasPendingRenderMetrics;
+    private long _pendingAcceptedTimestamp;
     private NativeSceneDamage _pendingDamage;
     private SceneHeader _pendingRenderHeader;
     private long _pendingDiffApplyTicks;
@@ -828,6 +834,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 {
                     _pendingDamage = damage;
                     _pendingRenderHeader = header;
+                    _pendingAcceptedTimestamp = monitoring ? Stopwatch.GetTimestamp() : 0;
                     if (monitoring)
                     {
                         _pendingDiffApplyTicks += diffApplyTicks;
@@ -887,6 +894,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 nextDamage = EvaluateDamage(view, changed);
                 _appliedRevision = header.Revision; _gpuNeedsRender = true;
                 _pendingDamage = nextDamage; _pendingRenderHeader = header; _hasPendingRenderMetrics = true;
+                _pendingAcceptedTimestamp = monitoring ? Stopwatch.GetTimestamp() : 0;
                 if (monitoring)
                 {
                     Interlocked.Increment(ref AppliedDiffCount);
@@ -1081,7 +1089,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
                     _pendingDiffCanvasCommandCount,
                     _renderer.TotalCommandCount);
             }
-            _renderObserver.RecordRendered(_pendingRenderHeader);
+            _renderObserver.RecordRendered(_pendingRenderHeader, _pendingAcceptedTimestamp);
             if (monitoring
                 && renderStarted - _lastRendererMetricsTimestamp
                     >= Stopwatch.Frequency)
