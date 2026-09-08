@@ -1837,3 +1837,22 @@ pending, so Kestrel remains a failing acceptance test at that API.
 The unchanged original Kestrel archive remains mandatory acceptance evidence.
 Triangle and synthetic resize probes do not replace successful Kestrel WebGPU
 startup, app interaction and resize verification.
+
+### createBindGroup (2026-09-08)
+
+GPUDevice exposes createBindGroup with iterable entries, ordered dictionary
+conversion, retained native resources and a device-retaining GPUBindGroup
+wrapper. Binding resources currently support GPUBuffer, GPUBufferBinding,
+GPUTextureView and GPUTexture (default view). Brand inspection does not invoke
+JavaScript or use exceptions for normal union dispatch. Sampler and external
+texture resource APIs remain outstanding; this is not complete union support.
+
+Tests cover labels, arity, receiver rejection, getter order and exceptions,
+required fields, wrong layout/resource brands, invalid offsets, direct buffers,
+texture views and textures. Native ownership/deferred retirement coverage is
+recorded above. Semantic resource/layout validation remains in Dawn.
+
+The unchanged Kestrel document (SHA256
+0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563)
+now gets past createBindGroup and reports “d.createPipelineLayout is not a
+function”. Its startup probe still exits 1 with Canvas 2D compatibility fallback.

@@ -255,6 +255,28 @@ class v8_webgpu_buffers {
             throw std::logic_error("GPUBuffer wrappers require their owning isolate scope");
     }
 public:
+    static bool is_instance(v8::Local<v8::Value> value) {
+        if(!value->IsObject())return false;
+        auto object=value.As<v8::Object>();
+        return object->InternalFieldCount()==2 && object->GetInternalField(0)->IsValue()
+            && object->GetInternalField(0).As<v8::Value>()->IsExternal()
+            && object->GetInternalField(0).As<v8::External>()->Value(v8::kExternalPointerTypeTagDefault)==&brand_;
+    }
+    static wgpu::Buffer native_reference(v8::Local<v8::Value> value) {
+        if (!value->IsObject()) throw std::invalid_argument("GPU resource object required");
+        auto object=value.As<v8::Object>();
+        if (object->InternalFieldCount()!=2 || !object->GetInternalField(0)->IsValue()
+            || !object->GetInternalField(0).As<v8::Value>()->IsExternal()
+            || object->GetInternalField(0).As<v8::External>()->Value(v8::kExternalPointerTypeTagDefault)!=&brand_)
+            throw std::invalid_argument("Incorrect GPU resource interface");
+        auto* item=static_cast<entry*>(object->GetAlignedPointerFromInternalField(1,v8::kEmbedderDataTypeTagDefault));
+        if (!item) throw std::invalid_argument("GPU resource realm has been released");
+        wgpu::Buffer result;
+        item->service->with_device(item->device,[&](auto& owned) {
+            owned.with_buffer(item->buffer,[&](const auto& native) { result=native; });
+        });
+        return result;
+    }
     v8_webgpu_buffers(v8::Isolate* isolate,v8::Local<v8::Context> context,size_t capacity,v8::Local<v8::Function> dom_exception)
         :isolate_(isolate),entries_(capacity) {
         check_scope();

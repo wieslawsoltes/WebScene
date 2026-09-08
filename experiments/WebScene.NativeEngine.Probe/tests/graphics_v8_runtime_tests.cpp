@@ -212,6 +212,36 @@ void test_runtime_webgpu_installation() {
         bindingLayout.label='updated';if(bindingLayout.label!=='updated')throw new Error('binding layout label');
     )JS","binding-layout"),"Binding layout creation failed");
     require(runtime.execute(R"JS(
+        {
+        if(installedDevice.createBindGroup.length!==1)throw new Error('bind group arity');
+        const buffer=installedDevice.createBuffer({size:64,usage:64});
+        const order=[];
+        const binding=new Proxy({buffer,offset:0,size:64},{get(target,key){order.push('buffer.'+key);return target[key]}});
+        const entry=new Proxy({binding:0,resource:binding},{get(target,key){order.push('entry.'+key);return target[key]}});
+        const descriptor=new Proxy({label:'camera group',entries:new Set([entry]),layout:bindingLayout},{get(target,key){order.push(key);return target[key]}});
+        const group=installedDevice.createBindGroup(descriptor);
+        if(order.join(',')!=='label,entries,entry.binding,entry.resource,buffer.buffer,buffer.offset,buffer.size,layout')throw new Error('binding conversion order: '+order);
+        if(Object.prototype.toString.call(group)!=='[object GPUBindGroup]'||group.label!=='camera group')throw new Error('bind group wrapper');
+        group.label='renamed';if(group.label!=='renamed')throw new Error('bind group label');
+        installedDevice.createBindGroup({layout:bindingLayout,entries:[{binding:0,resource:buffer}]});
+        for(const bad of [{},{entries:[]},{layout:bindingLayout,entries:[{binding:0}]},
+            {layout:group,entries:[]},{layout:bindingLayout,entries:[{binding:0,resource:{buffer:{}}}]},
+            {layout:bindingLayout,entries:[{binding:0,resource:{buffer,offset:-1}}]}]) {
+            let rejected=false;try{installedDevice.createBindGroup(bad)}catch(e){rejected=e instanceof TypeError}
+            if(!rejected)throw new Error('invalid bind group accepted');
+        }
+        const texture=installedDevice.createTexture({size:[2,2],format:'rgba8unorm',usage:4});
+        const textureLayout=installedDevice.createBindGroupLayout({entries:[{binding:0,visibility:2,texture:{}}]});
+        for(const resource of [texture,texture.createView()])
+            installedDevice.createBindGroup({layout:textureLayout,entries:[{binding:0,resource}]});
+        const sentinel={};let propagated=false;
+        try{installedDevice.createBindGroup({get entries(){throw sentinel}})}catch(e){propagated=e===sentinel}
+        if(!propagated)throw new Error('binding getter exception lost');
+        let receiverRejected=false;try{installedDevice.createBindGroup.call({}, {})}catch(e){receiverRejected=e instanceof TypeError}
+        if(!receiverRejected)throw new Error('binding receiver accepted');
+        }
+    )JS","binding-group"),"Bind group creation failed");
+    require(runtime.execute(R"JS(
         const namespaces={GPUBufferUsage:{MAP_READ:1,MAP_WRITE:2,COPY_SRC:4,COPY_DST:8,INDEX:16,VERTEX:32,UNIFORM:64,STORAGE:128,INDIRECT:256,QUERY_RESOLVE:512},
           GPUTextureUsage:{COPY_SRC:1,COPY_DST:2,TEXTURE_BINDING:4,STORAGE_BINDING:8,RENDER_ATTACHMENT:16,TRANSIENT_ATTACHMENT:32},
           GPUMapMode:{READ:1,WRITE:2},GPUShaderStage:{VERTEX:1,FRAGMENT:2,COMPUTE:4},GPUColorWrite:{RED:1,GREEN:2,BLUE:4,ALPHA:8,ALL:15}};

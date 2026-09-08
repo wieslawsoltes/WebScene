@@ -97,6 +97,13 @@ public:
     // descriptor getter may collect the source wrapper; the converted reference
     // stays valid until native descriptor consumption. Cross-device validation
     // belongs to Dawn, not WebIDL interface conversion.
+    static bool is_instance(v8::Local<v8::Value> value) {
+        if(!value->IsObject())return false;
+        auto object=value.As<v8::Object>();
+        return object->InternalFieldCount()==2 && object->GetInternalField(0)->IsValue()
+            && object->GetInternalField(0).As<v8::Value>()->IsExternal()
+            && object->GetInternalField(0).As<v8::External>()->Value(v8::kExternalPointerTypeTagDefault)==&brand_;
+    }
     static Native native_reference(v8::Local<v8::Value> value) {
         if (!value->IsObject()) throw std::invalid_argument("GPU resource object required");
         auto object=value.As<v8::Object>();
