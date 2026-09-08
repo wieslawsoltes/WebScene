@@ -585,3 +585,13 @@ this probe and counters include settling, so this is investigative evidence, not
 FPS qualification. It directs the next check toward scene publication/captured
 output invalidation during repeated bitmap resizes, rather than assuming low
 compositor callback frequency. Evidence: `evidence/kestrel/sidebar-drag-baseline.json`.
+
+Sidebar publication tracing identifies a scheduling cost of the resize hold.
+The detailed run records 137 resize-awaiting-RAF deferrals, 30 pending-output
+retries and 19 publications including startup, with no stale-binding rejection.
+Thus the current evidence does not support repeated invalidation of frozen GPU
+dependencies as the primary cause; repeated new layout/ResizeObserver changes
+before a queued redraw can publish are the next ordering concern. Preserve input
+sequence barriers and bounded coherent capture when correcting this; simply
+bypassing the hold would restore intermediate blank canvases. Temporary logging
+was removed. Evidence: `evidence/kestrel/sidebar-publication-deferrals.json`.
