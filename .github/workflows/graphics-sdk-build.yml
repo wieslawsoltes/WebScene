@@ -6,6 +6,16 @@ on:
       - 'eng/graphics/**'
       - '.github/workflows/graphics-sdk-build.yml'
   workflow_dispatch:
+    inputs:
+      clean:
+        description: Rebuild SDKs without restoring the cache
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'eng/graphics/**'
+      - '.github/workflows/graphics-sdk-build.yml'
 
 permissions:
   contents: read
@@ -21,7 +31,7 @@ jobs:
     name: Build ${{ matrix.component }} ${{ matrix.rid }} (no hardware qualification)
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 4
       matrix:
         component: [dawn, angle]
         include:
@@ -37,8 +47,23 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+    - id: sdk-identity
+      name: Resolve graphics SDK cache identity
+      shell: bash
+      env:
+        SDK_INPUTS: ${{ hashFiles('eng/graphics/dependencies.lock.json', 'eng/graphics/build.py', 'eng/graphics/DawnSymbolBoundary.cmake', 'eng/graphics/dawn_exports.py', 'eng/graphics/install-windows-sdk.ps1', '.github/workflows/graphics-sdk-build.yml') }}
+      run: |
+        echo "key=webscene-graphics-sdk-v1-${{ matrix.component }}-${{ matrix.rid }}-${ImageVersion:?Runner image version is required}-$SDK_INPUTS" >> "$GITHUB_OUTPUT"
+    - id: sdk-cache
+      name: Restore pinned graphics SDK
+      if: inputs.clean != true
+      uses: actions/cache/restore@v4
+      with:
+        path: artifacts/graphics-sdk/${{ matrix.rid }}/${{ matrix.component }}
+        key: ${{ steps.sdk-identity.outputs.key }}
+        # No prefix fallback: a different build recipe or toolchain must rebuild.
     - name: Install pinned Windows SDK for ANGLE
-      if: matrix.rid == 'win-x64' && matrix.component == 'angle'
+      if: matrix.rid == 'win-x64' && matrix.component == 'angle' && steps.sdk-cache.outputs.cache-hit != 'true'
       shell: pwsh
       run: ./eng/graphics/install-windows-sdk.ps1
     - name: Initialize Windows x64 compiler environment
@@ -66,9 +91,18 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y ninja-build clang lld pkg-config libvulkan-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev libxdamage-dev libxfixes-dev libdrm-dev libgbm-dev libwayland-dev libudev-dev
     - name: Build pinned SDK
+      if: steps.sdk-cache.outputs.cache-hit != 'true'
       run: python eng/graphics/build.py ${{ matrix.component }} --rid ${{ matrix.rid }} --jobs 2
     - name: Verify installed SDK
       run: python eng/graphics/verify-sdk.py artifacts/graphics-sdk/${{ matrix.rid }}/${{ matrix.component }} --component ${{ matrix.component }} --rid ${{ matrix.rid }}
+    # Save immediately after verification: a later probe failure must not throw
+    # away a successful expensive dependency build. Hits still run all probes.
+    - name: Save verified graphics SDK
+      if: steps.sdk-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: artifacts/graphics-sdk/${{ matrix.rid }}/${{ matrix.component }}
+        key: ${{ steps.sdk-identity.outputs.key }}
     - name: Compile and link diagnostic probe
       run: |
         cmake -S eng/graphics/probes -B artifacts/graphics-probes -G Ninja -DCMAKE_BUILD_TYPE=Release -DWEBSCENE_GRAPHICS_COMPONENTS=${{ matrix.component }} -DWEBSCENE_GRAPHICS_SDK_ROOT=${{ github.workspace }}/artifacts/graphics-sdk/${{ matrix.rid }}
