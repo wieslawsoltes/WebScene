@@ -30,6 +30,7 @@ class completion_mailbox {
         state phase{state::free};
         uint64_t generation{};
         bool native_pending{};
+        bool requires_polling{true};
         completion_record record{};
         std::chrono::steady_clock::time_point admitted_at{};
     };
@@ -67,7 +68,7 @@ public:
     }
     // Reserve BEFORE issuing an asynchronous backend operation. Every admitted
     // operation owns a completion slot, so driver callbacks can never overflow.
-    std::optional<completion_ticket> reserve(uint64_t operation, resource_owner owner) {
+    std::optional<completion_ticket> reserve(uint64_t operation, resource_owner owner, bool requires_polling=true) {
         check_engine();
         std::lock_guard lock(mutex_);
         if (closed_) return {};
@@ -78,6 +79,7 @@ public:
                 item.phase = state::pending;
                 ++pending_;
                 item.native_pending=true;
+                item.requires_polling=requires_polling;
                 ++native_pending_;
                 ++occupied_;
                 ++metrics_.admitted;
@@ -148,6 +150,14 @@ public:
         return result;
     }
     bool has_pending() const { std::lock_guard lock(mutex_); return pending_ != 0 || native_pending_ != 0; }
+    // Spontaneous lifetime callbacks need capacity and wake delivery, but must
+    // not cause a one-millisecond poll for the entire lifetime of a device.
+    bool has_pollable_pending() const {
+        std::lock_guard lock(mutex_);
+        return std::any_of(slots_.begin(),slots_.end(),[](const auto& item){
+            return item.requires_polling && (item.phase==state::pending || item.native_pending);
+        });
+    }
     bool has_ready() const { std::lock_guard lock(mutex_); return count_ != 0; }
     template<class Deliver> bool drain_one(Deliver deliver) {
         check_engine();

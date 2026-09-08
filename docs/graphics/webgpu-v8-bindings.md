@@ -1925,3 +1925,32 @@ The broader native-engine suite initially failed its detached-DOM GC deadline
 current changes and rerunning both native-engine and GPU runtime suites also
 passed (12.44 seconds combined). No GC assertion was weakened. The initial
 failure remains unresolved intermittent evidence, not a proven GC fix.
+
+### Device-loss promise and dormant completions (2026-09-08)
+
+Browser device requests now configure Dawn's loss callback and pass its owned
+signal into the adopted device. The signal captures reason and bounded message
+bytes on the native callback thread, handles loss before subscription, and
+publishes at most once. GPUDevice.lost returns a stable promise; engine-thread
+delivery resolves it with a branded GPUDeviceLostInfo (destroyed or unknown
+reason and message). Explicit destruction is covered by a real Dawn test.
+
+Lifetime callbacks reserve dormant completion slots: they remain bounded and
+wake the engine on publication but do not cause periodic event polling. Normal
+operations retain polling behavior. Tests cover dormant publication/cancellation,
+early and late loss subscriptions, owned diagnostic data, duplicate suppression,
+promise/result identity, destruction, and interface branding. Completion, graphics
+service and GPU runtime suites pass. Existing teardown fixtures now identify
+their own completion and preserve the baseline slots of live device subscriptions.
+
+Unchanged Kestrel selects WebGPU and reaches rendering, which fails with
+“this.device.queue.writeBuffer is not a function”. The previous startup verifier
+only checked the backend label and incorrectly accepted that run. It now also
+rejects errors logged by the original application's command history. The rebuilt
+probe reports one error and exits 1; this is still a failed acceptance test.
+
+Remaining qualification includes native unexpected-loss rendering recovery,
+loss under memory pressure, listener/GC lifetime, allocation-failure settlement,
+and complete standards coverage. Internal devices adopted without a configured
+loss signal are not qualified for device.lost delivery. Native uncaptured-error
+events are also still outstanding.

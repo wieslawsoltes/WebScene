@@ -1,6 +1,7 @@
 #pragma once
 #include "v8_webgpu_buffers.h"
 #include "v8_webgpu_error_scopes.h"
+#include "v8_webgpu_device_lost.h"
 #include "v8_webgpu_bind_groups.h"
 #include "v8_webgpu_pipeline_layouts.h"
 #include "v8_webgpu_pipeline_layout_descriptor.h"
@@ -32,6 +33,7 @@ class v8_webgpu_devices {
         v8::Global<v8::Private> queue_key;
         std::unique_ptr<v8_webgpu_queue> queue;
         std::unique_ptr<v8_webgpu_error_scopes> error_scopes;
+        std::unique_ptr<v8_webgpu_device_lost> loss;
         graphics_service* service{};
         resource_handle<dawn_device> device;
         std::unique_ptr<v8_webgpu_buffers> buffers;
@@ -54,6 +56,7 @@ class v8_webgpu_devices {
     v8::Global<v8::Function> dom_exception_;
     v8::Global<v8::ObjectTemplate> instance_;
     v8::Global<v8::Object> prototype_;
+    v8_webgpu_device_lost_info lost_info_factory_;
     v8_webgpu_errors errors_factory_;
     v8_webgpu_supported_features features_factory_;
     v8_webgpu_limits limits_factory_;
@@ -74,6 +77,9 @@ class v8_webgpu_devices {
         auto* item=static_cast<entry*>(object->GetAlignedPointerFromInternalField(1,v8::kEmbedderDataTypeTagDefault));
         if (!item) fail(info.GetIsolate(),"GPUDevice realm has been released");
         return item;
+    }
+    static void lost(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* item=receiver(info);if(item)info.GetReturnValue().Set(item->loss->promise());
     }
     static void push_error_scope(const v8::FunctionCallbackInfo<v8::Value>& info) {
         if(!receiver(info))return;
@@ -389,7 +395,7 @@ public:
     v8_webgpu_devices(v8::Isolate* isolate,v8::Local<v8::Context> context,
         v8::Local<v8::Function> dom_exception,size_t capacity=64,size_t buffer_capacity=1024,
         v8::Local<v8::FunctionTemplate> event_target={},std::function<bool(v8::Local<v8::Object>)> initialize_event_target={})
-        :isolate_(isolate),errors_factory_(isolate,context),features_factory_(isolate,context),limits_factory_(isolate,context),info_factory_(isolate,context),initialize_event_target_(std::move(initialize_event_target)),buffer_capacity_(buffer_capacity),entries_(capacity) {
+        :isolate_(isolate),lost_info_factory_(isolate,context),errors_factory_(isolate,context),features_factory_(isolate,context),limits_factory_(isolate,context),info_factory_(isolate,context),initialize_event_target_(std::move(initialize_event_target)),buffer_capacity_(buffer_capacity),entries_(capacity) {
         check_scope();
         if (dom_exception.IsEmpty()) throw std::invalid_argument("Trusted DOMException constructor is required");
         realm_.Reset(isolate,context); dom_exception_.Reset(isolate,dom_exception);
@@ -422,6 +428,7 @@ public:
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"limits"),v8::FunctionTemplate::New(isolate,limits));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"features"),v8::FunctionTemplate::New(isolate,features));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"queue"),v8::FunctionTemplate::New(isolate,queue));
+        prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate,"lost"),v8::FunctionTemplate::New(isolate,lost));
         prototype->Set(isolate,"destroy",v8::FunctionTemplate::New(isolate,destroy));
         auto prototype_object=prototype->NewInstance(context).ToLocalChecked();
         if(!event_target.IsEmpty()) {
@@ -436,6 +443,7 @@ public:
         check_scope();
         for (auto& item:entries_) if (item) {
             if (!item->wrapper.IsEmpty()) item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
+            item->loss.reset();
             item->error_scopes.reset();
             item->queue.reset();
             item->encoders.reset();
@@ -452,7 +460,7 @@ public:
     }
     bool complete(completion_record record) {
         check_scope();
-        for (auto& item:entries_) if (item && (item->error_scopes->complete(record)||item->buffers->complete(record)||item->shaders->complete(record))) return true;
+        for (auto& item:entries_) if (item && (item->loss->complete(record)||item->error_scopes->complete(record)||item->buffers->complete(record)||item->shaders->complete(record))) return true;
         return false;
     }
 private:
@@ -507,6 +515,7 @@ public:
         auto item=std::make_unique<entry>();
         item->label=std::move(initial_label);
         item->service=&service; item->device=device; item->releases=service.release_endpoint();
+        service.with_device(device,[&](auto& owned){item->loss=std::make_unique<v8_webgpu_device_lost>(isolate_,context,lost_info_factory_,owned.loss_signal(),service.dawn().completions());});
         item->error_scopes=std::make_unique<v8_webgpu_error_scopes>(isolate_,errors_factory_,dom_exception_.Get(isolate_));
         item->buffers=std::make_unique<v8_webgpu_buffers>(isolate_,context,buffer_capacity_,dom_exception_.Get(isolate_));
         item->pipeline_layouts=std::make_unique<v8_webgpu_pipeline_layouts>(isolate_,context);

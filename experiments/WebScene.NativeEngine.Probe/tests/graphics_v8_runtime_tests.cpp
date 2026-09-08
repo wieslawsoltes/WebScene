@@ -38,6 +38,24 @@ void require(bool value,const char* message) { if (!value) throw std::runtime_er
 #include "graphics_v8_iosurface_canvas_host.h"
 int weak_releases=0;
 void test_native_gpu_scene_leases();
+void test_device_loss_signal() {
+    resource_owner owner{new_owner_token(),new_owner_token(),0};
+    for(bool early:{false,true}) {
+        auto mailbox=std::make_shared<completion_mailbox>(1,nullptr);
+        auto signal=std::make_shared<device_loss_signal>(nullptr);
+        auto ticket=mailbox->reserve(new_owner_token(),owner,false).value();
+        std::string message="driver loss";
+        auto publish=[&]{signal->publish(wgpu::DeviceLostReason::Unknown,wgpu::StringView(message.data(),message.size()));};
+        if(early){std::thread callback(publish);callback.join();}
+        signal->subscribe(mailbox,ticket);
+        if(!early){std::thread callback(publish);callback.join();}
+        message[0]='X';
+        require(signal->lost.load()&&signal->result()->message=="driver loss","Loss callback did not own its snapshot");
+        unsigned count=0;require(mailbox->drain_one([&](auto record){++count;require(record.status==completion_status::success,"Loss completion failed");}),"Loss notification missing");
+        signal->publish(wgpu::DeviceLostReason::Destroyed,wgpu::StringView("duplicate"));
+        require(count==1&&!mailbox->has_ready(),"Loss delivered twice");
+    }
+}
 void test_compilation_info_snapshot() {
     std::string text="diagnostic";
     wgpu::CompilationMessage message{};
@@ -226,6 +244,28 @@ void test_runtime_webgpu_installation() {
             if(windowCalls)throw new Error('GPUDevice dispatched to window');
         }
     )JS","device-events"),"GPUDevice EventTarget integration failed");
+    require(runtime.execute(R"JS(
+        (async()=>{
+            if(!(installedDevice.lost instanceof Promise)||installedDevice.lost!==installedDevice.lost)throw new Error('lost SameObject promise');
+            const adapter=await navigator.gpu.requestAdapter();const device=await adapter.requestDevice();
+            const promise=device.lost;device.destroy();device.destroy();
+            const info=await promise;
+            if(!(info instanceof GPUDeviceLostInfo)||info.reason!=='destroyed'||typeof info.message!=='string')throw new Error('destroyed loss result');
+            if(Object.prototype.toString.call(info)!=='[object GPUDeviceLostInfo]')throw new Error('lost info tag');
+            if(device.lost!==promise||await device.lost!==info)throw new Error('lost identity changed');
+            let rejected=false;try{new GPUDeviceLostInfo()}catch(e){rejected=e instanceof TypeError}
+            if(!rejected)throw new Error('lost info constructible');
+            const getter=Object.getOwnPropertyDescriptor(GPUDeviceLostInfo.prototype,'reason').get;
+            rejected=false;try{getter.call({})}catch(e){rejected=e instanceof TypeError}
+            if(!rejected)throw new Error('lost info receiver accepted');
+            const node=document.createElement('div');node.id='loss-ready';document.body.appendChild(node);
+        })();
+    )JS","device-lost"),"GPUDevice lost request failed");
+    deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(!document.find_by_id("loss-ready")&&std::chrono::steady_clock::now()<deadline) {
+        require(runtime.pump_task(),"Device loss completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(document.find_by_id("loss-ready")!=nullptr,"Device destruction did not resolve lost promise");
     require(runtime.execute(R"JS(
         if(installedDevice.createBindGroupLayout.length!==1)throw new Error('binding layout arity');
         globalThis.bindingLayout=installedDevice.createBindGroupLayout({label:'camera',entries:new Set([{binding:0,visibility:1,buffer:{}}])});
@@ -443,7 +483,7 @@ void test_runtime_webgpu_installation() {
     require(runtime.execute("domGPUContext.unconfigure();","gpu-raf-cleanup"),"GPU RAF cleanup failed");
 #endif
     require(runtime.load_url("https://graphics.test/webgpu-next"),"WebGPU navigation failed");
-    require(runtime.execute("if('gpu' in navigator||'GPUBufferUsage' in globalThis||'GPUError' in globalThis||'GPUValidationError' in globalThis||'GPUOutOfMemoryError' in globalThis||'GPUInternalError' in globalThis)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");
+    require(runtime.execute("if('gpu' in navigator||'GPUBufferUsage' in globalThis||'GPUDeviceLostInfo' in globalThis||'GPUError' in globalThis||'GPUValidationError' in globalThis||'GPUOutOfMemoryError' in globalThis||'GPUInternalError' in globalThis)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");
     require(runtime.install_webgpu(wake,true,webgpu_canvas_interop::none),"Navigated GPU reinstall failed");
     require(runtime.execute("globalThis.retiredGPU=navigator.gpu;","retain-gpu"),"GPU retention failed");
     runtime.shutdown_graphics();
@@ -459,6 +499,7 @@ int main() {
     std::exception_ptr failure;
     std::thread worker([&] {
         try {
+            test_device_loss_signal();
             test_compilation_info_snapshot();
             test_inline_canvas_intrinsic_layout();
             test_runtime_webgpu_document_policy();
@@ -1157,7 +1198,8 @@ int main() {
                     // Dispose the registry before delivering successful native
                     // device completion. Use a fresh, unconsumed adapter.
                     auto cancel_adapter=std::make_shared<wgpu::Adapter>();
-                    auto cancel_adapter_ticket=fixture_mailbox->reserve(new_owner_token(),{adapter_fixture.engine_identity(),new_owner_token(),0}).value();
+                    const auto cancel_adapter_operation=new_owner_token();
+                    auto cancel_adapter_ticket=fixture_mailbox->reserve(cancel_adapter_operation,{adapter_fixture.engine_identity(),new_owner_token(),0}).value();
                     adapter_fixture.dawn().instance().RequestAdapter(&adapter_options,wgpu::CallbackMode::AllowSpontaneous,
                         [cancel_adapter,fixture_mailbox,cancel_adapter_ticket](wgpu::RequestAdapterStatus status,wgpu::Adapter adapter,wgpu::StringView) {
                             *cancel_adapter=std::move(adapter);
@@ -1166,7 +1208,7 @@ int main() {
                     bool cancel_adapter_ready=false;
                     auto cancel_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
                     while(!cancel_adapter_ready && std::chrono::steady_clock::now()<cancel_deadline) {
-                        adapter_fixture.pump([&](auto completion) { require(completion.status==completion_status::success,"Cancellation fixture adapter failed");cancel_adapter_ready=true; });
+                        adapter_fixture.pump([&](auto completion) { if(completion.operation!=cancel_adapter_operation)return;require(completion.status==completion_status::success,"Cancellation fixture adapter failed");cancel_adapter_ready=true; });
                         if(!cancel_adapter_ready)std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     }
                     require(cancel_adapter_ready && *cancel_adapter,"Cancellation fixture adapter unavailable");
@@ -1174,6 +1216,7 @@ int main() {
                     auto cancel_registry=std::make_unique<v8_webgpu_adapters>(isolate,context,*adapter_devices,exception_constructor,1);
                     auto cancel_object=cancel_registry->wrap(context,adapter_fixture,cancel_handle).ToLocalChecked();
                     auto request_method=cancel_object->Get(context,v8::String::NewFromUtf8Literal(isolate,"requestDevice")).ToLocalChecked().As<v8::Function>();
+                    const auto lifetime_completions=fixture_mailbox->metrics().occupied;
                     auto cancel_promise=request_method->Call(context,cancel_object,0,nullptr).ToLocalChecked().As<v8::Promise>();
                     require(cancel_promise->State()==v8::Promise::kPending,"Teardown fixture did not admit native request");
                     cancel_promise->MarkAsHandled();
@@ -1182,13 +1225,13 @@ int main() {
                     auto cancelled_reason=cancel_promise->Result();
                     size_t successful_retirements=0;
                     cancel_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
-                    while(fixture_mailbox->metrics().occupied && std::chrono::steady_clock::now()<cancel_deadline) {
+                    while(fixture_mailbox->metrics().occupied>lifetime_completions && std::chrono::steady_clock::now()<cancel_deadline) {
                         adapter_fixture.pump([&](auto completion) {
                             require(completion.status==completion_status::success,"Native creation did not succeed in teardown race");++successful_retirements;
                         });
-                        if(fixture_mailbox->metrics().occupied)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        if(fixture_mailbox->metrics().occupied>lifetime_completions)std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     }
-                    require(successful_retirements==1 && fixture_mailbox->metrics().occupied==0
+                    require(successful_retirements==1 && fixture_mailbox->metrics().occupied==lifetime_completions
                         && adapter_fixture.live_devices()==1 && adapter_fixture.live_adapters()==1,
                         "Successful teardown race leaked completion or adopted an orphan device");
                     require(cancel_promise->State()==v8::Promise::kRejected && cancel_promise->Result()->StrictEquals(cancelled_reason),

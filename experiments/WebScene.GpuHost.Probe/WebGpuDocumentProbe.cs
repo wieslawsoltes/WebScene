@@ -102,11 +102,11 @@ internal sealed class WebGpuDocumentProbeApp : Application
                     if (kestrel)
                     {
                         await Task.Delay(3000);
-                        Console.WriteLine(await view.EvaluateTextAsync("({ready:document.documentElement.dataset.ready,backend:document.getElementById('engine-label')?.textContent,history:document.getElementById('command-history')?.textContent,gpu:!!navigator.gpu})"));
+                        Console.WriteLine(await view.EvaluateTextAsync("({ready:document.documentElement.dataset.ready,backend:document.getElementById('engine-label')?.textContent,history:document.getElementById('command-history')?.textContent,errors:document.querySelectorAll('#command-history .history-error').length,gpu:!!navigator.gpu})"));
                         if (arguments.Contains("--verify-kestrel"))
                         {
-                            var webGpuReady = await view.EvaluateTextAsync("document.documentElement.dataset.ready==='true'&&document.getElementById('engine-label').textContent.startsWith('WebGPU')");
-                            Console.WriteLine(webGpuReady == "true" ? "Kestrel WebGPU startup check passed (interaction qualification remains)." : "FAIL: Kestrel did not initialize its WebGPU renderer.");
+                            var webGpuReady = await view.EvaluateTextAsync("document.documentElement.dataset.ready==='true'&&document.getElementById('engine-label').textContent.startsWith('WebGPU')&&document.querySelectorAll('#command-history .history-error').length===0");
+                            Console.WriteLine(webGpuReady == "true" ? "Kestrel WebGPU startup check passed (interaction qualification remains)." : "FAIL: Kestrel WebGPU startup or initial rendering reported an error.");
                             await view.DisposeAsync();
                             desktop.Shutdown(webGpuReady == "true" ? 0 : 1);
                         }

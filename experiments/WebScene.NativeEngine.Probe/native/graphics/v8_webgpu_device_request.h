@@ -1,6 +1,7 @@
 #pragma once
 #include <webgpu/webgpu_cpp.h>
 #include "completion_mailbox.h"
+#include "dawn_device.h"
 #include "v8_webgpu_device_descriptor.h"
 #include "webgpu_prepared_device_descriptor.h"
 #include <v8.h>
@@ -20,6 +21,7 @@ class v8_webgpu_device_request final {
     const resource_owner owner_;
     const uint64_t operation_;
     std::string label_,queue_label_;
+    std::shared_ptr<device_loss_signal> loss_;
     v8::Global<v8::Context> realm_;
     v8::Global<v8::Promise::Resolver> resolver_;
     v8::Global<v8::Function> dom_exception_;
@@ -51,6 +53,7 @@ public:
     }
     v8_webgpu_device_request(const v8_webgpu_device_request&)=delete;
     v8_webgpu_device_request& operator=(const v8_webgpu_device_request&)=delete;
+    std::shared_ptr<device_loss_signal> loss_signal() const {check_thread();return loss_;}
     const std::string& queue_label() const { check_thread(); return queue_label_; }
     const std::string& label() const { check_thread(); return label_; }
     bool pending() const { check_thread(); return !resolver_.IsEmpty(); }
@@ -107,8 +110,10 @@ public:
         }
         if (prepared && failure.IsEmpty()) {
             auto descriptor=prepared->native();
+            auto loss=std::make_shared<device_loss_signal>(nullptr);
+            device_loss_signal::configure(descriptor,loss);
             auto result=start(isolate,context,descriptor,adapter,std::move(mailbox),owner,operation,dom_exception,promise);
-            if (result) {result->label_=std::move(label);result->queue_label_=std::move(queue_label);}
+            if (result) {result->loss_=std::move(loss);result->label_=std::move(label);result->queue_label_=std::move(queue_label);}
             return result;
         }
         v8::Local<v8::Promise::Resolver> resolver;

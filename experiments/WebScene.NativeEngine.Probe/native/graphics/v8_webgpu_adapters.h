@@ -172,7 +172,7 @@ public:
                 auto* item=request->adapter;
                 wgpu::Adapter adapter;
                 item->service->with_adapter(item->adapter,[&](const auto& value) { adapter=value; });
-                auto handle=item->service->adopt_device(std::move(adapter),std::move(native));
+                auto handle=item->service->adopt_device(std::move(adapter),std::move(native),request->bridge->loss_signal());
                 try {
                     v8::Local<v8::Object> wrapper;
                     if (devices_.wrap(context,*item->service,handle,request->bridge->label(),request->bridge->queue_label()).ToLocal(&wrapper)) return wrapper;

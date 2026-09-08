@@ -316,7 +316,7 @@ public:
         if (commands_ && commands_->metrics().depth) return true;
         if (releases_ && releases_->has_ready(executed_command_serial_)) return true;
         return dawn_ && (dawn_->completions()->has_ready()
-            || (!closed_ && dawn_->completions()->has_pending()
+            || (!closed_ && dawn_->completions()->has_pollable_pending()
                 && std::chrono::steady_clock::now()>=next_event_poll_));
     }
     std::chrono::milliseconds recommended_idle_wait(std::chrono::milliseconds maximum) const {
@@ -328,7 +328,7 @@ public:
         // Cancellation delivery remains runnable after admission closes.
         if (dawn_->completions()->has_ready()) return std::chrono::milliseconds::zero();
         // Only outstanding native operations require ProcessEvents polling.
-        if (closed_ || !dawn_->completions()->has_pending()) return maximum;
+        if (closed_ || !dawn_->completions()->has_pollable_pending()) return maximum;
         const auto now=std::chrono::steady_clock::now();
         if (now>=next_event_poll_)
             return std::chrono::milliseconds::zero();

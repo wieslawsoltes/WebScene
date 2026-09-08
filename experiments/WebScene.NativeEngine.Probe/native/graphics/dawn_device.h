@@ -2,25 +2,60 @@
 #include "completion_mailbox.h"
 #include "resource_table.h"
 #include <webgpu/webgpu_cpp.h>
+#include <cstring>
 
 namespace webscene::graphics {
 // One logical WebGPU device. Adapter/device references remain native and belong
 // to the engine thread; callback captures retain only the completion mailbox.
 struct device_loss_signal {
+    struct snapshot { wgpu::DeviceLostReason reason;std::string message; };
     std::atomic<bool> lost{};
     std::shared_ptr<completion_wake> wake;
+private:
+    mutable std::mutex mutex_;
+    std::optional<snapshot> result_;
+    std::shared_ptr<completion_mailbox> mailbox_;
+    std::optional<completion_ticket> ticket_;
+public:
     explicit device_loss_signal(std::shared_ptr<completion_wake> value) : wake(std::move(value)) {}
+    std::optional<snapshot> result() const {std::lock_guard lock(mutex_);return result_;}
+    void subscribe(std::shared_ptr<completion_mailbox> mailbox,completion_ticket ticket) {
+        bool ready;
+        {
+            std::lock_guard lock(mutex_);
+            if(mailbox_)throw std::logic_error("Device loss already subscribed");
+            mailbox_=mailbox;ticket_=ticket;ready=result_.has_value();
+        }
+        if(ready)mailbox->publish(ticket,completion_status::success);
+    }
+    void publish(wgpu::DeviceLostReason reason,wgpu::StringView message) {
+        std::shared_ptr<completion_mailbox> mailbox;std::optional<completion_ticket> ticket;
+        {
+            std::lock_guard lock(mutex_);
+            if(result_)return;
+            snapshot value{reason,{}};
+            constexpr size_t limit=1024*1024;
+            size_t length=message.length;
+            if(length==WGPU_STRLEN)length=message.data?strnlen(message.data,limit):0;
+            // Diagnostics are bounded; loss must still be delivered if a driver
+            // supplies an oversized message or allocation fails.
+            try {if(message.data)value.message.assign(message.data,std::min(length,limit));}catch(...){}
+            result_=std::move(value);mailbox=mailbox_;ticket=ticket_;
+            if(reason!=wgpu::DeviceLostReason::Destroyed&&reason!=wgpu::DeviceLostReason::CallbackCancelled)
+                lost.store(true,std::memory_order_release);
+        }
+        if(mailbox&&ticket)mailbox->publish(*ticket,completion_status::success);
+        if(wake)wake->signal();
+    }
     static void configure(wgpu::DeviceDescriptor& descriptor,std::shared_ptr<device_loss_signal> signal) {
         if (!signal) throw std::invalid_argument("device loss signal is required");
         descriptor.SetDeviceLostCallback(wgpu::CallbackMode::AllowSpontaneous,
-            [signal](const wgpu::Device&,wgpu::DeviceLostReason reason,wgpu::StringView) {
-                if (reason!=wgpu::DeviceLostReason::Destroyed && reason!=wgpu::DeviceLostReason::CallbackCancelled) {
-                    signal->lost.store(true,std::memory_order_release);
-                    if (signal->wake) signal->wake->signal();
-                }
+            [signal](const wgpu::Device&,wgpu::DeviceLostReason reason,wgpu::StringView message) {
+                signal->publish(reason,message);
             });
     }
 };
+
 class dawn_device {
     const std::thread::id thread_=std::this_thread::get_id();
     const resource_owner owner_;
@@ -64,6 +99,7 @@ public:
     dawn_device(const dawn_device&)=delete;
     dawn_device& operator=(const dawn_device&)=delete;
     ~dawn_device() { if (std::this_thread::get_id()!=thread_) std::terminate(); close(); }
+    std::shared_ptr<device_loss_signal> loss_signal() const {check_thread();return loss_;}
     resource_owner owner() const { check_thread(); return owner_; }
     const wgpu::Adapter& adapter() const { check_thread(); return adapter_; }
     const wgpu::Device& native() const {

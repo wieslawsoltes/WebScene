@@ -15,6 +15,7 @@
             webgpu_navigator.Reset();
             for(const auto* name:webscene::graphics::webgpu_flag_namespaces)
                 context.Get(isolate)->Global()->Delete(context.Get(isolate),js_string(isolate,name)).FromMaybe(false);
+            context.Get(isolate)->Global()->Delete(context.Get(isolate),js_string(isolate,"GPUDeviceLostInfo")).FromMaybe(false);
             for(const auto* name:webscene::graphics::webgpu_error_names)
                 context.Get(isolate)->Global()->Delete(context.Get(isolate),js_string(isolate,name)).FromMaybe(false);
         }
