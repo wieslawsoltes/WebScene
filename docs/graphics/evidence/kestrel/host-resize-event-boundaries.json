@@ -1,0 +1,22 @@
+{
+  "validated": true,
+  "exitCode": 0,
+  "counts": {
+    "submittedSizes": 80,
+    "nativeWindowResizes": 38,
+    "surfaceSizeChanges": 38,
+    "nativeSubmissions": 38,
+    "publications": 51,
+    "renderedScenes": 46
+  },
+  "windowResizeReasons": {
+    "Layout": 38
+  },
+  "physicalPresentationVerified": false,
+  "nativeUserDragVerified": false,
+  "limitations": [
+    "One scripted property-update run.",
+    "Window notifications are all Layout; this does not qualify native user resize behavior.",
+    "Matching event counts locate reduction before native engine submission but do not identify each property/layout scheduling decision."
+  ]
+}

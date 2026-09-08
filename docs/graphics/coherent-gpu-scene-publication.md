@@ -887,3 +887,9 @@ The updated validated run completes its active loop in 1353ms: update interval m
 Fixed continuous-probe JSON serialization to include native metric fields; previous baseline/after native structs serialized as empty objects, although their separate timing arrays were present. A validated run now records 80 scripted size assignments but only 44 submitted native resize/frame pairs. All 44 were applied and published; engine resize coalescing stayed zero. Their aggregate submission-to-publication time is 337.48ms (about 7.67ms mean), maximum 23.81ms. Evidence: `evidence/kestrel/continuous-resize-native-counters.json`.
 
 The next attribution boundary is before engine submission: Avalonia property/layout updates versus actual native resize notifications. These counts do not prove a native-drag 30fps limit or that the engine drops half its resize requests. Earlier metrics-free traces remain usable only for their explicitly captured publication/draw/input arrays. Physical presentation remains unqualified.
+
+### Locate resize reduction before the WebScene surface
+
+The continuous probe now records bounded window Resized notifications (including reason), surface SizeChanged notifications and existing native resize submissions. Handlers are detached in finally. A validated run records 80 property assignments, 38 window notifications, 38 surface changes and 38 native submissions; all window notifications have Layout reason. Evidence: `evidence/kestrel/host-resize-event-boundaries.json`.
+
+Thus this scripted workload combines size changes before they reach the WebScene surface/engine. It cannot establish native mouse-drag throughput or justify a renderer change aimed solely at matching all 80 property assignments. A native window-edge drag trace, with the same stage measurements and actual presentation evidence, is the remaining relevant qualification. Build and complete scripted workload pass; physical presentation remains unqualified.

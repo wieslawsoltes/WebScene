@@ -235,39 +235,39 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 if (surface.SubmitPointerButton(2, x, y, 2, true) == 0)
                                     throw new InvalidOperationException("Kestrel pan press was rejected.");
                                 pressed = true;
-                                for (var step = 1; step <= 80; ++step)
-                                {
-                                    var distance = step <= 40 ? step * 4 : (80 - step) * 4;
-                                    // Kind 1 routes a move with the right-button bit through the native queue.
-                                    var submittedAt = System.Diagnostics.Stopwatch.GetTimestamp();
-                                    var sequence = surface.SubmitPointerButton(1, x + distance, y + distance / 4.0, 2, true);
-                                    if (sequence == 0)
-                                        throw new InvalidOperationException("Kestrel pan move was rejected.");
-                                    submittedMoves.Add(new { sequence, submittedAt, step, x = x + distance, y = y + distance / 4.0 });
-                                    await Task.Delay(16);
-                                }
-                                if (surface.SubmitPointerButton(3, x, y, 2, false) == 0)
-                                    throw new InvalidOperationException("Kestrel pan release was rejected.");
-                                pressed = false;
-                                await Task.Delay(500);
-                                var after = view.CapturePerformanceSnapshot();
-                                Console.WriteLine("Kestrel pan performance: " + System.Text.Json.JsonSerializer.Serialize(new { elapsedMilliseconds = started.Elapsed.TotalMilliseconds, baseline, after, delta = after.Since(baseline) }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
-                                var panDiagnostics = await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;return {events:p.events,captures:p.captures,frames:p.frames,panning:document.getElementById('viewport').classList.contains('panning'),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
-                                Console.WriteLine("Kestrel pan diagnostics: " + panDiagnostics);
-                                Console.WriteLine("Kestrel pan composition timeline: " + System.Text.Json.JsonSerializer.Serialize(new
-                                {
-                                    timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
-                                    traceStarted,
-                                    submittedMoves,
-                                    publications = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted),
-                                    renderedScenes = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted),
-                                    scheduling = surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted),
-                                    // Recorded at the end of OnRender, before platform presentation.
-                                    drawCallbackCompletions = surface.PresentationTimestamps.Where(timestamp => timestamp >= traceStarted),
-                                    physicalPresentationVerified = false
-                                }));
-                                KestrelDragWorkloadValidator.Validate(panDiagnostics, x, y);
-                                Console.WriteLine("Kestrel pan workload validated (physical presentation remains unqualified).");
+                                    for (var step = 1; step <= 80; ++step)
+                                    {
+                                        var distance = step <= 40 ? step * 4 : (80 - step) * 4;
+                                        // Kind 1 routes a move with the right-button bit through the native queue.
+                                        var submittedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                                        var sequence = surface.SubmitPointerButton(1, x + distance, y + distance / 4.0, 2, true);
+                                        if (sequence == 0)
+                                            throw new InvalidOperationException("Kestrel pan move was rejected.");
+                                        submittedMoves.Add(new { sequence, submittedAt, step, x = x + distance, y = y + distance / 4.0 });
+                                        await Task.Delay(16);
+                                    }
+                                    if (surface.SubmitPointerButton(3, x, y, 2, false) == 0)
+                                        throw new InvalidOperationException("Kestrel pan release was rejected.");
+                                    pressed = false;
+                                    await Task.Delay(500);
+                                    var after = view.CapturePerformanceSnapshot();
+                                    Console.WriteLine("Kestrel pan performance: " + System.Text.Json.JsonSerializer.Serialize(new { elapsedMilliseconds = started.Elapsed.TotalMilliseconds, baseline, after, delta = after.Since(baseline) }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
+                                    var panDiagnostics = await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;return {events:p.events,captures:p.captures,frames:p.frames,panning:document.getElementById('viewport').classList.contains('panning'),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
+                                    Console.WriteLine("Kestrel pan diagnostics: " + panDiagnostics);
+                                    Console.WriteLine("Kestrel pan composition timeline: " + System.Text.Json.JsonSerializer.Serialize(new
+                                    {
+                                        timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
+                                        traceStarted,
+                                        submittedMoves,
+                                        publications = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted),
+                                        renderedScenes = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted),
+                                        scheduling = surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted),
+                                        // Recorded at the end of OnRender, before platform presentation.
+                                        drawCallbackCompletions = surface.PresentationTimestamps.Where(timestamp => timestamp >= traceStarted),
+                                        physicalPresentationVerified = false
+                                    }));
+                                    KestrelDragWorkloadValidator.Validate(panDiagnostics, x, y);
+                                    Console.WriteLine("Kestrel pan workload validated (physical presentation remains unqualified).");
                             }
                             finally
                             {
@@ -337,6 +337,23 @@ internal sealed class WebGpuDocumentProbeApp : Application
                             var initialHeight = desktop.MainWindow.Height;
                             var traceStarted = System.Diagnostics.Stopwatch.GetTimestamp();
                             var submittedSizes = new List<object>(80);
+                            var nativeWindowResizes = new List<object>();
+                            var surfaceSizeChanges = new List<object>();
+                            EventHandler<WindowResizedEventArgs> onNativeResize = (_, e) => {
+                                if (nativeWindowResizes.Count < 4096) nativeWindowResizes.Add(new {
+                                    timestamp = System.Diagnostics.Stopwatch.GetTimestamp(),
+                                    width = e.ClientSize.Width, height = e.ClientSize.Height, reason = e.Reason.ToString() });
+                            };
+                            EventHandler<SizeChangedEventArgs> onSurfaceResize = (_, e) => {
+                                if (surfaceSizeChanges.Count < 4096) surfaceSizeChanges.Add(new {
+                                    timestamp = System.Diagnostics.Stopwatch.GetTimestamp(),
+                                    width = e.NewSize.Width, height = e.NewSize.Height });
+                            };
+                            desktop.MainWindow.Resized += onNativeResize;
+                            surface.SizeChanged += onSurfaceResize;
+                            long inputEnded;
+                            try
+                            {
                             for (var step = 1; step <= 80; ++step)
                             {
                                 var offset = step <= 40 ? step : 80 - step;
@@ -358,14 +375,22 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                     await Task.Yield(); // Keep late runs responsive; never busy-wait.
 
                             }
-                            var inputEnded = System.Diagnostics.Stopwatch.GetTimestamp();
+                            inputEnded = System.Diagnostics.Stopwatch.GetTimestamp();
                             await Task.Delay(750);
+                            }
+                            finally
+                            {
+                                desktop.MainWindow.Resized -= onNativeResize;
+                                surface.SizeChanged -= onSurfaceResize;
+                            }
                             var diagnostics = await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();const ancestors=[];for(let n=c.parentElement;n;n=n.parentElement){const b=n.getBoundingClientRect(),s=getComputedStyle(n);ancestors.push({id:n.id,tag:n.tagName,rect:[b.x,b.y,b.width,b.height],height:s.height,minHeight:s.minHeight,display:s.display,flex:s.flex,gridTemplateRows:s.gridTemplateRows});}return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],ancestors,dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
                             var published = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted).ToArray();
                             var drawn = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted).ToArray();
                             Console.WriteLine("Kestrel continuous window resize: " + System.Text.Json.JsonSerializer.Serialize(new {
                                 traceStarted, inputEnded, timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
-                                submittedSizes, diagnostics, baseline, after = view.CapturePerformanceSnapshot(),
+                                submittedSizes, nativeWindowResizes, surfaceSizeChanges,
+                                nativeSubmissions = surface.SubmittedResizes.Where(sample => sample.Timestamp >= traceStarted),
+                                diagnostics, baseline, after = view.CapturePerformanceSnapshot(),
                                 publications = published, renderedScenes = drawn,
                                 scheduling = surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted),
                                 physicalPresentationVerified = false, nativeUserDragVerified = false
