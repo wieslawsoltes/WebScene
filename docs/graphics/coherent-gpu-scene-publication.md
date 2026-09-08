@@ -568,3 +568,10 @@ window grows before layout catches up. Continuous-drag visual checks and separat
 HTML/sidebar cadence measurements remain required. The probe's optional
 `--capture-resize-kestrel` flag adds a five-second attachment delay before its
 existing resize sequence; it does not alter application source.
+
+Continuous-resize verification attempt: a window-scoped capture around synthetic
+native edge-drag events did not show changing window dimensions in the inspected
+frames. The action therefore did not exercise the intended live-resize path and
+is not a pass. Do not substitute its absence of blank frames for continuous-drag
+qualification. No FPS result is derived. Existing stepped-resize evidence remains
+limited to that workload; real continuous dragging still requires verification.
