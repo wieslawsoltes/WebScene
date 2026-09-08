@@ -276,6 +276,46 @@ void test_runtime_webgpu_installation() {
         }
     )JS","gpu-constants"),"GPU flag namespaces failed");
     require(runtime.execute(R"JS(
+        (async()=>{
+            if(installedDevice.popErrorScope.length!==0)throw new Error('pop scope arity');
+            for(const Type of [GPUValidationError,GPUOutOfMemoryError,GPUInternalError]) {
+                const error=new Type('diagnostic');
+                if(!(error instanceof GPUError)||!(error instanceof Type)||error.message!=='diagnostic')throw new Error('GPUError inheritance');
+                if(Object.prototype.toString.call(error)!=='[object '+Type.name+']')throw new Error('GPUError tag');
+                let rejected=false;try{Type('message')}catch(e){rejected=e instanceof TypeError}
+                if(!rejected)throw new Error('error constructor callable');
+            }
+            let rejected=false;try{new GPUError()}catch(e){rejected=e instanceof TypeError}
+            if(!rejected)throw new Error('base error constructible');
+            const getter=Object.getOwnPropertyDescriptor(GPUError.prototype,'message').get;
+            rejected=false;try{getter.call({})}catch(e){rejected=e instanceof TypeError}
+            if(!rejected)throw new Error('GPUError getter accepted wrong receiver');
+            const wrong=installedDevice.popErrorScope.call({});
+            if(!(wrong instanceof Promise))throw new Error('pop receiver did not return promise');
+            rejected=false;try{await wrong}catch(e){rejected=e instanceof TypeError}
+            if(!rejected)throw new Error('pop receiver accepted');
+            rejected=false;try{await installedDevice.popErrorScope()}catch(e){rejected=e instanceof DOMException&&e.name==='OperationError'}
+            if(!rejected)throw new Error('empty scope accepted');
+            installedDevice.pushErrorScope('validation');
+            installedDevice.pushErrorScope('out-of-memory');
+            installedDevice.createBuffer({size:16,usage:0});
+            const clean=installedDevice.popErrorScope();
+            const captured=installedDevice.popErrorScope();
+            if(clean===captured)throw new Error('scope promises reused');
+            if(await clean!==null)throw new Error('wrong scope captured validation');
+            const error=await captured;
+            if(!(error instanceof GPUValidationError)||!error.message.length)throw new Error('native validation missing');
+            installedDevice.pushErrorScope('validation');
+            if(await installedDevice.popErrorScope()!==null)throw new Error('clean scope failed');
+            const node=document.createElement('div');node.id='scope-ready';document.body.appendChild(node);
+        })();
+    )JS","pop-error-scope"),"GPU popErrorScope request failed");
+    deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(!document.find_by_id("scope-ready")&&std::chrono::steady_clock::now()<deadline) {
+        require(runtime.pump_task(),"Error scope completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(document.find_by_id("scope-ready")!=nullptr,"Error scope promises did not settle correctly");
+    require(runtime.execute(R"JS(
         if(installedDevice.pushErrorScope.length!==1)throw new Error('push scope arity');
         for(const filter of ['validation','out-of-memory','internal'])installedDevice.pushErrorScope(filter);
         for(const call of [
@@ -378,7 +418,7 @@ void test_runtime_webgpu_installation() {
     require(runtime.execute("domGPUContext.unconfigure();","gpu-raf-cleanup"),"GPU RAF cleanup failed");
 #endif
     require(runtime.load_url("https://graphics.test/webgpu-next"),"WebGPU navigation failed");
-    require(runtime.execute("if('gpu' in navigator||'GPUBufferUsage' in globalThis)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");
+    require(runtime.execute("if('gpu' in navigator||'GPUBufferUsage' in globalThis||'GPUError' in globalThis||'GPUValidationError' in globalThis||'GPUOutOfMemoryError' in globalThis||'GPUInternalError' in globalThis)throw new Error('GPU policy survived navigation');","navigated-gpu"),"Navigation retained GPU exposure");
     require(runtime.install_webgpu(wake,true,webgpu_canvas_interop::none),"Navigated GPU reinstall failed");
     require(runtime.execute("globalThis.retiredGPU=navigator.gpu;","retain-gpu"),"GPU retention failed");
     runtime.shutdown_graphics();
@@ -590,6 +630,8 @@ int main() {
             resource_handle<dawn_device> gc_buffer_device;
             std::array<std::unique_ptr<v8_webgpu_map_request>,3> map_requests;
             size_t map_completions=0;
+            std::array<uint64_t,14> test_operations;
+            for(auto& operation:test_operations)operation=new_owner_token();
             auto& graphics=runtime.initialize_graphics(wake,[&](completion_record record) {
                 if (device_registry && device_registry->complete(record)) {
                     auto* isolate=v8::Isolate::GetCurrent(); auto context=isolate->GetCurrentContext();
@@ -603,7 +645,7 @@ int main() {
                     retired_device_probe.Reset(); device_map_retired=true;
                     return;
                 }
-                if (record.operation==113) {
+                if (record.operation==test_operations[13]) {
                     auto* isolate=v8::Isolate::GetCurrent();
                     require(!cancelled_device_request->pending(),"Cancelled device request remained pending");
                     require(!cancelled_device_request->complete(isolate,isolate->GetCurrentContext(),record,[](wgpu::Device) -> v8::Local<v8::Value> {
@@ -611,7 +653,7 @@ int main() {
                     }),"Cancelled device completion was consumed twice");
                     cancelled_device_request.reset(); cancelled_device_retired=true; return;
                 }
-                if (record.operation==111) {
+                if (record.operation==test_operations[11]) {
                     auto* isolate=v8::Isolate::GetCurrent(); auto context=isolate->GetCurrentContext();
                     require(record.status==completion_status::failed,"Impossible device limit unexpectedly accepted");
                     require(failed_device_request->complete(isolate,context,record,[](wgpu::Device) -> v8::Local<v8::Value> {
@@ -623,16 +665,16 @@ int main() {
                     require(name->StrictEquals(v8::String::NewFromUtf8Literal(isolate,"OperationError")),"Device failure has wrong exception type");
                     failed_device_request.reset();device_failure_seen=true;return;
                 }
-                if (record.operation==110) {
+                if (record.operation==test_operations[10]) {
                     require(record.status==completion_status::success,"Invalid browser usage did not generate native validation");
                     buffer_validation_seen=true; return;
                 }
                 if (async_buffers && async_buffers->complete(record)) { ++binding_map_completions; return; }
-                if (record.operation==106 || record.operation==107 || record.operation==108) {
-                    auto& request=map_requests[record.operation-106];
+                if (record.operation==test_operations[6] || record.operation==test_operations[7] || record.operation==test_operations[8]) {
+                    auto& request=map_requests[std::find(test_operations.begin()+6,test_operations.begin()+9,record.operation)-(test_operations.begin()+6)];
                     require(request->complete(record,[&](const auto& buffer,auto) {
-                        if (record.operation==108) throw std::bad_alloc();
-                        require(record.operation==106,"Canceled mapping attached native memory");
+                        if (record.operation==test_operations[8]) throw std::bad_alloc();
+                        require(record.operation==test_operations[6],"Canceled mapping attached native memory");
                         require(buffer.GetMapState()==wgpu::BufferMapState::Mapped && buffer.GetMappedRange(8,16),"Asynchronous subrange mapping failed");
                     }),"Map promise completion was not handled");
                     require(!request->pending(),"Map promise remained pending");
@@ -641,7 +683,7 @@ int main() {
                     ++map_completions;
                     return;
                 }
-                if (record.operation==104) {
+                if (record.operation==test_operations[4]) {
                     auto* isolate=v8::Isolate::GetCurrent();
                     auto context=isolate->GetCurrentContext();
                     bool wrong_realm=false;
@@ -799,7 +841,7 @@ int main() {
                             auto buffer=device.native().CreateBuffer(&descriptor);
                             map_requests[i]=std::make_unique<v8_webgpu_map_request>(isolate,context,v8::Object::New(isolate),
                                 context->Global()->Get(context,v8::String::NewFromUtf8(isolate,i==1 ? "throwingMapException" : "DOMException").ToLocalChecked()).ToLocalChecked().As<v8::Function>(),
-                                std::move(buffer),device.owner(),106+i);
+                                std::move(buffer),device.owner(),test_operations[6+i]);
                             auto promise=map_requests[i]->start(adapter_service->dawn().completions(),wgpu::MapMode::Write,8,16).ToLocalChecked();
                             require(context->Global()->Set(context,v8::String::NewFromUtf8(isolate,i==0 ? "asyncMapProbe" : i==1 ? "cancelMapProbe" : "allocationMapProbe").ToLocalChecked(),promise).FromMaybe(false),"Map promise publication failed");
                         }
@@ -822,7 +864,7 @@ int main() {
                         require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"errorBufferProbe"),error_buffer).FromMaybe(false),"Error buffer publication failed");
                         require(run("if(errorBufferProbe.usage!==1024||errorBufferProbe.size!==64||errorBufferProbe.label!=='invalid usage'||errorBufferProbe.getMappedRange().byteLength!==64)throw new Error('invalid buffer metadata/mapping');errorBufferProbe.unmap();delete globalThis.errorBufferProbe;"),"Browser error buffer behavior failed");
                         auto error_mailbox=adapter_service->dawn().completions();
-                        auto error_ticket=error_mailbox->reserve(110,device.owner()).value();
+                        auto error_ticket=error_mailbox->reserve(test_operations[10],device.owner()).value();
                         device.native().PopErrorScope(wgpu::CallbackMode::AllowSpontaneous,
                             [error_mailbox,error_ticket](wgpu::PopErrorScopeStatus status,wgpu::ErrorType type,wgpu::StringView) {
                                 error_mailbox->publish(error_ticket,status==wgpu::PopErrorScopeStatus::Success && type==wgpu::ErrorType::Validation
@@ -1197,13 +1239,13 @@ int main() {
                     buffer_wrappers_tested=true;
                     return;
                 }
-                if (record.operation==102 || record.operation==103) {
+                if (record.operation==test_operations[2] || record.operation==test_operations[3]) {
                     auto* isolate=v8::Isolate::GetCurrent();
                     auto context=isolate->GetCurrentContext();
-                    auto& request=failed_wrappers[record.operation-102];
+                    auto& request=failed_wrappers[std::find(test_operations.begin()+2,test_operations.begin()+4,record.operation)-(test_operations.begin()+2)];
                     require(record.status==completion_status::success,"Wrapper failure test needs a hardware adapter");
                     require(request->complete(isolate,context,record,[&](wgpu::Adapter) -> v8::MaybeLocal<v8::Value> {
-                        if (record.operation==102) throw std::length_error("resource table full");
+                        if (record.operation==test_operations[2]) throw std::length_error("resource table full");
                         auto sentinel=context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"wrapperSentinel")).ToLocalChecked();
                         isolate->ThrowException(sentinel);
                         return {};
@@ -1215,7 +1257,7 @@ int main() {
                     ++failed_wrapper_count;
                     return;
                 }
-                if (record.operation==101) {
+                if (record.operation==test_operations[1]) {
                     auto* isolate=v8::Isolate::GetCurrent();
                     require(record.status==completion_status::cancelled,"Adapter cancellation lost");
                     require(cancelled_adapter->complete(isolate,isolate->GetCurrentContext(),record,
@@ -1224,7 +1266,7 @@ int main() {
                     adapter_cancelled=true;
                     return;
                 }
-                if (record.operation==100) {
+                if (record.operation==test_operations[0]) {
                     auto* isolate=v8::Isolate::GetCurrent();
                     auto context=isolate->GetCurrentContext();
                     require(adapter_request->complete(isolate,context,record,[&](wgpu::Adapter adapter) -> v8::Local<v8::Value> {
@@ -1285,7 +1327,7 @@ int main() {
                         consumed_promise->MarkAsHandled();
                         v8::Local<v8::Promise> promise;
                         device_request=v8_webgpu_device_request::start_checked(isolate,context,js_descriptor,[&] { return std::pair{adapter,false}; },mailbox,
-                            {adapter_service->engine_identity(),new_owner_token(),0},104,
+                            {adapter_service->engine_identity(),new_owner_token(),0},test_operations[4],
                             context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),promise);
                         require(device_request && device_request->pending(),"Device promise did not start");
                         require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"deviceRequestPromise"),promise).FromMaybe(false),"Device promise publication failed");
@@ -1293,14 +1335,14 @@ int main() {
                         wgpu::DeviceDescriptor impossible_descriptor{}; impossible_descriptor.requiredLimits=&impossible_limits;
                         v8::Local<v8::Promise> failure_promise;
                         failed_device_request=v8_webgpu_device_request::start(isolate,context,impossible_descriptor,adapter,mailbox,
-                            {adapter_service->engine_identity(),new_owner_token(),0},111,
+                            {adapter_service->engine_identity(),new_owner_token(),0},test_operations[11],
                             context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),failure_promise);
                         require(failed_device_request && failed_device_request->pending(),"Failure device promise did not start");
                         failure_promise->MarkAsHandled();
                         require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"failedDevicePromise"),failure_promise).FromMaybe(false),"Failure promise publication failed");
                         v8::Local<v8::Promise> cancelled_promise;
                         cancelled_device_request=v8_webgpu_device_request::start(isolate,context,impossible_descriptor,adapter,mailbox,
-                            {adapter_service->engine_identity(),new_owner_token(),0},113,
+                            {adapter_service->engine_identity(),new_owner_token(),0},test_operations[13],
                             context->Global()->Get(context,v8::String::NewFromUtf8Literal(isolate,"DOMException")).ToLocalChecked().As<v8::Function>(),cancelled_promise);
                         require(cancelled_device_request && cancelled_device_request->pending(),"Cancellable device request did not start");
                         bool wrong_cancel_realm=false;
@@ -1361,7 +1403,7 @@ int main() {
                     webgpu_adapter_options options;
                     adapter_request=v8_webgpu_adapter_request::start(isolate,context,options,
                         adapter_service->dawn().instance(),adapter_service->dawn().completions(),
-                        {adapter_service->engine_identity(),new_owner_token(),0},100,wgpu::BackendType::Undefined,promise);
+                        {adapter_service->engine_identity(),new_owner_token(),0},test_operations[0],wgpu::BackendType::Undefined,promise);
                     require(adapter_request && adapter_request->pending(), "Adapter request did not become pending");
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"adapterProbePromise"),promise).FromMaybe(false),
                         "Adapter promise publication failed");
@@ -1369,7 +1411,7 @@ int main() {
                     v8::Local<v8::Promise> cancelled_promise;
                     cancelled_adapter=v8_webgpu_adapter_request::start(isolate,context,options,
                         adapter_service->dawn().instance(),adapter_service->dawn().completions(),
-                        cancelled_owner,101,wgpu::BackendType::Undefined,cancelled_promise);
+                        cancelled_owner,test_operations[1],wgpu::BackendType::Undefined,cancelled_promise);
                     require(cancelled_adapter && cancelled_adapter->pending(),"Cancelled request was not admitted");
                     adapter_service->dawn().completions()->cancel_owner(cancelled_owner);
                     require(context->Global()->Set(context,v8::String::NewFromUtf8Literal(isolate,"cancelledAdapterPromise"),cancelled_promise).FromMaybe(false),
@@ -1379,7 +1421,7 @@ int main() {
                         v8::Local<v8::Promise> failed_promise;
                         failed_wrappers[i]=v8_webgpu_adapter_request::start(isolate,context,options,
                             adapter_service->dawn().instance(),adapter_service->dawn().completions(),
-                            {adapter_service->engine_identity(),new_owner_token(),0},102+i,wgpu::BackendType::Undefined,failed_promise);
+                            {adapter_service->engine_identity(),new_owner_token(),0},test_operations[2+i],wgpu::BackendType::Undefined,failed_promise);
                         require(failed_wrappers[i] && failed_wrappers[i]->pending(),"Failure test request was not admitted");
                         require(context->Global()->Set(context,v8::String::NewFromUtf8(isolate,i==0 ? "nativeWrapperFailure" : "jsWrapperFailure").ToLocalChecked(),failed_promise).FromMaybe(false),
                             "Failure test promise publication failed");

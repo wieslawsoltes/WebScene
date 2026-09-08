@@ -1872,3 +1872,28 @@ startup verification still exits 1 with Canvas 2D fallback; asynchronous error
 scope delivery is next. Validation errors collected in its pushed scope have
 not yet been exposed by the JavaScript API, so advancing through the creation
 calls alone does not prove its pipelines are valid.
+
+### Error scope completion (2026-09-08)
+
+GPUDevice.popErrorScope now returns a fresh promise and uses the native
+completion mailbox to settle it on the engine thread. Callback-owned messages
+are copied with a 1 MiB limit; pending requests are bounded and retain their
+device wrapper. Clean scopes resolve null, native validation/out-of-memory/
+internal errors become their GPUError subclasses, and failed pops reject with
+OperationError. Realm teardown cancels pending delivery. GPUError has a branded
+message getter and nonconstructible base; subclasses provide DOMString
+constructors and inheritance. Their globals are removed on policy retirement.
+
+Tests exercise empty-stack rejection, wrong receivers, concurrent nested scopes,
+a real invalid Dawn buffer descriptor, clean completion, constructors, message
+branding and inheritance. The runtime suite passes. The larger fixture also
+needed unique completion IDs: fixed numeric IDs collided with generated request
+IDs after this addition and dispatched to a retired fixture request. It now
+allocates its IDs through new_owner_token. Temporary crash diagnostics were
+removed after verifying that root cause.
+
+Unchanged Kestrel advances through popErrorScope to “d.addEventListener is not a
+function”. Startup still exits 1 with Canvas 2D fallback. GPUDevice EventTarget,
+uncaptured error events and device-loss delivery remain outstanding. Exhaustive
+teardown races, allocation-failure behavior and WebIDL/CTS conformance remain
+qualification work; passing these tests does not close those requirements.

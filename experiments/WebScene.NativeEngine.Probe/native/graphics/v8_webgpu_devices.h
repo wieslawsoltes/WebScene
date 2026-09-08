@@ -1,5 +1,6 @@
 #pragma once
 #include "v8_webgpu_buffers.h"
+#include "v8_webgpu_error_scopes.h"
 #include "v8_webgpu_bind_groups.h"
 #include "v8_webgpu_pipeline_layouts.h"
 #include "v8_webgpu_pipeline_layout_descriptor.h"
@@ -30,6 +31,7 @@ class v8_webgpu_devices {
         v8::Global<v8::Private> info_key;
         v8::Global<v8::Private> queue_key;
         std::unique_ptr<v8_webgpu_queue> queue;
+        std::unique_ptr<v8_webgpu_error_scopes> error_scopes;
         graphics_service* service{};
         resource_handle<dawn_device> device;
         std::unique_ptr<v8_webgpu_buffers> buffers;
@@ -52,6 +54,7 @@ class v8_webgpu_devices {
     v8::Global<v8::Function> dom_exception_;
     v8::Global<v8::ObjectTemplate> instance_;
     v8::Global<v8::Object> prototype_;
+    v8_webgpu_errors errors_factory_;
     v8_webgpu_supported_features features_factory_;
     v8_webgpu_limits limits_factory_;
     v8_webgpu_adapter_info info_factory_;
@@ -90,6 +93,26 @@ class v8_webgpu_devices {
         try {
             item->service->with_device(item->device,[&](auto& owned){owned.native().PushErrorScope(filter);});
         }catch(const std::exception&){fail(isolate,"GPU error scope push failed");}
+    }
+    static void pop_error_scope(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
+        v8::Local<v8::Promise::Resolver> resolver;
+        if(!v8::Promise::Resolver::New(context).ToLocal(&resolver))return;
+        info.GetReturnValue().Set(resolver->GetPromise());
+        v8::Local<v8::Value> failure;
+        {
+            v8::TryCatch caught(isolate);
+            auto* item=receiver(info);
+            if(item) {
+                try {
+                    auto device=native_reference(info.This());
+                    item->error_scopes->pop(context,info.This(),resolver,std::move(device),item->service->dawn().completions());
+                }catch(const std::exception&){fail(isolate,"GPUDevice native ownership unavailable");}
+            }
+            if(caught.HasTerminated())return;
+            if(caught.HasCaught())failure=caught.Exception();
+        }
+        if(!failure.IsEmpty())(void)resolver->Reject(context,failure).FromMaybe(false);
     }
     static void create_buffer(const v8::FunctionCallbackInfo<v8::Value>& info) {
         auto* item=receiver(info); if (!item) return;
@@ -364,7 +387,7 @@ class v8_webgpu_devices {
 public:
     v8_webgpu_devices(v8::Isolate* isolate,v8::Local<v8::Context> context,
         v8::Local<v8::Function> dom_exception,size_t capacity=64,size_t buffer_capacity=1024)
-        :isolate_(isolate),features_factory_(isolate,context),limits_factory_(isolate,context),info_factory_(isolate,context),buffer_capacity_(buffer_capacity),entries_(capacity) {
+        :isolate_(isolate),errors_factory_(isolate,context),features_factory_(isolate,context),limits_factory_(isolate,context),info_factory_(isolate,context),buffer_capacity_(buffer_capacity),entries_(capacity) {
         check_scope();
         if (dom_exception.IsEmpty()) throw std::invalid_argument("Trusted DOMException constructor is required");
         realm_.Reset(isolate,context); dom_exception_.Reset(isolate,dom_exception);
@@ -378,6 +401,8 @@ public:
         prototype->Set(isolate,"createBindGroup",group_create);
         auto binding_create=v8::FunctionTemplate::New(isolate,create_bind_group_layout);binding_create->SetLength(1);
         prototype->Set(isolate,"createBindGroupLayout",binding_create);
+        auto pop_scope=v8::FunctionTemplate::New(isolate,pop_error_scope);
+        prototype->Set(isolate,"popErrorScope",pop_scope);
         auto push_scope=v8::FunctionTemplate::New(isolate,push_error_scope);push_scope->SetLength(1);
         prototype->Set(isolate,"pushErrorScope",push_scope);
         auto shader_create=v8::FunctionTemplate::New(isolate,create_shader); shader_create->SetLength(1);
@@ -402,6 +427,7 @@ public:
         check_scope();
         for (auto& item:entries_) if (item) {
             if (!item->wrapper.IsEmpty()) item->wrapper.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);
+            item->error_scopes.reset();
             item->queue.reset();
             item->encoders.reset();
             item->textures.reset();
@@ -417,7 +443,7 @@ public:
     }
     bool complete(completion_record record) {
         check_scope();
-        for (auto& item:entries_) if (item && (item->buffers->complete(record)||item->shaders->complete(record))) return true;
+        for (auto& item:entries_) if (item && (item->error_scopes->complete(record)||item->buffers->complete(record)||item->shaders->complete(record))) return true;
         return false;
     }
 private:
@@ -471,6 +497,7 @@ public:
         auto item=std::make_unique<entry>();
         item->label=std::move(initial_label);
         item->service=&service; item->device=device; item->releases=service.release_endpoint();
+        item->error_scopes=std::make_unique<v8_webgpu_error_scopes>(isolate_,errors_factory_,dom_exception_.Get(isolate_));
         item->buffers=std::make_unique<v8_webgpu_buffers>(isolate_,context,buffer_capacity_,dom_exception_.Get(isolate_));
         item->pipeline_layouts=std::make_unique<v8_webgpu_pipeline_layouts>(isolate_,context);
         item->binding_groups=std::make_unique<v8_webgpu_bind_groups>(isolate_,context);
