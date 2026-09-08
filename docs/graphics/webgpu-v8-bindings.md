@@ -2335,3 +2335,20 @@ The fresh unchanged-app screenshot `macos-layer-list-border-fixed.png` confirms
 readable dark layer rows. This is local candidate coverage, not full border/CSS
 conformance or cross-RID qualification. GPU pan/zoom latency and flicker remain
 unqualified and are not claimed fixed by this CSS change.
+
+
+### Zoom performance counters after CSS fixes (2026-09-08)
+
+`--zoom-kestrel` now captures native performance snapshots before input and after
+settling, using IncludeFields so native interop counters are serialized. The
+macOS 40-wheel run consumed every queued input with no drops or script errors.
+Over 1.743 seconds (including a 500ms settle), it invoked 34 application RAF
+callbacks, built/rendered 63 scenes and encountered 18 blocked publication
+attempts. Nineteen scene builds had no damage. Full snapshots and deltas are in
+`evidence/kestrel/native-wheel-zoom-performance.json`.
+
+These counters identify extra publication/render work as an investigation lead;
+they do not establish GPU execution duration, input-to-photon latency, or the
+cause of flickering. Native wheel events and compositor frame inputs both appear
+in total input counts. The next check is whether 2D overlay changes and completed
+GPU images from an application frame are exposed as separate scene revisions.

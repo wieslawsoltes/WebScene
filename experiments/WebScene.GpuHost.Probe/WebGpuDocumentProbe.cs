@@ -181,6 +181,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 var x = center.RootElement[0].GetDouble();
                                 var y = center.RootElement[1].GetDouble();
                                 var surface = (NativeSceneSurface)view.Content!;
+                                var performanceBaseline = view.CapturePerformanceSnapshot();
                                 surface.SubmitPointerMove(x, y);
                                 for (var step = 0; step < 40; ++step)
                                 {
@@ -189,6 +190,8 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                     await Task.Delay(30);
                                 }
                                 await Task.Delay(500);
+                                var performanceAfter = view.CapturePerformanceSnapshot();
+                                Console.WriteLine("Kestrel zoom performance: " + System.Text.Json.JsonSerializer.Serialize(new { baseline = performanceBaseline, after = performanceAfter, delta = performanceAfter.Since(performanceBaseline) }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
                                 Console.WriteLine("Kestrel zoom diagnostics: " + await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelZoomProbe,c=document.getElementById('scene');return {wheelEvents:p.wheelEvents,handledWheelEvents:p.handledWheelEvents,resizes:p.resizes,bitmapMutations:p.bitmapMutations,canvas:[c.width,c.height],backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()"));
                             }
                             finally
