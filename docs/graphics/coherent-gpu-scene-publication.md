@@ -1,8 +1,8 @@
 # Coherent GPU scene publication
 
-Status: submission completion-ticket foundation implemented; scene capture/commit
-integration and end-to-end coherence remain unimplemented and unqualified. This preserves epic #22 scope and its Dawn/Skia
-GPU-resident route.
+Status: initial bounded scene capture/commit integration implemented; failure
+recovery and end-to-end coherence/performance remain unqualified. This preserves
+epic #22 scope and its Dawn/Skia GPU-resident route.
 
 ## Required invariant
 
@@ -188,3 +188,38 @@ The pre-existing pool-release assertion remains intact. Native engine tests pass
 owned reference (0.75s). This tests dependency capture, not atomic publication of
 the full A/B/C scene sequence. The engine still needs bounded staging, failure and
 generation invalidation, dirty-work preservation and atomic commit.
+
+
+## Initial engine capture/commit integration (2026-09-08)
+
+The engine now freezes scene commands, layer arrays, input sequence, viewport and
+exact GPU bindings together. One staged capture waits for all captured images;
+commit validates canvas identity, bitmap generation/content floor, image version,
+viewport and the consumer predecessor. It rechecks mailbox capacity before
+publication. Later live document changes remain pending after a frozen capture
+commits. Open GPU rendering opportunities defer capture. Resolution retains GPU
+leases without pixel copies or a synchronous GPU wait.
+
+Revision numbers are reserved at capture, rather than commit as originally
+proposed. Discarded captures can leave gaps; predecessor validation prevents a
+diff from targeting an unpublished capture. Both native suites pass after the
+identity/capacity hardening (14.57 seconds). A forty-wheel Kestrel run had no app
+errors, but manual input contaminated its timing counters, so it is not
+performance evidence.
+
+Remaining acceptance work includes controlled full capture/presentation tests,
+multi-canvas completion order, explicit missing-ticket handling under retention
+pressure, failure recovery, navigation/detach retirement, controlled right-button
+pan and resize, and browser-comparable displayed-frame measurements. A failed
+snapshot currently discards its captured scene; recovery from that state is not
+yet qualified. No claim that physical flicker or panning latency is fixed.
+
+The production commit helper now has deterministic white-box coverage for a
+pending dependency retaining scene A, frozen CPU commands B surviving a newer
+capture C, dirty-generation preservation, mailbox capacity, failed output, stale
+predecessor, viewport change and same-size bitmap reset. Both native suites pass
+with these regressions (14.16 seconds). These tests reuse a controlled image lease
+and vary CPU commands; they do not establish full multi-version rendered A/B/C
+coherence or exercise the runtime capture checkpoint. Consumer predecessor
+validation and queue insertion now share one lock to prevent a checkpoint reset
+from intervening between them.

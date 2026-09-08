@@ -1099,8 +1099,14 @@
             if (scene_pending
                 && host_visible_.load(std::memory_order_acquire)
                 && (resize_frame_boundary || now >= next_scene_publication)) {
-                if (publish_scene()) {
-                    scene_pending = false;
+                const auto publication=publish_scene();
+                if (publication!=publication_result::deferred) {
+                    scene_pending = publication==publication_result::published
+                        && document_.scene_generation()!=published_document_generation_;
+                    if(publication==publication_result::discarded) {
+                        next_scene_publication=now+std::chrono::milliseconds(16);
+                        continue;
+                    }
                     if (pending_paired_resize_publication.has_value()
                         && last_input_sequence_
                             >= pending_paired_resize_publication->sequence) {

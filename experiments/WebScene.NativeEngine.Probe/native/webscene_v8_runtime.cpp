@@ -4719,6 +4719,16 @@ webscene::graphics::graphics_service& v8_dom_runtime::initialize_graphics(
 }
 #endif
 
+bool v8_dom_runtime::has_open_gpu_output() const
+{
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+    if(impl_->gpu_rendering_opportunity)return true;
+    for(const auto& [key,canvas]:impl_->gpu_canvases)
+        if(canvas.context->has_current_texture())return true;
+#endif
+    return false;
+}
+
 bool v8_dom_runtime::pump_task()
 {
     auto isolate_locker = impl_->lock_shared_isolate();

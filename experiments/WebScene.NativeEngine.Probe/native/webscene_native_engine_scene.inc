@@ -9,7 +9,7 @@
     }
 #endif
 
-    bool publish_scene()
+    publication_result publish_scene()
     {
         scene_publication_attempts_.fetch_add(1, std::memory_order_relaxed);
         const auto publication_started = std::chrono::steady_clock::now();
@@ -40,6 +40,10 @@
             }
 #endif
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        if(runtime_ && runtime_->has_open_gpu_output())return publication_result::deferred;
+#endif
+        if(staged_scene_)return commit_captured_scene(staged_scene_,publication_started);
         uint64_t base_revision = 0;
         uint64_t acknowledged_dom_hash = 0;
         float acknowledged_width = 0;
@@ -62,7 +66,7 @@
                     blocked_scene_publications_.fetch_add(
                         1,
                         std::memory_order_relaxed);
-                    return false;
+                    return publication_result::deferred;
                 }
             }
             if (!acknowledgement_->pending_scenes.empty()) {
@@ -92,15 +96,16 @@
         }
         if (native_scene_active_) {
             const auto scene_build_started = std::chrono::steady_clock::now();
-            document_.build_gpu_canvas_images(next->gpu_images);
+            document_.build_gpu_canvas_bindings(next->gpu_bindings);
+            next->gpu_images.resize(next->gpu_bindings.size());
             document_.build_scene(
                 next->commands,
                 next->canvas_strings,
                 next->canvas_string_bytes,
-                !next->gpu_images.empty());
+                !next->gpu_bindings.empty(), true);
             std::unordered_map<uint64_t,uint32_t> gpu_indices;
-            for (uint32_t index=0;index<next->gpu_images.size();++index)
-                gpu_indices.emplace(next->gpu_images[index]->value.describe().canvas,index);
+            for (uint32_t index=0;index<next->gpu_bindings.size();++index)
+                gpu_indices.emplace(next->gpu_bindings[index].metadata.canvas,index);
             for (auto& command:next->commands) {
                 if (command.kind!=WEBSCENE_SCENE_COMMAND_GPU_IMAGE) continue;
                 const auto* node=document_.find_by_native_id(command.node_id);
@@ -217,8 +222,8 @@
             for (const auto byte : next->canvas_string_bytes) {
                 dom_hash = mix_hash(dom_hash, static_cast<uint8_t>(byte));
             }
-            for (const auto& image:next->gpu_images) {
-                const auto m=image->value.describe();
+            for (const auto& binding:next->gpu_bindings) {
+                const auto m=binding.metadata;
                 dom_hash=mix_hash(dom_hash,m.canvas);
                 dom_hash=mix_hash(dom_hash,m.allocation);
                 dom_hash=mix_hash(dom_hash,m.allocation_generation);
@@ -388,16 +393,70 @@
             mix_hash(
                 mix_hash(hash, std::bit_cast<uint32_t>(width)),
                 std::bit_cast<uint32_t>(height))};
+        next->captured_generation=document_.scene_generation();
+        return commit_captured_scene(std::move(next),publication_started);
+    }
+
+    publication_result commit_captured_scene(std::shared_ptr<scene> next,
+        std::chrono::steady_clock::time_point publication_started)
+    {
+        // Staging retains one exact CPU scene and its matching GPU dependencies.
+        // A later live DOM mutation cannot alter this capture.
+        if(next->header.viewport_width!=static_cast<float>(viewport_width_)
+            || next->header.viewport_height!=static_cast<float>(viewport_height_)) {
+            staged_scene_.reset();return publication_result::deferred;
+        }
+        for(size_t index=0;index<next->gpu_bindings.size();++index) {
+            const auto& binding=next->gpu_bindings[index];
+            if(!document_.validate_gpu_canvas_binding(binding)) {
+                staged_scene_.reset();return publication_result::deferred;
+            }
+            if(binding.pending && binding.pending->state()==webscene_gpu_image_snapshot::status::failed) {
+                staged_scene_.reset();
+                set_last_error("GPU scene producer failed; retaining the last complete scene");
+                return publication_result::discarded;
+            }
+            if(!next->gpu_images[index])next->gpu_images[index]=binding.resolve();
+            if(!next->gpu_images[index]) {
+                staged_scene_=std::move(next);return publication_result::deferred;
+            }
+            const auto actual=next->gpu_images[index]->value.describe();
+            const auto& expected=binding.metadata;
+            if(actual.canvas!=expected.canvas || actual.allocation!=expected.allocation
+                || actual.allocation_generation!=expected.allocation_generation
+                || actual.content_serial!=expected.content_serial) {
+                staged_scene_.reset();
+                set_last_error("Captured GPU output resolved to a different image version");
+                return publication_result::discarded;
+            }
+        }
+        std::unique_lock acknowledgement_lock(acknowledgement_->mutex);
+        {
+            const auto limit=ordered_scene_consumer_.load(std::memory_order_acquire) ? 2U : 1U;
+            if(acknowledgement_->pending_scenes.size()>=limit) {
+                staged_scene_=std::move(next);return publication_result::deferred;
+            }
+            const auto predecessor=acknowledgement_->pending_scenes.empty()
+                ? acknowledgement_->revision : acknowledgement_->pending_scenes.back()->header.revision;
+            if(predecessor!=next->header.base_revision) {
+                staged_scene_.reset();return publication_result::deferred;
+            }
+        }
+        staged_scene_.reset();
+        published_document_generation_=next->captured_generation;
+        next->gpu_bindings.clear();
+        const auto revision=next->header.revision;
+        const auto width=next->header.viewport_width;
+        const auto height=next->header.viewport_height;
+        const auto sequence=next->header.consumed_input_sequence;
         const auto latest_scene_bytes = retained_scene_bytes(*next);
         latest_scene_bytes_.store(latest_scene_bytes, std::memory_order_relaxed);
         next->published_timestamp_nanoseconds = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count());
         auto published_scene = std::shared_ptr<const scene>(std::move(next));
-        {
-            std::lock_guard lock(acknowledgement_->mutex);
-            acknowledgement_->pending_scenes.push_back(published_scene);
-        }
+        acknowledgement_->pending_scenes.push_back(published_scene);
+        acknowledgement_lock.unlock();
         std::atomic_store_explicit(
             &latest_,
             std::move(published_scene),
@@ -414,9 +473,9 @@
             scene_published_callback_(
                 scene_published_user_data_,
                 revision,
-                last_input_sequence_,
+                sequence,
                 width,
                 height);
         }
-        return true;
+        return publication_result::published;
     }

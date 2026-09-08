@@ -57,7 +57,7 @@
     {
         worker_.request_stop();
         signal_worker();
-        worker_.join();
+        if (worker_.joinable()) worker_.join();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         delete inspector_state_.exchange(nullptr, std::memory_order_acq_rel);
 #endif

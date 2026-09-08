@@ -144,6 +144,8 @@ struct canvas_layer_version final {
 struct scene final {
     webscene_scene_header header{};
     uint64_t required_capabilities{};
+    uint64_t captured_generation{};
+    std::vector<webscene_native::gpu_canvas_scene_binding> gpu_bindings;
     std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> gpu_images;
     std::vector<webscene_scene_command> commands;
     std::vector<webscene_canvas_layer> canvas_layers;
@@ -174,6 +176,7 @@ uint64_t retained_scene_bytes(const scene& value)
 {
     return sizeof(scene)
         + value.gpu_images.capacity() * sizeof(decltype(value.gpu_images)::value_type)
+        + value.gpu_bindings.capacity() * sizeof(decltype(value.gpu_bindings)::value_type)
         + value.commands.capacity() * sizeof(webscene_scene_command)
         + value.canvas_layers.capacity() * sizeof(webscene_canvas_layer)
         + value.canvas_commands.capacity() * sizeof(webscene_canvas_command)
@@ -286,6 +289,7 @@ struct inspector_pump_work final {
 } // namespace
 
 struct webscene_engine final {
+    enum class publication_result { deferred, published, discarded };
 #include "webscene_native_engine_lifecycle.inc"
 #include "webscene_native_engine_interop_api.inc"
 #include "webscene_native_engine_diagnostics.inc"
@@ -300,6 +304,10 @@ struct webscene_engine final {
         return diagnostics_.copy_failure(destination, capacity);
     }
 private:
+#if defined(WEBSCENE_GRAPHICS_SCENE_TESTS)
+    friend void test_native_gpu_scene_leases();
+    explicit webscene_engine(std::nullptr_t) : command_count_(0) {}
+#endif
 #include "webscene_native_engine_interop_work.inc"
 #include "webscene_native_engine_worker.inc"
 #include "webscene_native_engine_input.inc"
@@ -397,6 +405,9 @@ private:
     webscene::graphics::engine_wake worker_wake_;
 #endif
     uint64_t next_revision_{1};
+    std::shared_ptr<scene> staged_scene_;
+    uint64_t published_document_generation_{};
+
     uint64_t last_input_sequence_{0};
     double viewport_width_{1000};
     double viewport_height_{616};

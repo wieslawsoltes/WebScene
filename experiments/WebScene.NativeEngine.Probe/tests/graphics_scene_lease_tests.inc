@@ -3,6 +3,69 @@
 void test_native_gpu_scene_leases()
 {
     const auto require=[](bool value) { if (!value) throw std::runtime_error("GPU scene lease requirement failed"); };
+    // Exercise the production commit boundary with deliberately delayed outputs.
+    // This constructor disables the worker only in this test executable.
+    {
+        webscene_engine engine(nullptr);
+        struct test_provider final : webscene::graphics::image_provider_lifetime {};
+        webscene::graphics::owned_image_pool pool(std::make_shared<test_provider>());
+        struct delayed_output final : webscene_gpu_image_snapshot {
+            std::shared_ptr<const webscene_gpu_image_lease_v3> image;
+            status completion=status::pending;
+            webscene::graphics::image_metadata describe()const override{return image->value.describe();}
+            status state()const override{return completion;}
+            std::shared_ptr<const webscene_gpu_image_lease_v3> resolve()override {
+                return completion==status::ready?image:nullptr;
+            }
+        };
+        auto& canvas=engine.document_.create_element("canvas");
+        require(engine.document_.append_child(engine.document_.body(),canvas));
+        const auto& backing=canvas.canvas().backing;
+        auto writer=pool.acquire();
+        writer->set_metadata({backing.identity(),100,backing.allocation_generation(),backing.content_serial(),1,1,backing.width(),backing.height()});
+        writer->begin();auto retained=writer->publish();writer->complete();writer.reset();
+        auto output=std::make_shared<delayed_output>();
+        output->image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*retained));retained.reset();
+        const auto make_capture=[&](uint64_t revision,uint64_t base) {
+            auto value=std::make_shared<scene>();
+            value->header.revision=revision;value->header.base_revision=base;
+            value->header.viewport_width=static_cast<float>(engine.viewport_width_);
+            value->header.viewport_height=static_cast<float>(engine.viewport_height_);
+            value->captured_generation=engine.document_.scene_generation();
+            value->gpu_bindings.push_back({canvas.id,output->describe(),output,{}});
+            value->gpu_images.resize(1);
+            value->commands.push_back({});value->commands.back().x=static_cast<float>(revision);
+            return value;
+        };
+        const auto commit=[&](auto value){return engine.commit_captured_scene(value,std::chrono::steady_clock::now());};
+        using result=webscene_engine::publication_result;
+        auto a=make_capture(1,0);output->completion=webscene_gpu_image_snapshot::status::ready;
+        require(commit(a)==result::published);
+        engine.acknowledgement_->pending_scenes.clear();engine.acknowledgement_->revision=1;
+        auto b=make_capture(2,1);output->completion=webscene_gpu_image_snapshot::status::pending;
+        require(commit(b)==result::deferred && engine.latest_->header.revision==1);
+        engine.document_.mark_scene_changed();
+        auto c=make_capture(3,2); // Newer CPU capture must not replace frozen B.
+        require(commit(b)==result::deferred && engine.latest_->commands[0].x==1);
+        output->completion=webscene_gpu_image_snapshot::status::ready;
+        require(commit(b)==result::published && engine.latest_->commands[0].x==2);
+        require(engine.published_document_generation_!=engine.document_.scene_generation());
+        require(commit(c)==result::deferred); // Mailbox is full; input capture remains owned.
+        engine.acknowledgement_->pending_scenes.clear();engine.acknowledgement_->revision=2;
+        require(commit(c)==result::published && engine.latest_->commands[0].x==3);
+        engine.acknowledgement_->pending_scenes.clear();engine.acknowledgement_->revision=3;
+        auto failed=make_capture(4,3);output->completion=webscene_gpu_image_snapshot::status::failed;
+        require(commit(failed)==result::discarded && engine.latest_->header.revision==3);
+        output->completion=webscene_gpu_image_snapshot::status::ready;
+        auto stale=make_capture(5,2);
+        require(commit(stale)==result::deferred && !engine.staged_scene_ && engine.latest_->header.revision==3);
+        auto resized=make_capture(6,3);engine.viewport_width_+=1;
+        require(commit(resized)==result::deferred && engine.latest_->header.revision==3);
+        engine.viewport_width_-=1;
+        auto reset=make_capture(7,3);
+        canvas.mutable_canvas().backing.reset_bitmap(backing.width(),backing.height());
+        require(commit(reset)==result::deferred && engine.latest_->header.revision==3);
+    }
     // Ordered Canvas2D placement is independently negotiated, including a diff
     // whose unchanged command payload has been stripped after capability hashing.
     auto ordered=std::make_shared<scene>();

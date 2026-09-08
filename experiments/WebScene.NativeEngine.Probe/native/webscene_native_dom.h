@@ -1587,6 +1587,7 @@ public:
     // Engine-thread publication: validates document ownership and backing version,
     // then requests a scene without forcing style/layout work.
     void publish_gpu_canvas_image(dom_node& node,std::shared_ptr<const webscene_gpu_image_lease_v3> image);
+    bool validate_gpu_canvas_binding(const gpu_canvas_scene_binding& binding) const;
     void build_gpu_canvas_bindings(std::vector<gpu_canvas_scene_binding>& bindings) const;
     void build_gpu_canvas_images(std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images) const;
     void build_canvas_layouts(std::vector<webscene_canvas_layout>& layouts) const;

@@ -69,6 +69,18 @@ void native_document::publish_gpu_canvas_image(dom_node& node,
     if (changed) mark_scene_changed();
 }
 
+bool native_document::validate_gpu_canvas_binding(const gpu_canvas_scene_binding& binding) const
+{
+    const auto* node=binding.node_id==0 || binding.node_id>native_id_index_.size()
+        ? nullptr : native_id_index_[binding.node_id-1];
+    if(!node || node->tag!="canvas" || !is_connected(*node))return false;
+    const auto& backing=node->canvas().backing;
+    return backing.identity()==binding.metadata.canvas
+        && backing.allocation_generation()==binding.metadata.allocation_generation
+        && backing.accepts_completed_content(binding.metadata.content_serial)
+        && backing.width()==binding.metadata.width && backing.height()==binding.metadata.height;
+}
+
 void native_document::build_gpu_canvas_bindings(
     std::vector<gpu_canvas_scene_binding>& bindings) const
 {
