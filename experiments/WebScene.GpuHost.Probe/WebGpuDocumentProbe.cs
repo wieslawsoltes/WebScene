@@ -275,6 +275,8 @@ internal sealed class WebGpuDocumentProbeApp : Application
                         }
                         if (arguments.Contains("--resize-kestrel"))
                         {
+                            if (arguments.Contains("--capture-resize-kestrel"))
+                                await Task.Delay(5000); // Allow a window-scoped recorder to attach.
                             foreach (var size in new[] { (980, 680), (1440, 900), (1100, 740), (1280, 800) })
                             {
                                 desktop.MainWindow.Width = size.Item1;

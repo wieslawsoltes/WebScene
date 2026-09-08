@@ -557,3 +557,14 @@ Runtime regressions for these boundaries pass, and all four unchanged Kestrel
 resize geometry checkpoints pass. This is a candidate fix for the recorded
 flicker; a new physical capture still needs to verify it and HTML/canvas 60fps.
 Evidence: `evidence/kestrel/resize-redraw-boundary.json`.
+
+A new window-scoped 8.99s capture of the rebuilt original Kestrel shows the drawing
+remaining visible in inspected 2Hz overview and 15Hz transition samples across
+stepped resize checkpoints. `resize-redraw-check.mp4` is a resized viewing copy;
+the source capture reports 60Hz, which is not application FPS. This supports the
+blank-frame fix but does not certify every captured frame or continuous native
+window dragging. The capture also shows transient uncovered host area when the
+window grows before layout catches up. Continuous-drag visual checks and separate
+HTML/sidebar cadence measurements remain required. The probe's optional
+`--capture-resize-kestrel` flag adds a five-second attachment delay before its
+existing resize sequence; it does not alter application source.
