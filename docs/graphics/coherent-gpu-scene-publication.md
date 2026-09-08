@@ -680,3 +680,9 @@ The WPT-style runner now supports opt-in native navigation for harness/contract 
 Evidence: `evidence/kestrel/inert-style-native-navigation.json`. This is a local candidate pass, not upstream or multi-platform qualification. Temporary prepared files are deleted after engine destruction; no source fixture or original Kestrel code was altered.
 
 The native-navigation inert-style candidate also passes against the rebuilt graphics-disabled V8 library (1/1 document, 1/1 subtest). `evidence/kestrel/inert-style-navigation-graphics-disabled.json` records the independent native binary identity. This verifies the parsing regression without a WebGPU dependency; it does not extend platform or performance qualification.
+
+### Retain reference capture sources and generated inputs
+
+The local historical Chrome matrix contains 32 runs and 224 referenced image/trace files; all referenced SHA-256 values match the files. However, its recorded capture-script hash matches neither the current script nor a version found in that file’s Git history. That historical source provenance remains incomplete. Hash integrity alone does not establish reproducibility or durable archival qualification.
+
+Future captures now retain the exact four harness source files and both generated 10k/100k project inputs alongside their hashes, relative paths and byte lengths. A regression verifies that archived source bytes and hashes remain consistent after the original source is changed. All six reference unit tests pass. This improves future capture evidence; no new hardware matrix was captured, and it does not repair the historical missing source or qualify physical 60fps.

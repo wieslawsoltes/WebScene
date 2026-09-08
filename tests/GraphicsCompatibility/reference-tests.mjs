@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { lineProject, referenceCases } from "./reference-workloads.mjs";
-import { hardwareAssessment } from "./capture-chrome-reference.mjs";
+import { hardwareAssessment, archiveReferenceHarness } from "./capture-chrome-reference.mjs";
 import { analyzePresentation, supportedChromeRevision } from "./presentation-trace.mjs";
 
 test("seeded line input has stable bytes and complete unique entities", () => {
@@ -74,4 +74,25 @@ test("unknown Chrome, missing markers and malformed pairs remain unavailable", (
   const incomplete = fixture();
   incomplete.traceEvents = incomplete.traceEvents.filter(event => !(event.ph === "e" && event.id2?.local === "0x3"));
   assert.equal(analyzePresentation(incomplete, supportedChromeRevision).status, "unavailable");
+});
+
+test("reference archive retains exact harness bytes after the source changes", async t => {
+  const { mkdtemp, mkdir, writeFile, readFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const path = await import("node:path");
+  const root = await mkdtemp(path.join(tmpdir(), "webscene-harness-archive-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = path.join(root, "source"), output = path.join(root, "capture");
+  await mkdir(source);
+  const names = ["capture-chrome-reference.mjs", "chrome-session.mjs", "reference-workloads.mjs", "presentation-trace.mjs"];
+  for (const name of names) await writeFile(path.join(source, name), `// original ${name}\r\n`);
+  const archive = await archiveReferenceHarness(output, source);
+  await writeFile(path.join(source, names[0]), "// changed after capture");
+  for (const name of names) {
+    const stored = await readFile(path.join(output, archive.files[name].file));
+    assert.equal(stored.toString(), `// original ${name}\r\n`);
+    assert.equal(createHash("sha256").update(stored).digest("hex"), archive.hashes[name]);
+    assert.equal(archive.files[name].sha256, archive.hashes[name]);
+    assert.equal(archive.files[name].bytes, stored.length);
+  }
 });

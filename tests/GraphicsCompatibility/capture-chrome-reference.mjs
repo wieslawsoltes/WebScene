@@ -246,15 +246,18 @@ export async function main(argv) {
     if (validation.status !== 0) throw new Error(validation.stderr || validation.stdout);
     evidence.fixture = JSON.parse(await readFile(path.join(here, "fixtures/kestrel.json"), "utf8"));
     evidence.repositoryCommit = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
-    evidence.harness = {};
-    for (const name of ["capture-chrome-reference.mjs", "chrome-session.mjs", "reference-workloads.mjs", "presentation-trace.mjs"])
-      evidence.harness[name] = sha(await readFile(path.join(here, name)));
+    const harnessArchive = await archiveReferenceHarness(args.output);
+    evidence.harness = harnessArchive.hashes;
+    evidence.harnessFiles = harnessArchive.files;
+    await mkdir(path.join(args.output, "generated-inputs"), { recursive: true });
     const generated = new Map();
     evidence.generatedProjects = {};
     for (const count of [10_000, 100_000]) {
       const bytes = Buffer.from(JSON.stringify(lineProject(count)));
       generated.set(`/reference/lines-${count}.kcad`, bytes);
-      evidence.generatedProjects[`lines-${count}`] = { sha256: sha(bytes), bytes: bytes.length, count };
+      const file = `generated-inputs/lines-${count}.kcad`;
+      await writeFile(path.join(args.output, file), bytes);
+      evidence.generatedProjects[`lines-${count}`] = { file, sha256: sha(bytes), bytes: bytes.length, count };
     }
     service = await fixtureServer(path.join(fixtureRoot, "Kestrel-CAD"), generated);
     chrome = await startChrome(args.chrome);
@@ -296,4 +299,19 @@ export async function main(argv) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main(process.argv.slice(2)).then(code => { process.exitCode = code; }).catch(error => { console.error(error); process.exitCode = 1; });
+}
+
+// Persist the exact source bytes used to identify a reference capture, including
+// uncommitted harness edits. A repository SHA alone cannot recover those bytes.
+export async function archiveReferenceHarness(output, sourceDirectory = here) {
+  const hashes = {}, files = {};
+  await mkdir(path.join(output, "harness"), { recursive: true });
+  for (const name of ["capture-chrome-reference.mjs", "chrome-session.mjs", "reference-workloads.mjs", "presentation-trace.mjs"]) {
+    const bytes = await readFile(path.join(sourceDirectory, name));
+    const file = `harness/${name}`;
+    await writeFile(path.join(output, file), bytes);
+    hashes[name] = sha(bytes);
+    files[name] = { file, sha256: hashes[name], bytes: bytes.length };
+  }
+  return { hashes, files };
 }
