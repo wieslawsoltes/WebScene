@@ -907,7 +907,8 @@ internal sealed unsafe class NativeSceneCompositionHandler
     {
         damage = NativeSceneDamage.None;
         var options = NativeSceneAcquireOptionsV3.CpuOnly;
-        options.ConsumerCapabilities = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability;
+        options.ConsumerCapabilities = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability
+            | (_gpuPresenter?.SupportsProducerGpuWaits == true ? NativeWebSceneApi.ProducerGpuWaitCapability : 0UL);
         var status = NativeSceneLeaseV3.Acquire(_engine, in options, true, out var scene);
         if (status is NativeSceneAcquireStatus.Empty or NativeSceneAcquireStatus.Backpressure) return false;
         if (status != NativeSceneAcquireStatus.Success || scene is null) throw new InvalidOperationException($"GPU scene acquisition failed: {status}");

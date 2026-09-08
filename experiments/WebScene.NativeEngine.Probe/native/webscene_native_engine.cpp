@@ -169,7 +169,10 @@ constexpr uint64_t scene_command_capabilities(uint32_t kind) noexcept
 
 uint64_t scene_capabilities(const scene& value)
 {
-    return value.required_capabilities | (value.gpu_images.empty() ? 0 : WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES);
+    auto capabilities=value.required_capabilities | (value.gpu_images.empty() ? 0 : WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES);
+    for(const auto& image:value.gpu_images)
+        if(image && image->requires_producer_wait) capabilities|=WEBSCENE_SCENE_CAPABILITY_PRODUCER_GPU_WAITS;
+    return capabilities;
 }
 
 uint64_t retained_scene_bytes(const scene& value)
@@ -1340,7 +1343,7 @@ webscene_scene_acquire_status webscene_gpu_image_retain_v3(
     try {
         auto retained=image->value.retain();
         if (!retained) return WEBSCENE_SCENE_ACQUIRE_BACKPRESSURE;
-        *result=new webscene_gpu_image_lease_v3(std::move(*retained),image->dependencies);
+        *result=new webscene_gpu_image_lease_v3(std::move(*retained),image->dependencies,image->requires_producer_wait);
         return WEBSCENE_SCENE_ACQUIRE_SUCCESS;
     } catch (const std::bad_alloc&) { return WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY; }
       catch (...) { return WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR; }

@@ -27,11 +27,24 @@ void test_native_gpu_scene_leases()
         writer->begin();auto pixels=writer->publish();writer->complete();writer.reset();
         auto owner=std::make_shared<dependency>();
         std::weak_ptr<dependency> lifetime=owner;
-        auto source=std::make_unique<webscene_gpu_image_lease_v3>(std::move(*pixels),owner);
+        auto source=std::make_unique<webscene_gpu_image_lease_v3>(std::move(*pixels),owner,true);
         owner.reset();
         webscene_gpu_image_lease_v3* retained=nullptr;
         require(webscene_gpu_image_retain_v3(source.get(),&retained)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
         source.reset();require(!lifetime.expired() && retained->dependencies);
+        require(retained->requires_producer_wait);
+        {
+            auto protected_scene=std::make_shared<scene>();
+            protected_scene->gpu_images.push_back(std::make_shared<webscene_gpu_image_lease_v3>(
+                retained->value.retain().value(),retained->dependencies,true));
+            const webscene_scene_view_v3* view=nullptr;
+            require(acquire_scene_value_v3(protected_scene,{},WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES,&view)==
+                WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES && !view);
+            require(acquire_scene_value_v3(protected_scene,{},WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES |
+                WEBSCENE_SCENE_CAPABILITY_PRODUCER_GPU_WAITS,&view)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
+            require(view->required_capabilities & WEBSCENE_SCENE_CAPABILITY_PRODUCER_GPU_WAITS);
+            webscene_scene_release_v3(view);
+        }
         webscene_gpu_image_consumer_v3* consumer=nullptr;
         require(webscene_gpu_image_begin_consumer_v3(retained,&consumer)==WEBSCENE_SCENE_ACQUIRE_SUCCESS);
         webscene_gpu_image_release_v3(retained);

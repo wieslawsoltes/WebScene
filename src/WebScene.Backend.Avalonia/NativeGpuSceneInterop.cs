@@ -58,6 +58,7 @@ public static unsafe partial class NativeWebSceneApi
     internal const ulong GpuImageCapability = 1;
     internal const uint GpuImagePaintCommand = 256;
     internal const ulong OrderedCanvasCapability = 2;
+    internal const ulong ProducerGpuWaitCapability = 4;
     internal const uint OrderedCanvasPaintCommand = 257;
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_acquire_latest_scene_v3", CallingConvention = CallingConvention.Cdecl)]

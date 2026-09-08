@@ -482,6 +482,8 @@ struct webscene_scene_view {
 #define WEBSCENE_SCENE_VIEW_VERSION_3 3U
 #define WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES (UINT64_C(1) << 0)
 #define WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS (UINT64_C(1) << 1)
+/* Consumer must enqueue every native producer dependency before GPU reads. */
+#define WEBSCENE_SCENE_CAPABILITY_PRODUCER_GPU_WAITS (UINT64_C(1) << 2)
 /* Draw in the existing command stream at x/y/width/height. rgba carries the
  * scene GPU image index (not a color); node_id retains the canvas node ID. Existing transform/clip/isolation operations apply. */
 #define WEBSCENE_SCENE_COMMAND_GPU_IMAGE 256U

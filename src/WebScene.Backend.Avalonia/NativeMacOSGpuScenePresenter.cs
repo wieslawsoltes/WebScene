@@ -10,6 +10,8 @@ internal enum NativeGpuSceneApplyResult { Applied, Backpressure, InvalidScene, R
 internal sealed class NativeMacOSGpuScenePresenter
 {
     private NativeMacOSGpuSceneImages? _current;
+    private bool _hostInspected;
+    internal bool SupportsProducerGpuWaits { get; private set; }
     private readonly NativeMacOSGpuSceneImages?[] _retiring = new NativeMacOSGpuSceneImages?[2];
     private bool _prepared;
     internal bool IsStopping { get; private set; }
@@ -57,7 +59,8 @@ internal sealed class NativeMacOSGpuScenePresenter
         var result = NativeGpuSceneApplyResult.InvalidScene;
         scene.WithView(view =>
         {
-            const ulong supported = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability;
+            var supported = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability
+                | (SupportsProducerGpuWaits ? NativeWebSceneApi.ProducerGpuWaitCapability : 0UL);
             if (view.SceneVersion != 3 || view.StructSize != System.Runtime.InteropServices.Marshal.SizeOf<NativeSceneViewV3>() ||
                 (view.RequiredCapabilities & ~supported) != 0 || !NativeSceneViewValidation.IsValid((NativeSceneView*)view.CpuView)) return;
             var status = NativeMacOSGpuSceneImages.Acquire(scene, out var images);
@@ -114,6 +117,11 @@ internal sealed class NativeMacOSGpuScenePresenter
     internal bool TryPrepare(ISkiaSharpApiLease lease)
     {
         if (IsStopping) throw new InvalidOperationException("Scene presenter is stopping.");
+        if (!_hostInspected)
+        {
+            SupportsProducerGpuWaits = NativeMetalRetainedGpuImage.Supports(lease);
+            _hostInspected = true;
+        }
         DrainRetirements(lease);
         if (_current is null) return false;
         var before = _current.ImportedCount;

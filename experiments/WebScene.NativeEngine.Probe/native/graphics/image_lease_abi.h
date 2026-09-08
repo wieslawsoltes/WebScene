@@ -12,9 +12,10 @@ struct webscene_gpu_producer_dependencies {
 struct webscene_gpu_image_lease_v3 {
     webscene::graphics::owned_image_pool::retained value;
     std::shared_ptr<const webscene_gpu_producer_dependencies> dependencies;
+    const bool requires_producer_wait;
     explicit webscene_gpu_image_lease_v3(webscene::graphics::owned_image_pool::retained image,
-        std::shared_ptr<const webscene_gpu_producer_dependencies> producer={})
-        : value(std::move(image)),dependencies(std::move(producer)) {}
+        std::shared_ptr<const webscene_gpu_producer_dependencies> producer={},bool requires_wait=false)
+        : value(std::move(image)),dependencies(std::move(producer)),requires_producer_wait(requires_wait) {}
 };
 struct webscene_gpu_image_consumer_v3 {
     webscene::graphics::owned_image_pool::consumer value;
