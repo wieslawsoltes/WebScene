@@ -342,10 +342,21 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 var offset = step <= 40 ? step : 80 - step;
                                 var width = initialWidth + offset * 3;
                                 var height = initialHeight + offset * 2;
+                                var requestedAt = System.Diagnostics.Stopwatch.GetTimestamp();
                                 desktop.MainWindow.Width = width;
                                 desktop.MainWindow.Height = height;
-                                submittedSizes.Add(new { timestamp = System.Diagnostics.Stopwatch.GetTimestamp(), width, height });
-                                await Task.Delay(16);
+                                var timestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+                                submittedSizes.Add(new { requestedAt, timestamp, width, height });
+                                // Include synchronous resize work in the 60Hz budget.
+                                // Adding a fresh 16ms sleep after it halves input cadence
+                                // when the native setter already takes one display slot.
+                                var deadline = traceStarted + step * System.Diagnostics.Stopwatch.Frequency / 60;
+                                var remaining = deadline - System.Diagnostics.Stopwatch.GetTimestamp();
+                                if (remaining > 0)
+                                    await Task.Delay(TimeSpan.FromSeconds((double)remaining / System.Diagnostics.Stopwatch.Frequency));
+                                else
+                                    await Task.Yield(); // Keep late runs responsive; never busy-wait.
+
                             }
                             var inputEnded = System.Diagnostics.Stopwatch.GetTimestamp();
                             await Task.Delay(750);
