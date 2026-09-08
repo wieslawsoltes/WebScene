@@ -2352,3 +2352,24 @@ they do not establish GPU execution duration, input-to-photon latency, or the
 cause of flickering. Native wheel events and compositor frame inputs both appear
 in total input counts. The next check is whether 2D overlay changes and completed
 GPU images from an application frame are exposed as separate scene revisions.
+
+
+### Confirmed separate GPU/overlay publications (2026-09-08)
+
+A temporary native publication trace during unchanged Kestrel wheel zoom records
+GPU image content serials and retained 2D layer generations in each revision.
+Revision 16 advances overlay 163 from generation 6 to 7 while retaining GPU image
+9 serial 6. Revision 17 advances the overlay again while GPU catches up only to
+serial 7; revision 18 changes GPU serial to 8 with overlay unchanged. Counters
+belong to independent namespaces; the evidence is their transition order, not an
+assumption that their numbers must equal. Full data is retained in
+`evidence/kestrel/split-gpu-overlay-publications.json`. The temporary trace code
+was removed after capture.
+
+This confirms producer scenes can mix the new overlay and earlier geometry.
+It is a concrete flicker mechanism to eliminate, not proof of which revisions
+reached the physical display. The required fix must retain a coherent CPU/2D
+scene with its associated GPU image versions until producer completion, then
+publish them together without CPU pixel copies or synchronous GPU waits. Preserve
+the previous complete frame under backpressure and add a delayed-producer
+regression; merely reducing render callbacks cannot establish coherence.
