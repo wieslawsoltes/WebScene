@@ -30,6 +30,7 @@ def run(args, cwd=None, env=None):
 
 
 def capture(args, cwd=None, env=None):
+    print("+", subprocess.list2cmdline([str(a) for a in args]), flush=True)
     return subprocess.check_output([str(a) for a in args], cwd=cwd, env=env, text=True).strip()
 
 
@@ -211,7 +212,7 @@ def angle(args):
     # same toolchain selection as generation, particularly the local Windows SDK.
     (sdk / "build-info/resolved-args.gn").write_text(capture([gn, "args", output, "--list", "--short"], source, env=env) + "\n")
     shutil.copy2(source / "DEPS", sdk / "build-info/DEPS")
-    clang = source / "third_party/llvm-build/Release+Asserts/bin" / ("clang.exe" if os.name == "nt" else "clang")
+    clang = source / "third_party/llvm-build/Release+Asserts/bin" / ("clang-cl.exe" if args.rid.startswith("win-") else "clang")
     seal("angle", source, sdk, args.rid, settings,
          {"gn": capture([gn, "--version"], env=env), "ninja": capture(["ninja", "--version"], env=env),
           "clang": capture([clang, "--version"], env=env), "clangSha256": sha(clang),
