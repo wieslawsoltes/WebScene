@@ -756,3 +756,9 @@ Added `NativeMetalConsumerFence`: after the caller submits Skia work on the leas
 ### Integrate retained Metal images into scene ownership
 
 The immutable scene image group now uses a shared retained-image contract and selects Metal import for an active Metal host. The Metal owner retains texture, SKImage and native consumer across redraws, inserts a nonblocking queue completion marker at retirement, and releases the allocation only when that marker completes. Detached retirement acquires the host context before the Skia lock. Existing CGL ownership remains available. The opt-in `--ganesh-metal` native-window fixture passes 32 frames, two imports and all eight diagnostic readbacks, including a separate detached-retirement run. The CGL regression run also passes. Evidence: `evidence/kestrel/retained-metal-presenter.json`. This path still accepts completion-certified producer images; asynchronous Dawn dependency admission and original Kestrel Metal qualification remain incomplete.
+
+### Original Kestrel on opt-in Metal: pan passes, resize run fails
+
+Added `--webgpu-metal` to force Metal for the unchanged document probe. The pan workload passes all 80 input watermarks. Across 33 matched scenes, publication-to-acceptance median is 25.98ms, acceptance-to-draw-end 0.79ms, total 27.03ms. Faster draw callbacks do not resolve handoff delay or qualify FPS. Evidence: `evidence/kestrel/original-kestrel-metal-pan.json`.
+
+The stepped resize run reported all four correct CSS×DPR canvas geometries, then aborted during shutdown (exit 134). The OS crash stack reaches `gr_direct_context_flush_and_submit`, Metal command-buffer commit and the assertion "commit command buffer with uncommitted encoder". Thus this is a failed run, not resize qualification. Evidence: `evidence/kestrel/original-kestrel-metal-resize-failure.json`. Metal remains opt-in; resolve the flush/retirement lifecycle failure before treating original Kestrel Metal as ready.
