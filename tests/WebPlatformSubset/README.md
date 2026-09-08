@@ -664,3 +664,11 @@ Against the clean parent, three alternating same-machine runs put the 500-sample
 median-of-medians at 0.715/0.702 ms (parent/current) and the 30-sample light-DOM selector
 workload at 32.465/32.648 ms (+0.56%). This is within the established no-meaningful-
 regression envelope while the feature paths themselves remain pay for what is used.
+
+The project-owned animation-frame batch candidate covers cancellation, one timestamp per admitted batch, microtask checkpoints, deferred nested RAF and timer ordering. Run it with:
+
+```sh
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- --manifest tests/WebPlatformSubset/webscene-animation-frame-batch-profile.json --selection candidate --native-library /absolute/path/to/libwebscene_native_engine.dylib --output artifacts/wpt-animation-frame-batch
+```
+
+It is a local candidate, not an upstream WPT or physical-presentation qualification. The native engine regression additionally checks that host evaluation cannot observe a partial admitted batch.

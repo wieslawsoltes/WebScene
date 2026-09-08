@@ -712,7 +712,7 @@
             }
 
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
-            if (runtime_ != nullptr && resize_applied && host_frame_applied) {
+            if (runtime_ != nullptr && host_frame_applied) {
                 // `signal_animation_frame` releases the callbacks belonging to
                 // this rendering opportunity; execute that complete RAF batch
                 // before publishing. Do not run unrelated resources/timers here,
@@ -735,18 +735,20 @@
                         std::chrono::duration_cast<std::chrono::nanoseconds>(
                             std::chrono::steady_clock::now()
                                 - animation_frame_batch_started).count());
-                resize_frame_animation_callbacks_.fetch_add(
-                    animation_frame_callbacks,
-                    std::memory_order_relaxed);
-                total_resize_frame_animation_batch_nanoseconds_.fetch_add(
-                    animation_frame_batch_nanoseconds,
-                    std::memory_order_relaxed);
-                last_resize_frame_animation_batch_nanoseconds_.store(
-                    animation_frame_batch_nanoseconds,
-                    std::memory_order_relaxed);
-                store_maximum(
-                    maximum_resize_frame_animation_batch_nanoseconds_,
-                    animation_frame_batch_nanoseconds);
+                if (resize_applied) {
+                    resize_frame_animation_callbacks_.fetch_add(
+                        animation_frame_callbacks,
+                        std::memory_order_relaxed);
+                    total_resize_frame_animation_batch_nanoseconds_.fetch_add(
+                        animation_frame_batch_nanoseconds,
+                        std::memory_order_relaxed);
+                    last_resize_frame_animation_batch_nanoseconds_.store(
+                        animation_frame_batch_nanoseconds,
+                        std::memory_order_relaxed);
+                    store_maximum(
+                        maximum_resize_frame_animation_batch_nanoseconds_,
+                        animation_frame_batch_nanoseconds);
+                }
                 frame_scripts_executed_.store(
                     runtime_->frame_scripts_executed(),
                     std::memory_order_relaxed);
@@ -758,14 +760,14 @@
             }
             if (runtime_ != nullptr
                 && runtime_->has_pending_tasks()
-                && !(resize_applied && host_frame_applied)) {
+                && !host_frame_applied) {
                 // Resource discovery during component startup can produce many
                 // immediately runnable stylesheet/script tasks. Processing one
                 // and then sleeping for 2 ms added hundreds of milliseconds
                 // that browsers do not impose. Drain a bounded batch while no
                 // input/resize work is waiting; the time/count caps preserve a
                 // render opportunity and keep interaction latency bounded.
-                // A paired live-resize RAF is already the current rendering
+                // An admitted host RAF is already the current rendering
                 // opportunity. Arbitrary queued macrotasks run after that scene
                 // is published instead of delaying the visual boundary.
                 constexpr uint32_t maximum_task_batch = 32U;

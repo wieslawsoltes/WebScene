@@ -1443,6 +1443,12 @@ void test_animation_frame_callback_list_timestamp_and_cancellation(webscene_engi
         cancelled = requestAnimationFrame(timestamp => {
           __frameBatchEvents.push(['cancelled', timestamp]);
         });
+        // A larger admitted batch must remain indivisible even when host
+        // evaluation work arrives while its callbacks are running.
+        for (let i = 0; i < 40; ++i) requestAnimationFrame(() => {
+          const started = performance.now();
+          while (performance.now() - started < 0.2) {}
+        });
         requestAnimationFrame(timestamp => {
           __frameBatchEvents.push(['last', timestamp]);
         });

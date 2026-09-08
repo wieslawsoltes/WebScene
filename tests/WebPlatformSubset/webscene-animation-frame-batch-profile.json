@@ -1,0 +1,28 @@
+{
+  "profile": "webscene-animation-frame-batch-1",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "deviceScaleFactor": 2
+  },
+  "required": [],
+  "candidate": [
+    {
+      "path": "contracts/animation-frame-batch-boundary.html",
+      "type": "contract",
+      "capabilities": [
+        "animation-frame-batch-ordering",
+        "animation-frame-cancellation",
+        "microtask-checkpoints"
+      ],
+      "evidence": [
+        "native-engine-large-raf-batch-regression"
+      ],
+      "reason": "Candidate regression for complete host rendering opportunities; hardware and upstream qualification remain separate."
+    }
+  ],
+  "harnessBlocked": [],
+  "excluded": []
+}
