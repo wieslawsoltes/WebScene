@@ -62,6 +62,46 @@ void test_native_gpu_scene_leases()
         webscene_gpu_image_complete_consumer_v3(consumer);
         require(lifetime.expired());
     }
+    // A controlled backend proves early commit is independently gated by
+    // consumer capability and producer validation. It performs no GPU reads.
+    {
+        webscene_engine engine(nullptr);
+        struct provider final : webscene::graphics::image_provider_lifetime {};
+        struct output final : webscene_gpu_image_snapshot {
+            std::shared_ptr<const webscene_gpu_image_lease_v3> image;
+            bool validated=false;
+            webscene::graphics::image_metadata describe() const override { return image->value.describe(); }
+            status state() const override { return status::pending; }
+            std::shared_ptr<const webscene_gpu_image_lease_v3> resolve() override { return {}; }
+            std::shared_ptr<const webscene_gpu_image_lease_v3> resolve_with_gpu_waits() override { return validated?image:nullptr; }
+        };
+        auto& canvas=engine.document_.create_element("canvas");
+        require(engine.document_.append_child(engine.document_.body(),canvas));
+        const auto& backing=canvas.mutable_canvas().backing;
+        require(canvas.mutable_canvas().backing.claim_context(webscene::graphics::canvas_context_mode::webgpu));
+        webscene::graphics::owned_image_pool pool(std::make_shared<provider>());
+        auto writer=pool.acquire();
+        writer->set_metadata({backing.identity(),100,backing.allocation_generation(),backing.content_serial(),1,1,backing.width(),backing.height()});
+        writer->begin();auto pixels=writer->publish();writer->complete();writer.reset();
+        auto pending=std::make_shared<output>();
+        pending->image=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*pixels),nullptr,true);
+        canvas.mutable_canvas().gpu_snapshot=pending;
+        auto captured=std::make_shared<scene>();
+        captured->header.revision=1;captured->header.viewport_width=engine.viewport_width_;captured->header.viewport_height=engine.viewport_height_;
+        captured->gpu_bindings.push_back({canvas.id,pending->describe(),pending,{}});captured->gpu_images.resize(1);
+        const auto commit=[&]{return engine.commit_captured_scene(captured,std::chrono::steady_clock::now());};
+        using result=webscene_engine::publication_result;
+        require(commit()==result::deferred);
+        engine.set_producer_gpu_wait_consumer(true);
+        require(commit()==result::deferred);
+        pending->validated=true;
+        engine.set_producer_gpu_wait_consumer(false);
+        require(commit()==result::deferred);
+        engine.set_producer_gpu_wait_consumer(true);
+        require(commit()==result::published);
+        require(pending->state()==webscene_gpu_image_snapshot::status::pending);
+        require(engine.latest_->gpu_images[0]->requires_producer_wait);
+    }
     // Exercise the production commit boundary with deliberately delayed outputs.
     // This constructor disables the worker only in this test executable.
     {

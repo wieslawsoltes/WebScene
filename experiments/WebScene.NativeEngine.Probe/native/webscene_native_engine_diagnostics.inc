@@ -158,6 +158,9 @@
         return required;
     }
 
+    void set_producer_gpu_wait_consumer(bool enabled) {
+        producer_gpu_wait_consumer_.store(enabled,std::memory_order_release);
+    }
     std::shared_ptr<const scene> acquire_latest()
     {
         auto result = std::atomic_load_explicit(&latest_, std::memory_order_acquire);

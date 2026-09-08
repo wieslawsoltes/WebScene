@@ -14,13 +14,16 @@ int main() {
         producer_completion_gate gate;
         const auto first=queue_first ? producer_completion_gate::phase::queue : producer_completion_gate::phase::validation;
         const auto second=queue_first ? producer_completion_gate::phase::validation : producer_completion_gate::phase::queue;
+        require(!gate.validated_for_gpu_wait());
         require(!gate.finish(first,queue_first ? queue_ok : validation_ok));
+        require(gate.validated_for_gpu_wait()==(!queue_first && validation_ok));
         for(int poll=0;poll<100;++poll)require(gate.state()==producer_completion_gate::result::pending);
         require(!gate.finish(first,true)); // A duplicate cannot supply the missing phase.
         require(gate.state()==producer_completion_gate::result::pending);
         require(gate.finish(second,queue_first ? validation_ok : queue_ok));
         const auto expected=queue_ok&&validation_ok ? producer_completion_gate::result::success : producer_completion_gate::result::failure;
         require(gate.state()==expected);
+        require(gate.validated_for_gpu_wait()==(queue_ok && validation_ok));
         require(!gate.finish(first,false)&&!gate.finish(second,false));
         require(gate.state()==expected);
     }

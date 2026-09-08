@@ -426,7 +426,10 @@
         }
         for(size_t index=0;index<next->gpu_bindings.size();++index) {
             const auto& binding=next->gpu_bindings[index];
-            if(!next->gpu_images[index])next->gpu_images[index]=binding.resolve();
+            if(!next->gpu_images[index]) {
+                next->gpu_images[index]=binding.pending && producer_gpu_wait_consumer_.load(std::memory_order_acquire)
+                    ? binding.pending->resolve_with_gpu_waits() : binding.resolve();
+            }
             if(!next->gpu_images[index]) {
                 staged_scene_=std::move(next);return publication_result::deferred;
             }

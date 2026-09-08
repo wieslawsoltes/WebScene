@@ -34,6 +34,7 @@ struct webscene_gpu_image_snapshot {
     virtual webscene::graphics::image_metadata describe() const=0;
     virtual status state() const=0;
     virtual std::shared_ptr<const webscene_gpu_image_lease_v3> resolve()=0;
+    virtual std::shared_ptr<const webscene_gpu_image_lease_v3> resolve_with_gpu_waits() { return resolve(); }
 };
 
 // A submitted opportunity whose exact output could not be retained must remain

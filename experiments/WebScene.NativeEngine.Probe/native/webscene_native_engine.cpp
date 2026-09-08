@@ -400,6 +400,7 @@ private:
     std::atomic<uint64_t> next_interop_operation_id_{1U};
     std::shared_ptr<const scene> latest_{};
     std::atomic<bool> ordered_scene_consumer_{false};
+    std::atomic<bool> producer_gpu_wait_consumer_{false};
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     std::shared_ptr<webscene::graphics::engine_wake> graphics_wake_{
         std::make_shared<webscene::graphics::engine_wake>()};
@@ -1303,6 +1304,8 @@ webscene_scene_acquire_status acquire_scene_v3(webscene_engine* engine,
     if (!engine || !options || options->struct_size<sizeof(*options)) return WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT;
     if (options->scene_version!=WEBSCENE_SCENE_VIEW_VERSION_3) return WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_VERSION;
     try {
+        engine->set_producer_gpu_wait_consumer(
+            (options->consumer_capabilities & WEBSCENE_SCENE_CAPABILITY_PRODUCER_GPU_WAITS)!=0);
         auto value=ordered ? engine->acquire_next() : engine->acquire_latest();
         return acquire_scene_value_v3(std::move(value),engine->acknowledgement_state_handle(),
             options->consumer_capabilities,result);

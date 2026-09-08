@@ -120,7 +120,7 @@ inline std::optional<webscene::graphics::owned_image_pool::retained> fixture_daw
     }
 
     if (!submitted || !wait(submitted->completion_future()) || !wait(submitted->validation_future()) ||
-        ready_wake->count.load()!=1 || error->load()) return {};
+        (ready_wake->count.load()<1 || ready_wake->count.load()>2) || error->load()) return {};
     if(shared->begin(access)||!shared->expire_texture())return {};
     device->PushErrorScope(wgpu::ErrorFilter::Validation);
     auto invalid_view=expired_texture.CreateView();

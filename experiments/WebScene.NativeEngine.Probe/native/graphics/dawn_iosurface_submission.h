@@ -5,8 +5,8 @@
 #include <functional>
 #if defined(__APPLE__)
 namespace webscene::graphics {
-// Nonblocking producer handoff. Only take_ready() can expose the scene image;
-// EndAccess alone never makes an image ready for the presenter.
+// Nonblocking producer handoff. Completed consumers use take_ready(); capable
+// GPU consumers may take a validated image with all producer dependencies.
 class dawn_iosurface_submission final : public std::enable_shared_from_this<dawn_iosurface_submission> {
 public:
     enum class status { pending, ready, failed, consumed, discarded };
@@ -19,7 +19,7 @@ private:
     // Own EndAccess fences and timeline values beyond the submitting stack.
     // Snapshot ownership also keeps these dependencies alive for a GPU consumer.
     wgpu::SharedTextureMemoryEndAccessState handoff_;
-    bool present_=true;
+    bool present_=true, handoff_valid_=false;
     void finish(bool queue,bool valid,const std::shared_ptr<completion_wake>& wake) {
         bool notify=false;
         {
@@ -31,6 +31,7 @@ private:
                 if (!succeeded) image_.reset();
                 notify=true;
             }
+            notify=notify || (!queue && present_ && handoff_valid_ && completion_.validated_for_gpu_wait());
         }
         if (notify && wake) wake->signal();
     }
@@ -43,8 +44,8 @@ public:
         return std::move(image_);
     }
     // A captured CPU scene owns an exact output independently of the provider's
-    // destructive ready queue. Metadata is available while pending; the image
-    // itself cannot escape before queue completion AND handoff validation.
+    // destructive ready queue. Metadata is available while pending. Early image
+    // transfer requires validation and a consumer that encodes GPU dependencies.
     class snapshot final {
         std::shared_ptr<dawn_iosurface_submission> submission_;
         std::optional<owned_image_pool::retained> image_;
@@ -61,9 +62,22 @@ public:
         }
         status state() const { return submission_->state(); }
         // Immutable after publish_submitted/submit returns. Does not certify image
-        // readiness; a future asynchronous consumer must encode all dependencies.
+        // readiness; an asynchronous consumer must encode all dependencies.
         const wgpu::SharedTextureMemoryEndAccessState& producer_handoff() const noexcept {
             return submission_->handoff_;
+        }
+        bool can_enqueue_gpu_wait() const {
+            std::lock_guard lock(submission_->mutex_);
+            const auto& handoff=submission_->handoff_;
+            return submission_->present_ && submission_->handoff_valid_
+                && submission_->completion_.validated_for_gpu_wait()
+                && submission_->status_!=status::failed && submission_->status_!=status::discarded
+                && handoff.initialized && handoff.fenceCount>0
+                && handoff.fenceCount==handoff.signaledValueCount;
+        }
+        std::optional<owned_image_pool::retained> take_for_gpu_wait() {
+            if(!can_enqueue_gpu_wait() || !image_) return {};
+            auto result=std::move(image_);image_.reset();return result;
         }
         std::optional<owned_image_pool::retained> take_ready() {
             const auto current=state();
@@ -112,6 +126,7 @@ public:
         const bool ended=shared->end(end);
         const bool expired=ended&&shared->expire_texture();
         const bool valid=expired&&(!present||end.initialized);
+        result->handoff_valid_=valid;
         result->handoff_=std::move(end);
         result->future_=device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
             [result,pending,shared,device,device_lifetime,wake,valid,present](wgpu::QueueWorkDoneStatus status,wgpu::StringView) {
@@ -176,6 +191,7 @@ public:
         wgpu::SharedTextureMemoryEndAccessState end;
         const bool ended=shared->end(end);
         const bool expired=ended && shared->expire_texture();
+        result->handoff_valid_=ended && expired && end.initialized;
         result->handoff_=std::move(end);
         result->future_=queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
             [result,pending,shared,device,device_lifetime,wake,ended,expired]

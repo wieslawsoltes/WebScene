@@ -30,7 +30,6 @@ public:
         :ticket_(std::move(ticket)),metadata_(ticket_->describe()) {}
     image_metadata describe() const override { return metadata_; }
     status state() const override {
-        if(resolved_||ready_)return status::ready;
         switch(ticket_->state()) {
             case dawn_iosurface_submission::status::pending:return status::pending;
             case dawn_iosurface_submission::status::ready:
@@ -39,8 +38,8 @@ public:
         }
     }
     std::shared_ptr<const webscene_gpu_image_lease_v3> resolve() override {
-        if(resolved_)return resolved_;
         if(state()!=status::ready)return {};
+        if(resolved_)return resolved_;
         if(!ready_) {
             auto image=ticket_->take_ready();
             if(!image)return {};
@@ -51,6 +50,23 @@ public:
         resolved_=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*ready_),std::move(producer));
         ready_.reset();
         return resolved_;
+    }
+    std::shared_ptr<const webscene_gpu_image_lease_v3> resolve_with_gpu_waits() override {
+        if(auto completed=resolve())return completed;
+        if(!ticket_->can_enqueue_gpu_wait())return {};
+        if(resolved_)return resolved_;
+        auto producer=std::make_shared<dependencies>(ticket_);
+        for(size_t i=0;i<producer->count();++i) {
+            void* event=nullptr;uint64_t value=0;
+            if(!producer->metal_event(i,event,value))return {};
+        }
+        if(!ready_) {
+            auto image=ticket_->take_for_gpu_wait();
+            if(!image)return {};
+            ready_.emplace(std::move(*image));
+        }
+        resolved_=std::make_shared<webscene_gpu_image_lease_v3>(std::move(*ready_),std::move(producer),true);
+        ready_.reset();return resolved_;
     }
 };
 }

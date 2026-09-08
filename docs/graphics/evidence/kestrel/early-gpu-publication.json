@@ -1,0 +1,55 @@
+{
+  "implementation": "Validated early GPU image publication for consumers advertising producer GPU waits",
+  "nativeTests": {
+    "passed": 3,
+    "failed": 0,
+    "suites": [
+      "webscene_graphics_completion_tests",
+      "webscene_native_engine_tests",
+      "webscene_graphics_v8_runtime_tests"
+    ]
+  },
+  "originalKestrel": {
+    "startupPassed": true,
+    "panWorkloadValidated": true,
+    "analysis": {
+      "physicalPresentationVerified": false,
+      "publicationToAcceptance": {
+        "count": 33,
+        "medianMilliseconds": 26.548125,
+        "p95Milliseconds": 34.276625,
+        "maximumMilliseconds": 35.23975
+      },
+      "acceptanceToDrawCallbackEnd": {
+        "count": 33,
+        "medianMilliseconds": 0.795709,
+        "p95Milliseconds": 1.179542,
+        "maximumMilliseconds": 2.415625
+      },
+      "publicationToDrawCallbackEnd": {
+        "count": 33,
+        "medianMilliseconds": 27.5425,
+        "p95Milliseconds": 35.215417,
+        "maximumMilliseconds": 36.144
+      },
+      "inputToPublishedConsumptionWatermark": {
+        "count": 80,
+        "medianMilliseconds": 14.6361875,
+        "p95Milliseconds": 32.557125,
+        "maximumMilliseconds": 44.848708
+      },
+      "unmatchedInputCount": 0,
+      "limitations": [
+        "Draw callback completion is not physical presentation.",
+        "A consumption watermark does not prove each coalesced move was drawn.",
+        "Measurement includes settling; no FPS qualification is derived."
+      ]
+    }
+  },
+  "limitations": [
+    "Controlled scene regression verifies capability and validation gates but does not submit GPU reads.",
+    "This run does not prove that a real Dawn image was consumed while its producer work remained pending.",
+    "No physical presentation or 60 FPS qualification; observed handoff latency remains.",
+    "Delayed real-Dawn end-to-end handoff, device loss and continuous resize stress remain required."
+  ]
+}

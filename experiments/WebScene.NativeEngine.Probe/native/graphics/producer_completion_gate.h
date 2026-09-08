@@ -16,6 +16,7 @@ private:
 public:
     void reject() noexcept { valid_=false; }
     result state() const noexcept { return result_; }
+    bool validated_for_gpu_wait() const noexcept { return completed_[1] && valid_; }
     bool finish(phase source,bool valid) noexcept {
         const auto index=static_cast<size_t>(source);
         if(completed_[index])return false;
