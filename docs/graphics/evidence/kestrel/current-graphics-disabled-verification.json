@@ -1,0 +1,30 @@
+{
+  "revision": "62ec2336497463d99846f1bc42ff243de0c78ed7",
+  "rid": "osx-arm64",
+  "configuration": {
+    "buildType": "Release",
+    "v8": true,
+    "graphics": false
+  },
+  "librarySha256": "8c639d87185632fa16a78ec9ac8efd85c44bab26a1d946118302ee05af7ae9c6",
+  "localUncommittedInputs": [
+    "experiments/WebScene.NativeEngine.Probe/native/webscene_v8_runtime_css_cascade.inc",
+    "experiments/WebScene.NativeEngine.Probe/tests/graphics_v8_runtime_tests.cpp"
+  ],
+  "buildExitCode": 0,
+  "nativeTestExitCode": 0,
+  "nativeTestsPassed": 1,
+  "wptCandidateExitCode": 0,
+  "wptCandidateOutput": "RUN  contracts/animation-frame-batch-boundary.html ... PASS (123 ms)\nWPT subset: 1/1 documents passed; 5/5 subtests passed.\nResults: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/wpt-animation-frame-batch-graphics-disabled/results.json\n",
+  "dynamicDependencies": [
+    "\t@rpath/libwebscene_native_engine.dylib (compatibility version 0.0.0, current version 0.0.0)",
+    "\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 5026.5.4)",
+    "\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)",
+    "\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 5026.5.4)",
+    "\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 61901.120.67)",
+    "\t/usr/lib/libz.1.dylib (compatibility version 1.0.0, current version 1.2.12)",
+    "\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2100.43.0)",
+    "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)"
+  ],
+  "scope": "Incremental current-worktree macOS graphics-disabled V8 verification; not a clean three-RID package qualification or performance result"
+}
