@@ -1,3 +1,6 @@
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#include "graphics/dawn_scene_image_snapshot.h"
+#endif
 #include "webscene_v8_runtime.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
 #include "graphics/graphics_service.h"

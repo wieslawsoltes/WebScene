@@ -2652,7 +2652,18 @@
     void finish_gpu_rendering_opportunity(bool present) {
         if(!gpu_rendering_opportunity||has_due_animation_frame_task())return;
         gpu_rendering_opportunity=false;
-        for(auto& [key,canvas]:gpu_canvases)canvas.context->end_frame(present);
+        for(auto& [key,canvas]:gpu_canvases) {
+            const auto submitted=canvas.context->has_current_texture();
+            canvas.context->end_frame(present);
+            if(submitted) {
+                auto& output=canvas.node->mutable_canvas().gpu_snapshot;
+                output.reset();
+                if(present) {
+                    auto ticket=canvas.provider->capture_latest_submission();
+                    if(ticket)output=std::make_shared<webscene::graphics::dawn_scene_image_snapshot>(std::move(ticket));
+                }
+            }
+        }
         publish_ready_gpu_canvases();
     }
     void publish_ready_gpu_canvases() {
@@ -2699,7 +2710,7 @@
                     return metadata;
                 });
                 host.invalidate=[self,node] {
-                    auto& canvas=node->mutable_canvas();canvas.backing.reset_bitmap(canvas.backing.width(),canvas.backing.height());canvas.gpu_image.reset();self->document.mark_scene_changed();
+                    auto& canvas=node->mutable_canvas();canvas.backing.reset_bitmap(canvas.backing.width(),canvas.backing.height());canvas.gpu_image.reset();canvas.gpu_snapshot.reset();self->document.mark_scene_changed();
                 };
                 auto controller=std::make_unique<v8_webgpu_canvas_context>(info.GetIsolate(),context,info.This(),exception,width,height,std::move(host));
                 auto object=controller->object();

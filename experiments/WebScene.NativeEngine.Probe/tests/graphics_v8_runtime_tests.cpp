@@ -783,6 +783,12 @@ void test_runtime_webgpu_installation() {
     }
     auto published=published_node->canvas().gpu_image;
     require(published!=nullptr,"Completed DOM GPU image did not publish");
+    auto captured_output=published_node->canvas().gpu_snapshot;
+    require(captured_output!=nullptr,"Runtime did not capture submitted GPU output");
+    auto captured_image=captured_output->resolve();
+    require(captured_image&&captured_image==captured_output->resolve(),"Captured output resolution was not stable");
+    require(captured_image->value.describe().allocation==published->value.describe().allocation&&
+        captured_output->describe().content_serial==published->value.describe().content_serial,"Runtime capture changed output identity");
     auto consumer=published->value.begin_consumer();require(consumer.has_value(),"Published DOM canvas consumer unavailable");
     auto surface=iosurface_canvas_images::resolve(*consumer).borrowed_handle();
     require(IOSurfaceLock(surface,kIOSurfaceLockReadOnly,nullptr)==kIOReturnSuccess,"DOM canvas pixel lock failed");
@@ -800,7 +806,8 @@ void test_runtime_webgpu_installation() {
     try { document.publish_gpu_canvas_image(*published_node,published); }
     catch(const std::invalid_argument&) { invalidated_image_rejected=true; }
     require(invalidated_image_rejected,"Unconfigure accepted a previous completed image");
-    require(!published_node->canvas().gpu_image,"Unconfigure retained the displayed GPU image");
+    require(!published_node->canvas().gpu_image&&!published_node->canvas().gpu_snapshot,"Unconfigure retained the displayed GPU output");
+    require(captured_output->resolve()==captured_image,"Unconfigure invalidated a frozen capture's ownership");
     require(runtime.execute(R"JS(
         domGPUContext.configure({device:installedDevice,format:navigator.gpu.getPreferredCanvasFormat()});
         requestAnimationFrame(()=>{globalThis.rafCanvasTexture=domGPUContext.getCurrentTexture();});

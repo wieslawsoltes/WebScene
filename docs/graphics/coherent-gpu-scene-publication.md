@@ -145,3 +145,26 @@ with zero explicit transport copies. Evidence:
 This deterministic test covers the shared production gate, not an artificially
 stalled hardware queue or whole captured scene. Runtime snapshot integration and
 the A/B/C delayed-scene regression remain outstanding.
+
+
+## Runtime output capture (2026-09-08)
+
+The runtime now captures a backend-neutral `webscene_gpu_image_snapshot` at the
+end of each submitted rendering opportunity, before `publish_ready_gpu_canvases`
+drains provider outputs. Canvas state holds the latest dependency; a scene can
+retain that shared dependency independently of future canvas changes. The Dawn
+adapter caches successful resolution, preserving stable image identity without
+pixel copying. Bitmap reset and configure/unconfigure clear the canvas's current
+reference; existing captures keep ownership of their exact image.
+
+The native runtime regression resolves the captured output after normal image
+publication, checks allocation/serial identity and repeated resolution, then
+verifies unconfigure clears current canvas state without destroying an existing
+capture. Both native suites pass (12.44s). Unchanged Kestrel handles all forty
+wheel events with no bitmap mutations or app errors; results are in
+`evidence/kestrel/runtime-output-snapshot.json`.
+
+The scene builder still consumes completed `gpu_image` state. Pending-image
+command representation, frozen CPU scene capture and atomic commit remain
+mandatory. Failed/pressure-rejected capture also needs explicit staged-scene
+failure handling at that integration point; no coherence claim is made yet.

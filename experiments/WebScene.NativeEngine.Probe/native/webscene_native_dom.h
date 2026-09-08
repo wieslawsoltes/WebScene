@@ -829,6 +829,7 @@ struct text_layout_fragment final {
 struct canvas_node_data final {
     webscene::graphics::canvas_backing backing;
     std::shared_ptr<const webscene_gpu_image_lease_v3> gpu_image;
+    std::shared_ptr<webscene_gpu_image_snapshot> gpu_snapshot;
     void publish_gpu_image(std::shared_ptr<const webscene_gpu_image_lease_v3> image) {
         if (!image) throw std::invalid_argument("missing GPU canvas image");
         const auto m=image->value.describe();
