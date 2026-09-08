@@ -706,3 +706,13 @@ WebScene currently acquires before invalidation, and its invalidation gate preve
 The additional project-owned ResizeObserver/RAF ordering contract passes: the complete RAF batch and its microtask precede observer delivery, and RAF requested by the observer waits for a later opportunity. Combined profile: 2/2 documents, 7/7 subtests. This preserves HTML rendering order while further scheduling work remains open.
 
 Inspected Chromium source SHA-256: `fadd272dd6df5bad58dbef192383f51d5fab80d176521ca66d12f518766c18e5` (retrieved 2026-09-08; main URL is mutable).
+
+### Reject ordinary publication UI wake experiment
+
+Temporarily enabling a coalesced normal-priority UI-to-compositor wake for every ordinary publication did not materially reduce original-Kestrel pan handoff latency: median publication-to-acceptance 24.12ms, compared with 23.54ms in the preceding run; draw-callback-end latency 26.68ms versus 27.25ms. The workload validated 80 input watermarks, with 37 matched draws. These single runs cannot establish a speedup. The policy change was removed, avoiding an extra UI wake on each publication without demonstrated benefit. Evidence: `evidence/kestrel/rejected-publication-wake-pan.json`. Physical 60fps remains unqualified.
+
+### Implementing the Chromium-style dependency handoff
+
+User requested adopting Chromium's approach. Current macOS `NativeMacOSRetainedGpuImage.Import` explicitly requires a CGL host; `dawn_iosurface_submission` waits for queue completion and handoff validation before exposing the image. Removing that admission check alone is unsafe. The pinned Dawn SDK exposes `SharedFenceMTLSharedEventExportInfo`, while the pinned Avalonia.Native 11.3.4 package lists Metal as a rendering mode. These establish an implementation direction, not verified interoperability.
+
+Next implementation must qualify the host Metal context/queue lease, retain exported producer shared-event/value dependencies with immutable scene images, encode consumer GPU waits before Skia reads, and retain allocation ownership until consumer completion. Keep the existing completion-certified CGL route for unsupported hosts until the Metal route is verified. Test delayed producers, multiple dependencies, reset/unconfigure, device loss, and delayed consumer release before switching the original Kestrel probe. Performance acceptance still requires physical 60fps measurement; source-level similarity is insufficient.
