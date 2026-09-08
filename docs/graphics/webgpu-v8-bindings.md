@@ -2283,3 +2283,15 @@ Build and run with the existing ordinary-view probe commands, adding
 these diagnostics do not certify camera transformations, frame timing, or
 flicker-free presentation. GPU presentation and overlay painting still require
 investigation and captured-frame evidence.
+
+
+### Initial full-document computed-style inspection (2026-09-08)
+
+`--inspect-kestrel-styles` records the real document's root theme, computed
+background/text colors, and geometry for the explorer, viewport, canvas, and
+explorer tabs. The macOS original-document run reports dark theme, transparent
+explorer/canvas backgrounds, dark viewport RGB(18,28,41), and light text. Thus the
+initial computed values inspected do not show a light-theme substitution.
+`evidence/kestrel/native-initial-style-diagnostics.json` records the result.
+This is before interaction, does not inspect every element, and does not prove
+painted pixels agree with computed styles. No visual defect is declared fixed.

@@ -1,0 +1,69 @@
+{
+  "phase": "initial startup, before interactions",
+  "observations": {
+    "theme": "dark",
+    "nodes": [
+      {
+        "id": "explorer-list",
+        "background": "rgba(0, 0, 0, 0)",
+        "color": "rgb(220, 228, 237)",
+        "display": "block",
+        "rect": [
+          0,
+          348,
+          221,
+          360
+        ]
+      },
+      {
+        "id": "viewport",
+        "background": "rgb(18, 28, 41)",
+        "color": "rgb(220, 228, 237)",
+        "display": "block",
+        "rect": [
+          222,
+          205,
+          556,
+          614
+        ]
+      },
+      {
+        "id": "scene",
+        "background": "rgba(0, 0, 0, 0)",
+        "color": "rgb(220, 228, 237)",
+        "display": "block",
+        "rect": [
+          222,
+          205,
+          556,
+          614
+        ]
+      },
+      {
+        "id": "layers-tab",
+        "background": "rgba(0, 0, 0, 0)",
+        "color": "rgb(220, 228, 237)",
+        "display": "flex",
+        "rect": [
+          -1,
+          253,
+          53.50365447998047,
+          34
+        ]
+      },
+      {
+        "id": "objects-tab",
+        "background": "rgba(0, 0, 0, 0)",
+        "color": "rgb(139, 154, 171)",
+        "display": "flex",
+        "rect": [
+          67.50365447998047,
+          253,
+          71.0402603149414,
+          34
+        ]
+      }
+    ]
+  },
+  "limitation": "Computed styles do not certify painted pixels or interaction states."
+}

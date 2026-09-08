@@ -103,6 +103,16 @@ internal sealed class WebGpuDocumentProbeApp : Application
                     {
                         await Task.Delay(3000);
                         Console.WriteLine(await view.EvaluateTextAsync("({ready:document.documentElement.dataset.ready,backend:document.getElementById('engine-label')?.textContent,history:document.getElementById('command-history')?.textContent,errors:document.querySelectorAll('#command-history .history-error').length,gpu:!!navigator.gpu})"));
+                        if (arguments.Contains("--inspect-kestrel-styles"))
+                        {
+                            Console.WriteLine("Kestrel style diagnostics: " + await view.EvaluateTextAsync("""
+                                (()=>({theme:document.documentElement.getAttribute('data-theme'),nodes:
+                                  ['explorer-list','viewport','scene','layers-tab','objects-tab'].map(id=>{
+                                    const n=document.getElementById(id),s=getComputedStyle(n),r=n.getBoundingClientRect();
+                                    return {id,background:s.backgroundColor,color:s.color,display:s.display,rect:[r.x,r.y,r.width,r.height]};
+                                  })}))()
+                                """));
+                        }
                         if (arguments.Contains("--mesh-kestrel"))
                         {
                             var baseline = int.Parse(await view.EvaluateTextAsync("Number(document.getElementById('object-count').textContent)"));
