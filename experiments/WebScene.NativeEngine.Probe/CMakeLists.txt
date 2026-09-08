@@ -1149,6 +1149,13 @@ if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS AND WEBSCENE_NATIVE_
 endif()
 
 if(BUILD_TESTING AND APPLE AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    enable_language(OBJCXX)
+    add_executable(webscene_graphics_metal_event_handoff_tests tests/graphics_metal_event_handoff.mm)
+    target_compile_features(webscene_graphics_metal_event_handoff_tests PRIVATE cxx_std_20)
+    target_compile_options(webscene_graphics_metal_event_handoff_tests PRIVATE -fobjc-arc)
+    target_link_libraries(webscene_graphics_metal_event_handoff_tests PRIVATE "-framework Foundation" "-framework Metal")
+    add_test(NAME webscene_graphics_metal_event_handoff_tests COMMAND webscene_graphics_metal_event_handoff_tests)
+    set_tests_properties(webscene_graphics_metal_event_handoff_tests PROPERTIES TIMEOUT 15 LABELS "graphics;hardware;metal")
     # Private managed-interop fixture, deliberately excluded from install/package targets.
     add_library(webscene_graphics_iosurface_fixture SHARED EXCLUDE_FROM_ALL tests/graphics_iosurface_fixture.cpp)
     target_compile_features(webscene_graphics_iosurface_fixture PRIVATE cxx_std_20)

@@ -1,0 +1,16 @@
+{
+  "test": "webscene_graphics_metal_event_handoff_tests",
+  "result": "passed",
+  "durationSeconds": 0.43,
+  "hardware": "local Metal device",
+  "checks": [
+    "consumer submission returns while producer gated",
+    "consumer does not complete before shared event signal",
+    "cross-queue dependent read receives all 4096 expected bytes"
+  ],
+  "diagnosticCopy": true,
+  "productionPixelTransportChanged": false,
+  "dawnExportVerified": false,
+  "avaloniaQueueVerifiedByThisTest": false,
+  "physicalPresentationVerified": false
+}
