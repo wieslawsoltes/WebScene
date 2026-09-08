@@ -132,6 +132,55 @@ public sealed unsafe class NativeOrderedGpuPaintTests
     }
 
     [Fact]
+    public void TextAcrossGpuBoundaryMatchesUnsegmentedReplayAfterCompilation()
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes("16\t20\t400\tleft\tsans-serif\tauto\tKestrel 0123");
+        fixed (byte* data = bytes)
+        {
+            var resource = new NativeSceneString { ByteLength = (uint)bytes.Length };
+            var commands = stackalloc SceneCommand[] {
+                new() { Kind = 3, X = 2, Y = 2, Width = 120, Height = 24, Rgba = 0x000000ff },
+                new() { Kind = 256 }, // Separates pictures without painting pixels.
+                new() { Kind = 3, X = 2, Y = 30, Width = 120, Height = 24, Rgba = 0x000000ff }
+            };
+            var scene = new NativeSceneView { Commands = commands, Strings = &resource,
+                StringCount = 1, StringBytes = data, StringByteCount = (uint)bytes.Length,
+                Header = new SceneHeader { Revision = 1, Flags = 3, CommandCount = 3,
+                    ViewportWidth = 128, ViewportHeight = 60 } };
+            using var segmented = new SKBitmap(128, 60);
+            using var reference = new SKBitmap(128, 60);
+            var renderer = new NativeCanvasSceneRenderer();
+            try
+            {
+                Assert.True(renderer.ApplyDiff(&scene, orderedGpuImages: true));
+                // All compilation shapers have been disposed before replay.
+                using (var canvas = new SKCanvas(segmented))
+                {
+                    canvas.Clear(SKColors.White);
+                    renderer.RenderRetained(canvas, 128, 60, null, (_, _) => { });
+                }
+                commands[1].Kind = 0;
+                scene.Header.Revision = 2;
+                Assert.True(renderer.ApplyDiff(&scene, orderedGpuImages: true));
+                using (var canvas = new SKCanvas(reference))
+                {
+                    canvas.Clear(SKColors.White);
+                    renderer.RenderRetained(canvas, 128, 60, null, (_, _) => { });
+                }
+                var ink = 0;
+                for (var y = 0; y < 60; ++y)
+                    for (var x = 0; x < 128; ++x)
+                    {
+                        Assert.Equal(reference.GetPixel(x, y), segmented.GetPixel(x, y));
+                        if (segmented.GetPixel(x, y) != SKColors.White) ++ink;
+                    }
+                Assert.True(ink > 100, "Both comparisons must contain rendered glyphs.");
+            }
+            finally { renderer.Reset(); }
+        }
+    }
+
+    [Fact]
     public void OrderedModeRejectsUnplacedLegacyCanvasLayers()
     {
         var renderer = new NativeCanvasSceneRenderer();
