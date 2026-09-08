@@ -1,0 +1,27 @@
+{
+  "date": "2026-09-08",
+  "platform": "macOS arm64 / Apple M4 / ANGLE Metal",
+  "change": "Typed ANGLE loss reported at activation and after graphics-service command execution",
+  "tests": {
+    "build": "cmake --build artifacts/graphics-build/native-v8-enabled -j2",
+    "test": "ctest --test-dir artifacts/graphics-build/native-v8-enabled --output-on-failure",
+    "result": "19/19 passed, 13.12 seconds",
+    "queue_result": [
+      "loss reported for injecting command",
+      "next command for lost context rejected before callback",
+      "independent context command executes",
+      "subsequent lost-context command rejected before callback"
+    ],
+    "teardown": "zero live contexts and zero queued commands"
+  },
+  "limitations": [
+    "Injected ANGLE context loss; not physical GPU reset",
+    "No browser WebGL events, restoration or conformance claim",
+    "Windows/Linux not tested",
+    "Working tree includes pre-existing uncommitted dialog UA/runtime-test edits, excluded from this commit"
+  ],
+  "logs": {
+    "build.log.gz": "2af44c8ce4a337fd171ebd77490d47af2a6e01ac42365ac338b9de8aa023a615",
+    "tests.log.gz": "c7e79c478a9f58f96c90b7b6506b70ecf5225a5bdcf661c540eac27b7c2d2a52"
+  }
+}

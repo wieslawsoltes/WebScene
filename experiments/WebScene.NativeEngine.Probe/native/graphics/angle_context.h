@@ -11,6 +11,11 @@
 #include <thread>
 
 namespace webscene::graphics {
+// Distinguish recoverable context loss from stale handles and execution bugs.
+class angle_context_lost : public std::runtime_error {
+public:
+    angle_context_lost() : std::runtime_error("ANGLE context is lost") {}
+};
 // A context retains its display owner's lease. The display service, not each
 // context, initializes/terminates EGL; destroying one context cannot terminate
 // the display used by another engine/context.
@@ -88,16 +93,16 @@ public:
     public:
         explicit scope(angle_context& owner) : owner_(owner) {
             owner_.check_thread();
-            if(owner_.lost_) throw std::runtime_error("ANGLE context is lost");
+            if(owner_.lost_) throw angle_context_lost();
             previous_display_=eglGetCurrentDisplay();
             previous_context_=eglGetCurrentContext();
             previous_draw_=eglGetCurrentSurface(EGL_DRAW);
             previous_read_=eglGetCurrentSurface(EGL_READ);
             if (!eglMakeCurrent(owner_.display_,owner_.surface_,owner_.surface_,owner_.context_)) {
-                if(eglGetError()==EGL_CONTEXT_LOST) owner_.lost_=true;
+                if(eglGetError()==EGL_CONTEXT_LOST) { owner_.lost_=true; throw angle_context_lost(); }
                 throw std::runtime_error("Cannot activate ANGLE context");
             }
-            if(owner_.poll_loss()) { restore(); throw std::runtime_error("ANGLE context is lost"); }
+            if(owner_.poll_loss()) { restore(); throw angle_context_lost(); }
         }
         scope(const scope&)=delete;
         scope& operator=(const scope&)=delete;

@@ -16,6 +16,36 @@ void set_color(graphics_service& service,std::span<const std::byte> upload,
     service.with_angle_context(handle,[&] { glClearColor(color[0],color[1],color[2],color[3]); });
     ++executed_commands;
 }
+// Commands translate expected context loss without dropping later FIFO work.
+std::array<int,4> loss_order{};
+size_t loss_count=0;
+void context_loss_command(graphics_service& service,std::span<const std::byte>,
+                          const graphics_command::arguments& values) noexcept {
+    resource_handle<angle_context> handle{values[0],values[1],static_cast<uint32_t>(values[2])};
+    bool entered=false;
+    try {
+        service.with_angle_context(handle,[&] {
+            entered=true;
+            if(values[3]==1) {
+                using request_proc=void (GL_APIENTRY *)(const GLchar*);
+                using lose_proc=void (GL_APIENTRY *)(GLenum,GLenum);
+                auto request=reinterpret_cast<request_proc>(eglGetProcAddress("glRequestExtensionANGLE"));
+                auto lose=reinterpret_cast<lose_proc>(eglGetProcAddress("glLoseContextCHROMIUM"));
+                require(request && lose);
+                request("GL_CHROMIUM_lose_context");
+                require(glGetError()==GL_NO_ERROR);
+                lose(GL_GUILTY_CONTEXT_RESET_EXT,GL_INNOCENT_CONTEXT_RESET_EXT);
+            } else {
+                glClearColor(0.25f,0.5f,0.75f,1);
+                GLfloat color[4]{};glGetFloatv(GL_COLOR_CLEAR_VALUE,color);
+                require(glGetError()==GL_NO_ERROR && color[1]==0.5f);
+            }
+        });
+        loss_order.at(loss_count++)=3;
+    } catch(const angle_context_lost&) {
+        loss_order.at(loss_count++)=entered ? 1 : 2;
+    }
+}
 int main() {
     auto wake=std::make_shared<engine_wake>();
     graphics_service a(wake),b(wake);
@@ -140,6 +170,27 @@ int main() {
         require(baseline.live_contexts==0 && baseline.release_registrations==0 && baseline.commands.depth==0);
     }
     recycled.close();
+    // Loss in one queued command is reported immediately, subsequent commands
+    // for that context reject before execution, and independent work continues.
+    graphics_service loss_service(wake);
+    auto lost_context=loss_service.create_angle_context(backend,2);
+    auto surviving_context=loss_service.create_angle_context(backend,2);
+    auto loss_queue=loss_service.command_endpoint(4,0);
+    const auto enqueue_loss=[&](auto handle,uint64_t inject) {
+        require(loss_queue->enqueue({context_loss_command,
+            {handle.table,handle.generation,handle.slot,inject}})==enqueue_result::accepted);
+    };
+    enqueue_loss(lost_context,1);
+    enqueue_loss(lost_context,0);
+    enqueue_loss(surviving_context,0);
+    enqueue_loss(lost_context,0);
+    require(loss_service.drain_commands(4)==4);
+    require(loss_count==4 && loss_order==std::array<int,4>{1,2,3,2});
+    require(eglGetCurrentContext()==EGL_NO_CONTEXT);
+    loss_service.destroy_angle_context(lost_context);
+    loss_service.destroy_angle_context(surviving_context);
+    require(loss_service.live_contexts()==0 && loss_queue->metrics().depth==0);
+    loss_service.close();
     graphics_service delivery(wake);
     auto delivery_mailbox=delivery.dawn().completions();
     auto delivery_ticket=delivery_mailbox->reserve(1,{delivery.engine_identity(),new_owner_token(),0}).value();

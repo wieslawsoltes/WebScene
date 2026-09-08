@@ -120,13 +120,17 @@ public:
     }
     template<class Execute> void with_angle_context(resource_handle<angle_context> handle,Execute execute) {
         check_open();
-        angle_context::scope scope(contexts_.get(handle,owner_));
+        auto& context=contexts_.get(handle,owner_);
+        angle_context::scope scope(context);
         struct execution_guard {
             size_t& count;
             explicit execution_guard(size_t& value) : count(value) { ++count; }
             ~execution_guard() { --count; }
         } guard(active_context_scopes_);
         execute();
+        // Report a reset during execution to the command's completion path;
+        // successful callback return alone does not imply a usable context.
+        if(context.poll_loss()) throw angle_context_lost();
     }
     // Called by the execution thread after queued context operations have drained.
     void destroy_angle_context(resource_handle<angle_context> handle) {
