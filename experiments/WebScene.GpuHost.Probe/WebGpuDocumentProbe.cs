@@ -264,7 +264,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                     drawCallbackCompletions = surface.PresentationTimestamps.Where(timestamp => timestamp >= traceStarted),
                                     physicalPresentationVerified = false
                                 }));
-                                ValidatePanWorkload(panDiagnostics, x, y);
+                                KestrelDragWorkloadValidator.Validate(panDiagnostics, x, y);
                                 Console.WriteLine("Kestrel pan workload validated (physical presentation remains unqualified).");
                             }
                             finally
@@ -280,6 +280,8 @@ internal sealed class WebGpuDocumentProbeApp : Application
                             var x = setup.RootElement.GetProperty("x").GetDouble();
                             var y = setup.RootElement.GetProperty("y").GetDouble();
                             var originalWidth = setup.RootElement.GetProperty("width").GetDouble();
+                            await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelSidebarProbe={events:[]};p.event=e=>p.events.push({type:e.type,x:e.clientX,y:e.clientY,button:e.button,buttons:e.buttons});for(const n of ['pointerdown','pointermove','pointerup'])document.addEventListener(n,p.event);})()");
+                            var submittedMoves = new List<object>(60);
                             var baseline = view.CapturePerformanceSnapshot();
                             var traceStarted = System.Diagnostics.Stopwatch.GetTimestamp();
                             var pressed = false;
@@ -290,8 +292,11 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 pressed = true;
                                 for (var step = 1; step <= 60; ++step)
                                 {
-                                    if (surface.SubmitPointerButton(1, x + step * 2, y, 0, true) == 0)
+                                    var submittedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                                    var sequence = surface.SubmitPointerButton(1, x + step * 2, y, 0, true);
+                                    if (sequence == 0)
                                         throw new InvalidOperationException("Sidebar move rejected.");
+                                    submittedMoves.Add(new { sequence, submittedAt, step, x = x + step * 2, y });
                                     await Task.Delay(16);
                                 }
                                 if (surface.SubmitPointerButton(3, x + 120, y, 0, false) == 0)
@@ -302,17 +307,22 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 if (Math.Abs(width - Math.Clamp(originalWidth + 120, 170, 390)) > 1)
                                     throw new InvalidOperationException($"Sidebar drag failed: width {originalWidth} became {width}.");
                                 var after = view.CapturePerformanceSnapshot();
+                                var diagnostics = await view.EvaluateTextAsync("(()=>{return {events:globalThis.kestrelSidebarProbe.events,panning:document.getElementById('viewport').classList.contains('panning'),errors:document.querySelectorAll('#command-history .history-error').length}})()");
+                                Console.WriteLine("Kestrel sidebar diagnostics: " + diagnostics);
+                                KestrelDragWorkloadValidator.Validate(diagnostics, x, y, sidebar: true);
                                 Console.WriteLine("Kestrel sidebar timeline: " + System.Text.Json.JsonSerializer.Serialize(new {
                                     traceStarted, timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
-                                    originalWidth, width, baseline, after, delta = after.Since(baseline),
+                                    originalWidth, width, baseline, after, delta = after.Since(baseline), submittedMoves,
                                     publications = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted),
                                     renderedScenes = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted),
                                     physicalPresentationVerified = false
                                 }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
+                                Console.WriteLine("Kestrel sidebar workload validated (physical presentation remains unqualified).");
                             }
                             finally
                             {
                                 if (pressed) surface.SubmitPointerButton(3, x + 120, y, 0, false);
+                                await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelSidebarProbe;for(const n of ['pointerdown','pointermove','pointerup'])document.removeEventListener(n,p.event);delete globalThis.kestrelSidebarProbe;})()");
                             }
                         }
                         if (arguments.Contains("--resize-kestrel"))
@@ -386,45 +396,6 @@ internal sealed class WebGpuDocumentProbeApp : Application
         var workbench = ancestors.Single(node => node.GetProperty("id").GetString() == "workbench").GetProperty("rect");
         if (Math.Abs(viewport[3].GetDouble() - workbench[3].GetDouble()) > 1)
             throw new InvalidOperationException("Kestrel viewport no longer tracks the resized workbench height.");
-    }
-
-    private static void ValidatePanWorkload(string diagnostics, double x, double y)
-    {
-        using var parsed = System.Text.Json.JsonDocument.Parse(diagnostics);
-        var root = parsed.RootElement;
-        var events = root.GetProperty("events").EnumerateArray().ToArray();
-        if (root.GetProperty("errors").GetInt32() != 0 || root.GetProperty("panning").GetBoolean()
-            || events.Length < 3 || events[0].GetProperty("type").GetString() != "pointerdown"
-            || events[^1].GetProperty("type").GetString() != "pointerup")
-            throw new InvalidOperationException("Invalid Kestrel pan workload: missing gesture boundary or application error.");
-        static bool At(System.Text.Json.JsonElement e, double px, double py) =>
-            Math.Abs(e.GetProperty("x").GetDouble() - px) < 0.1
-            && Math.Abs(e.GetProperty("y").GetDouble() - py) < 0.1;
-        if (!At(events[0], x, y) || !At(events[^1], x, y)
-            || events[0].GetProperty("button").GetInt32() != 2
-            || events[^1].GetProperty("button").GetInt32() != 2)
-            throw new InvalidOperationException("Invalid Kestrel pan workload: unexpected gesture boundary.");
-        // Coalescing may omit moves, but delivered moves must remain an ordered
-        // subsequence of the injected path. This detects extra routed input;
-        // it does not prove the provenance of identical-coordinate input.
-        var nextStep = 1;
-        foreach (var e in events.Skip(1).Take(events.Length - 2))
-        {
-            if (e.GetProperty("type").GetString() != "pointermove"
-                || e.GetProperty("buttons").GetInt32() != 2)
-                throw new InvalidOperationException("Invalid Kestrel pan workload: unexpected pointer event.");
-            var matched = false;
-            while (nextStep <= 80)
-            {
-                var step = nextStep++;
-                var distance = step <= 40 ? step * 4 : (80 - step) * 4;
-                if (!At(e, x + distance, y + distance / 4.0)) continue;
-                matched = true;
-                break;
-            }
-            if (!matched)
-                throw new InvalidOperationException("Invalid Kestrel pan workload: moves differ from injected path; discard performance comparison.");
-        }
     }
 
 }

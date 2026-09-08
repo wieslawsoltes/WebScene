@@ -624,3 +624,9 @@ state before measuring identical interaction workloads.
 Moving layout and ResizeObserver delivery before the admitted GPU RAF batch produced 26 scene draws over a 1.577-second sidebar workload (including settling), compared with 13 in the preceding run. This is neither an FPS measurement nor a controlled speedup claim. Both native test suites passed, but the experiment changes observable rendering phase ordering: ResizeObserver delivery belongs after animation callbacks. The production experiment was removed. Evidence: `evidence/kestrel/rejected-pre-raf-resize-layout.json`.
 
 The retained resize redraw hold passed the stepped resize checks, but continuous window-edge resizing and physical 60fps presentation remain unqualified. The hold can still defer too many scenes under continuous sidebar resizing; resolving that requires preserving browser scheduling and coherent CPU/GPU scene boundaries.
+
+### Validated sidebar input baseline
+
+The sidebar probe now records all submitted move sequences and timestamps, observes delivered pointer events, and rejects unexpected boundaries, buttons, or moves outside the ordered submitted path. Coalesced omissions are allowed. Temporary observers are removed in `finally`; the Kestrel fixture remains unchanged. Eight managed regression cases cover both pan and sidebar validation on net8.0 and net10.0.
+
+The validated baseline in `evidence/kestrel/validated-sidebar-publication-baseline.json` reproduced the publication deficit: 94 compositor callbacks, 49 application RAF callbacks, and 14 scene draws in 1.580 seconds including 500ms settling. Geometry reached 342px from 222px with no application errors. These counts are not physical FPS or a sustained-rate measurement. Next work remains the resize reset/publication boundary, without promoting ResizeObserver ahead of RAF or allowing mismatched CPU/GPU generations.
