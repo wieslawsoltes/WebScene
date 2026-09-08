@@ -64,6 +64,7 @@ public:
                 slot.metadata.content_serial==metadata.content_serial) return *slot.color;
         throw std::invalid_argument("IOSurface generation unavailable");
     }
+    image_lease_pool::occupancy inspect_occupancy() const { return pool_.inspect_occupancy(); }
     size_t busy_images() const { return pool_.busy_images(); }
 };
 } // namespace webscene::graphics

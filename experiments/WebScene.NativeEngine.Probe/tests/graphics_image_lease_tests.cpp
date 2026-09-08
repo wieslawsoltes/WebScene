@@ -32,8 +32,13 @@ void test_capacity_wake() {
     auto writer=write(pool); auto retained=submit(pool,writer).value();
     require(!pool.retain(retained) && !pool.begin_consumer(retained));
     pool.finish_producer(writer); require(wake->signals==0); // No new capacity yet.
+    const auto cpu_only=pool.inspect_occupancy();
+    require(cpu_only.busy==1 && cpu_only.producer_pending==0
+        && cpu_only.retained==1 && cpu_only.consumer_pending==0);
     std::thread release([&] { pool.release(retained); }); release.join();
     require(wake->signals==1 && wake->last_busy==0);
+    const auto idle=pool.inspect_occupancy();
+    require(idle.busy==0 && idle.producer_pending==0 && idle.retained==0 && idle.consumer_pending==0);
     require(wake->latched.wait_for(std::chrono::milliseconds(0),[] { return false; }));
     auto abandoned=write(pool); pool.cancel_write(abandoned);
     require(wake->signals==2);
@@ -58,6 +63,9 @@ void test_owned_lifetime() {
     auto scene=producer->publish();
     auto redraw=scene->retain();
     auto pending=scene->begin_consumer();
+    const auto occupied=owner->inspect_occupancy();
+    require(occupied.busy==1 && occupied.producer_pending==1
+        && occupied.retained==1 && occupied.consumer_pending==1);
     scene.reset();
     owner.reset(); // Engine/canvas ownership ends; GPU use is still outstanding.
     require(!weak.expired() && destroyed==0);

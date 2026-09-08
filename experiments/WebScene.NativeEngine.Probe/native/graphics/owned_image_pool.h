@@ -134,6 +134,7 @@ public:
         return producer(state_,*token);
     }
     void close() { state_->pool.close(); }
+    image_lease_pool::occupancy inspect_occupancy() const { return state_->pool.inspect_occupancy(); }
     size_t busy_images() const { return state_->pool.busy_images(); }
 };
 } // namespace webscene::graphics

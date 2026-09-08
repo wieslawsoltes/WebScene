@@ -316,3 +316,27 @@ subsequent investigation toward frame admission, producer completion and consume
 retirement; it does not identify GPU execution as the bottleneck. Evidence:
 `evidence/kestrel/native-pan-callback-timing.json`. The existing interactive demo
 remained open, so this is investigative evidence rather than an isolated benchmark.
+
+
+## Frame admission ownership trace (2026-09-08)
+
+A thread-safe native image-pool occupancy snapshot now distinguishes occupied
+images, unfinished producers, retained-reference images and outstanding-consumer
+images. Roles can overlap; counts are images, not reference counts. The owned
+pool and IOSurface provider expose the same read-only snapshot. Tests cover an
+image with simultaneous producer/retained/consumer ownership, completed producer
+with retained ownership only, and full release to idle. Image lease and GPU
+runtime suites pass (0.95 seconds together).
+
+Temporary admission tracing recorded 37 admitted and 17 blocked host frame
+signals during a controlled eighty-move pan (66 delivered, 14 coalesced). Every
+blocked signal had three busy images, zero unfinished producers, two retained
+images and two images with outstanding consumer leases. This does not prove
+consumer GPU execution was still running: the lease may instead await polling
+of an already-signaled GL fence. The next investigation must measure that
+distinction in the Skia/GL retirement path.
+
+Trace logging was removed and the native library rebuilt. Evidence:
+`evidence/kestrel/frame-admission-ownership.json`. An earlier trace contained
+extra manual input and is excluded from controlled counts. No frame-rate or
+physical presentation qualification is inferred from this diagnostic run.

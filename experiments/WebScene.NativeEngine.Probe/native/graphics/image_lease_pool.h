@@ -177,6 +177,21 @@ public:
     }
     // Stop new frames. Existing retained scenes can still be redrawn/released.
     void close() { std::lock_guard lock(mutex_); closed_=true; }
+    struct occupancy {
+        size_t busy{},producer_pending{},retained{},consumer_pending{};
+    };
+    occupancy inspect_occupancy() const {
+        std::lock_guard lock(mutex_);
+        occupancy result;
+        for(const auto& item:images_) {
+            if(item.state==phase::idle)continue;
+            ++result.busy;
+            result.producer_pending+=item.producer_started&&!item.producer_done;
+            result.retained+=item.retained!=0;
+            result.consumer_pending+=item.consumers!=0;
+        }
+        return result;
+    }
     size_t busy_images() const {
         std::lock_guard lock(mutex_);
         size_t count=0;

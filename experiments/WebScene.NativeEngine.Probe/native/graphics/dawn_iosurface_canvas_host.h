@@ -95,6 +95,7 @@ public:
         if(active_||images_.busy_images()>=3)return false;
         return std::any_of(pending_.begin(),pending_.end(),[](const auto& item){return !item;});
     }
+    image_lease_pool::occupancy inspect_occupancy() const { return images_.inspect_occupancy(); }
     size_t busy_images()const {check_thread();return images_.busy_images();}
 };
 } // namespace webscene::graphics
