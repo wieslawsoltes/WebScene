@@ -618,3 +618,9 @@ closed, preserving the user's original reference tab. Do not derive a native /
 Chrome performance ratio from these mismatched conditions. A comparison harness
 must verify settled canvas dimensions as well as viewport, DPR and application
 state before measuring identical interaction workloads.
+
+### Rejected pre-RAF resize layout experiment
+
+Moving layout and ResizeObserver delivery before the admitted GPU RAF batch produced 26 scene draws over a 1.577-second sidebar workload (including settling), compared with 13 in the preceding run. This is neither an FPS measurement nor a controlled speedup claim. Both native test suites passed, but the experiment changes observable rendering phase ordering: ResizeObserver delivery belongs after animation callbacks. The production experiment was removed. Evidence: `evidence/kestrel/rejected-pre-raf-resize-layout.json`.
+
+The retained resize redraw hold passed the stepped resize checks, but continuous window-edge resizing and physical 60fps presentation remain unqualified. The hold can still defer too many scenes under continuous sidebar resizing; resolving that requires preserving browser scheduling and coherent CPU/GPU scene boundaries.
