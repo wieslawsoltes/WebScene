@@ -51,3 +51,12 @@ period and never establish physical presentation FPS. Logs rejected by workload
 validation must not be used for performance comparisons.
 
 For viewport alignment, the native GPU document probe accepts `--document-width 792 --document-height 878` (positive integer CSS dimensions). Sidebar timelines record actual viewport/DPR/canvas geometry; verify these against the browser instead of assuming the requested window size or scale was applied. Matching geometry alone is not a matched performance workload.
+
+After a capture finishes, verify its retained file bytes before copying or archiving:
+
+```sh
+python3 tests/GraphicsCompatibility/verify-reference-archive.py artifacts/chrome-reference-new
+python3 -m unittest discover -s tests/GraphicsCompatibility -p test_reference_archive.py
+```
+
+This rejects incomplete captures, missing harness sources, missing or changed referenced artifacts, and paths outside the archive. It checks archive integrity only; it does not establish full matrix coverage, pixel correctness, hardware qualification or performance. Preserve the complete directory, including its exact harness sources and generated inputs.
