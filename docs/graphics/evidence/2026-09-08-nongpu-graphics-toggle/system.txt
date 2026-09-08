@@ -1,0 +1,4 @@
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+Darwin MacMini 25.6.0 Darwin Kernel Version 25.6.0: Fri Jul 31 19:11:03 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T8132 arm64

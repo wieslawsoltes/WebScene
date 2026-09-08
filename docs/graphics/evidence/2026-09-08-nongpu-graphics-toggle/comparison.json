@@ -1,0 +1,196 @@
+{
+  "scope": "same-source graphics OFF versus ON",
+  "status": "measured; epic baseline gate remains incomplete",
+  "method": "20 fresh processes per variant, ten ABBA blocks; 10000 paired block bootstrap resamples of median ratios; 5% boundary. Intervals crossing boundary are inconclusive, not passing.",
+  "metrics": {
+    "startup.prewarmMilliseconds": {
+      "controlMedian": 1.5623,
+      "candidateMedian": 1.6202,
+      "ratio": 1.0370607437752033,
+      "blockBootstrap95RatioInterval": [
+        0.9945424013434089,
+        1.0876594669698119
+      ],
+      "classification": "inconclusive"
+    },
+    "startup.warmContextCreateMilliseconds.mean": {
+      "controlMedian": 0.2289,
+      "candidateMedian": 0.22627999999999998,
+      "ratio": 0.9885539536915683,
+      "blockBootstrap95RatioInterval": [
+        0.9173977207510041,
+        1.0946375022049744
+      ],
+      "classification": "inconclusive"
+    },
+    "startup.firstSceneMilliseconds.mean": {
+      "controlMedian": 1.30496,
+      "candidateMedian": 1.3390849999999999,
+      "ratio": 1.0261502268268758,
+      "blockBootstrap95RatioInterval": [
+        0.9650302519721223,
+        1.0609214592732052
+      ],
+      "classification": "inconclusive"
+    },
+    "idle.processCpuMilliseconds": {
+      "controlMedian": 6.288,
+      "candidateMedian": 6.598,
+      "ratio": 1.0493002544529262,
+      "blockBootstrap95RatioInterval": [
+        0.9908787360534246,
+        1.1479917184265012
+      ],
+      "classification": "inconclusive"
+    },
+    "timerAndAnimationFrame.elapsedMilliseconds": {
+      "controlMedian": 719.2196,
+      "candidateMedian": 717.74685,
+      "ratio": 0.9979522944035452,
+      "blockBootstrap95RatioInterval": [
+        0.9929227306642944,
+        1.0027917712397967
+      ],
+      "classification": "within-5-percent"
+    },
+    "timerAndAnimationFrame.processCpuMilliseconds": {
+      "controlMedian": 41.6725,
+      "candidateMedian": 37.967,
+      "ratio": 0.9110804487371768,
+      "blockBootstrap95RatioInterval": [
+        0.8371205973056323,
+        1.0721480573879099
+      ],
+      "classification": "inconclusive"
+    },
+    "consoleHeavy.elapsedMilliseconds": {
+      "controlMedian": 3.732,
+      "candidateMedian": 4.0625,
+      "ratio": 1.0885584137191853,
+      "blockBootstrap95RatioInterval": [
+        0.8388716470849035,
+        1.2217289916556626
+      ],
+      "classification": "inconclusive"
+    },
+    "consoleHeavy.processCpuMilliseconds": {
+      "controlMedian": 12.1935,
+      "candidateMedian": 12.655000000000001,
+      "ratio": 1.0378480337884939,
+      "blockBootstrap95RatioInterval": [
+        0.8281554511062708,
+        1.25742621465694
+      ],
+      "classification": "inconclusive"
+    },
+    "representativeWorkload.elapsedMilliseconds": {
+      "controlMedian": 79.80445,
+      "candidateMedian": 73.43095,
+      "ratio": 0.9201360325144775,
+      "blockBootstrap95RatioInterval": [
+        0.8891992852472665,
+        1.0630895391597501
+      ],
+      "classification": "inconclusive"
+    },
+    "representativeWorkload.processCpuMilliseconds": {
+      "controlMedian": 316.45349999999996,
+      "candidateMedian": 291.647,
+      "ratio": 0.921610915979757,
+      "blockBootstrap95RatioInterval": [
+        0.892301790399539,
+        1.0607639866581497
+      ],
+      "classification": "inconclusive"
+    },
+    "memory.populatedViewsWorkingSetBytes": {
+      "controlMedian": 102719488.0,
+      "candidateMedian": 103718912.0,
+      "ratio": 1.0097296435122418,
+      "blockBootstrap95RatioInterval": [
+        1.008523179862992,
+        1.010369306851719
+      ],
+      "classification": "within-5-percent"
+    },
+    "memory.workloadWorkingSetBytes": {
+      "controlMedian": 148897792.0,
+      "candidateMedian": 149766144.0,
+      "ratio": 1.005831866197183,
+      "blockBootstrap95RatioInterval": [
+        0.9900467747198956,
+        1.017085038151056
+      ],
+      "classification": "within-5-percent"
+    },
+    "managedAllocations.ordinaryViewConstructionBytes": {
+      "controlMedian": 599533.0,
+      "candidateMedian": 599533.0,
+      "ratio": 1.0,
+      "blockBootstrap95RatioInterval": [
+        1.0,
+        1.0
+      ],
+      "classification": "within-5-percent"
+    },
+    "managedAllocations.blankLifecycleBytes.median": {
+      "controlMedian": 2088.0,
+      "candidateMedian": 2088.0,
+      "ratio": 1.0,
+      "blockBootstrap95RatioInterval": [
+        1.0,
+        1.0
+      ],
+      "classification": "within-5-percent"
+    }
+  },
+  "exactWork": {
+    "timerAndAnimationFrame.timersFired": {
+      "control": [
+        800
+      ],
+      "candidate": [
+        800
+      ]
+    },
+    "timerAndAnimationFrame.animationFramesInvoked": {
+      "control": [
+        240
+      ],
+      "candidate": [
+        240
+      ]
+    },
+    "consoleHeavy.calls": {
+      "control": [
+        4000
+      ],
+      "candidate": [
+        4000
+      ]
+    },
+    "consoleHeavy.completionSignals": {
+      "control": [
+        4
+      ],
+      "candidate": [
+        4
+      ]
+    },
+    "representativeWorkload.completionSignals": {
+      "control": [
+        4
+      ],
+      "candidate": [
+        4
+      ]
+    }
+  },
+  "limitations": [
+    "Not pre-epic baseline",
+    "Manual application windows remained open; system contention may affect measurements",
+    "Probe reports engine/CPU behavior, not physical presentation",
+    "Reported V8 heap counters are zero and cannot establish V8 memory equivalence",
+    "No Windows/Linux measurement"
+  ]
+}
