@@ -575,3 +575,13 @@ frames. The action therefore did not exercise the intended live-resize path and
 is not a pass. Do not substitute its absence of blank frames for continuous-drag
 qualification. No FPS result is derived. Existing stepped-resize evidence remains
 limited to that workload; real continuous dragging still requires verification.
+
+The unchanged-application sidebar probe uses native left-button input on the real
+`.left-resizer`, moving 120px across 60 steps, and asserts final width. It passes
+222→342px with zero script errors. The first run records 92 compositor callbacks,
+47 RAF callbacks, 154 layouts and only 11 rendered scenes; median matched
+publication-to-draw latency is 32.62ms. Input contamination is not yet checked in
+this probe and counters include settling, so this is investigative evidence, not
+FPS qualification. It directs the next check toward scene publication/captured
+output invalidation during repeated bitmap resizes, rather than assuming low
+compositor callback frequency. Evidence: `evidence/kestrel/sidebar-drag-baseline.json`.

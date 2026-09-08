@@ -273,6 +273,48 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;if(window.requestAnimationFrame===p.raf)window.requestAnimationFrame=p.originalRaf;for(const n of ['pointerdown','pointermove','pointerup'])document.removeEventListener(n,p.event);for(const n of ['gotpointercapture','lostpointercapture'])document.removeEventListener(n,p.capture);delete globalThis.kestrelPanProbe;})()");
                             }
                         }
+                        if (arguments.Contains("--sidebar-kestrel"))
+                        {
+                            var surface = (NativeSceneSurface)view.Content!;
+                            using var setup = System.Text.Json.JsonDocument.Parse(await view.EvaluateTextAsync("(()=>{const r=document.querySelector('.left-resizer').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:document.getElementById('explorer').offsetWidth}})()"));
+                            var x = setup.RootElement.GetProperty("x").GetDouble();
+                            var y = setup.RootElement.GetProperty("y").GetDouble();
+                            var originalWidth = setup.RootElement.GetProperty("width").GetDouble();
+                            var baseline = view.CapturePerformanceSnapshot();
+                            var traceStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                            var pressed = false;
+                            try
+                            {
+                                if (surface.SubmitPointerButton(2, x, y, 0, true) == 0)
+                                    throw new InvalidOperationException("Sidebar press rejected.");
+                                pressed = true;
+                                for (var step = 1; step <= 60; ++step)
+                                {
+                                    if (surface.SubmitPointerButton(1, x + step * 2, y, 0, true) == 0)
+                                        throw new InvalidOperationException("Sidebar move rejected.");
+                                    await Task.Delay(16);
+                                }
+                                if (surface.SubmitPointerButton(3, x + 120, y, 0, false) == 0)
+                                    throw new InvalidOperationException("Sidebar release rejected.");
+                                pressed = false;
+                                await Task.Delay(500);
+                                var width = double.Parse(await view.EvaluateTextAsync("document.getElementById('explorer').offsetWidth"), System.Globalization.CultureInfo.InvariantCulture);
+                                if (Math.Abs(width - Math.Clamp(originalWidth + 120, 170, 390)) > 1)
+                                    throw new InvalidOperationException($"Sidebar drag failed: width {originalWidth} became {width}.");
+                                var after = view.CapturePerformanceSnapshot();
+                                Console.WriteLine("Kestrel sidebar timeline: " + System.Text.Json.JsonSerializer.Serialize(new {
+                                    traceStarted, timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
+                                    originalWidth, width, baseline, after, delta = after.Since(baseline),
+                                    publications = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted),
+                                    renderedScenes = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted),
+                                    physicalPresentationVerified = false
+                                }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
+                            }
+                            finally
+                            {
+                                if (pressed) surface.SubmitPointerButton(3, x + 120, y, 0, false);
+                            }
+                        }
                         if (arguments.Contains("--resize-kestrel"))
                         {
                             if (arguments.Contains("--capture-resize-kestrel"))
