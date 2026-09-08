@@ -2373,3 +2373,5 @@ scene with its associated GPU image versions until producer completion, then
 publish them together without CPU pixel copies or synchronous GPU waits. Preserve
 the previous complete frame under backpressure and add a delayed-producer
 regression; merely reducing render callbacks cannot establish coherence.
+
+The writeBuffer regression additionally verifies immediate post-call transfer/detachment of typed-array and raw ArrayBuffer sources, overwrites the transferred storage, and checks the original GPU words through diagnostic mapping. Shared-buffer mutation is also verified after both writes. See `evidence/v8-write-buffer-detachment.json`; cross-worker shared-memory stress remains outstanding.
