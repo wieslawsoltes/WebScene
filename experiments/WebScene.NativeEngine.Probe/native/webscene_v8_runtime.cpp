@@ -4743,6 +4743,7 @@ bool v8_dom_runtime::has_pending_tasks() const noexcept
         || impl_->websocket_transport.has_pending_events()
         || !impl_->pending_window_messages.empty()
         || impl_->has_ready_fetch_task()
+        || !impl_->pending_dialog_close_events.empty()
         || !impl_->pending_programmatic_scroll_events.empty()
         || !impl_->pending_frame_hydrations.empty()
         || !impl_->connected_resources.empty()

@@ -443,6 +443,23 @@
         return true;
     }
 
+    bool drain_dialog_close_event_task()
+    {
+        auto task = std::move(pending_dialog_close_events.front());
+        pending_dialog_close_events.erase(pending_dialog_close_events.begin());
+        auto local_context = task.context.Get(isolate);
+        auto* target = document.find_by_native_id(task.target_id);
+        if (target == nullptr || local_context.IsEmpty()) return true;
+        v8::Context::Scope context_scope(local_context);
+        activate_css_cascade(local_context);
+        webscene_input_event input{};
+        v8::TryCatch try_catch(isolate);
+        if (dispatch_input_event_type(input, "close", *target)) return true;
+        last_error = "Dialog close dispatch failed: "
+            + describe_reported_exception(try_catch, local_context);
+        return false;
+    }
+
     void enqueue_programmatic_scroll_event(dom_node& target)
     {
         auto local_context = isolate->GetCurrentContext();
@@ -554,6 +571,9 @@
         }
         if (has_ready_fetch_task()) {
             return drain_fetch_task();
+        }
+        if (!pending_dialog_close_events.empty()) {
+            return drain_dialog_close_event_task();
         }
         if (!pending_programmatic_scroll_events.empty()) {
             return drain_programmatic_scroll_event_task();
@@ -1433,14 +1453,17 @@
             event->Set(local_context, js_string(isolate, name), v8::Number::New(isolate, value)).Check();
         };
         const auto type_view = std::string_view(type);
-        const auto bubbles = type_view != "blur"
+        const auto bubbles = type_view != "close"
+            && type_view != "cancel"
+            && type_view != "blur"
             && type_view != "focus"
             && type_view != "mouseenter"
             && type_view != "mouseleave"
             && type_view != "pointerenter"
             && type_view != "pointerleave"
             && type_view != "scroll";
-        const auto cancelable = type_view != "blur"
+        const auto cancelable = type_view != "close"
+            && type_view != "blur"
             && type_view != "focus"
             && type_view != "focusin"
             && type_view != "focusout"

@@ -376,6 +376,44 @@ void test_runtime_webgpu_installation() {
         }
     )JS","closed-dialog-layout");
     if (!dialog_layout_ok) throw std::runtime_error("Dialog default visibility failed: " + runtime.last_error());
+    const bool dialog_close_ok=runtime.execute(R"JS(
+        globalThis.closingDialog=document.createElement('dialog');
+        document.body.append(closingDialog);
+        globalThis.dialogEvents=[];
+        closingDialog.addEventListener('close',event=>{
+            if(event.bubbles||event.cancelable||event.target!==closingDialog)throw new Error('close event flags');
+            dialogEvents.push('close');
+        });
+        closingDialog.returnValue='initial';
+        closingDialog.close('ignored');
+        if(closingDialog.returnValue!=='initial')throw new Error('closed dialog result changed');
+        closingDialog.open=true;
+        closingDialog.addEventListener('cancel',event=>{
+            if(event.bubbles||!event.cancelable)throw new Error('cancel event flags');
+            dialogEvents.push('cancel');event.preventDefault();
+        },{once:true});
+        closingDialog.requestClose('cancelled');
+        if(!closingDialog.open||closingDialog.returnValue!=='initial'||dialogEvents.join()!=='cancel')throw new Error('requestClose cancellation');
+        const openAttribute=Array.from(closingDialog.attributes).find(attribute=>attribute.name==='open');
+        closingDialog.requestClose('accepted');
+        if(openAttribute.ownerElement!==null||openAttribute.value!=='')throw new Error('close did not detach Attr');
+        if(closingDialog.open||closingDialog.returnValue!=='accepted'||dialogEvents.join()!=='cancel')throw new Error('close was not asynchronous');
+        closingDialog.close('duplicate');
+        if(closingDialog.returnValue!=='accepted')throw new Error('duplicate close changed result');
+    )JS","dialog-close-lifecycle");
+    if(!dialog_close_ok)throw std::runtime_error("Dialog closing failed: "+runtime.last_error());
+    for(int task=0;task<32&&runtime.has_pending_tasks();++task)
+        require(runtime.pump_task(),"Dialog close task failed");
+    require(runtime.execute(R"JS(
+        if(dialogEvents.join()!=='cancel,close')throw new Error('queued close missing or duplicated');
+        closingDialog.open=true;closingDialog.close(undefined);
+        if(closingDialog.returnValue!=='accepted')throw new Error('omitted close value was overwritten');
+        let rejected=false;try{closingDialog.close(Symbol())}catch(e){rejected=e instanceof TypeError}
+        if(!rejected)throw new Error('close DOMString validation');
+        rejected=false;try{HTMLDialogElement.prototype.close.call(document.body)}catch(e){rejected=e instanceof TypeError}
+        if(!rejected)throw new Error('close receiver validation');
+        closingDialog.remove();
+    )JS","dialog-close-result"),"Dialog close result failed");
     require(runtime.execute(R"JS(
         if(installedDevice.createBindGroupLayout.length!==1)throw new Error('binding layout arity');
         globalThis.bindingLayout=installedDevice.createBindGroupLayout({label:'camera',entries:new Set([{binding:0,visibility:1,buffer:{}}])});

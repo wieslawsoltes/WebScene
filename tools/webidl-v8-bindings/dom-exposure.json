@@ -314,7 +314,10 @@
         { "name": "open", "getter": "get_dialog_open", "setter": "set_dialog_open" },
         { "name": "returnValue", "getter": "get_dialog_return_value", "setter": "set_dialog_return_value" }
       ],
-      "methods": [],
+      "methods": [
+        { "name": "close", "callback": "dialog_close", "length": 0 },
+        { "name": "requestClose", "callback": "dialog_request_close", "length": 0 }
+      ],
       "constants": []
     },
     {

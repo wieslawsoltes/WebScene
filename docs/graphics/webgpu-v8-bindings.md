@@ -2121,3 +2121,27 @@ injected and no hidden form submitted. Modal top-layer rendering, focus/inert
 input, show/close/cancel events and complete dialog semantics remain pending.
 The API/state distinction follows the
 [HTML dialog specification](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element).
+
+### Dialog closing lifecycle dependency (2026-09-08)
+
+The generated dialog interface now exposes close and requestClose. Closing an
+open dialog removes its open attribute, detaches any existing Attr wrapper,
+updates returnValue only when supplied and queues a non-bubbling,
+non-cancelable close event. Closing an already closed dialog does nothing.
+requestClose dispatches a non-bubbling cancelable cancel event and leaves the
+dialog open if the event is prevented. Both methods validate their receiver
+and optional DOMString argument, including conversion failure on closed dialogs.
+
+Queued close events retain their target wrapper until dispatch and are cleared
+on runtime/frame teardown. They participate in the ordinary runtime task pump;
+handler failures report a dialog-specific error. Regression tests exercise
+cancellation, asynchronous dispatch, event flags, duplicate-close suppression,
+return values, omitted arguments, receiver/conversion validation and detached
+Attr state. Native-engine and GPU runtime suites passed (12.72 seconds combined)
+and generated binding consistency passed.
+
+This remains partial dialog support: show/showModal, modal top-layer layout and
+painting, focus restoration, inert background input, Escape/close-watcher
+integration, beforetoggle/toggle events and complete reentrancy/conformance
+coverage are outstanding. Kestrel's original BOX workflow remains blocked at
+showModal; these closing primitives do not establish a working modal workflow.

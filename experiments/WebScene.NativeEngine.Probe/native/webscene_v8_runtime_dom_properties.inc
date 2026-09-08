@@ -1783,6 +1783,53 @@
         set_boolean_attribute(value, info, "readonly");
     }
 
+    void close_dialog(dom_node& node, const std::optional<std::string>& result)
+    {
+        if (!node.attributes.contains("open")) return;
+        const auto old_open = node.attributes.at("open");
+        detach_attr(node, "open", old_open);
+        node.attributes.erase("open");
+        if (result) {
+            if (!node.dialog_state) node.dialog_state = std::make_unique<dom_node::dialog_data>();
+            node.dialog_state->return_value = *result;
+        }
+        recascade_connected_subtree(node);
+        pending_dialog_close_events.push_back(pending_dialog_close_event{
+            node.id, v8::Global<v8::Context>(isolate, context_for_node(node)),
+            v8::Global<v8::Object>(isolate, wrap_node(node))});
+    }
+
+    static bool dialog_close_argument(
+        const v8::FunctionCallbackInfo<v8::Value>& info, std::optional<std::string>& result)
+    {
+        if (info.Length() == 0 || info[0]->IsUndefined()) return true;
+        v8::Local<v8::String> converted;
+        if (!info[0]->ToString(info.GetIsolate()->GetCurrentContext()).ToLocal(&converted)) return false;
+        result = to_wtf8(info.GetIsolate(), converted);
+        return true;
+    }
+
+    static void dialog_close(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        std::optional<std::string> result;
+        if (!dialog_close_argument(info, result)) return;
+        self->close_dialog(*node, result);
+    }
+
+    static void dialog_request_close(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        std::optional<std::string> result;
+        if (!dialog_close_argument(info, result) || !node->attributes.contains("open")) return;
+        webscene_input_event input{};
+        bool prevented = false;
+        if (!self->dispatch_input_event_type(input, "cancel", *node, &prevented) || prevented) return;
+        self->close_dialog(*node, result);
+    }
+
     static void get_dialog_open(
         v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
     {

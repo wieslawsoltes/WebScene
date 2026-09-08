@@ -26,6 +26,12 @@
         std::string source_origin;
     };
 
+    struct pending_dialog_close_event final {
+        uint32_t target_id;
+        v8::Global<v8::Context> context;
+        v8::Global<v8::Object> target;
+    };
+
     struct pending_programmatic_scroll_event final {
         uint32_t target_id;
         v8::Global<v8::Context> context;

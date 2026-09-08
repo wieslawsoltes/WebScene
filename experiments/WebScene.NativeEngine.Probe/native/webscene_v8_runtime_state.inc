@@ -120,6 +120,7 @@
     std::vector<std::unique_ptr<media_query_list_state>> media_query_lists;
     std::vector<timer_task> timers;
     std::deque<pending_window_message> pending_window_messages;
+    std::vector<pending_dialog_close_event> pending_dialog_close_events;
     std::vector<pending_programmatic_scroll_event>
         pending_programmatic_scroll_events;
     native_websocket_transport websocket_transport;

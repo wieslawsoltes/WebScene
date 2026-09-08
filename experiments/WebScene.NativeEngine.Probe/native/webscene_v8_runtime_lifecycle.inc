@@ -136,6 +136,7 @@
         media_query_lists.clear();
         timers.clear();
         pending_window_messages.clear();
+        pending_dialog_close_events.clear();
         pending_programmatic_scroll_events.clear();
         pending_interop_promises.clear();
         pending_callback_promises.clear();

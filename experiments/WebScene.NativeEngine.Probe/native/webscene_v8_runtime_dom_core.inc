@@ -777,6 +777,11 @@
                 return task.target_context.Get(isolate) == local_context;
             });
         std::erase_if(
+            pending_dialog_close_events,
+            [&](const auto& task) {
+                return task.context.Get(isolate) == local_context;
+            });
+        std::erase_if(
             pending_programmatic_scroll_events,
             [&](const auto& task) {
                 return task.context.Get(isolate) == local_context;
