@@ -434,3 +434,14 @@ A same-iteration host-frame flag also cannot represent an RAF batch that finishe
 in a later worker iteration; any eventual scheduling change must track the actual
 completed rendering opportunity. Next profiling should timestamp host-frame
 admission, RAF completion, scene capture/commit and compositor drawing separately.
+
+The pan probe now emits the existing per-view publication, rendered revision and
+end-of-draw timestamps, filtered to the measurement window. No new rendering-path
+instrumentation was added. The property's legacy `PresentationTimestamps` name is
+reported as `drawCallbackCompletions`: its implementation records OnRender, not
+physical presentation. The rebuilt probe passed workload/startup validation and
+recorded 64 publications, 64 rendered scenes and 65 draw callbacks. Matching
+revision timestamps yields median publication-to-draw latency 33.37ms. This directs
+further investigation toward compositor consumption/retirement; it does not prove
+a GPU execution bottleneck or a physical frame rate. Evidence:
+`evidence/kestrel/pan-composition-timeline.json`.

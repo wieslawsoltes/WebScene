@@ -228,6 +228,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 y = center.RootElement[1].GetDouble();
                                 await view.EvaluateTextAsync("globalThis.kestrelPanProbe.events=[];globalThis.kestrelPanProbe.frames=[]");
                                 var baseline = view.CapturePerformanceSnapshot();
+                                var traceStarted = System.Diagnostics.Stopwatch.GetTimestamp();
                                 var started = System.Diagnostics.Stopwatch.StartNew();
                                 if (surface.SubmitPointerButton(2, x, y, 2, true) == 0)
                                     throw new InvalidOperationException("Kestrel pan press was rejected.");
@@ -248,6 +249,16 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 Console.WriteLine("Kestrel pan performance: " + System.Text.Json.JsonSerializer.Serialize(new { elapsedMilliseconds = started.Elapsed.TotalMilliseconds, baseline, after, delta = after.Since(baseline) }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
                                 var panDiagnostics = await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;return {events:p.events,captures:p.captures,frames:p.frames,panning:document.getElementById('viewport').classList.contains('panning'),backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
                                 Console.WriteLine("Kestrel pan diagnostics: " + panDiagnostics);
+                                Console.WriteLine("Kestrel pan composition timeline: " + System.Text.Json.JsonSerializer.Serialize(new
+                                {
+                                    timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
+                                    traceStarted,
+                                    publications = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted),
+                                    renderedScenes = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted),
+                                    // Recorded at the end of OnRender, before platform presentation.
+                                    drawCallbackCompletions = surface.PresentationTimestamps.Where(timestamp => timestamp >= traceStarted),
+                                    physicalPresentationVerified = false
+                                }));
                                 ValidatePanWorkload(panDiagnostics, x, y);
                                 Console.WriteLine("Kestrel pan workload validated (physical presentation remains unqualified).");
                             }

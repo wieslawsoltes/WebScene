@@ -1,0 +1,2481 @@
+{
+  "workloadValidated": true,
+  "physicalPresentationVerified": false,
+  "publicationToDrawMedianMilliseconds": 33.3722295,
+  "records": {
+    "Kestrel pan performance": {
+      "elapsedMilliseconds": 1857.0006,
+      "baseline": {
+        "ContextId": 1,
+        "Timestamp": 91760001607666,
+        "Engine": {
+          "EnqueuedInputs": 3,
+          "DroppedInputs": 0,
+          "ConsumedInputs": 3,
+          "PublishedScenes": 6,
+          "AcquiredScenes": 4,
+          "ExecutedScripts": 0,
+          "ScriptErrors": 0,
+          "DomNodes": 1316,
+          "LayoutPasses": 8,
+          "IframeNodes": 0,
+          "IframeHtmlBytes": 0,
+          "FrameScriptsExecuted": 10,
+          "FrameScriptErrors": 0,
+          "CanvasNodes": 2,
+          "ComponentReady": 0,
+          "CompilationRequests": 15,
+          "CompilationMemoryHits": 0,
+          "CompilationPersistentHits": 0,
+          "CompilationPersistentMisses": 0,
+          "CompilationCacheRejections": 0,
+          "CompilationCacheBytesRead": 0,
+          "CompilationCacheBytesWritten": 0,
+          "CompilationTimeNanoseconds": 3418207,
+          "InputEventsDispatched": 1,
+          "InputCallbacksInvoked": 1,
+          "BusiestCanvasWidthMilli": 806000,
+          "BusiestCanvasHeightMilli": 463000,
+          "CoalescedResizeInputs": 0,
+          "AppliedResizeInputs": 1,
+          "LastResizeDispatchNanoseconds": 91750,
+          "LastScenePublicationNanoseconds": 1935459,
+          "LastResizeOuterListenersNanoseconds": 0,
+          "LastResizeFrameListenersNanoseconds": 0,
+          "LastResizeLayoutNanoseconds": 0,
+          "LastResizeObserversNanoseconds": 0,
+          "CoalescedPointerMoveInputs": 0,
+          "CoalescedWheelInputs": 0,
+          "AppliedPointerMoveInputs": 0,
+          "AppliedWheelInputs": 0,
+          "AppliedAnimationFrames": 2,
+          "CoalescedAnimationFrames": 0,
+          "LastAnimationAdvanceNanoseconds": 0,
+          "LastLayoutNanoseconds": 1490917,
+          "LastSceneBuildNanoseconds": 328167,
+          "MaximumScenePublicationNanoseconds": 1935459
+        },
+        "InputDispatch": {
+          "StructSize": 48,
+          "Reserved": 0,
+          "LastDispatchNanoseconds": 0,
+          "MaximumDispatchNanoseconds": 0,
+          "LastDispatchSequence": 0,
+          "DispatchedInputs": 0,
+          "TotalDispatchNanoseconds": 0
+        },
+        "AnimationFrames": {
+          "StructSize": 48,
+          "Reserved": 0,
+          "DispatchedFrames": 2,
+          "TotalDispatchNanoseconds": 1750,
+          "LastDispatchNanoseconds": 1416,
+          "MaximumDispatchNanoseconds": 1416,
+          "LastTimestampMicroseconds": 91756932908
+        },
+        "SceneFlow": {
+          "StructSize": 64,
+          "Reserved": 0,
+          "PublicationAttempts": 7,
+          "BlockedPublications": 0,
+          "AcknowledgedScenes": 4,
+          "TotalAcknowledgementNanoseconds": 393463332,
+          "LastAcknowledgementNanoseconds": 22471291,
+          "MaximumAcknowledgementNanoseconds": 175062791,
+          "AcknowledgedRevision": 6
+        },
+        "ResizeFrames": {
+          "StructSize": 136,
+          "Reserved": 0,
+          "SubmittedPairs": 0,
+          "AppliedPairs": 0,
+          "PublishedPairs": 0,
+          "TotalQueueNanoseconds": 0,
+          "LastQueueNanoseconds": 0,
+          "MaximumQueueNanoseconds": 0,
+          "TotalDispatchNanoseconds": 0,
+          "LastDispatchNanoseconds": 0,
+          "MaximumDispatchNanoseconds": 0,
+          "AnimationFrameCallbacks": 0,
+          "TotalAnimationFrameBatchNanoseconds": 0,
+          "LastAnimationFrameBatchNanoseconds": 0,
+          "MaximumAnimationFrameBatchNanoseconds": 0,
+          "TotalToPublicationNanoseconds": 0,
+          "LastToPublicationNanoseconds": 0,
+          "MaximumToPublicationNanoseconds": 0
+        },
+        "ResourceCache": {
+          "StructSize": 56,
+          "Reserved": 0,
+          "Requests": 1,
+          "Hits": 0,
+          "Misses": 1,
+          "Rejections": 0,
+          "BytesRead": 0,
+          "BytesWritten": 0
+        },
+        "RuntimeWork": {
+          "StructSize": 168,
+          "Reserved": 0,
+          "TimersScheduled": 0,
+          "TimersFired": 0,
+          "TimersCancelled": 0,
+          "LateTimers": 0,
+          "TotalTimerLatenessNanoseconds": 0,
+          "AnimationFramesRequested": 0,
+          "AnimationFramesInvoked": 0,
+          "AnimationFramesCancelled": 0,
+          "MicrotaskCheckpoints": 0,
+          "WorkerWaits": 0,
+          "WorkerSignalledWakes": 0,
+          "WorkerTimeoutWakes": 0,
+          "SceneBuilds": 0,
+          "NoDamageSceneBuilds": 0,
+          "FullCheckpointSceneBuilds": 0,
+          "ArbitraryEvaluationCalls": 0,
+          "GeneratedInvokeCalls": 0,
+          "GeneratedCallbackCalls": 0,
+          "ArbitraryEvaluationSourceBytes": 0,
+          "GeneratedRequestBytes": 0
+        },
+        "ProcessCache": {
+          "StructSize": 112,
+          "Reserved": 0,
+          "CompilationMemoryHits": 0,
+          "CompilationLeaders": 15,
+          "CompilationWaiters": 0,
+          "CompilationSharedBytes": 0,
+          "ResourceMemoryHits": 0,
+          "ResourceLoadLeaders": 1,
+          "ResourceLoadWaiters": 0,
+          "ResourceSharedBytes": 0,
+          "ScriptSourceMemoryHits": 0,
+          "ScriptSourceSharedBytes": 0,
+          "SharedIsolateSlot": 18446744073709551615,
+          "SharedIsolateActiveContexts": 1,
+          "SharedIsolatePeakContexts": 1
+        },
+        "Memory": {
+          "StructSize": 608,
+          "Reserved": 0,
+          "V8TotalHeapBytes": 5701632,
+          "V8UsedHeapBytes": 3096480,
+          "V8ExecutableHeapBytes": 524288,
+          "V8PhysicalHeapBytes": 5701632,
+          "V8ExternalBytes": 442729,
+          "V8MallocedBytes": 73812,
+          "V8PeakMallocedBytes": 1484800,
+          "LatestSceneBytes": 127068,
+          "ProcessCompilationCacheBytes": 250464,
+          "ProcessResourceCacheBytes": 0,
+          "V8CodeAndMetadataBytes": 0,
+          "V8BytecodeAndMetadataBytes": 0,
+          "V8ExternalScriptSourceBytes": 785023,
+          "NativeDomNodeCount": 1051,
+          "NativeDomNodeSizeBytes": 1000,
+          "NativeDomInlineBytes": 1051000,
+          "NativeDomPseudoStorageBytes": 6800,
+          "NativeDomCanvasNodeCount": 2,
+          "NativeDomCanvasStorageBytes": 448,
+          "NativeDomAnimationCount": 3,
+          "NativeDomAnimationStorageBytes": 3801,
+          "NativeDomCustomPropertyNodeCount": 1,
+          "NativeDomCustomPropertyEntryCount": 22,
+          "NativeDomCustomPropertyStorageBytes": 2700,
+          "NativeDomBackgroundImageCount": 2,
+          "NativeDomBackgroundImageStorageBytes": 1006,
+          "NativeDomGridCount": 1,
+          "NativeDomGridStorageBytes": 569,
+          "NativeDomAuthoredStyleNodeCount": 12,
+          "NativeDomAuthoredStyleEntryCount": 14,
+          "NativeDomAuthoredStyleStorageBytes": 2692,
+          "NativeCssRuleCount": 407,
+          "NativeCssRuleStorageBytes": 16495,
+          "NativeCssIndexStorageBytes": 45535,
+          "ProcessSharedCssRuleCount": 407,
+          "ProcessSharedCssRuleStorageBytes": 369573,
+          "LowMemoryNotifications": 0,
+          "NativeDomAttributeNodeCount": 678,
+          "NativeDomAttributeEntryCount": 1848,
+          "NativeDomAttributeStorageBytes": 183026,
+          "NativeWrapperHandleCount": 269,
+          "NativeWrapperStorageBytes": 11000,
+          "NativeTextMeasurementCacheEntryCount": 425,
+          "NativeTextMeasurementCacheStorageBytes": 99812,
+          "ProcessCompilationMappedCacheBytes": 0,
+          "ProcessResourceMappedCacheBytes": 0,
+          "NativeDomTextualStyleCount": 751,
+          "NativeDomTextualStyleStorageBytes": 485542,
+          "NativeDomNodePoolReservedBytes": 1088000,
+          "NativeDomNodePoolPeakBytes": 1088000,
+          "NativeDomTableLayoutCount": 0,
+          "NativeDomTableLayoutStorageBytes": 0,
+          "NativeDomFormControlCount": 52,
+          "NativeDomFormControlStorageBytes": 4108,
+          "HiddenLowMemoryNotifications": 0,
+          "NativeEventListenerCount": 30,
+          "NativeEventListenerStorageBytes": 4685,
+          "V8YoungSpaceUsedBytes": 660600,
+          "V8YoungSpacePhysicalBytes": 2097152,
+          "V8OldSpaceUsedBytes": 1920184,
+          "V8OldSpacePhysicalBytes": 2097152,
+          "V8CodeSpaceUsedBytes": 196928,
+          "V8CodeSpacePhysicalBytes": 524288,
+          "V8MapSpaceUsedBytes": 0,
+          "V8MapSpacePhysicalBytes": 0,
+          "V8LargeObjectSpaceUsedBytes": 187472,
+          "V8LargeObjectSpacePhysicalBytes": 196608,
+          "V8ReadOnlySpaceUsedBytes": 1816740,
+          "V8ReadOnlySpacePhysicalBytes": 1835008,
+          "V8SharedSpaceUsedBytes": 0,
+          "V8SharedSpacePhysicalBytes": 0,
+          "V8TrustedSpaceUsedBytes": 131296,
+          "V8TrustedSpacePhysicalBytes": 786432,
+          "PendingSceneCount": 0,
+          "PendingSceneBytes": 0
+        },
+        "InteropPool": {
+          "StructSize": 200,
+          "Version": 3,
+          "OutstandingResults": 0,
+          "PooledBytes": 1022,
+          "PoolHits": 4,
+          "PoolMisses": 1,
+          "OversizeAllocations": 0,
+          "HighWaterOutstandingResults": 1,
+          "PooledRequestRecords": 0,
+          "RequestPoolHits": 0,
+          "RequestPoolMisses": 0,
+          "RequestOversizeAllocations": 0,
+          "ActiveOperationSlots": 0,
+          "AvailableOperationSlots": 1,
+          "OperationSlotHighWater": 1,
+          "PooledResultBytes4K": 1022,
+          "PooledResultBytes16K": 0,
+          "PooledResultBytes64K": 0,
+          "PooledResultBytes256K": 0,
+          "PooledResultBytes1M": 0,
+          "TakenResultLeases": 0,
+          "OperationResultLeases": 0,
+          "QueuedCallbacks": 0,
+          "TakenCallbackLeases": 0,
+          "PendingCallbackPromises": 0,
+          "CallbackQueueHighWater": 0
+        },
+        "RendererMemory": {
+          "RetainedLayerCount": 0,
+          "RetainedCommandCount": 0,
+          "LogicalBitmapBytes": 0,
+          "IsolationLayerCount": 0,
+          "IsolationLogicalBitmapBytes": 0,
+          "DomCommandCount": 0,
+          "StringCount": 0,
+          "StringBytes": 0,
+          "TypefaceCount": 0,
+          "SvgPictureCount": 0,
+          "ProcessSvgPictureCount": 0,
+          "ProcessSvgPictureReferenceCount": 0,
+          "ProcessSvgPictureMemoryHits": 0
+        },
+        "Surface": {
+          "RenderedScenes": 4,
+          "RoutedInputEvents": 0,
+          "AcceptedInputEvents": 0,
+          "CompositionUiWakes": 0,
+          "PendingCompositionPublications": 0,
+          "ResizePublicationNotifications": 0
+        },
+        "ProcessWebTypefaces": {
+          "Entries": 0,
+          "References": 0,
+          "Hits": 0,
+          "Misses": 0
+        },
+        "ProcessComposition": {
+          "AnimationFrames": 1,
+          "Renders": 0,
+          "AppliedDiffs": 0,
+          "InvalidationCalls": 0,
+          "DamageRectangles": 0,
+          "ChangedLayers": 0,
+          "EmptyDamageDiffs": 0,
+          "PartialDamageDiffs": 0,
+          "FullInvalidations": 0,
+          "SuppressedLiveResizeAnimationFrames": 0,
+          "SubmittedAnimationFrames": 0,
+          "SkippedEmptyAnimationFrames": 1,
+          "RenderCallbacks": 0,
+          "UnchangedRenderCallbacks": 0,
+          "LastAnimationFrameDemand": 0
+        }
+      },
+      "after": {
+        "ContextId": 1,
+        "Timestamp": 91761865174875,
+        "Engine": {
+          "EnqueuedInputs": 147,
+          "DroppedInputs": 0,
+          "ConsumedInputs": 147,
+          "PublishedScenes": 70,
+          "AcquiredScenes": 68,
+          "ExecutedScripts": 0,
+          "ScriptErrors": 0,
+          "DomNodes": 1447,
+          "LayoutPasses": 139,
+          "IframeNodes": 0,
+          "IframeHtmlBytes": 0,
+          "FrameScriptsExecuted": 10,
+          "FrameScriptErrors": 0,
+          "CanvasNodes": 2,
+          "ComponentReady": 0,
+          "CompilationRequests": 15,
+          "CompilationMemoryHits": 0,
+          "CompilationPersistentHits": 0,
+          "CompilationPersistentMisses": 0,
+          "CompilationCacheRejections": 0,
+          "CompilationCacheBytesRead": 0,
+          "CompilationCacheBytesWritten": 0,
+          "CompilationTimeNanoseconds": 3418207,
+          "InputEventsDispatched": 167,
+          "InputCallbacksInvoked": 150,
+          "BusiestCanvasWidthMilli": 806000,
+          "BusiestCanvasHeightMilli": 463000,
+          "CoalescedResizeInputs": 0,
+          "AppliedResizeInputs": 1,
+          "LastResizeDispatchNanoseconds": 91750,
+          "LastScenePublicationNanoseconds": 1002833,
+          "LastResizeOuterListenersNanoseconds": 0,
+          "LastResizeFrameListenersNanoseconds": 0,
+          "LastResizeLayoutNanoseconds": 0,
+          "LastResizeObserversNanoseconds": 0,
+          "CoalescedPointerMoveInputs": 8,
+          "CoalescedWheelInputs": 0,
+          "AppliedPointerMoveInputs": 72,
+          "AppliedWheelInputs": 0,
+          "AppliedAnimationFrames": 64,
+          "CoalescedAnimationFrames": 0,
+          "LastAnimationAdvanceNanoseconds": 0,
+          "LastLayoutNanoseconds": 574750,
+          "LastSceneBuildNanoseconds": 308792,
+          "MaximumScenePublicationNanoseconds": 1935459
+        },
+        "InputDispatch": {
+          "StructSize": 48,
+          "Reserved": 0,
+          "LastDispatchNanoseconds": 2961292,
+          "MaximumDispatchNanoseconds": 18233708,
+          "LastDispatchSequence": 639244577775456243,
+          "DispatchedInputs": 74,
+          "TotalDispatchNanoseconds": 279052165
+        },
+        "AnimationFrames": {
+          "StructSize": 48,
+          "Reserved": 0,
+          "DispatchedFrames": 64,
+          "TotalDispatchNanoseconds": 51375,
+          "LastDispatchNanoseconds": 917,
+          "MaximumDispatchNanoseconds": 3209,
+          "LastTimestampMicroseconds": 91761371068
+        },
+        "SceneFlow": {
+          "StructSize": 64,
+          "Reserved": 0,
+          "PublicationAttempts": 158,
+          "BlockedPublications": 0,
+          "AcknowledgedScenes": 68,
+          "TotalAcknowledgementNanoseconds": 2387493378,
+          "LastAcknowledgementNanoseconds": 34422208,
+          "MaximumAcknowledgementNanoseconds": 175062791,
+          "AcknowledgedRevision": 70
+        },
+        "ResizeFrames": {
+          "StructSize": 136,
+          "Reserved": 0,
+          "SubmittedPairs": 0,
+          "AppliedPairs": 0,
+          "PublishedPairs": 0,
+          "TotalQueueNanoseconds": 0,
+          "LastQueueNanoseconds": 0,
+          "MaximumQueueNanoseconds": 0,
+          "TotalDispatchNanoseconds": 0,
+          "LastDispatchNanoseconds": 0,
+          "MaximumDispatchNanoseconds": 0,
+          "AnimationFrameCallbacks": 0,
+          "TotalAnimationFrameBatchNanoseconds": 0,
+          "LastAnimationFrameBatchNanoseconds": 0,
+          "MaximumAnimationFrameBatchNanoseconds": 0,
+          "TotalToPublicationNanoseconds": 0,
+          "LastToPublicationNanoseconds": 0,
+          "MaximumToPublicationNanoseconds": 0
+        },
+        "ResourceCache": {
+          "StructSize": 56,
+          "Reserved": 0,
+          "Requests": 1,
+          "Hits": 0,
+          "Misses": 1,
+          "Rejections": 0,
+          "BytesRead": 0,
+          "BytesWritten": 0
+        },
+        "RuntimeWork": {
+          "StructSize": 168,
+          "Reserved": 0,
+          "TimersScheduled": 0,
+          "TimersFired": 0,
+          "TimersCancelled": 0,
+          "LateTimers": 0,
+          "TotalTimerLatenessNanoseconds": 0,
+          "AnimationFramesRequested": 57,
+          "AnimationFramesInvoked": 57,
+          "AnimationFramesCancelled": 0,
+          "MicrotaskCheckpoints": 223,
+          "WorkerWaits": 270,
+          "WorkerSignalledWakes": 243,
+          "WorkerTimeoutWakes": 26,
+          "SceneBuilds": 64,
+          "NoDamageSceneBuilds": 1,
+          "FullCheckpointSceneBuilds": 0,
+          "ArbitraryEvaluationCalls": 0,
+          "GeneratedInvokeCalls": 0,
+          "GeneratedCallbackCalls": 0,
+          "ArbitraryEvaluationSourceBytes": 0,
+          "GeneratedRequestBytes": 0
+        },
+        "ProcessCache": {
+          "StructSize": 112,
+          "Reserved": 0,
+          "CompilationMemoryHits": 0,
+          "CompilationLeaders": 15,
+          "CompilationWaiters": 0,
+          "CompilationSharedBytes": 0,
+          "ResourceMemoryHits": 0,
+          "ResourceLoadLeaders": 1,
+          "ResourceLoadWaiters": 0,
+          "ResourceSharedBytes": 0,
+          "ScriptSourceMemoryHits": 0,
+          "ScriptSourceSharedBytes": 0,
+          "SharedIsolateSlot": 18446744073709551615,
+          "SharedIsolateActiveContexts": 1,
+          "SharedIsolatePeakContexts": 1
+        },
+        "Memory": {
+          "StructSize": 608,
+          "Reserved": 0,
+          "V8TotalHeapBytes": 5701632,
+          "V8UsedHeapBytes": 3096480,
+          "V8ExecutableHeapBytes": 524288,
+          "V8PhysicalHeapBytes": 5701632,
+          "V8ExternalBytes": 442729,
+          "V8MallocedBytes": 73812,
+          "V8PeakMallocedBytes": 1484800,
+          "LatestSceneBytes": 162360,
+          "ProcessCompilationCacheBytes": 250464,
+          "ProcessResourceCacheBytes": 0,
+          "V8CodeAndMetadataBytes": 0,
+          "V8BytecodeAndMetadataBytes": 0,
+          "V8ExternalScriptSourceBytes": 785023,
+          "NativeDomNodeCount": 1051,
+          "NativeDomNodeSizeBytes": 1000,
+          "NativeDomInlineBytes": 1051000,
+          "NativeDomPseudoStorageBytes": 6800,
+          "NativeDomCanvasNodeCount": 2,
+          "NativeDomCanvasStorageBytes": 448,
+          "NativeDomAnimationCount": 3,
+          "NativeDomAnimationStorageBytes": 3801,
+          "NativeDomCustomPropertyNodeCount": 1,
+          "NativeDomCustomPropertyEntryCount": 22,
+          "NativeDomCustomPropertyStorageBytes": 2700,
+          "NativeDomBackgroundImageCount": 2,
+          "NativeDomBackgroundImageStorageBytes": 1006,
+          "NativeDomGridCount": 1,
+          "NativeDomGridStorageBytes": 569,
+          "NativeDomAuthoredStyleNodeCount": 12,
+          "NativeDomAuthoredStyleEntryCount": 14,
+          "NativeDomAuthoredStyleStorageBytes": 2692,
+          "NativeCssRuleCount": 407,
+          "NativeCssRuleStorageBytes": 16495,
+          "NativeCssIndexStorageBytes": 45535,
+          "ProcessSharedCssRuleCount": 407,
+          "ProcessSharedCssRuleStorageBytes": 369573,
+          "LowMemoryNotifications": 0,
+          "NativeDomAttributeNodeCount": 678,
+          "NativeDomAttributeEntryCount": 1848,
+          "NativeDomAttributeStorageBytes": 183026,
+          "NativeWrapperHandleCount": 269,
+          "NativeWrapperStorageBytes": 11000,
+          "NativeTextMeasurementCacheEntryCount": 425,
+          "NativeTextMeasurementCacheStorageBytes": 99812,
+          "ProcessCompilationMappedCacheBytes": 0,
+          "ProcessResourceMappedCacheBytes": 0,
+          "NativeDomTextualStyleCount": 751,
+          "NativeDomTextualStyleStorageBytes": 485542,
+          "NativeDomNodePoolReservedBytes": 1088000,
+          "NativeDomNodePoolPeakBytes": 1088000,
+          "NativeDomTableLayoutCount": 0,
+          "NativeDomTableLayoutStorageBytes": 0,
+          "NativeDomFormControlCount": 52,
+          "NativeDomFormControlStorageBytes": 4108,
+          "HiddenLowMemoryNotifications": 0,
+          "NativeEventListenerCount": 30,
+          "NativeEventListenerStorageBytes": 4685,
+          "V8YoungSpaceUsedBytes": 660600,
+          "V8YoungSpacePhysicalBytes": 2097152,
+          "V8OldSpaceUsedBytes": 1920184,
+          "V8OldSpacePhysicalBytes": 2097152,
+          "V8CodeSpaceUsedBytes": 196928,
+          "V8CodeSpacePhysicalBytes": 524288,
+          "V8MapSpaceUsedBytes": 0,
+          "V8MapSpacePhysicalBytes": 0,
+          "V8LargeObjectSpaceUsedBytes": 187472,
+          "V8LargeObjectSpacePhysicalBytes": 196608,
+          "V8ReadOnlySpaceUsedBytes": 1816740,
+          "V8ReadOnlySpacePhysicalBytes": 1835008,
+          "V8SharedSpaceUsedBytes": 0,
+          "V8SharedSpacePhysicalBytes": 0,
+          "V8TrustedSpaceUsedBytes": 131296,
+          "V8TrustedSpacePhysicalBytes": 786432,
+          "PendingSceneCount": 0,
+          "PendingSceneBytes": 0
+        },
+        "InteropPool": {
+          "StructSize": 200,
+          "Version": 3,
+          "OutstandingResults": 0,
+          "PooledBytes": 1022,
+          "PoolHits": 4,
+          "PoolMisses": 1,
+          "OversizeAllocations": 0,
+          "HighWaterOutstandingResults": 1,
+          "PooledRequestRecords": 0,
+          "RequestPoolHits": 0,
+          "RequestPoolMisses": 0,
+          "RequestOversizeAllocations": 0,
+          "ActiveOperationSlots": 0,
+          "AvailableOperationSlots": 1,
+          "OperationSlotHighWater": 1,
+          "PooledResultBytes4K": 1022,
+          "PooledResultBytes16K": 0,
+          "PooledResultBytes64K": 0,
+          "PooledResultBytes256K": 0,
+          "PooledResultBytes1M": 0,
+          "TakenResultLeases": 0,
+          "OperationResultLeases": 0,
+          "QueuedCallbacks": 0,
+          "TakenCallbackLeases": 0,
+          "PendingCallbackPromises": 0,
+          "CallbackQueueHighWater": 0
+        },
+        "RendererMemory": {
+          "RetainedLayerCount": 1,
+          "RetainedCommandCount": 315,
+          "LogicalBitmapBytes": 5970848,
+          "IsolationLayerCount": 0,
+          "IsolationLogicalBitmapBytes": 0,
+          "DomCommandCount": 484,
+          "StringCount": 3283,
+          "StringBytes": 170674,
+          "TypefaceCount": 2,
+          "SvgPictureCount": 73,
+          "ProcessSvgPictureCount": 73,
+          "ProcessSvgPictureReferenceCount": 73,
+          "ProcessSvgPictureMemoryHits": 0
+        },
+        "Surface": {
+          "RenderedScenes": 68,
+          "RoutedInputEvents": 0,
+          "AcceptedInputEvents": 0,
+          "CompositionUiWakes": 0,
+          "PendingCompositionPublications": 0,
+          "ResizePublicationNotifications": 0
+        },
+        "ProcessWebTypefaces": {
+          "Entries": 0,
+          "References": 0,
+          "Hits": 0,
+          "Misses": 0
+        },
+        "ProcessComposition": {
+          "AnimationFrames": 97,
+          "Renders": 64,
+          "AppliedDiffs": 64,
+          "InvalidationCalls": 65,
+          "DamageRectangles": 177,
+          "ChangedLayers": 57,
+          "EmptyDamageDiffs": 1,
+          "PartialDamageDiffs": 63,
+          "FullInvalidations": 0,
+          "SuppressedLiveResizeAnimationFrames": 0,
+          "SubmittedAnimationFrames": 62,
+          "SkippedEmptyAnimationFrames": 35,
+          "RenderCallbacks": 65,
+          "UnchangedRenderCallbacks": 0,
+          "LastAnimationFrameDemand": 0
+        }
+      },
+      "delta": {
+        "Elapsed": "00:00:01.8635672",
+        "EnqueuedInputs": 144,
+        "DroppedInputs": 0,
+        "ConsumedInputs": 144,
+        "ExecutedScripts": 0,
+        "ScriptErrors": 0,
+        "LayoutPasses": 131,
+        "AppliedAnimationFrames": 62,
+        "CoalescedAnimationFrames": 0,
+        "PublicationAttempts": 151,
+        "BlockedPublications": 0,
+        "PublishedScenes": 64,
+        "AcquiredScenes": 64,
+        "AcknowledgedScenes": 64,
+        "RenderedScenes": 64,
+        "CompositionUiWakes": 0,
+        "RoutedInputEvents": 0,
+        "AcceptedInputEvents": 0,
+        "ResourceRequests": 0,
+        "ResourceHits": 0,
+        "ResourceMisses": 0,
+        "InteropPoolHits": 0,
+        "InteropPoolMisses": 0,
+        "InteropRequestPoolHits": 0,
+        "InteropRequestPoolMisses": 0,
+        "TimersScheduled": 0,
+        "TimersFired": 0,
+        "TimersCancelled": 0,
+        "LateTimers": 0,
+        "TotalTimerLatenessNanoseconds": 0,
+        "AnimationFramesRequested": 57,
+        "AnimationFramesInvoked": 57,
+        "AnimationFramesCancelled": 0,
+        "MicrotaskCheckpoints": 223,
+        "WorkerWaits": 270,
+        "WorkerSignalledWakes": 243,
+        "WorkerTimeoutWakes": 26,
+        "SceneBuilds": 64,
+        "NoDamageSceneBuilds": 1,
+        "FullCheckpointSceneBuilds": 0,
+        "ArbitraryEvaluationCalls": 0,
+        "GeneratedInvokeCalls": 0,
+        "GeneratedCallbackCalls": 0,
+        "ArbitraryEvaluationSourceBytes": 0,
+        "GeneratedRequestBytes": 0,
+        "WebTypefaceCacheHits": 0,
+        "WebTypefaceCacheMisses": 0,
+        "CompositionAnimationFrames": 96,
+        "CompositionRenders": 64,
+        "CompositionAppliedDiffs": 64,
+        "CompositionInvalidations": 65,
+        "CompositionFullInvalidations": 0,
+        "CompositionSubmittedAnimationFrames": 62,
+        "CompositionSkippedEmptyAnimationFrames": 34,
+        "CompositionRenderCallbacks": 65,
+        "CompositionUnchangedRenderCallbacks": 0
+      }
+    },
+    "Kestrel pan diagnostics": {
+      "events": [
+        {
+          "type": "pointerdown",
+          "x": 625,
+          "y": 436.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760026.392125,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 633,
+          "y": 438.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760036.787958,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 637,
+          "y": 439.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760058.650541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 641,
+          "y": 440.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760063.603833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 645,
+          "y": 441.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760082.749916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 649,
+          "y": 442.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760104.884208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 653,
+          "y": 443.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760127.979,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 657,
+          "y": 444.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760130.74025,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 661,
+          "y": 445.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760148.710458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 665,
+          "y": 446.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760169.396125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 669,
+          "y": 447.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760191.75025,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 673,
+          "y": 448.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760212.110583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 677,
+          "y": 449.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760214.771208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 685,
+          "y": 451.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760252.659625,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 689,
+          "y": 452.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760271.96525,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 693,
+          "y": 453.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760295.125416,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 701,
+          "y": 455.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760320.41025,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 705,
+          "y": 456.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760340.350208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 709,
+          "y": 457.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760362.098833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 713,
+          "y": 458.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760384.547333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 717,
+          "y": 459.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760387.540583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 721,
+          "y": 460.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760407.373083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 725,
+          "y": 461.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760427.394458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 729,
+          "y": 462.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760450.800375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 733,
+          "y": 463.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760453.688875,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 737,
+          "y": 464.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760471.811708,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 741,
+          "y": 465.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760494.208125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 745,
+          "y": 466.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760516.126208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 753,
+          "y": 468.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760539.91125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 757,
+          "y": 469.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760560.227375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 761,
+          "y": 470.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760580.112666,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 765,
+          "y": 471.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760600.838708,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 773,
+          "y": 473.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760621.665083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 777,
+          "y": 474.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760640.685416,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 781,
+          "y": 475.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760660.508541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 785,
+          "y": 476.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760681.631916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 781,
+          "y": 475.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760700.943916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 777,
+          "y": 474.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760720.427166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 773,
+          "y": 473.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760739.016791,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 769,
+          "y": 472.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760742.175791,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 765,
+          "y": 471.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760766.561916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 761,
+          "y": 470.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760788.857375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 757,
+          "y": 469.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760810.13425,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 753,
+          "y": 468.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760813.048,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 749,
+          "y": 467.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760829.682375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 745,
+          "y": 466.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760852.278958,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 741,
+          "y": 465.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760872.160416,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 737,
+          "y": 464.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760892.989375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 733,
+          "y": 463.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760895.51825,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 729,
+          "y": 462.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760914.307208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 725,
+          "y": 461.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760933.458166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 721,
+          "y": 460.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760956.0035,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 717,
+          "y": 459.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760972.711666,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 713,
+          "y": 458.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760994.292166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 709,
+          "y": 457.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91760996.884208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 705,
+          "y": 456.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761014.466375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 701,
+          "y": 455.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761034.509833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 697,
+          "y": 454.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761053.768,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 693,
+          "y": 453.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761071.822,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 689,
+          "y": 452.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761091.253708,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 685,
+          "y": 451.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761110.404333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 677,
+          "y": 449.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761132.013416,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 673,
+          "y": 448.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761150.848875,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 669,
+          "y": 447.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761169.94,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 665,
+          "y": 446.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761186.776291,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 661,
+          "y": 445.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761207.531166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 657,
+          "y": 444.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761226.545625,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 653,
+          "y": 443.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761245.634,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 649,
+          "y": 442.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761248.116333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 637,
+          "y": 439.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761307.664375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 633,
+          "y": 438.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761322.722,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 629,
+          "y": 437.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761349.111291,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 625,
+          "y": 436.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91761355.918125,
+          "panning": true
+        },
+        {
+          "type": "pointerup",
+          "x": 625,
+          "y": 436.5,
+          "button": 2,
+          "buttons": 0,
+          "time": 91761365.035916,
+          "panning": false
+        }
+      ],
+      "captures": [],
+      "frames": [
+        {
+          "timestamp": 91760035.777458,
+          "start": 91760042.126166,
+          "duration": 1.9514999985694885
+        },
+        {
+          "timestamp": 91760053.15404099,
+          "start": 91760064.429708,
+          "duration": 1.5311249941587448
+        },
+        {
+          "timestamp": 91760079.744333,
+          "start": 91760083.5595,
+          "duration": 0.6601250022649765
+        },
+        {
+          "timestamp": 91760102.07775,
+          "start": 91760105.554041,
+          "duration": 0.6067920029163361
+        },
+        {
+          "timestamp": 91760125.503458,
+          "start": 91760131.29625,
+          "duration": 0.5764999985694885
+        },
+        {
+          "timestamp": 91760146.078791,
+          "start": 91760149.442416,
+          "duration": 0.6803750097751617
+        },
+        {
+          "timestamp": 91760166.77633299,
+          "start": 91760170.079916,
+          "duration": 0.5417499989271164
+        },
+        {
+          "timestamp": 91760189.18075,
+          "start": 91760192.304916,
+          "duration": 0.5354590117931366
+        },
+        {
+          "timestamp": 91760209.607625,
+          "start": 91760215.272,
+          "duration": 0.5563330054283142
+        },
+        {
+          "timestamp": 91760249.97504099,
+          "start": 91760253.303875,
+          "duration": 0.532708004117012
+        },
+        {
+          "timestamp": 91760269.785583,
+          "start": 91760272.560083,
+          "duration": 0.7537920027971268
+        },
+        {
+          "timestamp": 91760292.583708,
+          "start": 91760295.913583,
+          "duration": 0.8098750114440918
+        },
+        {
+          "timestamp": 91760315.9505,
+          "start": 91760321.131291,
+          "duration": 0.658624991774559
+        },
+        {
+          "timestamp": 91760337.613208,
+          "start": 91760340.957666,
+          "duration": 0.528084009885788
+        },
+        {
+          "timestamp": 91760359.289125,
+          "start": 91760362.744291,
+          "duration": 0.5539590120315552
+        },
+        {
+          "timestamp": 91760403.69912499,
+          "start": 91760408.055416,
+          "duration": 0.6549170017242432
+        },
+        {
+          "timestamp": 91760423.265416,
+          "start": 91760428.288166,
+          "duration": 1.0339590013027191
+        },
+        {
+          "timestamp": 91760448.220625,
+          "start": 91760454.413666,
+          "duration": 0.5903750061988831
+        },
+        {
+          "timestamp": 91760469.01379101,
+          "start": 91760472.494375,
+          "duration": 0.8091249912977219
+        },
+        {
+          "timestamp": 91760491.297791,
+          "start": 91760495.054875,
+          "duration": 0.6380829960107803
+        },
+        {
+          "timestamp": 91760513.14325,
+          "start": 91760516.8075,
+          "duration": 0.8402500003576279
+        },
+        {
+          "timestamp": 91760536.980958,
+          "start": 91760540.596166,
+          "duration": 0.5729999989271164
+        },
+        {
+          "timestamp": 91760557.73829101,
+          "start": 91760560.88125,
+          "duration": 0.71458300948143
+        },
+        {
+          "timestamp": 91760577.54458301,
+          "start": 91760580.85075,
+          "duration": 0.5129159986972809
+        },
+        {
+          "timestamp": 91760597.173083,
+          "start": 91760602.36125,
+          "duration": 0.6947910040616989
+        },
+        {
+          "timestamp": 91760619.020625,
+          "start": 91760622.290208,
+          "duration": 0.5503749996423721
+        },
+        {
+          "timestamp": 91760638.378125,
+          "start": 91760641.313875,
+          "duration": 0.5725829899311066
+        },
+        {
+          "timestamp": 91760658.163125,
+          "start": 91760661.073708,
+          "duration": 0.5339580029249191
+        },
+        {
+          "timestamp": 91760679.310791,
+          "start": 91760682.264041,
+          "duration": 0.5538339912891388
+        },
+        {
+          "timestamp": 91760717.952833,
+          "start": 91760721.036458,
+          "duration": 0.6992499977350235
+        },
+        {
+          "timestamp": 91760735.703541,
+          "start": 91760742.831125,
+          "duration": 0.675040990114212
+        },
+        {
+          "timestamp": 91760761.581666,
+          "start": 91760767.861041,
+          "duration": 0.9136670082807541
+        },
+        {
+          "timestamp": 91760785.49308302,
+          "start": 91760790.8595,
+          "duration": 0.6487910002470016
+        },
+        {
+          "timestamp": 91760806.953583,
+          "start": 91760813.648541,
+          "duration": 0.9930419921875
+        },
+        {
+          "timestamp": 91760826.930125,
+          "start": 91760830.455083,
+          "duration": 0.6273750066757202
+        },
+        {
+          "timestamp": 91760849.731041,
+          "start": 91760852.914583,
+          "duration": 0.7527080029249191
+        },
+        {
+          "timestamp": 91760869.367916,
+          "start": 91760872.893041,
+          "duration": 0.6643339991569519
+        },
+        {
+          "timestamp": 91760890.495666,
+          "start": 91760896.064208,
+          "duration": 0.6480419933795929
+        },
+        {
+          "timestamp": 91760911.96379101,
+          "start": 91760914.881333,
+          "duration": 0.6356250047683716
+        },
+        {
+          "timestamp": 91760952.041458,
+          "start": 91760957.431416,
+          "duration": 0.6498750001192093
+        },
+        {
+          "timestamp": 91760969.957791,
+          "start": 91760973.371541,
+          "duration": 0.5867920070886612
+        },
+        {
+          "timestamp": 91760991.721666,
+          "start": 91760997.520458,
+          "duration": 0.5911670029163361
+        },
+        {
+          "timestamp": 91761012.152875,
+          "start": 91761015.1095,
+          "duration": 0.5790829956531525
+        },
+        {
+          "timestamp": 91761051.337166,
+          "start": 91761054.389958,
+          "duration": 0.7157920002937317
+        },
+        {
+          "timestamp": 91761069.475666,
+          "start": 91761072.472791,
+          "duration": 0.6372089982032776
+        },
+        {
+          "timestamp": 91761088.907166,
+          "start": 91761091.923333,
+          "duration": 0.5967079997062683
+        },
+        {
+          "timestamp": 91761108.090916,
+          "start": 91761111.005625,
+          "duration": 0.4493750035762787
+        },
+        {
+          "timestamp": 91761128.732625,
+          "start": 91761133.953541,
+          "duration": 0.6931670010089874
+        },
+        {
+          "timestamp": 91761167.45158301,
+          "start": 91761170.563333,
+          "duration": 0.668957993388176
+        },
+        {
+          "timestamp": 91761184.30258301,
+          "start": 91761187.439708,
+          "duration": 0.5696250051259995
+        },
+        {
+          "timestamp": 91761205.254625,
+          "start": 91761208.131166,
+          "duration": 0.5298340022563934
+        },
+        {
+          "timestamp": 91761224.28075,
+          "start": 91761227.124333,
+          "duration": 0.5235830098390579
+        },
+        {
+          "timestamp": 91761243.248458,
+          "start": 91761248.626791,
+          "duration": 0.6551250070333481
+        },
+        {
+          "timestamp": 91761301.90908301,
+          "start": 91761309.179416,
+          "duration": 1.6092090010643005
+        },
+        {
+          "timestamp": 91761319.784916,
+          "start": 91761324.026458,
+          "duration": 1.6230420023202896
+        },
+        {
+          "timestamp": 91761345.49983299,
+          "start": 91761358.6465,
+          "duration": 0.7779579907655716
+        },
+        {
+          "timestamp": 91761371.068,
+          "start": 91761371.094916,
+          "duration": 0.894666999578476
+        }
+      ],
+      "panning": false,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    "Kestrel pan composition timeline": {
+      "timestampFrequency": 1000000000,
+      "traceStarted": 91760008262041,
+      "publications": [
+        {
+          "Timestamp": 91760027686750,
+          "Revision": 7,
+          "ConsumedInputSequence": 639244577775456162,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760046859750,
+          "Revision": 8,
+          "ConsumedInputSequence": 639244577775456164,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760067639541,
+          "Revision": 9,
+          "ConsumedInputSequence": 639244577775456166,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760085442666,
+          "Revision": 10,
+          "ConsumedInputSequence": 639244577775456167,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760107624333,
+          "Revision": 11,
+          "ConsumedInputSequence": 639244577775456168,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760133223500,
+          "Revision": 12,
+          "ConsumedInputSequence": 639244577775456170,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760151254208,
+          "Revision": 13,
+          "ConsumedInputSequence": 639244577775456171,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760171951041,
+          "Revision": 14,
+          "ConsumedInputSequence": 639244577775456172,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760194138875,
+          "Revision": 15,
+          "ConsumedInputSequence": 639244577775456173,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760216983750,
+          "Revision": 16,
+          "ConsumedInputSequence": 639244577775456175,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760255374458,
+          "Revision": 17,
+          "ConsumedInputSequence": 639244577775456177,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760274506500,
+          "Revision": 18,
+          "ConsumedInputSequence": 639244577775456178,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760298055666,
+          "Revision": 19,
+          "ConsumedInputSequence": 639244577775456179,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760323012958,
+          "Revision": 20,
+          "ConsumedInputSequence": 639244577775456181,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760342692125,
+          "Revision": 21,
+          "ConsumedInputSequence": 639244577775456182,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760364693500,
+          "Revision": 22,
+          "ConsumedInputSequence": 639244577775456183,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760388638583,
+          "Revision": 23,
+          "ConsumedInputSequence": 639244577775456185,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760409984666,
+          "Revision": 24,
+          "ConsumedInputSequence": 639244577775456186,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760431721333,
+          "Revision": 25,
+          "ConsumedInputSequence": 639244577775456187,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760456432791,
+          "Revision": 26,
+          "ConsumedInputSequence": 639244577775456189,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760474433541,
+          "Revision": 27,
+          "ConsumedInputSequence": 639244577775456190,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760497906916,
+          "Revision": 28,
+          "ConsumedInputSequence": 639244577775456191,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760518677083,
+          "Revision": 29,
+          "ConsumedInputSequence": 639244577775456192,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760542504875,
+          "Revision": 30,
+          "ConsumedInputSequence": 639244577775456194,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760564382083,
+          "Revision": 31,
+          "ConsumedInputSequence": 639244577775456195,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760582538083,
+          "Revision": 32,
+          "ConsumedInputSequence": 639244577775456196,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760604383833,
+          "Revision": 33,
+          "ConsumedInputSequence": 639244577775456197,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760624129541,
+          "Revision": 34,
+          "ConsumedInputSequence": 639244577775456199,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760643283083,
+          "Revision": 35,
+          "ConsumedInputSequence": 639244577775456200,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760665004750,
+          "Revision": 36,
+          "ConsumedInputSequence": 639244577775456201,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760684029125,
+          "Revision": 37,
+          "ConsumedInputSequence": 639244577775456202,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760702666000,
+          "Revision": 38,
+          "ConsumedInputSequence": 639244577775456203,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760723005083,
+          "Revision": 39,
+          "ConsumedInputSequence": 639244577775456204,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760747283000,
+          "Revision": 40,
+          "ConsumedInputSequence": 639244577775456206,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760770058750,
+          "Revision": 41,
+          "ConsumedInputSequence": 639244577775456207,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760792757458,
+          "Revision": 42,
+          "ConsumedInputSequence": 639244577775456208,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760815621208,
+          "Revision": 43,
+          "ConsumedInputSequence": 639244577775456210,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760832373125,
+          "Revision": 44,
+          "ConsumedInputSequence": 639244577775456211,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760855073625,
+          "Revision": 45,
+          "ConsumedInputSequence": 639244577775456212,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760874881791,
+          "Revision": 46,
+          "ConsumedInputSequence": 639244577775456213,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760898134750,
+          "Revision": 47,
+          "ConsumedInputSequence": 639244577775456215,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760916904083,
+          "Revision": 48,
+          "ConsumedInputSequence": 639244577775456216,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760934609208,
+          "Revision": 49,
+          "ConsumedInputSequence": 639244577775456217,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760959328291,
+          "Revision": 50,
+          "ConsumedInputSequence": 639244577775456218,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760975227416,
+          "Revision": 51,
+          "ConsumedInputSequence": 639244577775456219,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91760999382541,
+          "Revision": 52,
+          "ConsumedInputSequence": 639244577775456221,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761017499250,
+          "Revision": 53,
+          "ConsumedInputSequence": 639244577775456222,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761035590708,
+          "Revision": 54,
+          "ConsumedInputSequence": 639244577775456223,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761056399625,
+          "Revision": 55,
+          "ConsumedInputSequence": 639244577775456224,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761074329583,
+          "Revision": 56,
+          "ConsumedInputSequence": 639244577775456225,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761093723250,
+          "Revision": 57,
+          "ConsumedInputSequence": 639244577775456226,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761115000625,
+          "Revision": 58,
+          "ConsumedInputSequence": 639244577775456227,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761135727000,
+          "Revision": 59,
+          "ConsumedInputSequence": 639244577775456229,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761151902333,
+          "Revision": 60,
+          "ConsumedInputSequence": 639244577775456230,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761172377583,
+          "Revision": 61,
+          "ConsumedInputSequence": 639244577775456231,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761189414791,
+          "Revision": 62,
+          "ConsumedInputSequence": 639244577775456232,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761210056708,
+          "Revision": 63,
+          "ConsumedInputSequence": 639244577775456233,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761231407458,
+          "Revision": 64,
+          "ConsumedInputSequence": 639244577775456234,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761250633125,
+          "Revision": 65,
+          "ConsumedInputSequence": 639244577775456236,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761314285333,
+          "Revision": 66,
+          "ConsumedInputSequence": 639244577775456239,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761327342458,
+          "Revision": 67,
+          "ConsumedInputSequence": 639244577775456240,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761360755208,
+          "Revision": 68,
+          "ConsumedInputSequence": 639244577775456242,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761368175166,
+          "Revision": 69,
+          "ConsumedInputSequence": 639244577775456243,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        },
+        {
+          "Timestamp": 91761394082916,
+          "Revision": 70,
+          "ConsumedInputSequence": 639244577775456243,
+          "ViewportWidth": 1280,
+          "ViewportHeight": 800
+        }
+      ],
+      "renderedScenes": [
+        {
+          "Timestamp": 91760042728666,
+          "Revision": 7,
+          "ConsumedInputSequence": 639244577775456162
+        },
+        {
+          "Timestamp": 91760078022541,
+          "Revision": 8,
+          "ConsumedInputSequence": 639244577775456164
+        },
+        {
+          "Timestamp": 91760100324250,
+          "Revision": 9,
+          "ConsumedInputSequence": 639244577775456166
+        },
+        {
+          "Timestamp": 91760123736416,
+          "Revision": 10,
+          "ConsumedInputSequence": 639244577775456167
+        },
+        {
+          "Timestamp": 91760145027375,
+          "Revision": 11,
+          "ConsumedInputSequence": 639244577775456168
+        },
+        {
+          "Timestamp": 91760165175958,
+          "Revision": 12,
+          "ConsumedInputSequence": 639244577775456170
+        },
+        {
+          "Timestamp": 91760187617333,
+          "Revision": 13,
+          "ConsumedInputSequence": 639244577775456171
+        },
+        {
+          "Timestamp": 91760208052916,
+          "Revision": 14,
+          "ConsumedInputSequence": 639244577775456172
+        },
+        {
+          "Timestamp": 91760228187291,
+          "Revision": 15,
+          "ConsumedInputSequence": 639244577775456173
+        },
+        {
+          "Timestamp": 91760248435791,
+          "Revision": 16,
+          "ConsumedInputSequence": 639244577775456175
+        },
+        {
+          "Timestamp": 91760290984375,
+          "Revision": 17,
+          "ConsumedInputSequence": 639244577775456177
+        },
+        {
+          "Timestamp": 91760314159750,
+          "Revision": 18,
+          "ConsumedInputSequence": 639244577775456178
+        },
+        {
+          "Timestamp": 91760335906500,
+          "Revision": 19,
+          "ConsumedInputSequence": 639244577775456179
+        },
+        {
+          "Timestamp": 91760357608625,
+          "Revision": 20,
+          "ConsumedInputSequence": 639244577775456181
+        },
+        {
+          "Timestamp": 91760380248000,
+          "Revision": 21,
+          "ConsumedInputSequence": 639244577775456182
+        },
+        {
+          "Timestamp": 91760401873708,
+          "Revision": 22,
+          "ConsumedInputSequence": 639244577775456183
+        },
+        {
+          "Timestamp": 91760421559416,
+          "Revision": 23,
+          "ConsumedInputSequence": 639244577775456185
+        },
+        {
+          "Timestamp": 91760446547875,
+          "Revision": 24,
+          "ConsumedInputSequence": 639244577775456186
+        },
+        {
+          "Timestamp": 91760467199958,
+          "Revision": 25,
+          "ConsumedInputSequence": 639244577775456187
+        },
+        {
+          "Timestamp": 91760489398416,
+          "Revision": 26,
+          "ConsumedInputSequence": 639244577775456189
+        },
+        {
+          "Timestamp": 91760511270458,
+          "Revision": 27,
+          "ConsumedInputSequence": 639244577775456190
+        },
+        {
+          "Timestamp": 91760534879416,
+          "Revision": 28,
+          "ConsumedInputSequence": 639244577775456191
+        },
+        {
+          "Timestamp": 91760556086166,
+          "Revision": 29,
+          "ConsumedInputSequence": 639244577775456192
+        },
+        {
+          "Timestamp": 91760575898500,
+          "Revision": 30,
+          "ConsumedInputSequence": 639244577775456194
+        },
+        {
+          "Timestamp": 91760596169416,
+          "Revision": 31,
+          "ConsumedInputSequence": 639244577775456195
+        },
+        {
+          "Timestamp": 91760617383041,
+          "Revision": 32,
+          "ConsumedInputSequence": 639244577775456196
+        },
+        {
+          "Timestamp": 91760636731666,
+          "Revision": 33,
+          "ConsumedInputSequence": 639244577775456197
+        },
+        {
+          "Timestamp": 91760656589750,
+          "Revision": 34,
+          "ConsumedInputSequence": 639244577775456199
+        },
+        {
+          "Timestamp": 91760677707166,
+          "Revision": 35,
+          "ConsumedInputSequence": 639244577775456200
+        },
+        {
+          "Timestamp": 91760697001625,
+          "Revision": 36,
+          "ConsumedInputSequence": 639244577775456201
+        },
+        {
+          "Timestamp": 91760716372833,
+          "Revision": 37,
+          "ConsumedInputSequence": 639244577775456202
+        },
+        {
+          "Timestamp": 91760733769208,
+          "Revision": 38,
+          "ConsumedInputSequence": 639244577775456203
+        },
+        {
+          "Timestamp": 91760759758500,
+          "Revision": 39,
+          "ConsumedInputSequence": 639244577775456204
+        },
+        {
+          "Timestamp": 91760783110083,
+          "Revision": 40,
+          "ConsumedInputSequence": 639244577775456206
+        },
+        {
+          "Timestamp": 91760805279791,
+          "Revision": 41,
+          "ConsumedInputSequence": 639244577775456207
+        },
+        {
+          "Timestamp": 91760825305000,
+          "Revision": 42,
+          "ConsumedInputSequence": 639244577775456208
+        },
+        {
+          "Timestamp": 91760848098333,
+          "Revision": 43,
+          "ConsumedInputSequence": 639244577775456210
+        },
+        {
+          "Timestamp": 91760868016750,
+          "Revision": 44,
+          "ConsumedInputSequence": 639244577775456211
+        },
+        {
+          "Timestamp": 91760888871250,
+          "Revision": 45,
+          "ConsumedInputSequence": 639244577775456212
+        },
+        {
+          "Timestamp": 91760910373625,
+          "Revision": 46,
+          "ConsumedInputSequence": 639244577775456213
+        },
+        {
+          "Timestamp": 91760929571708,
+          "Revision": 47,
+          "ConsumedInputSequence": 639244577775456215
+        },
+        {
+          "Timestamp": 91760950226541,
+          "Revision": 48,
+          "ConsumedInputSequence": 639244577775456216
+        },
+        {
+          "Timestamp": 91760968078208,
+          "Revision": 49,
+          "ConsumedInputSequence": 639244577775456217
+        },
+        {
+          "Timestamp": 91760990150458,
+          "Revision": 50,
+          "ConsumedInputSequence": 639244577775456218
+        },
+        {
+          "Timestamp": 91761010531875,
+          "Revision": 51,
+          "ConsumedInputSequence": 639244577775456219
+        },
+        {
+          "Timestamp": 91761030356041,
+          "Revision": 52,
+          "ConsumedInputSequence": 639244577775456221
+        },
+        {
+          "Timestamp": 91761049502125,
+          "Revision": 53,
+          "ConsumedInputSequence": 639244577775456222
+        },
+        {
+          "Timestamp": 91761067861791,
+          "Revision": 54,
+          "ConsumedInputSequence": 639244577775456223
+        },
+        {
+          "Timestamp": 91761087322041,
+          "Revision": 55,
+          "ConsumedInputSequence": 639244577775456224
+        },
+        {
+          "Timestamp": 91761106524333,
+          "Revision": 56,
+          "ConsumedInputSequence": 639244577775456225
+        },
+        {
+          "Timestamp": 91761127149208,
+          "Revision": 57,
+          "ConsumedInputSequence": 639244577775456226
+        },
+        {
+          "Timestamp": 91761146616875,
+          "Revision": 58,
+          "ConsumedInputSequence": 639244577775456227
+        },
+        {
+          "Timestamp": 91761165902708,
+          "Revision": 59,
+          "ConsumedInputSequence": 639244577775456229
+        },
+        {
+          "Timestamp": 91761182789750,
+          "Revision": 60,
+          "ConsumedInputSequence": 639244577775456230
+        },
+        {
+          "Timestamp": 91761203657541,
+          "Revision": 61,
+          "ConsumedInputSequence": 639244577775456231
+        },
+        {
+          "Timestamp": 91761222765625,
+          "Revision": 62,
+          "ConsumedInputSequence": 639244577775456232
+        },
+        {
+          "Timestamp": 91761241617916,
+          "Revision": 63,
+          "ConsumedInputSequence": 639244577775456233
+        },
+        {
+          "Timestamp": 91761261188375,
+          "Revision": 64,
+          "ConsumedInputSequence": 639244577775456234
+        },
+        {
+          "Timestamp": 91761299004791,
+          "Revision": 65,
+          "ConsumedInputSequence": 639244577775456236
+        },
+        {
+          "Timestamp": 91761342955750,
+          "Revision": 66,
+          "ConsumedInputSequence": 639244577775456239
+        },
+        {
+          "Timestamp": 91761369306875,
+          "Revision": 67,
+          "ConsumedInputSequence": 639244577775456240
+        },
+        {
+          "Timestamp": 91761390889583,
+          "Revision": 68,
+          "ConsumedInputSequence": 639244577775456242
+        },
+        {
+          "Timestamp": 91761412227000,
+          "Revision": 69,
+          "ConsumedInputSequence": 639244577775456243
+        },
+        {
+          "Timestamp": 91761431076375,
+          "Revision": 70,
+          "ConsumedInputSequence": 639244577775456243
+        }
+      ],
+      "drawCallbackCompletions": [
+        91760042358666,
+        91760078018958,
+        91760100321250,
+        91760123730833,
+        91760145025791,
+        91760165174250,
+        91760187611250,
+        91760208050083,
+        91760228184625,
+        91760248434416,
+        91760290980416,
+        91760314155333,
+        91760335902416,
+        91760357604833,
+        91760380246333,
+        91760401872208,
+        91760421557750,
+        91760446543875,
+        91760467194916,
+        91760489392958,
+        91760511265791,
+        91760534876708,
+        91760556080166,
+        91760575894125,
+        91760596168250,
+        91760617375666,
+        91760636718833,
+        91760656584041,
+        91760677704125,
+        91760697000541,
+        91760716370625,
+        91760733767625,
+        91760759753916,
+        91760783105416,
+        91760805274916,
+        91760825301791,
+        91760848095083,
+        91760868014125,
+        91760888866875,
+        91760910369916,
+        91760929569875,
+        91760950222583,
+        91760968077458,
+        91760990142250,
+        91761010528000,
+        91761030355083,
+        91761049499416,
+        91761067860666,
+        91761087319375,
+        91761106522208,
+        91761127146875,
+        91761146616333,
+        91761165902083,
+        91761182788666,
+        91761203655833,
+        91761222763666,
+        91761241615208,
+        91761261181125,
+        91761299000791,
+        91761342952375,
+        91761369304916,
+        91761390885625,
+        91761412225041,
+        91761431075000,
+        91761433666625
+      ],
+      "physicalPresentationVerified": false
+    }
+  }
+}
