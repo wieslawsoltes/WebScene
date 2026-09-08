@@ -125,3 +125,23 @@ capture. The 32-frame fixture and native GPU runtime test pass; evidence is in
 `evidence/kestrel/gpu-provider-ticket-fixture.json`. Runtime snapshot capture,
 first-pending-image commands, atomic scene commit and delayed-completion tests
 remain unimplemented; this provider API alone does not fix presentation.
+
+
+## Deterministic completion-phase coverage (2026-09-08)
+
+The production Dawn submission now uses `producer_completion_gate` under its
+existing mutex. The gate requires queue completion and validation, even when
+one reports failure; a validation error alone cannot certify finished GPU writes.
+Duplicate phase delivery is ignored, preventing a terminal consumed state from
+being overwritten by a repeated completion signal.
+
+The platform-independent completion tests withhold either phase, check that
+polling cannot make it ready, and cover all success/failure combinations and
+duplicate delivery before/after completion. Completion and V8 GPU runtime tests
+pass (0.92s together). The real Ganesh fixture also passes 32 frames and retirement
+with zero explicit transport copies. Evidence:
+`evidence/kestrel/producer-completion-gate.json`.
+
+This deterministic test covers the shared production gate, not an artificially
+stalled hardware queue or whole captured scene. Runtime snapshot integration and
+the A/B/C delayed-scene regression remain outstanding.

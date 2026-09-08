@@ -1,4 +1,5 @@
 #include "graphics/completion_mailbox.h"
+#include "graphics/producer_completion_gate.h"
 #include <iostream>
 using namespace webscene::graphics;
 void require(bool value) { if (!value) throw std::runtime_error("requirement failed"); }
@@ -7,6 +8,28 @@ struct wake_counter : completion_wake {
     void signal() noexcept override { ++count; }
 };
 int main() {
+    // Hold either producer phase indefinitely. No readiness or release signal
+    // is permitted until the other phase arrives, including on validation error.
+    for(bool queue_first:{false,true})for(bool queue_ok:{false,true})for(bool validation_ok:{false,true}) {
+        producer_completion_gate gate;
+        const auto first=queue_first ? producer_completion_gate::phase::queue : producer_completion_gate::phase::validation;
+        const auto second=queue_first ? producer_completion_gate::phase::validation : producer_completion_gate::phase::queue;
+        require(!gate.finish(first,queue_first ? queue_ok : validation_ok));
+        for(int poll=0;poll<100;++poll)require(gate.state()==producer_completion_gate::result::pending);
+        require(!gate.finish(first,true)); // A duplicate cannot supply the missing phase.
+        require(gate.state()==producer_completion_gate::result::pending);
+        require(gate.finish(second,queue_first ? validation_ok : queue_ok));
+        const auto expected=queue_ok&&validation_ok ? producer_completion_gate::result::success : producer_completion_gate::result::failure;
+        require(gate.state()==expected);
+        require(!gate.finish(first,false)&&!gate.finish(second,false));
+        require(gate.state()==expected);
+    }
+    producer_completion_gate rejected;
+    rejected.reject();
+    require(!rejected.finish(producer_completion_gate::phase::queue,true));
+    require(rejected.finish(producer_completion_gate::phase::validation,true));
+    require(rejected.state()==producer_completion_gate::result::failure);
+
     auto wake = std::make_shared<wake_counter>();
     completion_mailbox box(2, wake);
     resource_owner a{new_owner_token(),new_owner_token(),0};

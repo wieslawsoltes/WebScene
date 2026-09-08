@@ -1,6 +1,7 @@
 #pragma once
 #include "dawn_iosurface_canvas_texture.h"
 #include "iosurface_canvas_images.h"
+#include "producer_completion_gate.h"
 #include <functional>
 #if defined(__APPLE__)
 namespace webscene::graphics {
@@ -14,16 +15,17 @@ private:
     status status_=status::pending;
     std::optional<owned_image_pool::retained> image_;
     wgpu::Future future_{}, validation_future_{};
-    bool queue_done_=false, validation_done_=false, valid_=true, present_=true;
+    producer_completion_gate completion_;
+    bool present_=true;
     void finish(bool queue,bool valid,const std::shared_ptr<completion_wake>& wake) {
         bool notify=false;
         {
             std::lock_guard lock(mutex_);
-            (queue ? queue_done_ : validation_done_)=true;
-            valid_ &= valid;
-            if (queue_done_ && validation_done_) {
-                status_=valid_ ? (present_ ? status::ready : status::discarded) : status::failed;
-                if (!valid_) image_.reset();
+            if (completion_.finish(queue ? producer_completion_gate::phase::queue
+                    : producer_completion_gate::phase::validation,valid)) {
+                const auto succeeded=completion_.state()==producer_completion_gate::result::success;
+                status_=succeeded ? (present_ ? status::ready : status::discarded) : status::failed;
+                if (!succeeded) image_.reset();
                 notify=true;
             }
         }
@@ -92,7 +94,7 @@ public:
         result->present_=present;
         if(present) {
             auto image=pending->producer.publish();
-            result->valid_=bool(image);
+            if(!image)result->completion_.reject();
             if(image)result->image_.emplace(std::move(*image));
         }
         // Scope only host handoff operations, never application JS recording or
