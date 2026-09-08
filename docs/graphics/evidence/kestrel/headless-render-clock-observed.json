@@ -1,0 +1,114 @@
+{
+  "exitCode": 0,
+  "qualification": "CPU baseline diagnostic only; physical presentation unqualified",
+  "command": "WEBSCENE_NATIVE_ENGINE_PATH=\"$PWD/artifacts/graphics-build/native-v8-enabled/libwebscene_native_engine.dylib\" dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release --no-build -- probe native-resize-cadence --seconds 5 --warmup-seconds 2 --hz 60 --composition",
+  "frameworkSource": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/11.3.4/src/Headless/Avalonia.Headless/AvaloniaHeadlessPlatform.cs",
+  "measurement": {
+    "schema": "webscene-native-resize-cadence-v2",
+    "measurementScope": "headless-cpu-draw-callback",
+    "physicalPresentationVerified": false,
+    "headlessRenderTimer": {
+      "available": true,
+      "tickCount": 150,
+      "ticksPerSecond": 29.999894400371712,
+      "intervalMilliseconds": {
+        "count": 149,
+        "average": 33.32357634228188,
+        "p50": 34.057917,
+        "p95": 34.789709,
+        "maximum": 37.345333
+      }
+    },
+    "sourceKind": "deterministic-fixture",
+    "composition": true,
+    "certificationTelemetryEnabled": false,
+    "requestedHz": 60,
+    "warmupSeconds": 2,
+    "requestedSeconds": 5,
+    "elapsedMilliseconds": 5000.0176,
+    "submitted": 300,
+    "acceptedSubmissions": 300,
+    "appliedPairs": 300,
+    "publishedPairs": 150,
+    "coalescedPairs": 0,
+    "renderedFrames": 150,
+    "drawCallbackCompletions": 150,
+    "renderedFramesPerSecond": 29.999894400371712,
+    "drawCallbackCompletionsPerSecond": 30.002529827410196,
+    "layoutPasses": 900,
+    "layoutPassesPerAppliedResize": 3,
+    "publishedScenes": 150,
+    "publicationAttempts": 302,
+    "blockedPublications": 152,
+    "fullInvalidations": 150,
+    "unchangedRenderCallbacks": 0,
+    "droppedInputs": 0,
+    "processCpuMilliseconds": 2431.793,
+    "normalizedProcessCpuPercent": 48.63568880237541,
+    "lastCompositionMilliseconds": {
+      "diffApply": 2.782125,
+      "retainedDraw": 0.292167,
+      "skiaSubmit": 0.387209,
+      "callback": 0.387792
+    },
+    "lastResizeStageMilliseconds": {
+      "outerListeners": 0,
+      "frameListeners": 0,
+      "finalLayout": 0,
+      "observers": 0,
+      "totalDispatch": 2.921459,
+      "scenePublication": 0.649875
+    },
+    "queueMilliseconds": {
+      "average": 0.008550266666666667,
+      "maximum": 0.066083
+    },
+    "dispatchMilliseconds": {
+      "average": 2.4751538933333337,
+      "maximum": 5.132834
+    },
+    "publicationLatencyMilliseconds": {
+      "count": 299,
+      "average": 12.695980217391305,
+      "p50": 8.443625,
+      "p95": 21.530667,
+      "maximum": 37.233458
+    },
+    "publicationToRenderLatencyMilliseconds": {
+      "count": 148,
+      "average": 65.95909599324321,
+      "p50": 66.026208,
+      "p95": 66.971208,
+      "maximum": 70.996625
+    },
+    "renderLatencyMilliseconds": {
+      "count": 295,
+      "average": 78.600604379661,
+      "p50": 72.146209,
+      "p95": 87.997666,
+      "maximum": 92.374791
+    },
+    "renderIntervalMilliseconds": {
+      "count": 149,
+      "average": 33.32958976510068,
+      "p50": 34.140584,
+      "p95": 34.784875,
+      "maximum": 36.909541
+    },
+    "drawCallbackIntervalMilliseconds": {
+      "count": 149,
+      "average": 33.330522651006696,
+      "p50": 34.140208,
+      "p95": 34.784875,
+      "maximum": 36.909584
+    },
+    "cpuCadenceGate": {
+      "maximumP95LatencyMilliseconds": 16.7,
+      "minimumFramesPerSecond": 58,
+      "maximumConsecutiveMissIntervalMilliseconds": 33.4,
+      "passed": false
+    },
+    "chromeReferenceComparison": null,
+    "certificationDiagnostics": "certification telemetry disabled at compile time"
+  }
+}
