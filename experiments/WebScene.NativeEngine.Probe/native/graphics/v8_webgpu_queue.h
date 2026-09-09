@@ -1,6 +1,7 @@
 #pragma once
 #include "v8_webgpu_command_buffers.h"
 #include "v8_webgpu_buffers.h"
+#include "v8_webgpu_copy_descriptor.h"
 #include <atomic>
 #include "v8_webgpu_vertex_state.h"
 namespace webscene::graphics {
@@ -88,6 +89,57 @@ class v8_webgpu_queue {
         }catch(const std::bad_alloc&){isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"writeBuffer allocation failed")));}
         catch(const std::exception&){fail(isolate,"writeBuffer native ownership unavailable");}
     }
+    static void write_texture(const v8::FunctionCallbackInfo<v8::Value>& info){
+        if(!receiver(info))return;auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
+        if(info.Length()<4){fail(isolate,"writeTexture requires destination, data, layout and size");return;}
+        try{
+            wgpu::TexelCopyTextureInfo dest{};wgpu::TexelCopyBufferLayout layout{};wgpu::Extent3D extent{};
+            if(!read_copy_texture(isolate,context,info[0],dest)||!read_copy_layout(isolate,context,info[2],layout)||!read_copy_extent(isolate,context,info[3],extent))return;
+            source data;if(!buffer_source(isolate,info[1],data))return;
+            auto* self=receiver(info);if(!self)return;
+            auto* bytes=static_cast<uint8_t*>(data.backing->Data());if(data.offset)bytes+=data.offset;
+            std::vector<uint8_t> shared;
+            if(data.backing->IsShared()){shared.resize(data.length);for(size_t i=0;i<data.length;++i)shared[i]=std::atomic_ref<uint8_t>(bytes[i]).load(std::memory_order_relaxed);bytes=shared.data();}
+            self->service_.with_device(self->device_,[&](auto& device){device.native().GetQueue().WriteTexture(&dest,bytes,data.length,&layout,&extent);});
+        }catch(const std::exception&){fail(isolate,"writeTexture ownership unavailable");}
+    }
+    struct work_request{
+        uint64_t operation;
+        std::shared_ptr<completion_mailbox> mailbox;
+        v8::Global<v8::Context> context;
+        v8::Global<v8::Object> queue;
+        v8::Global<v8::Promise::Resolver> resolver;
+    };
+    resource_owner work_owner_{new_owner_token(),new_owner_token(),new_owner_token()};
+    std::vector<std::unique_ptr<work_request>> work_;
+    static void work_done(const v8::FunctionCallbackInfo<v8::Value>& info){
+        auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
+        v8::Local<v8::Promise::Resolver> resolver;if(!v8::Promise::Resolver::New(context).ToLocal(&resolver))return;
+        info.GetReturnValue().Set(resolver->GetPromise());v8::TryCatch caught(isolate);
+        auto* self=receiver(info);
+        if(!self){auto error=caught.Exception();caught.Reset();resolver->Reject(context,error).FromMaybe(false);return;}
+        try{
+            if(self->work_.size()>=1024)throw std::length_error("Queue work request capacity exhausted");
+            auto p=std::make_unique<work_request>();p->operation=new_owner_token();p->mailbox=self->service_.dawn().completions();
+            p->context.Reset(isolate,context);p->queue.Reset(isolate,info.This());p->resolver.Reset(isolate,resolver);
+            self->work_.reserve(self->work_.size()+1);
+            auto ticket=p->mailbox->reserve(p->operation,self->work_owner_);if(!ticket)throw std::length_error("Queue work completion capacity exhausted");
+            auto mailbox=p->mailbox;self->work_.push_back(std::move(p));
+            try {
+                self->service_.with_device(self->device_,[&](auto& device){
+                    device.native().GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
+                        [mailbox,ticket=*ticket](wgpu::QueueWorkDoneStatus status,wgpu::StringView){
+                            mailbox->publish(ticket,status==wgpu::QueueWorkDoneStatus::Success?completion_status::success:completion_status::failed);
+                        });
+                });
+            } catch(...) {
+                mailbox->publish(*ticket,completion_status::failed);
+                throw;
+            }
+        }catch(const std::exception& e){
+            caught.Reset();resolver->Reject(context,v8::Exception::Error(v8::String::NewFromUtf8(isolate,e.what()).ToLocalChecked())).FromMaybe(false);
+        }
+    }
     static void submit(const v8::FunctionCallbackInfo<v8::Value>& info) {
         if(!receiver(info))return;auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
         try {
@@ -109,14 +161,25 @@ class v8_webgpu_queue {
         catch(const std::exception&){fail(isolate,"GPUQueue label ownership unavailable");}
     }
 public:
+    bool complete(completion_record record){
+        check_scope();if(record.owner!=work_owner_)return false;
+        auto found=std::find_if(work_.begin(),work_.end(),[&](auto& p){return p->operation==record.operation;});
+        if(found==work_.end())return true;
+        auto p=std::move(*found);work_.erase(found);auto context=p->context.Get(isolate_);v8::Context::Scope scope(context);
+        if(record.status==completion_status::success)p->resolver.Get(isolate_)->Resolve(context,v8::Undefined(isolate_)).FromMaybe(false);
+        else p->resolver.Get(isolate_)->Reject(context,v8::Exception::Error(v8::String::NewFromUtf8Literal(isolate_,"GPU queue work failed"))).FromMaybe(false);
+        return true;
+    }
     v8_webgpu_queue(v8::Isolate* isolate,graphics_service& service,resource_handle<dawn_device> device,std::string label,v8::Local<v8::Function> dom_exception)
         :isolate_(isolate),service_(service),device_(device),label_(std::move(label)){check_scope();dom_exception_.Reset(isolate,dom_exception);}
-    ~v8_webgpu_queue(){check_scope();if(!wrapper_.IsEmpty())wrapper_.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);wrapper_.Reset();}
+    ~v8_webgpu_queue(){for(auto& p:work_)p->mailbox->cancel_owner(work_owner_);check_scope();if(!wrapper_.IsEmpty())wrapper_.Get(isolate_)->SetAlignedPointerInInternalField(1,nullptr,v8::kEmbedderDataTypeTagDefault);wrapper_.Reset();}
     v8::MaybeLocal<v8::Object> create(v8::Local<v8::Context> context,v8::Local<v8::Object> parent) {
         check_scope();
         auto instance=v8::ObjectTemplate::New(isolate_);instance->SetInternalFieldCount(2);
         auto prototype=v8::ObjectTemplate::New(isolate_);auto submit_fn=v8::FunctionTemplate::New(isolate_,submit);submit_fn->SetLength(1);
         prototype->Set(isolate_,"submit",submit_fn);
+        prototype->Set(isolate_,"onSubmittedWorkDone",v8::FunctionTemplate::New(isolate_,work_done));
+        prototype->Set(isolate_,"writeTexture",v8::FunctionTemplate::New(isolate_,write_texture));
         auto write=v8::FunctionTemplate::New(isolate_,write_buffer);write->SetLength(3);prototype->Set(isolate_,"writeBuffer",write);
         prototype->Set(v8::Symbol::GetToStringTag(isolate_),v8::String::NewFromUtf8Literal(isolate_,"GPUQueue"),static_cast<v8::PropertyAttribute>(v8::ReadOnly|v8::DontEnum));
         prototype->SetAccessorProperty(v8::String::NewFromUtf8Literal(isolate_,"label"),v8::FunctionTemplate::New(isolate_,label),v8::FunctionTemplate::New(isolate_,set_label));

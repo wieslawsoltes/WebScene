@@ -1478,7 +1478,8 @@
                     : node.tag == "td" || node.tag == "th"
                         ? html_table_cell_element_template.Get(isolate)
                     : html_element_template.Get(isolate))
-                : element_template.Get(isolate))
+                : node.namespace_uri() == "http://www.w3.org/2000/svg"
+                    ? svg_element_template.Get(isolate) : element_template.Get(isolate))
             : node.kind == dom_node_kind::document_fragment
                 ? (document.is_shadow_root(node)
                     ? shadow_root_template.Get(isolate)
@@ -1642,6 +1643,7 @@
             if (detached_document_roots.contains(ancestor->id)) return;
         }
         if (node.tag == "script") {
+            bool module_script = false;
             const auto authored_type = node.attributes.find("type");
             if (authored_type != node.attributes.end()) {
                 auto type = lower_html_name(authored_type->second);
@@ -1650,6 +1652,7 @@
                 type = first == std::string::npos
                     ? std::string{}
                     : type.substr(first, last - first + 1U);
+                module_script = type == "module";
                 const auto executable = type.empty() || type == "module"
                     || type == "text/javascript"
                     || type == "application/javascript"
@@ -1693,12 +1696,11 @@
                             wrapper).Check();
                     }
                     std::string error;
-                    const auto executed = execute_in_context(
-                        resource_context,
-                        source,
-                        name,
-                        error,
-                        false);
+                    if (module_script && !document_value.IsEmpty() && document_value->IsObject())
+                        document_value.As<v8::Object>()->Set(resource_context,js_string(isolate,"currentScript"),v8::Null(isolate)).Check();
+                    const auto executed = module_script
+                        ? execute_module(resource_context, source, name, error)
+                        : execute_in_context(resource_context, source, name, error, false);
                     if (!document_value.IsEmpty() && document_value->IsObject()) {
                         document_value.As<v8::Object>()->Set(
                             resource_context,

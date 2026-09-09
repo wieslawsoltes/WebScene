@@ -97,6 +97,8 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
         retire_document_graphics();
 #endif
+        stop_workers();
+        module_map.clear();
         set_context_location(local_context, local_context->Global(), resolved_url);
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
         if(webgpu_document_policy)webgpu_document_policy(resolved_url);
@@ -372,13 +374,11 @@
                 const auto script_source = immutable_source != nullptr
                     ? immutable_source->view()
                     : std::string_view(source);
-                if (!execute_in_context(
-                        local_context,
-                        script_source,
-                        name,
-                        error,
-                        true,
-                        std::move(immutable_source))) {
+                if (script.module) outer_document->Set(local_context, js_string(isolate, "currentScript"), v8::Null(isolate)).Check();
+                const bool executed = script.module
+                    ? execute_module(local_context, script_source, name, error)
+                    : execute_in_context(local_context, script_source, name, error, true, std::move(immutable_source));
+                if (!executed) {
                     frame_last_error_value = "Document script #" + std::to_string(script.index)
                         + " failed: " + error;
                     ++frame_script_error_count;

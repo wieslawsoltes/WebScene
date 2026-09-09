@@ -11,7 +11,7 @@
     std::unordered_map<uint32_t, pending_frame_preparation>
         pending_frame_preparations;
     std::shared_ptr<shared_isolate_state> shared_isolate;
-    v8::ArrayBuffer::Allocator* allocator{nullptr};
+    std::shared_ptr<v8::ArrayBuffer::Allocator> allocator;
     v8::Isolate* isolate{nullptr};
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     v8::CpuProfiler* cpu_profiler{nullptr};
@@ -39,6 +39,7 @@
     v8::Global<v8::FunctionTemplate> element_template;
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> html_element_template;
+    v8::Global<v8::FunctionTemplate> svg_element_template;
     v8::Global<v8::FunctionTemplate> html_table_cell_element_template;
     v8::Global<v8::FunctionTemplate> html_dialog_element_template;
     v8::Global<v8::FunctionTemplate> html_form_element_template;

@@ -311,4 +311,23 @@ template<> struct webgpu_enum_names<wgpu::StorageTextureAccess> {
         {"read-write",wgpu::StorageTextureAccess::ReadWrite},
     }};
 };
+template<> struct webgpu_enum_names<wgpu::AddressMode> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::AddressMode>,3> values{{
+        {"clamp-to-edge",wgpu::AddressMode::ClampToEdge},
+        {"repeat",wgpu::AddressMode::Repeat},
+        {"mirror-repeat",wgpu::AddressMode::MirrorRepeat},
+    }};
+};
+template<> struct webgpu_enum_names<wgpu::FilterMode> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::FilterMode>,2> values{{
+        {"nearest",wgpu::FilterMode::Nearest},
+        {"linear",wgpu::FilterMode::Linear},
+    }};
+};
+template<> struct webgpu_enum_names<wgpu::MipmapFilterMode> {
+    static inline constexpr std::array<std::pair<std::string_view,wgpu::MipmapFilterMode>,2> values{{
+        {"nearest",wgpu::MipmapFilterMode::Nearest},
+        {"linear",wgpu::MipmapFilterMode::Linear},
+    }};
+};
 } // namespace webscene::graphics

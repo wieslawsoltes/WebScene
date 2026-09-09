@@ -68,6 +68,7 @@ class dawn_device {
     resource_table<wgpu::Buffer> buffers_;
     size_t active_buffer_scopes_{};
     resource_table<wgpu::ShaderModule> shaders_;
+    resource_table<wgpu::Sampler> samplers_;
     size_t active_shader_scopes_{};
     resource_table<wgpu::BindGroup> bind_groups_;
     size_t active_bind_group_scopes_{};
@@ -76,12 +77,15 @@ class dawn_device {
     resource_table<wgpu::PipelineLayout> pipeline_layouts_;
     size_t active_pipeline_layout_scopes_{};
     resource_table<wgpu::RenderPipeline> render_pipelines_;
+    resource_table<wgpu::ComputePipeline> compute_pipelines_;
     size_t active_render_pipeline_scopes_{};
+    size_t active_compute_pipeline_scopes_{};
     resource_table<wgpu::Texture> textures_;
     resource_table<wgpu::TextureView> texture_views_;
     size_t active_texture_scopes_{},active_texture_view_scopes_{};
     resource_table<wgpu::CommandEncoder> command_encoders_;
     resource_table<wgpu::RenderPassEncoder> render_passes_;
+    resource_table<wgpu::ComputePassEncoder> compute_passes_;
     resource_table<wgpu::CommandBuffer> command_buffers_;
     size_t active_command_scopes_{};
     void check_thread() const {
@@ -92,7 +96,7 @@ public:
     dawn_device(uint64_t engine,std::shared_ptr<completion_mailbox> mailbox,
                 wgpu::Adapter adapter,wgpu::Device device,std::shared_ptr<device_loss_signal> loss={},size_t buffer_capacity=1024,size_t shader_capacity=1024,size_t render_pipeline_capacity=1024,size_t texture_capacity=1024,size_t texture_view_capacity=4096,size_t command_capacity=1024)
         : owner_{engine,new_owner_token(),0},mailbox_(std::move(mailbox)),
-          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_),bind_groups_(render_pipeline_capacity,owner_),bind_group_layouts_(render_pipeline_capacity,owner_),pipeline_layouts_(render_pipeline_capacity,owner_),render_pipelines_(render_pipeline_capacity,owner_),textures_(texture_capacity,owner_),texture_views_(texture_view_capacity,owner_),command_encoders_(command_capacity,owner_),render_passes_(command_capacity,owner_),command_buffers_(command_capacity,owner_) {
+          adapter_(std::move(adapter)),device_(std::move(device)),loss_(std::move(loss)),buffers_(buffer_capacity,owner_),shaders_(shader_capacity,owner_),samplers_(shader_capacity,owner_),bind_groups_(render_pipeline_capacity,owner_),bind_group_layouts_(render_pipeline_capacity,owner_),pipeline_layouts_(render_pipeline_capacity,owner_),render_pipelines_(render_pipeline_capacity,owner_),compute_pipelines_(render_pipeline_capacity,owner_),textures_(texture_capacity,owner_),texture_views_(texture_view_capacity,owner_),command_encoders_(command_capacity,owner_),render_passes_(command_capacity,owner_),compute_passes_(command_capacity,owner_),command_buffers_(command_capacity,owner_) {
         if (!engine || !mailbox_ || !adapter_ || !device_)
             throw std::invalid_argument("Dawn device requires native ownership");
     }
@@ -161,6 +165,22 @@ public:
         shaders_.destroy(handle,owner_);
     }
     size_t live_shader_modules() const {check_thread();return shaders_.resident_count();}
+    resource_handle<wgpu::Sampler> create_sampler(const wgpu::SamplerDescriptor& descriptor){
+        const auto& device=native();return samplers_.insert(owner_,std::make_unique<wgpu::Sampler>(device.CreateSampler(&descriptor)));
+    }
+    template<class Execute> void with_sampler(resource_handle<wgpu::Sampler> handle,Execute execute){
+        check_thread();execute(samplers_.get(handle,owner_));
+    }
+    void release_sampler(resource_handle<wgpu::Sampler> handle){check_thread();samplers_.destroy(handle,owner_);}
+    resource_handle<wgpu::RenderPipeline> adopt_render_pipeline(wgpu::RenderPipeline value) {
+        native();return render_pipelines_.insert(owner_,std::make_unique<wgpu::RenderPipeline>(std::move(value)));
+    }
+    resource_handle<wgpu::ComputePipeline> adopt_compute_pipeline(wgpu::ComputePipeline value) {
+        native();return compute_pipelines_.insert(owner_,std::make_unique<wgpu::ComputePipeline>(std::move(value)));
+    }
+    resource_handle<wgpu::BindGroupLayout> adopt_bind_group_layout(wgpu::BindGroupLayout value) {
+        native();return bind_group_layouts_.insert(owner_,std::make_unique<wgpu::BindGroupLayout>(std::move(value)));
+    }
     resource_handle<wgpu::RenderPipeline> create_render_pipeline(const wgpu::RenderPipelineDescriptor& descriptor) {
         const auto& device=native();
         if(!render_pipelines_.can_insert())throw std::length_error("Graphics render-pipeline capacity exhausted");
@@ -180,6 +200,25 @@ public:
         render_pipelines_.destroy(handle,owner_);
     }
     size_t live_render_pipelines() const {check_thread();return render_pipelines_.resident_count();}
+    resource_handle<wgpu::ComputePipeline> create_compute_pipeline(const wgpu::ComputePipelineDescriptor& descriptor) {
+        const auto& device=native();
+        if(!compute_pipelines_.can_insert())throw std::length_error("Graphics compute-pipeline capacity exhausted");
+        auto pipeline=device.CreateComputePipeline(&descriptor);
+        if(!pipeline)throw std::runtime_error("Dawn did not return a compute pipeline");
+        return compute_pipelines_.insert(owner_,std::make_unique<wgpu::ComputePipeline>(std::move(pipeline)));
+    }
+    template<class Execute> void with_compute_pipeline(resource_handle<wgpu::ComputePipeline> handle,Execute execute) {
+        check_thread();
+        const auto& pipeline=compute_pipelines_.get(handle,owner_);
+        struct guard { size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;} } scope(active_compute_pipeline_scopes_);
+        execute(pipeline);
+    }
+    void release_compute_pipeline(resource_handle<wgpu::ComputePipeline> handle) {
+        check_thread();
+        if(active_compute_pipeline_scopes_)throw std::logic_error("Cannot release compute pipeline during execution");
+        compute_pipelines_.destroy(handle,owner_);
+    }
+    size_t live_compute_pipelines() const {check_thread();return compute_pipelines_.resident_count();}
     resource_handle<wgpu::BindGroupLayout> create_bind_group_layout(const wgpu::BindGroupLayoutDescriptor& descriptor) {
         const auto& device=native();
         if(!bind_group_layouts_.can_insert())throw std::length_error("Graphics bind_group_layout capacity exhausted");
@@ -296,6 +335,11 @@ public:
         auto pass=command_encoders_.get(encoder,owner_).BeginRenderPass(&descriptor);if(!pass)throw std::runtime_error("Dawn did not return a render pass");
         return render_passes_.insert(owner_,std::make_unique<wgpu::RenderPassEncoder>(std::move(pass)));
     }
+    resource_handle<wgpu::ComputePassEncoder> begin_compute_pass(resource_handle<wgpu::CommandEncoder> encoder,const wgpu::ComputePassDescriptor& descriptor) {
+        native();if(!compute_passes_.can_insert())throw std::length_error("Compute pass capacity exhausted");
+        auto pass=command_encoders_.get(encoder,owner_).BeginComputePass(&descriptor);if(!pass)throw std::runtime_error("Dawn did not return a compute pass");
+        return compute_passes_.insert(owner_,std::make_unique<wgpu::ComputePassEncoder>(std::move(pass)));
+    }
     resource_handle<wgpu::CommandBuffer> finish_command_encoder(resource_handle<wgpu::CommandEncoder> encoder,const wgpu::CommandBufferDescriptor& descriptor) {
         native();if(!command_buffers_.can_insert())throw std::length_error("Command buffer capacity exhausted");
         auto command=command_encoders_.get(encoder,owner_).Finish(&descriptor);if(!command)throw std::runtime_error("Dawn did not return a command buffer");
@@ -321,6 +365,16 @@ public:
         render_passes_.destroy(handle,owner_);
     }
     size_t live_render_passes() const {check_thread();return render_passes_.resident_count();}
+    template<class Execute> void with_compute_pass(resource_handle<wgpu::ComputePassEncoder> handle,Execute execute) {
+        check_thread();const auto& resource=compute_passes_.get(handle,owner_);
+        struct guard {size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;}} scope(active_command_scopes_);
+        execute(resource);
+    }
+    void release_compute_pass(resource_handle<wgpu::ComputePassEncoder> handle) {
+        check_thread();if(active_command_scopes_)throw std::logic_error("Cannot release command resources during execution");
+        compute_passes_.destroy(handle,owner_);
+    }
+    size_t live_compute_passes() const {check_thread();return compute_passes_.resident_count();}
     template<class Execute> void with_command_buffer(resource_handle<wgpu::CommandBuffer> handle,Execute execute) {
         check_thread();const auto& resource=command_buffers_.get(handle,owner_);
         struct guard {size_t& count;explicit guard(size_t& value):count(value){++count;}~guard(){--count;}} scope(active_command_scopes_);
@@ -344,7 +398,7 @@ public:
     void close() {
         check_thread();
         if (closed_) return;
-        if (active_bind_group_scopes_ || active_pipeline_layout_scopes_ || active_bind_group_layout_scopes_ || active_buffer_scopes_ || active_shader_scopes_ || active_render_pipeline_scopes_ || active_texture_scopes_ || active_texture_view_scopes_ || active_command_scopes_) throw std::logic_error("Cannot close device during resource execution");
+        if (active_bind_group_scopes_ || active_pipeline_layout_scopes_ || active_bind_group_layout_scopes_ || active_buffer_scopes_ || active_shader_scopes_ || active_render_pipeline_scopes_ || active_compute_pipeline_scopes_ || active_texture_scopes_ || active_texture_view_scopes_ || active_command_scopes_) throw std::logic_error("Cannot close device during resource execution");
         process_loss();
         closed_=true;
         // Logical cancellation is independent of physical GPU completion.
@@ -353,11 +407,13 @@ public:
         if (!lost_) mailbox_->cancel_owner(owner_);
         device_.Destroy();
         render_passes_.destroy_owner(owner_);
+        compute_passes_.destroy_owner(owner_);
         command_encoders_.destroy_owner(owner_);
         command_buffers_.destroy_owner(owner_);
         buffers_.destroy_owner(owner_);
-        shaders_.destroy_owner(owner_);
+        shaders_.destroy_owner(owner_);samplers_.destroy_owner(owner_);
         render_pipelines_.destroy_owner(owner_);
+        compute_pipelines_.destroy_owner(owner_);
         pipeline_layouts_.destroy_owner(owner_);
         bind_groups_.destroy_owner(owner_);
         bind_group_layouts_.destroy_owner(owner_);

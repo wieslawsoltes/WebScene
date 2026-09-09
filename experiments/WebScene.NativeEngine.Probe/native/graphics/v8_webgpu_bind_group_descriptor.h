@@ -1,6 +1,7 @@
 #pragma once
 #include "v8_webgpu_vertex_state.h"
 #include "v8_webgpu_buffers.h"
+#include "v8_webgpu_samplers.h"
 #include "v8_webgpu_textures.h"
 #include "v8_webgpu_bind_group_layouts.h"
 namespace webscene::graphics {
@@ -33,6 +34,8 @@ inline bool read_webgpu_bind_group_descriptor(v8::Isolate* isolate,v8::Local<v8:
         // retain resources across subsequent descriptor getters and GC.
         if(v8_webgpu_buffers::is_instance(resource))
             entry.buffer=v8_webgpu_buffers::native_reference(resource);
+        else if(v8_webgpu_samplers::is_instance(resource))
+            entry.sampler=v8_webgpu_samplers::native_reference(resource);
         else if(v8_webgpu_texture_views::is_instance(resource))
             entry.textureView=v8_webgpu_texture_views::native_reference(resource);
         else if(v8_webgpu_textures::is_instance(resource))

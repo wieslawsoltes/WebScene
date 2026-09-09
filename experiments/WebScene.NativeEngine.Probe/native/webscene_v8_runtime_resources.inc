@@ -746,13 +746,10 @@
             const auto script_source = immutable_source != nullptr
                 ? immutable_source->view()
                 : std::string_view(source);
-            if (!execute_in_context(
-                    local_context,
-                    script_source,
-                    script_name,
-                    error,
-                    false,
-                    std::move(immutable_source))) {
+            const auto type = node.attributes.find("type");
+            const bool module = type != node.attributes.end() && lower_html_name(type->second) == "module";
+            if (!(module ? execute_module(local_context,script_source,script_name,error)
+                : execute_in_context(local_context,script_source,script_name,error,false,std::move(immutable_source)))) {
                 frame_last_error_value = "Connected script failed: " + error;
                 ++frame_script_error_count;
                 return false;

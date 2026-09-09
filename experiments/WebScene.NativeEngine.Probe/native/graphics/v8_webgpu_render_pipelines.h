@@ -1,5 +1,5 @@
 #pragma once
-#include "v8_webgpu_labeled_resources.h"
+#include "v8_webgpu_pipeline_resources.h"
 namespace webscene::graphics {
 struct v8_webgpu_render_pipelines_traits {
     using native_type=wgpu::RenderPipeline;
@@ -11,5 +11,5 @@ struct v8_webgpu_render_pipelines_traits {
         return graphics_service::deferred_render_pipeline_release(device,handle);
     }
 };
-using v8_webgpu_render_pipelines=v8_webgpu_labeled_resources<v8_webgpu_render_pipelines_traits>;
+using v8_webgpu_render_pipelines=v8_webgpu_pipeline_resources<v8_webgpu_render_pipelines_traits>;
 } // namespace webscene::graphics

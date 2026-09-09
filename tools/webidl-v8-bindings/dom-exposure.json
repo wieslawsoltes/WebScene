@@ -219,6 +219,17 @@
       "constants": []
     },
     {
+      "name": "SVGElement",
+      "template": "svg_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "Element",
+      "attributes": [
+        { "name": "style", "getter": "get_style" }
+      ],
+      "methods": [],
+      "constants": []
+    },
+    {
       "name": "HTMLElement",
       "template": "html_element_template",
       "constructor": "illegal_dom_constructor",
@@ -391,7 +402,6 @@
     "HTMLImageElement": "HTMLElement",
     "HTMLInputElement": "HTMLElement",
     "HTMLParagraphElement": "HTMLElement",
-    "SVGElement": "Element",
     "Window": "EventTarget"
   }
 }

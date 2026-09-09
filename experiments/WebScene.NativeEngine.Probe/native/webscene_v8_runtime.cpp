@@ -255,7 +255,7 @@ struct v8_dom_runtime::implementation final {
     {
         prune_persistent_compilation_cache();
         initialize_v8_process();
-        if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") != nullptr) {
+        if (!force_dedicated_isolate && std::getenv("WEBSCENE_V8_SHARED_ISOLATE") != nullptr) {
             try {
                 shared_isolate = acquire_shared_isolate();
             } catch (const std::exception& exception) {
@@ -264,9 +264,11 @@ struct v8_dom_runtime::implementation final {
             }
             isolate = shared_isolate == nullptr ? nullptr : shared_isolate->isolate;
         } else {
-            allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+            allocator.reset(v8::ArrayBuffer::Allocator::NewDefaultAllocator());
             v8::Isolate::CreateParams params;
-            params.array_buffer_allocator = allocator;
+            // Transferred backing stores can outlive the originating worker isolate.
+            // V8 retains this shared allocator until the final backing store is released.
+            params.array_buffer_allocator_shared = allocator;
             if (const auto maximum_heap_mib =
                     unsigned_environment_value("WEBSCENE_V8_MAX_HEAP_MIB");
                 maximum_heap_mib.has_value() && *maximum_heap_mib > 0) {
@@ -280,7 +282,7 @@ struct v8_dom_runtime::implementation final {
                 configure_startup_snapshot(params);
             } catch (const std::exception& exception) {
                 last_error = exception.what();
-                delete allocator;
+                allocator.reset();
                 allocator = nullptr;
                 return false;
             }
@@ -297,6 +299,8 @@ struct v8_dom_runtime::implementation final {
         }
         isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kExplicit);
         isolate->SetPromiseRejectCallback(promise_rejected);
+        isolate->SetHostInitializeImportMetaObjectCallback(initialize_import_meta);
+        isolate->SetHostImportModuleDynamicallyCallback(import_module_dynamically);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_bindings || profile_resize_cpu) {
             cpu_profiler = v8::CpuProfiler::New(isolate);
@@ -3515,6 +3519,16 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, std::string(crypto_source).c_str())).ToLocalChecked();
         crypto_script->Run(local_context).ToLocalChecked();
+        local_context->Global()->Set(local_context, js_string(isolate, "structuredClone"),
+            v8::Function::New(local_context, structured_clone, {}, 1).ToLocalChecked()).Check();
+        auto worker_constructor=v8::Function::New(local_context, worker_construct, {}, 1).ToLocalChecked();
+        v8::Local<v8::Value> event_target,worker_prototype,event_prototype;
+        if(local_context->Global()->Get(local_context,js_string(isolate,"EventTarget")).ToLocal(&event_target)
+            &&event_target->IsFunction()
+            &&worker_constructor->Get(local_context,js_string(isolate,"prototype")).ToLocal(&worker_prototype)
+            &&event_target.As<v8::Object>()->Get(local_context,js_string(isolate,"prototype")).ToLocal(&event_prototype))
+            worker_prototype.As<v8::Object>()->SetPrototype(local_context,event_prototype).FromMaybe(false);
+        local_context->Global()->Set(local_context, js_string(isolate, "Worker"),worker_constructor).Check();
         install_clipboard_api(local_context);
         install_websocket_globals(local_context);
         install_editor_web_platform_globals(local_context);
@@ -4163,6 +4177,9 @@ struct v8_dom_runtime::implementation final {
         info.GetReturnValue().Set(v8::True(info.GetIsolate()));
     }
 
+#include "webscene_v8_runtime_clone.inc"
+#include "webscene_v8_runtime_modules.inc"
+#include "webscene_v8_runtime_workers.inc"
 #include "webscene_v8_runtime_navigation.inc"
     // Keep these fragments in one translation unit: their order and direct
     // visibility preserve the runtime's existing release code generation.
@@ -4807,6 +4824,7 @@ bool v8_dom_runtime::has_pending_tasks() const noexcept
     return impl_->has_pending_detached_dom_collection()
         || impl_->websocket_transport.has_pending_events()
         || !impl_->pending_window_messages.empty()
+        || impl_->has_worker_messages()
         || impl_->has_ready_fetch_task()
         || !impl_->pending_dialog_close_events.empty()
         || !impl_->pending_programmatic_scroll_events.empty()

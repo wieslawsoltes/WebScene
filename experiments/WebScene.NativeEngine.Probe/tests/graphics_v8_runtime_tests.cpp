@@ -756,6 +756,46 @@ void test_runtime_webgpu_installation() {
         require(runtime.pump_task(),"Compilation info completion failed");std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     require(document.find_by_id("compilation-ready")!=nullptr,"Compilation info promises did not settle");
+    require(runtime.execute(R"JS(
+        (async()=>{
+            const d=installedDevice;
+            const module=d.createShaderModule({code:`
+                @group(0) @binding(0) var<storage,read_write> values:array<u32>;
+                @compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id:vec3<u32>){
+                    values[id.x]=id.x*3u+7u;
+                }`});
+            const pipeline=await d.createComputePipelineAsync({layout:'auto',compute:{module,entryPoint:'main'}});
+            const buffer=d.createBuffer({size:16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC|GPUBufferUsage.COPY_DST});
+            const readback=d.createBuffer({size:16,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
+            const group=d.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer}}]});
+            const encoder=d.createCommandEncoder();encoder.clearBuffer(buffer);
+            const pass=encoder.beginComputePass();pass.setPipeline(pipeline);pass.setBindGroup(0,group);pass.dispatchWorkgroups(4);pass.end();
+            encoder.copyBufferToBuffer(buffer,0,readback,0,16);d.queue.submit([encoder.finish()]);
+            await d.queue.onSubmittedWorkDone();await readback.mapAsync(GPUMapMode.READ);
+            const values=new Uint32Array(readback.getMappedRange());
+            if(values.join(',')!=='7,10,13,16')throw Error('Compute dispatch readback mismatch: '+values);
+            readback.unmap();readback.destroy();buffer.destroy();
+            let invalid=false;
+            try{await d.createComputePipelineAsync({layout:'auto',compute:{module,entryPoint:'missing'}})}
+            catch(e){invalid=e.name==='GPUPipelineError'&&e.reason==='validation'}
+            if(!invalid)throw Error('Invalid async pipeline did not reject');
+            const texture=d.createTexture({size:[2,1],format:'rgba8unorm',usage:GPUTextureUsage.COPY_DST|GPUTextureUsage.COPY_SRC});
+            d.queue.writeTexture({texture},new Uint8Array([255,0,0,255,0,255,0,255]),{bytesPerRow:8},[2,1]);
+            const pixels=d.createBuffer({size:256,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
+            const copy=d.createCommandEncoder();copy.copyTextureToBuffer({texture},{buffer:pixels,bytesPerRow:256},[2,1]);
+            d.queue.submit([copy.finish()]);await pixels.mapAsync(GPUMapMode.READ);
+            if(new Uint8Array(pixels.getMappedRange()).slice(0,8).join(',')!=='255,0,0,255,0,255,0,255')throw Error('Texture transfer mismatch');
+            pixels.unmap();pixels.destroy();texture.destroy();
+            const ready=document.createElement('div');ready.id='compute-copy-ready';document.body.appendChild(ready);
+        })();
+    )JS","compute-copy"),"Compute/copy regression execution failed");
+    deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+    while(!document.find_by_id("compute-copy-ready")&&std::chrono::steady_clock::now()<deadline){
+        if(!runtime.pump_task())throw std::runtime_error(runtime.last_error());
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(document.find_by_id("compute-copy-ready")!=nullptr,"Compute dispatch/copies did not complete");
+
     require(runtime.execute("globalThis.pressureTexture=installedDevice.createTexture({size:[1,1],format:'rgba8unorm',usage:16});globalThis.livePressureView=pressureTexture.createView();","view-pressure-setup"),"View pressure setup failed");
     for(unsigned i=0;i<300;++i)
         require(runtime.execute("pressureTexture.createView();","view-pressure"),"Unreachable texture views exhausted release tickets");
@@ -884,10 +924,14 @@ void test_runtime_webgpu_installation() {
     require(direct.initialize()&&direct.install_webgpu(wake,true,webgpu_canvas_interop::none),"Direct disposal GPU setup failed");
     require(direct.execute("navigator.gpu.requestAdapter();","pending-disposal-gpu"),"Direct disposal request failed");
 }
+#include "graphics_v8_modules.h"
 int main() {
     std::exception_ptr failure;
     std::thread worker([&] {
         try {
+            test_secure_context_reporting();
+            test_modules_and_clone();
+            test_dedicated_module_worker();
             test_device_loss_signal();
             test_compilation_info_snapshot();
             test_navigation_stylesheet_raw_text_isolation();

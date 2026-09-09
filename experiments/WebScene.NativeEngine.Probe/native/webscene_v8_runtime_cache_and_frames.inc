@@ -2066,7 +2066,7 @@
         }
         std::string source = script.code;
         std::shared_ptr<const immutable_text_source> immutable_source;
-        auto name = "webscene-frame-inline-" + std::to_string(script.index) + ".js";
+        auto name = hydration.base_address + "#inline-script-" + std::to_string(script.index);
         if (!script.source.empty()) {
             if (!load_text_resource(
                     script.source,
@@ -2085,19 +2085,15 @@
             auto document_value = local_frame_context->Global()->Get(
                 local_frame_context,
                 js_string(isolate, "document")).ToLocalChecked().As<v8::Object>();
-            set_current_script(local_frame_context, document_value, name);
+            if(script.module)document_value->Set(local_frame_context,js_string(isolate,"currentScript"),v8::Null(isolate)).Check();
+            else set_current_script(local_frame_context, document_value, name);
         }
         std::string error;
         const auto script_source = immutable_source != nullptr
             ? immutable_source->view()
             : std::string_view(source);
-        if (!execute_in_context(
-                local_frame_context,
-                script_source,
-                name,
-                error,
-                true,
-                std::move(immutable_source))) {
+        if (!(script.module ? execute_module(local_frame_context,script_source,name,error)
+            : execute_in_context(local_frame_context,script_source,name,error,true,std::move(immutable_source)))) {
             frame_last_error_value = "Iframe script #" + std::to_string(script.index)
                 + " failed: " + error;
             ++frame_script_error_count;

@@ -9,7 +9,10 @@
 #include "v8_webgpu_bind_group_layouts.h"
 #include "v8_webgpu_bind_group_layout_descriptor.h"
 #include "v8_webgpu_shaders.h"
+#include "v8_webgpu_samplers.h"
 #include "v8_webgpu_render_pipelines.h"
+#include "v8_webgpu_compute_descriptor.h"
+#include "v8_webgpu_async_pipelines.h"
 #include "v8_webgpu_textures.h"
 #include "v8_webgpu_command_encoders.h"
 #include "v8_webgpu_queue.h"
@@ -38,10 +41,13 @@ class v8_webgpu_devices {
         resource_handle<dawn_device> device;
         std::unique_ptr<v8_webgpu_buffers> buffers;
         std::unique_ptr<v8_webgpu_shaders> shaders;
+        std::unique_ptr<v8_webgpu_samplers> samplers;
         std::unique_ptr<v8_webgpu_pipeline_layouts> pipeline_layouts;
         std::unique_ptr<v8_webgpu_bind_groups> binding_groups;
         std::unique_ptr<v8_webgpu_bind_group_layouts> binding_layouts;
         std::unique_ptr<v8_webgpu_render_pipelines> pipelines;
+        std::unique_ptr<v8_webgpu_compute_pipelines> computes;
+        std::unique_ptr<v8_webgpu_async_pipelines> async_pipelines;
         std::unique_ptr<v8_webgpu_textures> textures;
         std::unique_ptr<v8_webgpu_command_encoders> encoders;
         std::shared_ptr<release_channel> releases;
@@ -281,6 +287,83 @@ class v8_webgpu_devices {
             isolate->ThrowException(v8::Exception::RangeError(v8::String::NewFromUtf8Literal(isolate,"Pipeline capacity exhausted")));
         } catch (const std::exception&) { fail(isolate,"GPUDevice native pipeline ownership is unavailable"); }
     }
+    static void create_sampler(const v8::FunctionCallbackInfo<v8::Value>& info){
+        if(!receiver(info))return;auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
+        try{
+            std::string label;if(!read_webgpu_object_label(isolate,context,info[0],label))return;
+            webgpu_state_reader r(isolate,context,info[0]);wgpu::SamplerDescriptor d{};
+            d.label=wgpu::StringView(label.data(),label.size());
+            d.addressModeU=d.addressModeV=d.addressModeW=wgpu::AddressMode::ClampToEdge;
+            d.magFilter=d.minFilter=wgpu::FilterMode::Nearest;d.mipmapFilter=wgpu::MipmapFilterMode::Nearest;
+            d.lodMinClamp=0;d.lodMaxClamp=32;uint32_t anisotropy=1;
+            if(!r.enumeration("addressModeU",d.addressModeU)||!r.enumeration("addressModeV",d.addressModeV)
+                ||!r.enumeration("addressModeW",d.addressModeW)||!r.enumeration("compare",d.compare)
+                ||!r.floating("lodMaxClamp",d.lodMaxClamp)||!r.floating("lodMinClamp",d.lodMinClamp)
+                ||!r.enumeration("magFilter",d.magFilter)||!r.uint32("maxAnisotropy",anisotropy)
+                ||!r.enumeration("minFilter",d.minFilter)||!r.enumeration("mipmapFilter",d.mipmapFilter))return;
+            if(anisotropy>UINT16_MAX){fail(isolate,"maxAnisotropy exceeds unsigned short");return;}d.maxAnisotropy=static_cast<uint16_t>(anisotropy);
+            auto* item=receiver(info);if(!item)return;
+            resource_handle<wgpu::Sampler> handle;item->service->with_device(item->device,[&](auto& device){handle=device.create_sampler(d);});
+            v8::Local<v8::Object> result;
+            try{
+                if(!item->samplers->wrap(context,*item->service,item->device,handle,info.This(),label).ToLocal(&result)){
+                    item->service->with_device(item->device,[&](auto& device){device.release_sampler(handle);});fail(isolate,"Sampler capacity exhausted");return;}
+            }catch(...){item->service->with_device(item->device,[&](auto& device){device.release_sampler(handle);});throw;}
+            info.GetReturnValue().Set(result);
+        }catch(const std::exception&){fail(isolate,"Sampler creation failed");}
+    }
+    static void create_compute_pipeline(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if(!receiver(info))return;auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
+        try {
+            webgpu_compute_descriptor converted;if(!read_webgpu_compute_descriptor(isolate,context,info[0],converted))return;
+            auto* item=receiver(info);if(!item)return;
+            resource_handle<wgpu::ComputePipeline> pipeline;
+            converted.with_native([&](const auto& desc){item->service->with_device(item->device,[&](auto& device){pipeline=device.create_compute_pipeline(desc);});});
+            v8::Local<v8::Object> result;
+            try {
+                if(!item->computes->wrap(context,*item->service,item->device,pipeline,info.This(),converted.label).ToLocal(&result)){
+                    item->service->with_device(item->device,[&](auto& device){device.release_compute_pipeline(pipeline);});fail(isolate,"Compute pipeline capacity exhausted");return;
+                }
+            }catch(...){item->service->with_device(item->device,[&](auto& device){device.release_compute_pipeline(pipeline);});throw;}
+            info.GetReturnValue().Set(result);
+        }catch(const std::exception&){fail(isolate,"Compute pipeline creation failed");}
+    }
+    template<bool Compute> static void create_pipeline_async(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* isolate=info.GetIsolate();auto context=isolate->GetCurrentContext();
+        v8::Local<v8::Promise::Resolver> resolver;if(!v8::Promise::Resolver::New(context).ToLocal(&resolver))return;
+        info.GetReturnValue().Set(resolver->GetPromise());
+        v8::TryCatch caught(isolate);
+        try {
+            if(!receiver(info)){
+                auto error=caught.Exception();caught.Reset();resolver->Reject(context,error).FromMaybe(false);return;
+            }
+            auto launch=[&](const auto& converted){
+                auto* item=receiver(info);if(!item)return;
+                converted.with_native([&](const auto& descriptor){
+                    item->async_pipelines->start(context,info.This(),resolver,*item->service,item->device,
+                        *item->pipelines,*item->computes,descriptor,converted.label);
+                });
+            };
+            bool valid;
+            if constexpr(Compute){
+                webgpu_compute_descriptor converted;valid=read_webgpu_compute_descriptor(isolate,context,info[0],converted);
+                if(valid)launch(converted);
+            }else{
+                webgpu_render_descriptor converted;valid=read_webgpu_render_descriptor(isolate,context,info[0],converted,
+                    [](v8::Local<v8::Value> value)->std::optional<wgpu::PipelineLayout>{
+                        if(!v8_webgpu_pipeline_layouts::is_instance(value))return {};
+                        return v8_webgpu_pipeline_layouts::native_reference(value);
+                    });
+                if(valid)launch(converted);
+            }
+            if(!valid||caught.HasCaught()){
+                auto error=caught.HasCaught()?caught.Exception():v8::Exception::TypeError(v8::String::NewFromUtf8Literal(isolate,"Invalid pipeline descriptor"));
+                caught.Reset();resolver->Reject(context,error).FromMaybe(false);
+            }
+        }catch(const std::exception& e){
+            caught.Reset();resolver->Reject(context,v8::Exception::Error(v8::String::NewFromUtf8(isolate,e.what()).ToLocalChecked())).FromMaybe(false);
+        }
+    }
     static void create_texture(const v8::FunctionCallbackInfo<v8::Value>& info) {
         if (!receiver(info)) return;
         auto* isolate=info.GetIsolate(); auto context=isolate->GetCurrentContext();
@@ -417,8 +500,12 @@ public:
         prototype->Set(isolate,"pushErrorScope",push_scope);
         auto shader_create=v8::FunctionTemplate::New(isolate,create_shader); shader_create->SetLength(1);
         prototype->Set(isolate,"createShaderModule",shader_create);
+        prototype->Set(isolate,"createSampler",v8::FunctionTemplate::New(isolate,create_sampler));
         auto pipeline_create=v8::FunctionTemplate::New(isolate,create_pipeline);pipeline_create->SetLength(1);
         prototype->Set(isolate,"createRenderPipeline",pipeline_create);
+        prototype->Set(isolate,"createComputePipeline",v8::FunctionTemplate::New(isolate,create_compute_pipeline));
+        prototype->Set(isolate,"createComputePipelineAsync",v8::FunctionTemplate::New(isolate,create_pipeline_async<true>));
+        prototype->Set(isolate,"createRenderPipelineAsync",v8::FunctionTemplate::New(isolate,create_pipeline_async<false>));
         auto texture_create=v8::FunctionTemplate::New(isolate,create_texture);texture_create->SetLength(1);
         prototype->Set(isolate,"createTexture",texture_create);
         auto encoder_create=v8::FunctionTemplate::New(isolate,create_encoder);encoder_create->SetLength(0);
@@ -448,10 +535,13 @@ public:
             item->queue.reset();
             item->encoders.reset();
             item->textures.reset();
+            item->async_pipelines.reset();
+            item->computes.reset();
             item->pipelines.reset();
             item->pipeline_layouts.reset();
             item->binding_groups.reset();
             item->binding_layouts.reset();
+            item->samplers.reset();
             item->shaders.reset();
             item->buffers.reset(); // Invalidate first; cancellation can construct JS exceptions.
             item->wrapper.Reset();
@@ -460,7 +550,7 @@ public:
     }
     bool complete(completion_record record) {
         check_scope();
-        for (auto& item:entries_) if (item && (item->loss->complete(record)||item->error_scopes->complete(record)||item->buffers->complete(record)||item->shaders->complete(record))) return true;
+        for (auto& item:entries_) if (item && (item->loss->complete(record)||item->error_scopes->complete(record)||item->buffers->complete(record)||item->shaders->complete(record)||item->async_pipelines->complete(record)||item->queue->complete(record))) return true;
         return false;
     }
 private:
@@ -522,7 +612,10 @@ public:
         item->binding_groups=std::make_unique<v8_webgpu_bind_groups>(isolate_,context);
         item->binding_layouts=std::make_unique<v8_webgpu_bind_group_layouts>(isolate_,context);
         item->shaders=std::make_unique<v8_webgpu_shaders>(isolate_,context);
+        item->samplers=std::make_unique<v8_webgpu_samplers>(isolate_,context);
         item->pipelines=std::make_unique<v8_webgpu_render_pipelines>(isolate_,context);
+        item->computes=std::make_unique<v8_webgpu_compute_pipelines>(isolate_,context);
+        item->async_pipelines=std::make_unique<v8_webgpu_async_pipelines>(isolate_);
         item->textures=std::make_unique<v8_webgpu_textures>(isolate_,context);
         item->encoders=std::make_unique<v8_webgpu_command_encoders>(isolate_,context);
         item->buffer_owner_key.Reset(isolate_,v8::Private::New(isolate_));

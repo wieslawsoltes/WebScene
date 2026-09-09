@@ -262,5 +262,18 @@
     "write-only": "WriteOnly",
     "read-only": "ReadOnly",
     "read-write": "ReadWrite"
+  },
+  "AddressMode": {
+    "clamp-to-edge": "ClampToEdge",
+    "repeat": "Repeat",
+    "mirror-repeat": "MirrorRepeat"
+  },
+  "FilterMode": {
+    "nearest": "Nearest",
+    "linear": "Linear"
+  },
+  "MipmapFilterMode": {
+    "nearest": "Nearest",
+    "linear": "Linear"
   }
 }

@@ -120,6 +120,15 @@ jobs:
           -p:WebSceneAvalonia12Sample=${{ matrix.avalonia12Sample }} \
           -o artifacts/aot-contracts 2>&1 | tee artifacts-aot-publish.log
         python scripts/verify-aot-warnings.py artifacts-aot-publish.log
+    - name: Publish Aureon NativeAOT sample
+      if: matrix.avalonia == 12
+      shell: bash
+      run: |
+        set -o pipefail
+        dotnet publish experiments/WebScene.AureonStudio -c Release -r '${{ matrix.rid }}' \
+          -p:PublishAot=true -p:WebSceneAvalonia12Sample=true \
+          -o artifacts/aureon-aot 2>&1 | tee artifacts-aureon-publish.log
+        python scripts/verify-aot-warnings.py artifacts-aureon-publish.log
     - name: Exercise checkpoint and archive contracts in native executable
       shell: bash
       run: ./artifacts/aot-contracts/${{ matrix.executable }} --aot-serialization-probe
@@ -127,4 +136,4 @@ jobs:
       if: always()
       with:
         name: aot-contracts-${{ matrix.rid }}-avalonia-${{ matrix.avalonia }}
-        path: artifacts-aot-publish.log
+        path: artifacts*-publish.log

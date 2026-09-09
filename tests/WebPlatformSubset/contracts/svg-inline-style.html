@@ -1,0 +1,19 @@
+<!doctype html>
+<title>SVG inline style and namespace identity</title>
+<svg id="gizmo"><g id="handle"><path d="M0 0L10 10"></path></g></svg>
+<script>
+const s=window.__webSceneWptState={complete:false,harness:null,results:[],errors:[],diagnostics:[]};
+function check(name,passed){s.results.push({name,status:passed?'PASS':'FAIL',message:passed?null:'SVG style contract failed',stack:null});}
+try{
+    const svg=document.getElementById('gizmo'),g=document.getElementById('handle');
+    check('SVG wrappers have SVGElement identity',svg instanceof SVGElement&&g instanceof SVGElement&&!(svg instanceof HTMLElement));
+    check('SVG style has stable identity',svg.style===svg.style&&!!g.style);
+    svg.style.display='none';
+    check('SVG display mutation is reflected in computed style',getComputedStyle(svg).display==='none');
+    svg.style.display='';
+    check('SVG display restores after removal',getComputedStyle(svg).display!=='none');
+    const html=document.createElement('div');
+    check('HTML remains outside the SVG interface',html instanceof HTMLElement&&!(html instanceof SVGElement));
+}catch(e){s.errors.push(String(e));check('SVG style workload completed',false);}
+s.harness={status:s.results.some(r=>r.status!=='PASS')?1:0,message:null,stack:null};s.complete=true;
+</script>

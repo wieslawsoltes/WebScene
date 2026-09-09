@@ -49,6 +49,8 @@
 
     ~implementation()
     {
+        stop_workers();
+        dedicated_workers.clear();
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
         // Stop native publication before releasing the dispatcher and isolate.
         // Context disposal discards its JS promises; no late callback may enter it.
@@ -190,6 +192,7 @@
         element_template.Reset();
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         html_element_template.Reset();
+        svg_element_template.Reset();
         html_table_cell_element_template.Reset();
         html_dialog_element_template.Reset();
         html_form_element_template.Reset();
@@ -208,6 +211,7 @@
         event_target_template.Reset();
 #endif
         frame_context.Reset();
+        module_map.clear();
         context.Reset();
         release_external_dom_memory_accounting();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -220,7 +224,7 @@
             isolate->Dispose();
         }
         isolate = nullptr;
-        delete allocator;
+        allocator.reset();
         allocator = nullptr;
         // The final shared owner disposes the isolate. Release the recursive
         // V8 lock first so its destructor never observes an already-disposed

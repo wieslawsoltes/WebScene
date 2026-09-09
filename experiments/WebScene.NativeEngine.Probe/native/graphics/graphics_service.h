@@ -180,6 +180,24 @@ public:
             } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
         },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
     }
+    static graphics_command deferred_sampler_release(resource_handle<dawn_device> device,resource_handle<wgpu::Sampler> pipeline) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try {
+                service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
+                    owner.release_sampler({args[3],args[4],static_cast<uint32_t>(args[5])});
+                });
+            } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
+        },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
+    }
+    static graphics_command deferred_compute_pipeline_release(resource_handle<dawn_device> device,resource_handle<wgpu::ComputePipeline> pipeline) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try {
+                service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
+                    owner.release_compute_pipeline({args[3],args[4],static_cast<uint32_t>(args[5])});
+                });
+            } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
+        },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
+    }
     static graphics_command deferred_bind_group_layout_release(resource_handle<dawn_device> device,resource_handle<wgpu::BindGroupLayout> pipeline) noexcept {
         return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
             try {
@@ -239,6 +257,15 @@ public:
             try {
                 service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
                     owner.release_render_pass({args[3],args[4],static_cast<uint32_t>(args[5])});
+                });
+            } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
+        },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
+    }
+    static graphics_command deferred_compute_pass_release(resource_handle<dawn_device> device,resource_handle<wgpu::ComputePassEncoder> pipeline) noexcept {
+        return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
+            try {
+                service.with_device({args[0],args[1],static_cast<uint32_t>(args[2])},[&](auto& owner) {
+                    owner.release_compute_pass({args[3],args[4],static_cast<uint32_t>(args[5])});
                 });
             } catch (const std::invalid_argument&) { /* Device or wrapper already released. */ }
         },{device.table,device.generation,device.slot,pipeline.table,pipeline.generation,pipeline.slot}};
