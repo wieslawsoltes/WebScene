@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 #if !WEBSCENE_UNO
 using Avalonia;
 using Avalonia.Controls;
@@ -1740,46 +1741,36 @@ internal static class NativePresenterTextDiagnostics
             var colorSpace = image.ColorSpace;
             var rasterization = NativeTextShaping.ResolveFontRasterizationProfile(
                 presenterDeviceScaleFactor);
-            var metadata = new
+            var metadata = new JsonObject
             {
-                CapturedUtc = DateTimeOffset.UtcNow,
-                RasterizationMode = NativeTextShaping.ActiveFontRasterizationMode.ToString(),
-                RasterizationOverride = Environment.GetEnvironmentVariable(
-                    NativeTextShaping.RasterizationModeEnvironmentVariable),
-                Rasterization = new
+                ["CapturedUtc"] = DateTimeOffset.UtcNow,
+                ["RasterizationMode"] = NativeTextShaping.ActiveFontRasterizationMode.ToString(),
+                ["RasterizationOverride"] = Environment.GetEnvironmentVariable(NativeTextShaping.RasterizationModeEnvironmentVariable),
+                ["Rasterization"] = new JsonObject
                 {
-                    rasterization.Subpixel,
-                    rasterization.BaselineSnap,
-                    Edging = rasterization.Edging.ToString(),
-                    Hinting = rasterization.Hinting.ToString(),
-                    rasterization.LinearMetrics,
-                    rasterization.EmbeddedBitmaps
+                    ["Subpixel"] = rasterization.Subpixel, ["BaselineSnap"] = rasterization.BaselineSnap,
+                    ["Edging"] = rasterization.Edging.ToString(), ["Hinting"] = rasterization.Hinting.ToString(),
+                    ["LinearMetrics"] = rasterization.LinearMetrics, ["EmbeddedBitmaps"] = rasterization.EmbeddedBitmaps
                 },
-                PresenterDeviceScaleFactor = presenterDeviceScaleFactor,
-                EffectiveSize = new { effectiveSize.X, effectiveSize.Y },
-                Viewport = new { Width = viewportWidth, Height = viewportHeight },
-                ContentScale = new { contentScale.X, contentScale.Y },
-                PresenterMatrix = MatrixValues(presenterMatrix),
-                ContentMatrix = MatrixValues(contentMatrix),
-                Surface = new
+                ["PresenterDeviceScaleFactor"] = presenterDeviceScaleFactor,
+                ["EffectiveSize"] = new JsonObject { ["X"] = effectiveSize.X, ["Y"] = effectiveSize.Y },
+                ["Viewport"] = new JsonObject { ["Width"] = viewportWidth, ["Height"] = viewportHeight },
+                ["ContentScale"] = new JsonObject { ["X"] = contentScale.X, ["Y"] = contentScale.Y },
+                ["PresenterMatrix"] = MatrixValues(presenterMatrix),
+                ["ContentMatrix"] = MatrixValues(contentMatrix),
+                ["Surface"] = new JsonObject
                 {
-                    image.Width,
-                    image.Height,
-                    ColorType = image.ColorType.ToString(),
-                    AlphaType = image.AlphaType.ToString(),
-                    IsSrgb = colorSpace?.IsSrgb,
-                    GammaIsCloseToSrgb = colorSpace?.GammaIsCloseToSrgb,
-                    GammaIsLinear = colorSpace?.GammaIsLinear,
-                    PixelGeometry = surface.SurfaceProperties.PixelGeometry.ToString(),
-                    Flags = surface.SurfaceProperties.Flags.ToString(),
-                    Backend = surface.Context?.Backend.ToString() ?? "CPU"
+                    ["Width"] = image.Width, ["Height"] = image.Height,
+                    ["ColorType"] = image.ColorType.ToString(), ["AlphaType"] = image.AlphaType.ToString(),
+                    ["IsSrgb"] = colorSpace?.IsSrgb, ["GammaIsCloseToSrgb"] = colorSpace?.GammaIsCloseToSrgb,
+                    ["GammaIsLinear"] = colorSpace?.GammaIsLinear,
+                    ["PixelGeometry"] = surface.SurfaceProperties.PixelGeometry.ToString(),
+                    ["Flags"] = surface.SurfaceProperties.Flags.ToString(),
+                    ["Backend"] = surface.Context?.Backend.ToString() ?? "CPU"
                 }
             };
-            File.WriteAllText(
-                Path.Combine(OutputDirectory, "presenter-metadata.json"),
-                JsonSerializer.Serialize(
-                    metadata,
-                    new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(Path.Combine(OutputDirectory, "presenter-metadata.json"),
+                metadata.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
             Console.WriteLine(
                 $"WebScene text presenter diagnostic captured to {OutputDirectory}");
             Interlocked.Exchange(ref s_captureState, 2);
@@ -1791,18 +1782,12 @@ internal static class NativePresenterTextDiagnostics
             Interlocked.Exchange(ref s_captureState, 0);
         }
 
-        static object MatrixValues(SKMatrix matrix)
-            => new
+        static JsonObject MatrixValues(SKMatrix matrix)
+            => new()
             {
-                matrix.ScaleX,
-                matrix.SkewX,
-                matrix.TransX,
-                matrix.SkewY,
-                matrix.ScaleY,
-                matrix.TransY,
-                matrix.Persp0,
-                matrix.Persp1,
-                matrix.Persp2
+                ["ScaleX"] = matrix.ScaleX, ["SkewX"] = matrix.SkewX, ["TransX"] = matrix.TransX,
+                ["SkewY"] = matrix.SkewY, ["ScaleY"] = matrix.ScaleY, ["TransY"] = matrix.TransY,
+                ["Persp0"] = matrix.Persp0, ["Persp1"] = matrix.Persp1, ["Persp2"] = matrix.Persp2
             };
     }
 }

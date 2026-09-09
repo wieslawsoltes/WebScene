@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using SkiaSharp;
 
 #if WEBSCENE_UNO
@@ -29,7 +30,6 @@ internal sealed unsafe partial class NativeCanvasSceneRenderer
     }
     private PendingReadback? _pendingReadback;
 #endif
-    private static readonly JsonSerializerOptions CheckpointJson = new() { IncludeFields = true };
 
     internal sealed class RasterCheckpoint
     {
@@ -49,7 +49,7 @@ internal sealed unsafe partial class NativeCanvasSceneRenderer
         using var png = image.Encode(SKEncodedImageFormat.Png, 100);
         if (png is null) throw new InvalidOperationException("Canvas checkpoint encoding failed.");
         checkpoint.Png = Convert.ToBase64String(png.ToArray());
-        return JsonSerializer.SerializeToUtf8Bytes(checkpoint,CheckpointJson);
+        return JsonSerializer.SerializeToUtf8Bytes(checkpoint, CanvasCheckpointJsonContext.Default.RasterCheckpoint);
     }
 
     private static RasterCheckpoint CaptureCheckpointState(CanvasReplaySnapshot snapshot)
@@ -230,11 +230,13 @@ internal sealed unsafe partial class NativeCanvasSceneRenderer
     private static void TraceCheckpointStage(string stage, long started)
     {
         if (Environment.GetEnvironmentVariable("WEBSCENE_TRACE_CANVAS_CHECKPOINTS") != "1") return;
-        Console.WriteLine("Canvas checkpoint timing: " + JsonSerializer.Serialize(new
+        var timing = new System.Text.Json.Nodes.JsonObject
         {
-            stage, started, ended = System.Diagnostics.Stopwatch.GetTimestamp(),
-            frequency = System.Diagnostics.Stopwatch.Frequency
-        }));
+            ["stage"] = stage, ["started"] = started,
+            ["ended"] = System.Diagnostics.Stopwatch.GetTimestamp(),
+            ["frequency"] = System.Diagnostics.Stopwatch.Frequency
+        };
+        Console.WriteLine("Canvas checkpoint timing: " + timing.ToJsonString());
     }
 
     private static Task<byte[]> StartCheckpointEncoding(SKImage raster, RasterCheckpoint state)
@@ -254,7 +256,7 @@ internal sealed unsafe partial class NativeCanvasSceneRenderer
     private static CanvasState ReplayCheckpoint(SKCanvas canvas, SKPath path, string resource,
         uint width, uint height)
     {
-        var checkpoint = JsonSerializer.Deserialize<RasterCheckpoint>(resource, CheckpointJson)
+        var checkpoint = JsonSerializer.Deserialize(resource, CanvasCheckpointJsonContext.Default.RasterCheckpoint)
             ?? throw new InvalidOperationException("Invalid canvas checkpoint.");
         if (checkpoint.Version != 1 || checkpoint.Matrix.Length != 9)
             throw new InvalidOperationException("Unsupported canvas checkpoint.");
@@ -284,4 +286,10 @@ internal sealed unsafe partial class NativeCanvasSceneRenderer
         path.FillType=(SKPathFillType)checkpoint.FillType;
         return checkpoint.State;
     }
+}
+
+[JsonSourceGenerationOptions(IncludeFields = true)]
+[JsonSerializable(typeof(NativeCanvasSceneRenderer.RasterCheckpoint))]
+internal partial class CanvasCheckpointJsonContext : JsonSerializerContext
+{
 }

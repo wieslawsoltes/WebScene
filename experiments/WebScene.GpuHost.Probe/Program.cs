@@ -8,6 +8,12 @@ using Avalonia.Rendering.Composition;
 
 internal static class Program
 {
+    static Program()
+    {
+        if (Environment.GetEnvironmentVariable("WEBSCENE_TRACE_AOT_EXCEPTIONS") == "1")
+            AppDomain.CurrentDomain.FirstChanceException += (_, e) => Console.Error.WriteLine(e.Exception);
+    }
+
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_probe")]
     internal static extern int RenderGraphite(uint texture, uint serial);
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_poll")]
@@ -27,7 +33,9 @@ internal static class Program
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_shutdown")]
     internal static extern int ShutdownGraphite();
     [STAThread]
-    public static int Main(string[] args) => args.Contains("--canvas-backing-probe")
+    public static int Main(string[] args) => args.Contains("--aot-serialization-probe")
+        ? AotSerializationProbe.Run()
+        : args.Contains("--canvas-backing-probe")
         ? AppBuilder.Configure<CanvasBackingProbeApp>().UsePlatformDetect().StartWithClassicDesktopLifetime(args)
         : args.Contains("--metal-host")
         ? AppBuilder.Configure<MetalHostProbeApp>().UsePlatformDetect()

@@ -83,3 +83,38 @@ jobs:
         -DWEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF
     - name: Compile native C++ portability target
       run: cmake --build artifacts/native-engine-portability --config Release --parallel
+
+  native-aot:
+    name: NativeAOT contracts ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - os: macos-latest
+          rid: osx-arm64
+          executable: WebScene.GpuHost.Probe
+        - os: windows-latest
+          rid: win-x64
+          executable: WebScene.GpuHost.Probe.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v5
+      with:
+        global-json-file: global.json
+    - name: Publish NativeAOT with reflection JSON disabled
+      shell: bash
+      run: |
+        set -o pipefail
+        dotnet publish experiments/WebScene.GpuHost.Probe -c Release -r '${{ matrix.rid }}' \
+          -p:PublishAot=true -p:JsonSerializerIsReflectionEnabledByDefault=false \
+          -o artifacts/aot-contracts 2>&1 | tee artifacts-aot-publish.log
+        python scripts/verify-aot-warnings.py artifacts-aot-publish.log
+    - name: Exercise checkpoint and archive contracts in native executable
+      shell: bash
+      run: ./artifacts/aot-contracts/${{ matrix.executable }} --aot-serialization-probe
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: aot-contracts-${{ matrix.rid }}
+        path: artifacts-aot-publish.log

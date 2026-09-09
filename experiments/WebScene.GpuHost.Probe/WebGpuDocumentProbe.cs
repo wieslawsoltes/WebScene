@@ -507,6 +507,9 @@ internal sealed class WebGpuDocumentProbeApp : Application
                             await view.FlushRuntimeDiagnosticsAsync(diagnosticTimeout.Token);
                             Console.WriteLine($"Kestrel uncaught JavaScript exceptions: {Interlocked.Read(ref documentExceptions)}");
                             if (Interlocked.Read(ref documentExceptions) != 0) webGpuReady = "false";
+                            var renderedScenes = view.CapturePerformanceSnapshot().Surface.RenderedScenes;
+                            Console.WriteLine($"Kestrel successfully rendered scenes: {renderedScenes}");
+                            if (renderedScenes == 0) webGpuReady = "false";
                             Console.WriteLine(webGpuReady == "true" ? "Kestrel WebGPU startup check passed (interaction qualification remains)." : "FAIL: Kestrel WebGPU startup or initial rendering reported an error.");
                             await view.DisposeAsync();
                             desktop.Shutdown(webGpuReady == "true" ? 0 : 1);

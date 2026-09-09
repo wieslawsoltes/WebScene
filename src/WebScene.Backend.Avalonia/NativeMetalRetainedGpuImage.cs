@@ -20,7 +20,7 @@ internal sealed class NativeMetalRetainedGpuImage : INativeRetainedGpuImage
     internal static bool Supports(ISkiaSharpApiLease lease)
     {
         using var platform=lease.TryLeasePlatformGraphicsApi();
-        return platform?.Context.GetType().GetInterface("Avalonia.Metal.IMetalDevice") is not null;
+        return platform?.Context is global::Avalonia.Metal.IMetalDevice;
     }
     internal static NativeMetalRetainedGpuImage? Import(NativeGpuImageLeaseV3 source,
         ISkiaSharpApiLease lease, GRSurfaceOrigin origin, SKAlphaType alpha)
@@ -31,10 +31,13 @@ internal sealed class NativeMetalRetainedGpuImage : INativeRetainedGpuImage
             ?? throw new NotSupportedException("Metal platform lease required"))
         {
             var host=platform.Context;
-            var type=host.GetType().GetInterface("Avalonia.Metal.IMetalDevice")
+            var metal=host as global::Avalonia.Metal.IMetalDevice
                 ?? throw new NotSupportedException("Metal host required");
-            var device=(IntPtr)type.GetProperty("Device")!.GetValue(host)!;
-            var queue=(IntPtr)type.GetProperty("CommandQueue")!.GetValue(host)!;
+            // Avalonia hides these members in its reference assembly. Reflect on
+            // the known interface type so NativeAOT preserves the accessors.
+            var type=typeof(global::Avalonia.Metal.IMetalDevice);
+            var device=(IntPtr)type.GetProperty("Device")!.GetValue(metal)!;
+            var queue=(IntPtr)type.GetProperty("CommandQueue")!.GetValue(metal)!;
             result=new(host,skia,queue);
             var status=NativeGpuImageConsumerV3.Acquire(source,out result._consumer);
             if(status==NativeSceneAcquireStatus.Backpressure) return null;
