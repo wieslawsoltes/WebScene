@@ -161,8 +161,7 @@ def angle(args):
     (workspace / ".gclient").write_text("solutions = " + repr(solution) + "\n")
     env = dict(os.environ, DEPOT_TOOLS_UPDATE="0", DEPOT_TOOLS_WIN_TOOLCHAIN="0")
     # Apply LF policy to gclient's transitive Git checkouts without changing user configuration.
-    env.update(GIT_CONFIG_COUNT="2", GIT_CONFIG_KEY_0="core.autocrlf", GIT_CONFIG_VALUE_0="false",
-               GIT_CONFIG_KEY_1="core.eol", GIT_CONFIG_VALUE_1="lf")
+    env.update(angle_git_environment())
     env["PATH"] = str(depot) + os.pathsep + env["PATH"]
     if os.name == "nt":
         # Self-updates stay disabled to preserve the pin, but gclient's Windows
@@ -226,6 +225,16 @@ def angle(args):
          {"gn": capture([gn, "--version"], env=env), "ninja": capture(["ninja", "--version"], env=env),
           "clang": capture([clang, "--version"], env=env), "clangSha256": sha(clang),
           "depotTools": LOCK["sources"]["depot-tools"]["revision"], "host": platform.platform()}, env=env)
+
+
+def angle_git_environment():
+    # Rust's ICU snapshots exceed MAX_PATH under the CI workspace. Use the same
+    # policy for gclient checkout and later verification; otherwise Git reports
+    # these tracked files as deleted even when they exist on disk.
+    return dict(GIT_CONFIG_COUNT="3",
+                GIT_CONFIG_KEY_0="core.autocrlf", GIT_CONFIG_VALUE_0="false",
+                GIT_CONFIG_KEY_1="core.eol", GIT_CONFIG_VALUE_1="lf",
+                GIT_CONFIG_KEY_2="core.longpaths", GIT_CONFIG_VALUE_2="true")
 
 
 if __name__ == "__main__":
