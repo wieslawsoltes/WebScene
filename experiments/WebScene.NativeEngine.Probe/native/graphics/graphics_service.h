@@ -1,5 +1,10 @@
 #pragma once
+#ifndef WEBSCENE_GRAPHICS_ENABLE_ANGLE
+#define WEBSCENE_GRAPHICS_ENABLE_ANGLE 1
+#endif
+#if WEBSCENE_GRAPHICS_ENABLE_ANGLE
 #include "angle_context.h"
+#endif
 #include "dawn_event_service.h"
 #include "dawn_device.h"
 #include "command_channel.h"
@@ -23,7 +28,9 @@ class graphics_service {
     std::shared_ptr<completion_wake> wake_;
     const size_t completion_capacity_;
     const bool measure_latency_;
+#if WEBSCENE_GRAPHICS_ENABLE_ANGLE
     resource_table<angle_context> contexts_;
+#endif
     resource_table<dawn_device> devices_;
     resource_table<wgpu::Adapter> adapters_;
     std::unique_ptr<dawn_event_service> dawn_;
@@ -47,7 +54,11 @@ class graphics_service {
     }
 public:
     graphics_service(std::shared_ptr<completion_wake> wake,size_t context_capacity=64,size_t completion_capacity=256,bool measure_latency=false)
-        : wake_(std::move(wake)),completion_capacity_(completion_capacity),measure_latency_(measure_latency),contexts_(context_capacity,owner_),devices_(context_capacity,owner_),adapters_(context_capacity,owner_) {}
+        : wake_(std::move(wake)),completion_capacity_(completion_capacity),measure_latency_(measure_latency),
+#if WEBSCENE_GRAPHICS_ENABLE_ANGLE
+          contexts_(context_capacity,owner_),
+#endif
+          devices_(context_capacity,owner_),adapters_(context_capacity,owner_) {}
     graphics_service(const graphics_service&)=delete;
     graphics_service& operator=(const graphics_service&)=delete;
     ~graphics_service() {
@@ -108,6 +119,7 @@ public:
         devices_.destroy(handle,owner_);
     }
     size_t live_devices() const { check_thread(); return devices_.resident_count(); }
+#if WEBSCENE_GRAPHICS_ENABLE_ANGLE
     resource_handle<angle_context> create_angle_context(EGLint backend,EGLint major) {
         check_open();
         auto display=angle_display::acquire(backend);
@@ -138,6 +150,7 @@ public:
         if (active_context_scopes_) throw std::logic_error("Cannot destroy ANGLE contexts during execution");
         contexts_.destroy(handle,owner_);
     }
+#endif
     // Finalizers enqueue these value-only records through a retained endpoint.
     // A full queue requires retry/retention by the caller; it is not a release.
     static graphics_command deferred_buffer_release(resource_handle<dawn_device> device,resource_handle<wgpu::Buffer> buffer) noexcept {
@@ -251,12 +264,14 @@ public:
             catch (const std::invalid_argument&) { /* Already explicitly destroyed. */ }
         },{handle.table,handle.generation,handle.slot}};
     }
+#if WEBSCENE_GRAPHICS_ENABLE_ANGLE
     static graphics_command deferred_context_release(resource_handle<angle_context> handle) noexcept {
         return {[](graphics_service& service,std::span<const std::byte>,const graphics_command::arguments& args) noexcept {
             try { service.destroy_angle_context({args[0],args[1],static_cast<uint32_t>(args[2])}); }
             catch (const std::invalid_argument&) { /* Already explicitly destroyed. */ }
         },{handle.table,handle.generation,handle.slot}};
     }
+#endif
     // Create lazily on the engine thread; other threads retain only the channel.
     std::shared_ptr<command_channel> command_endpoint(size_t capacity=256,size_t upload_limit=65536) {
         check_open();
@@ -340,12 +355,19 @@ public:
     }
     graphics_metrics metrics() const {
         check_thread();
-        return {devices_.resident_count(),contexts_.resident_count(),
+        return {devices_.resident_count(),live_contexts(),
             dawn_ ? dawn_->completions()->metrics() : completion_metrics{},
             commands_ ? commands_->metrics() : queue_metrics{},
             releases_ ? releases_->occupied() : 0,adapters_.resident_count()};
     }
-    size_t live_contexts() const { check_thread(); return contexts_.resident_count(); }
+    size_t live_contexts() const {
+        check_thread();
+#if WEBSCENE_GRAPHICS_ENABLE_ANGLE
+        return contexts_.resident_count();
+#else
+        return 0;
+#endif
+    }
     void close() {
         check_thread();
         if (closed_) return;
@@ -360,7 +382,9 @@ public:
         devices_.destroy_owner(owner_);
         adapters_.destroy_owner(owner_);
         if (dawn_) dawn_->close();
+#if WEBSCENE_GRAPHICS_ENABLE_ANGLE
         contexts_.destroy_owner(owner_);
+#endif
     }
 };
 } // namespace webscene::graphics

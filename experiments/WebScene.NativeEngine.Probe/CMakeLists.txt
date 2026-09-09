@@ -80,12 +80,21 @@ target_compile_features(webscene_native_engine PRIVATE cxx_std_20)
 target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_BUILD)
 target_include_directories(webscene_native_engine PUBLIC native)
 
-option(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS "Link the pinned Dawn and ANGLE graphics prerequisites" OFF)
+option(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS "Link pinned native GPU dependencies for this platform" OFF)
 if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
-    set(WEBSCENE_GRAPHICS_COMPONENTS dawn angle)
+    set(WEBSCENE_GRAPHICS_COMPONENTS dawn)
+    set(webscene_graphics_libraries dawn::webgpu_dawn)
+    # The native macOS presenter shares Metal textures directly with Skia.
+    # Windows requires ANGLE for the D3D11/EGL composition bridge.
+    if(APPLE)
+        add_compile_definitions(WEBSCENE_GRAPHICS_ENABLE_ANGLE=0)
+    else()
+        list(APPEND WEBSCENE_GRAPHICS_COMPONENTS angle)
+        list(APPEND webscene_graphics_libraries webscene_angle_EGL webscene_angle_GLESv2)
+    endif()
     include("${CMAKE_CURRENT_LIST_DIR}/../../eng/graphics/GraphicsDependencies.cmake")
     target_link_libraries(webscene_native_engine PRIVATE
-        dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2)
+        ${webscene_graphics_libraries})
     target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=1)
     if(WIN32)
         target_link_libraries(webscene_native_engine PRIVATE d3d12 d3d11 dxgi)
@@ -98,37 +107,39 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
         add_executable(webscene_graphics_dawn_event_tests tests/graphics_dawn_event_tests.cpp)
         target_compile_features(webscene_graphics_dawn_event_tests PRIVATE cxx_std_20)
         target_include_directories(webscene_graphics_dawn_event_tests PRIVATE native)
-        target_link_libraries(webscene_graphics_dawn_event_tests PRIVATE dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2 Threads::Threads)
+        target_link_libraries(webscene_graphics_dawn_event_tests PRIVATE ${webscene_graphics_libraries} Threads::Threads)
         add_test(NAME webscene_graphics_dawn_event_tests COMMAND webscene_graphics_dawn_event_tests)
         set_tests_properties(webscene_graphics_dawn_event_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
-        add_custom_command(TARGET webscene_graphics_dawn_event_tests POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "$<TARGET_FILE:dawn::webgpu_dawn>"
-                "$<TARGET_FILE:webscene_angle_EGL>" "$<TARGET_FILE:webscene_angle_GLESv2>"
-                "$<TARGET_FILE_DIR:webscene_graphics_dawn_event_tests>")
-        add_executable(webscene_graphics_angle_context_tests tests/graphics_angle_context_tests.cpp)
-        target_compile_features(webscene_graphics_angle_context_tests PRIVATE cxx_std_20)
-        target_include_directories(webscene_graphics_angle_context_tests PRIVATE native)
-        target_link_libraries(webscene_graphics_angle_context_tests PRIVATE webscene_angle_EGL webscene_angle_GLESv2 Threads::Threads)
-        add_test(NAME webscene_graphics_angle_context_tests COMMAND webscene_graphics_angle_context_tests 2)
-        add_test(NAME webscene_graphics_angle_es3_context_tests COMMAND webscene_graphics_angle_context_tests 3)
-        set_tests_properties(webscene_graphics_angle_context_tests webscene_graphics_angle_es3_context_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
-        add_executable(webscene_graphics_service_tests tests/graphics_service_tests.cpp)
-        target_compile_features(webscene_graphics_service_tests PRIVATE cxx_std_20)
-        target_include_directories(webscene_graphics_service_tests PRIVATE native)
-        target_link_libraries(webscene_graphics_service_tests PRIVATE dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2 Threads::Threads)
-        add_test(NAME webscene_graphics_service_tests COMMAND webscene_graphics_service_tests)
-        set_tests_properties(webscene_graphics_service_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
-        foreach(library dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2)
-            add_custom_command(TARGET webscene_graphics_service_tests POST_BUILD
+        foreach(library IN LISTS webscene_graphics_libraries)
+            add_custom_command(TARGET webscene_graphics_dawn_event_tests POST_BUILD
                 COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                    "$<TARGET_FILE:${library}>" "$<TARGET_FILE_DIR:webscene_graphics_service_tests>")
+                    "$<TARGET_FILE:${library}>" "$<TARGET_FILE_DIR:webscene_graphics_dawn_event_tests>")
         endforeach()
-        foreach(library EGL GLESv2)
-            add_custom_command(TARGET webscene_graphics_angle_context_tests POST_BUILD
-                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                    "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_graphics_angle_context_tests>")
-        endforeach()
+        if(NOT APPLE)
+            add_executable(webscene_graphics_angle_context_tests tests/graphics_angle_context_tests.cpp)
+            target_compile_features(webscene_graphics_angle_context_tests PRIVATE cxx_std_20)
+            target_include_directories(webscene_graphics_angle_context_tests PRIVATE native)
+            target_link_libraries(webscene_graphics_angle_context_tests PRIVATE webscene_angle_EGL webscene_angle_GLESv2 Threads::Threads)
+            add_test(NAME webscene_graphics_angle_context_tests COMMAND webscene_graphics_angle_context_tests 2)
+            add_test(NAME webscene_graphics_angle_es3_context_tests COMMAND webscene_graphics_angle_context_tests 3)
+            set_tests_properties(webscene_graphics_angle_context_tests webscene_graphics_angle_es3_context_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+            add_executable(webscene_graphics_service_tests tests/graphics_service_tests.cpp)
+            target_compile_features(webscene_graphics_service_tests PRIVATE cxx_std_20)
+            target_include_directories(webscene_graphics_service_tests PRIVATE native)
+            target_link_libraries(webscene_graphics_service_tests PRIVATE ${webscene_graphics_libraries} Threads::Threads)
+            add_test(NAME webscene_graphics_service_tests COMMAND webscene_graphics_service_tests)
+            set_tests_properties(webscene_graphics_service_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+            foreach(library ${webscene_graphics_libraries})
+                add_custom_command(TARGET webscene_graphics_service_tests POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "$<TARGET_FILE:${library}>" "$<TARGET_FILE_DIR:webscene_graphics_service_tests>")
+            endforeach()
+            foreach(library EGL GLESv2)
+                add_custom_command(TARGET webscene_graphics_angle_context_tests POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_graphics_angle_context_tests>")
+            endforeach()
+        endif()
     endif()
     add_custom_command(TARGET webscene_native_engine POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
@@ -143,11 +154,13 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     elseif(UNIX)
         set_target_properties(webscene_native_engine PROPERTIES BUILD_RPATH "$ORIGIN")
     endif()
-    foreach(library EGL GLESv2)
-        add_custom_command(TARGET webscene_native_engine POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_native_engine>")
-    endforeach()
+    if(NOT APPLE)
+        foreach(library EGL GLESv2)
+            add_custom_command(TARGET webscene_native_engine POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_native_engine>")
+        endforeach()
+    endif()
 endif()
 
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8 "Link the engine directly to the pinned V8 monolith" OFF)
@@ -1154,7 +1167,7 @@ if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS AND WEBSCENE_NATIVE_
     endif()
     add_dependencies(webscene_graphics_v8_runtime_tests webscene_native_engine)
     add_test(NAME webscene_graphics_v8_runtime_tests COMMAND webscene_graphics_v8_runtime_tests)
-    set_tests_properties(webscene_graphics_v8_runtime_tests PROPERTIES TIMEOUT 30 LABELS "graphics;runtime")
+    set_tests_properties(webscene_graphics_v8_runtime_tests PROPERTIES TIMEOUT 30 LABELS "graphics;runtime;hardware")
 endif()
 
 if(BUILD_TESTING AND APPLE AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)

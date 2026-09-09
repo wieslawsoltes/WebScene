@@ -377,7 +377,13 @@ fi
 cmake "${cmake_args[@]}"
 cmake --build "$build_dir" --config "$cmake_build_type" --parallel
 cmake -E copy_if_different "$icu_data" "$build_dir/icudtl.dat"
-ctest --test-dir "$build_dir" -C "$cmake_build_type" --output-on-failure
+ctest_args=(--test-dir "$build_dir" -C "$cmake_build_type" --output-on-failure)
+# Hosted package builders prove linkage and CPU contracts; real GPU execution
+# remains mandatory on the explicitly enrolled hardware qualification runners.
+if [[ "${WEBSCENE_NATIVE_SKIP_HARDWARE_TESTS:-0}" == 1 ]]; then
+  ctest_args+=(-LE hardware)
+fi
+ctest "${ctest_args[@]}"
 
 native_path="$build_dir/$native_name"
 if [[ ! -f "$native_path" ]]; then
@@ -517,7 +523,10 @@ copied_assets=("$native_name" icudtl.dat webscene-native-runtime.json)
 if [[ -n "$graphics_sdk" ]]; then
   graphics_suffix=.so
   if [[ "$expected_kernel" == Darwin ]]; then graphics_suffix=.dylib; fi
-  copied_assets+=("libwebgpu_dawn$graphics_suffix" "libEGL$graphics_suffix" "libGLESv2$graphics_suffix" webscene-graphics-runtime.json)
+  copied_assets+=("libwebgpu_dawn$graphics_suffix" webscene-graphics-runtime.json)
+  if [[ "$expected_kernel" != Darwin ]]; then
+    copied_assets+=("libEGL$graphics_suffix" "libGLESv2$graphics_suffix")
+  fi
 fi
 if [[ "$v8_snapshot" == bootstrap ]]; then
   copied_assets+=(webscene_bootstrap_snapshot.bin webscene_bootstrap_snapshot.meta)

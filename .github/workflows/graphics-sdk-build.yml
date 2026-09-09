@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'eng/graphics/**'
+      - '.github/actions/graphics-sdk/**'
       - '.github/workflows/graphics-sdk-build.yml'
   workflow_dispatch:
     inputs:
@@ -15,6 +16,7 @@ on:
     branches: [main]
     paths:
       - 'eng/graphics/**'
+      - '.github/actions/graphics-sdk/**'
       - '.github/workflows/graphics-sdk-build.yml'
 
 permissions:
@@ -44,65 +46,11 @@ jobs:
     timeout-minutes: 120
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: ./.github/actions/graphics-sdk
       with:
-        python-version: '3.11'
-    - id: sdk-identity
-      name: Resolve graphics SDK cache identity
-      shell: bash
-      env:
-        SDK_INPUTS: ${{ hashFiles('eng/graphics/dependencies.lock.json', 'eng/graphics/windows-runtime.json', 'eng/graphics/build.py', 'eng/graphics/DawnSymbolBoundary.cmake', 'eng/graphics/dawn_exports.py', 'eng/graphics/install-windows-sdk.ps1', '.github/workflows/graphics-sdk-build.yml') }}
-      run: |
-        echo "key=webscene-graphics-sdk-v1-${{ matrix.component }}-${{ matrix.rid }}-${ImageVersion:?Runner image version is required}-$SDK_INPUTS" >> "$GITHUB_OUTPUT"
-    - id: sdk-cache
-      name: Restore pinned graphics SDK
-      if: inputs.clean != true
-      uses: actions/cache/restore@v4
-      with:
-        path: artifacts/graphics-sdk/${{ matrix.rid }}/${{ matrix.component }}
-        key: ${{ steps.sdk-identity.outputs.key }}
-        # No prefix fallback: a different build recipe or toolchain must rebuild.
-    - name: Install pinned Windows SDK for graphics runtime packaging
-      if: matrix.rid == 'win-x64' && steps.sdk-cache.outputs.cache-hit != 'true'
-      shell: pwsh
-      run: ./eng/graphics/install-windows-sdk.ps1
-    - name: Initialize Windows x64 compiler environment
-      if: matrix.rid == 'win-x64'
-      shell: pwsh
-      run: |
-        $ErrorActionPreference = 'Stop'
-        $before = @{}
-        Get-ChildItem Env: | ForEach-Object { $before[$_.Name] = $_.Value }
-        $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
-        if (!(Test-Path $vswhere)) { throw 'Visual Studio Installer/vswhere is required.' }
-        $installation = & $vswhere -latest -version '[17.1,)' -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-        if ($LASTEXITCODE -ne 0 -or !$installation) { throw 'An x64 Visual C++ toolchain is required.' }
-        $developerShell = Join-Path $installation 'Common7/Tools/Launch-VsDevShell.ps1'
-        & $developerShell -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
-        if (!(Get-Command cl.exe -ErrorAction SilentlyContinue)) { throw 'Visual C++ initialization did not expose cl.exe.' }
-        if ($env:VSCMD_ARG_TGT_ARCH -ne 'x64') { throw 'Expected an x64 compiler target.' }
-        Get-ChildItem Env: | Where-Object { !$before.ContainsKey($_.Name) -or $before[$_.Name] -ne $_.Value } | ForEach-Object {
-          if ($_.Value.Contains("`n") -or $_.Value.Contains("`r")) { throw "Unexpected multiline environment variable: $($_.Name)" }
-          "$($_.Name)=$($_.Value)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-        }
-    - name: Install Linux development prerequisites
-      if: matrix.rid == 'linux-x64'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ninja-build clang lld pkg-config libvulkan-dev libx11-dev libx11-xcb-dev libxcb1-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev libxdamage-dev libxfixes-dev libdrm-dev libgbm-dev libwayland-dev libudev-dev
-    - name: Build pinned SDK
-      if: steps.sdk-cache.outputs.cache-hit != 'true'
-      run: python eng/graphics/build.py ${{ matrix.component }} --rid ${{ matrix.rid }} --jobs 2
-    - name: Verify installed SDK
-      run: python eng/graphics/verify-sdk.py artifacts/graphics-sdk/${{ matrix.rid }}/${{ matrix.component }} --component ${{ matrix.component }} --rid ${{ matrix.rid }}
-    # Save immediately after verification: a later probe failure must not throw
-    # away a successful expensive dependency build. Hits still run all probes.
-    - name: Save verified graphics SDK
-      if: steps.sdk-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
-      with:
-        path: artifacts/graphics-sdk/${{ matrix.rid }}/${{ matrix.component }}
-        key: ${{ steps.sdk-identity.outputs.key }}
+        rid: ${{ matrix.rid }}
+        component: ${{ matrix.component }}
+        clean: ${{ inputs.clean || false }}
     - name: Compile and link diagnostic probe
       run: |
         cmake -S eng/graphics/probes -B artifacts/graphics-probes -G Ninja -DCMAKE_BUILD_TYPE=Release -DWEBSCENE_GRAPHICS_COMPONENTS=${{ matrix.component }} -DWEBSCENE_GRAPHICS_SDK_ROOT=${{ github.workspace }}/artifacts/graphics-sdk/${{ matrix.rid }}

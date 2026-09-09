@@ -236,7 +236,9 @@ if ($V8Snapshot -eq "bootstrap") {
     Copy-Item $snapshotPath (Join-Path $buildDir "Release/webscene_bootstrap_snapshot.bin") -Force
     Copy-Item $snapshotMetadataPath (Join-Path $buildDir "Release/webscene_bootstrap_snapshot.meta") -Force
 }
-& ctest --test-dir $buildDir -C Release --output-on-failure
+$ctestArgs = @('--test-dir', $buildDir, '-C', 'Release', '--output-on-failure')
+if ($env:WEBSCENE_NATIVE_SKIP_HARDWARE_TESTS -eq '1') { $ctestArgs += @('-LE', 'hardware') }
+& ctest @ctestArgs
 if ($LASTEXITCODE -ne 0) { throw "Native WebScene engine tests failed." }
 
 $nativePath = Join-Path $buildDir "Release/webscene_native_engine.dll"
