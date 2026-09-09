@@ -7,11 +7,13 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/WebScene.JavaScript.Interop.Generator/WebScene.JavaScript.Interop.Generator.csproj" />
     <ProjectReference Include="..\..\src\WebScene.JavaScript.Interop\WebScene.JavaScript.Interop.csproj" />
     <ProjectReference Include="..\..\samples\TradingViewInterop.Generated\TradingViewInterop.Generated.csproj" />
     <ProjectReference Include="..\WebScene.JavaScript.Interop.Generator.Compile\WebScene.JavaScript.Interop.Generator.Compile.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
