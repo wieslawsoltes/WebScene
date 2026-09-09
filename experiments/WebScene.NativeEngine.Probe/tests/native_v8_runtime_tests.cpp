@@ -310,8 +310,10 @@ int main()
             return 0;
         }
         if (selected == "detached-dom-gc") {
+            test_low_memory_reclaims_small_detached_dom_batches();
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
+            resize(focused_engine, 320, 120, 1U);
             test_detached_dom_wrappers_do_not_permanently_root_nodes(
                 focused_engine);
             webscene_engine_destroy(focused_engine);
@@ -742,6 +744,7 @@ int main()
     test_dom_element_constructor_identity(engine);
     test_provisional_frame_focus_and_document_event_identity(engine);
     test_initial_frame_document_write_and_hidden_style(engine);
+    test_low_memory_reclaims_small_detached_dom_batches();
     test_detached_dom_wrappers_do_not_permanently_root_nodes(engine);
     test_connected_style_recascade_skips_detached_wrapper_retention(engine);
     test_resize_updates_device_pixel_ratio(engine);
