@@ -98,6 +98,9 @@
         retire_document_graphics();
 #endif
         stop_workers();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        clear_media_bindings();
+#endif
         module_map.clear();
         set_context_location(local_context, local_context->Global(), resolved_url);
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)

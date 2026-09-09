@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <IsPackable>true</IsPackable>
+    <WebSceneNativeEngineMedia Condition="'$(WebSceneNativeEngineMedia)' == ''">false</WebSceneNativeEngineMedia>
     <WebSceneNativeEngineGraphics>false</WebSceneNativeEngineGraphics>
     <WebSceneNativeEngineGraphics Condition="'$(WebSceneGraphicsPackageProps)' != ''">true</WebSceneNativeEngineGraphics>
     <IncludeBuildOutput>false</IncludeBuildOutput>
@@ -52,6 +53,7 @@
     <WebSceneNativeV8LicensePackagePath>$(WebSceneNativePackageMetadataDir)V8-LICENSE.txt</WebSceneNativeV8LicensePackagePath>
     <WebSceneNativeIcuLicensePackagePath>$(WebSceneNativePackageMetadataDir)ICU-LICENSE.txt</WebSceneNativeIcuLicensePackagePath>
     <WebSceneNativeIXWebSocketLicensePackagePath>$(WebSceneNativePackageMetadataDir)IXWebSocket-LICENSE.txt</WebSceneNativeIXWebSocketLicensePackagePath>
+    <WebSceneNativeMiniaudioLicensePackagePath>$(WebSceneNativePackageMetadataDir)Miniaudio-LICENSE.txt</WebSceneNativeMiniaudioLicensePackagePath>
     <WebSceneNativeMbedTlsLicensePackagePath>$(WebSceneNativePackageMetadataDir)MbedTLS-LICENSE.txt</WebSceneNativeMbedTlsLicensePackagePath>
     <WebSceneNativeHtmlParserNoticesPackagePath>$(WebSceneNativePackageMetadataDir)HTML-PARSER-THIRD-PARTY-NOTICES.md</WebSceneNativeHtmlParserNoticesPackagePath>
   </PropertyGroup>
@@ -86,6 +88,8 @@
     <None Include="$(WebSceneNativeIXWebSocketLicensePackagePath)"
           Pack="true"
           PackagePath="licenses\IXWebSocket-LICENSE.txt" />
+    <None Include="$(WebSceneNativeMiniaudioLicensePackagePath)" Pack="true" Visible="false"
+          PackagePath="licenses\Miniaudio-LICENSE.txt" Condition="'$(WebSceneNativeEngineMedia)' == 'true'" />
     <None Include="$(WebSceneNativeMbedTlsLicensePackagePath)"
           Pack="true"
           PackagePath="licenses\MbedTLS-LICENSE.txt"
@@ -113,6 +117,8 @@
            Text="The configured WebScene native engine does not exist: $(WebSceneNativeEnginePath)" />
     <Error Condition="!Exists('$(WebSceneNativeEngineIcuDataPath)')"
            Text="The configured V8 ICU data does not exist: $(WebSceneNativeEngineIcuDataPath)" />
+    <Error Condition="'$(WebSceneNativeEngineMedia)' == 'true' and !Exists('$(WebSceneNativeEngineMiniaudioLicensePath)')"
+           Text="Media-enabled runtime packaging requires the pinned Miniaudio license." />
     <Error Condition="!Exists('$(WebSceneNativeEngineV8LicensePath)') or !Exists('$(WebSceneNativeEngineIcuLicensePath)') or !Exists('$(WebSceneNativeEngineIXWebSocketLicensePath)')"
            Text="Packing the native WebScene runtime requires valid V8, ICU, and IXWebSocket license files." />
     <Error Condition="$([System.String]::Copy('$(WebSceneNativeEngineRid)').StartsWith('win-')) and !Exists('$(WebSceneNativeEngineMbedTlsLicensePath)')"
@@ -169,6 +175,8 @@
           BeforeTargets="GenerateNuspec"
           DependsOnTargets="ValidateWebSceneNativeEnginePackage">
     <MakeDir Directories="$(WebSceneNativePackageMetadataDir)" />
+    <Copy SourceFiles="$(WebSceneNativeEngineMiniaudioLicensePath)" DestinationFiles="$(WebSceneNativeMiniaudioLicensePackagePath)"
+          Condition="'$(WebSceneNativeEngineMedia)' == 'true'" />
     <Copy SourceFiles="$(WebSceneNativeEngineV8LicensePath)"
           DestinationFiles="$(WebSceneNativeV8LicensePackagePath)" />
     <Copy SourceFiles="$(WebSceneNativeEngineIcuLicensePath)"

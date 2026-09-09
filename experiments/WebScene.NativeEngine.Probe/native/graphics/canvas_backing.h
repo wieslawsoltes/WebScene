@@ -2,7 +2,7 @@
 #include "resource_table.h"
 
 namespace webscene::graphics {
-enum class canvas_context_mode : uint32_t { none, two_d, webgl1, webgl2, webgpu };
+enum class canvas_context_mode : uint32_t { none, two_d, webgl1, webgl2, webgpu, media };
 // Canvas identity is independent of DOM attachment, scene acknowledgement and
 // native image allocation. This metadata owns no pixels or backend pointers.
 class canvas_backing {
@@ -24,7 +24,7 @@ public:
         return serial>=content_floor_ && serial<=content_serial_;
     }
     bool claim_context(canvas_context_mode mode) noexcept {
-        if (mode==canvas_context_mode::none || static_cast<uint32_t>(mode)>static_cast<uint32_t>(canvas_context_mode::webgpu)) return false;
+        if (mode==canvas_context_mode::none || static_cast<uint32_t>(mode)>static_cast<uint32_t>(canvas_context_mode::media)) return false;
         if (mode_!=canvas_context_mode::none && mode_!=mode) return false;
         mode_=mode;
         return true;

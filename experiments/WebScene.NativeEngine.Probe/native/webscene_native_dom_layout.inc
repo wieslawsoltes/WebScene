@@ -1308,7 +1308,7 @@ void native_document::layout_children(dom_node& parent)
             // Replaced inline elements contribute their intrinsic box, even
             // without CSS width/height. Flattening them into text runs loses
             // the box entirely (canvas fallback children are not its contents).
-            if (node.tag == "canvas" || node.tag == "img" || node.tag == "svg"
+            if (node.tag == "canvas" || node.tag == "video" || node.tag == "img" || node.tag == "svg"
                 || node.tag == "input" || node.tag == "select" || node.tag == "textarea")
                 return false;
             // Inline-block and inline-table descendants are atomic inline
@@ -2628,7 +2628,7 @@ void native_document::layout_children(dom_node& parent)
     const auto contains_replaced_content = [&](const auto& self,
                                                 const dom_node& candidate) -> bool {
         if (candidate.tag == "svg" || candidate.tag == "img"
-            || candidate.tag == "canvas" || candidate.tag == "input"
+            || candidate.tag == "canvas" || candidate.tag == "video" || candidate.tag == "input"
             || candidate.tag == "select" || candidate.tag == "textarea") {
             return true;
         }
@@ -3725,7 +3725,7 @@ float native_document::min_content_inline_size(
         return constrain(padding + widest_segment);
     }
     if (node.tag == "input" || node.tag == "select" || node.tag == "textarea"
-        || node.tag == "img" || node.tag == "svg" || node.tag == "canvas") {
+        || node.tag == "img" || node.tag == "svg" || node.tag == "canvas" || node.tag == "video") {
         return intrinsic_size(node, true, available);
     }
 
@@ -4131,11 +4131,15 @@ float native_document::compute_intrinsic_size(
         // applied to the wrapper and used to size its portaled listbox.
         return constrain(columns * measure_text_width("0", node) + padding);
     }
-    if (node.tag == "svg" || node.tag == "img" || node.tag == "canvas") {
+    if (node.tag == "svg" || node.tag == "img" || node.tag == "canvas" || node.tag == "video") {
 #if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
         ++intrinsic_size_branch_counts_for_benchmark[5];
 #endif
         const auto attribute = node.attributes.find(horizontal ? "width" : "height");
+        if (node.tag == "video" && attribute == node.attributes.end()) {
+            const auto& backing=node.canvas().backing;
+            return constrain(static_cast<float>(horizontal?backing.width():backing.height())+padding);
+        }
         if (node.tag == "canvas" && attribute == node.attributes.end()) {
             return constrain((horizontal ? 300.0F : 150.0F) + padding);
         }

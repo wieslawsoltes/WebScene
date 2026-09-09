@@ -1624,6 +1624,7 @@ public:
     std::array<uint64_t, 4U> intrinsic_view_box_parse_counts() const noexcept;
 #endif
     size_t node_count() const noexcept;
+    const std::vector<dom_node*>& media_elements() const noexcept { return media_elements_; }
     allocation_metrics read_allocation_metrics() const noexcept;
     size_t count_tag(const std::string& tag) const noexcept;
     size_t sum_attribute_bytes(const std::string& tag, const std::string& attribute) const noexcept;
@@ -2017,6 +2018,7 @@ private:
     uint32_t retained_export_canvas_id_{0};
     float viewport_width_{1};
     float viewport_height_{1};
+    std::vector<dom_node*> media_elements_;
     uint32_t next_node_id_{1};
     uint64_t layout_passes_{0};
     double animation_frame_timestamp_ms_{0};

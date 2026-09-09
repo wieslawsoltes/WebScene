@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the Aureon AOT host and its pinned, unmodified browser assets."""
+"""Package the Frameforge AOT host and its pinned, unmodified browser assets."""
 import argparse
 import json
 import pathlib
@@ -17,11 +17,11 @@ if a.output.exists():
     raise SystemExit("Output already exists; choose a fresh path.")
 mac = a.output / "Contents/MacOS"
 mac.mkdir(parents=True)
-for name in ["Frameforge", "libAvaloniaNative.dylib", "libSkiaSharp.dylib", "libHarfBuzzSharp.dylib"]:
+for name in ["media-verify.html", "Frameforge", "libAvaloniaNative.dylib", "libSkiaSharp.dylib", "libHarfBuzzSharp.dylib"]:
     shutil.copy2(a.publish / name, mac / name)
 for name in ["libwebscene_native_engine.dylib", "libwebgpu_dawn.dylib", "icudtl.dat",
              "webscene_bootstrap_snapshot.bin", "webscene_bootstrap_snapshot.meta",
-             "webscene-graphics-runtime.json"]:
+             "webscene-graphics-runtime.json", "webscene-miniaudio-LICENSE"]:
     shutil.copy2(a.runtime / name, mac / name)
 assets = mac / "Assets"
 assets.mkdir()
@@ -35,7 +35,7 @@ commit = subprocess.check_output(["git", "-C", str(a.source), "rev-parse", "HEAD
 (mac / "BUILD-STATUS.json").write_text(json.dumps({
     "application": "Frameforge", "sourceCommit": commit,
     "status": "Native AOT compatibility build; video editing is not qualified.",
-    "limitations": ["HTML media decoding, Web Audio, GPU external video textures and recording are not supported.", "IndexedDB persistence is unavailable."],
+    "limitations": ["GPU external image/video textures and recording remain unqualified; HTML media and Web Audio have a separate --media-verify contract.", "IndexedDB persistence is unavailable."],
     "runtime": "WebScene Native AOT, Avalonia 12.1.1, macOS arm64"
 }, indent=2) + "\n")
 (a.output / "Contents/Info.plist").write_bytes(plistlib.dumps({

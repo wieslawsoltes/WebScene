@@ -1061,12 +1061,14 @@ internal sealed class UnoResourceLoader : IWebSceneResourceLoader
         var uri = new Uri(address);
         if (uri.IsFile)
         {
+            var bytes = request.Kind == WebSceneResourceKind.Data ? File.ReadAllBytes(uri.LocalPath) : null;
             return new WebSceneTextResource(
                 address,
-                File.ReadAllText(uri.LocalPath),
+                bytes is null ? File.ReadAllText(uri.LocalPath) : System.Text.Encoding.UTF8.GetString(bytes),
                 address,
                 null)
             {
+                BinaryContent = bytes is null ? (ReadOnlyMemory<byte>?)null : new ReadOnlyMemory<byte>(bytes),
                 LastModified = File.GetLastWriteTimeUtc(uri.LocalPath),
                 IsCacheable = true
             };
@@ -1086,7 +1088,10 @@ internal sealed class UnoResourceLoader : IWebSceneResourceLoader
                 ? System.Text.Encoding.UTF8.GetString(
                     Convert.FromBase64String(payload))
                 : Uri.UnescapeDataString(payload);
-            return new WebSceneTextResource(address, dataContent, address, null);
+            return new WebSceneTextResource(address, dataContent, address, null)
+            { BinaryContent = request.Kind == WebSceneResourceKind.Data
+                ? new ReadOnlyMemory<byte>(metadata.EndsWith(";base64", StringComparison.OrdinalIgnoreCase)
+                    ? Convert.FromBase64String(payload) : System.Text.Encoding.UTF8.GetBytes(dataContent)) : (ReadOnlyMemory<byte>?)null };
         }
         if (uri.Scheme is not ("http" or "https"))
         {
@@ -1163,11 +1168,13 @@ internal sealed class UnoResourceLoader : IWebSceneResourceLoader
                 inner: null,
                 response.StatusCode);
         }
-        var content = request.Kind == WebSceneResourceKind.Image
+        var binaryBytes = request.Kind == WebSceneResourceKind.Data ? response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult() : null;
+        var content = binaryBytes is not null ? System.Text.Encoding.UTF8.GetString(binaryBytes) : request.Kind == WebSceneResourceKind.Image
             ? NativeImageResource.ToMarkup(response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult())
             : response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         return new WebSceneTextResource(address, content, address, null)
         {
+            BinaryContent = binaryBytes is null ? (ReadOnlyMemory<byte>?)null : new ReadOnlyMemory<byte>(binaryBytes),
             EntityTag = responseEntityTag,
             LastModified = responseLastModified,
             FreshUntil = cachePolicy.FreshUntil,

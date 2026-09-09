@@ -50,6 +50,10 @@
     ~implementation()
     {
         stop_workers();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        clear_media_bindings();
+        media_initializer_key.Reset();
+#endif
         dedicated_workers.clear();
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
         // Stop native publication before releasing the dispatcher and isolate.

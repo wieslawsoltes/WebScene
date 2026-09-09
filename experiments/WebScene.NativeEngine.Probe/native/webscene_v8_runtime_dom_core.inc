@@ -1530,6 +1530,9 @@
                 js_string(isolate, "form"),
                 get_form_owner).Check();
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        attach_media_prototype(local_context,node,object);
+#endif
         auto& wrapper = node_wrappers[key];
         wrapper.Reset(isolate, object);
         if (!is_connected(node)) wrapper.SetWeak();

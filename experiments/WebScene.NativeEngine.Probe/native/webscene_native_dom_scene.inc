@@ -61,7 +61,7 @@ void native_document::build_scene(
 void native_document::publish_gpu_canvas_image(dom_node& node,
     std::shared_ptr<const webscene_gpu_image_lease_v3> image)
 {
-    if (node.tag!="canvas" || find_by_native_id(node.id)!=&node)
+    if ((node.tag!="canvas" && node.tag!="video") || find_by_native_id(node.id)!=&node)
         throw std::invalid_argument("GPU canvas belongs to another document or is not a canvas");
     auto& canvas=node.mutable_canvas();
     const bool changed=canvas.gpu_image!=image;
@@ -85,7 +85,7 @@ bool native_document::validate_gpu_canvas_binding(const gpu_canvas_scene_binding
 {
     const auto* node=binding.node_id==0 || binding.node_id>native_id_index_.size()
         ? nullptr : native_id_index_[binding.node_id-1];
-    if(!node || node->tag!="canvas" || !is_connected(*node))return false;
+    if(!node || (node->tag!="canvas" && node->tag!="video") || !is_connected(*node))return false;
     const auto& backing=node->canvas().backing;
     if(binding.presentation_generation) {
         return binding.completed && !binding.pending
@@ -104,7 +104,7 @@ void native_document::build_gpu_canvas_bindings(
 {
     bindings.clear();
     for(const auto& node:nodes_) {
-        if(node->tag!="canvas" || !is_connected(*node) || !node->visible
+        if((node->tag!="canvas" && node->tag!="video") || !is_connected(*node) || !node->visible
             || !display_tree_allows_render(*this,*node))continue;
         const auto& canvas=node->canvas();
         if(!canvas.gpu_snapshot&&!canvas.gpu_image) {
@@ -131,7 +131,7 @@ void native_document::build_gpu_canvas_images(
 {
     images.clear();
     for (const auto& node : nodes_) {
-        if (node->tag!="canvas" || !is_connected(*node) || !node->visible
+        if ((node->tag!="canvas" && node->tag!="video") || !is_connected(*node) || !node->visible
             || !display_tree_allows_render(*this,*node)) continue;
         const auto& canvas=node->canvas();
         if (!canvas.gpu_image) continue;
@@ -1328,7 +1328,7 @@ void native_document::append_scene(
     const bool paints_gpu=presentation_gpu || (gpu_metadata
         && gpu_metadata->allocation_generation==canvas.backing.allocation_generation()
         && canvas.backing.accepts_completed_content(gpu_metadata->content_serial));
-    if (paint_self && node.tag=="canvas" && paints_gpu) {
+    if (paint_self && (node.tag=="canvas" || node.tag=="video") && paints_gpu) {
         // Native DOM output carries the node ID. Publication resolves it to the
         // scene-local image index before exposing the command to consumers.
         commands.push_back(webscene_scene_command{

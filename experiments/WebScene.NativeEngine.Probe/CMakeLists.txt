@@ -80,10 +80,11 @@ target_compile_features(webscene_native_engine PRIVATE cxx_std_20)
 target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_BUILD)
 target_include_directories(webscene_native_engine PUBLIC native)
 
-option(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA "Build native media decoder foundation (browser bindings follow separately)" OFF)
+option(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA "Build native HTML media and Web Audio services" ON)
 if(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
     add_subdirectory(native/media)
     target_link_libraries(webscene_native_engine PRIVATE webscene_media)
+    target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA=1)
 endif()
 
 

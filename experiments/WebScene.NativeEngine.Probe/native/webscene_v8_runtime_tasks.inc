@@ -563,6 +563,10 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
         publish_ready_gpu_canvases();
 #endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        synchronize_media_elements();
+        if(drain_media())return true;
+#endif
         if (has_worker_messages()) return drain_worker_message();
         if (websocket_transport.has_pending_events()) {
             return drain_websocket_event();

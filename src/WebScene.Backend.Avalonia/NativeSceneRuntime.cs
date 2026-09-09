@@ -1189,7 +1189,7 @@ public static unsafe partial class NativeWebSceneApi
             var responseEntityTagLength = Encoding.UTF8.GetByteCount(responseEntityTag);
             var contentLength = resource.NotModified
                 ? 0
-                : Encoding.UTF8.GetByteCount(resource.Content);
+                : resource.BinaryContent?.Length ?? Encoding.UTF8.GetByteCount(resource.Content);
             return new PreparedResource(
                 resource.NotModified,
                 resource.IsCacheable,
@@ -1198,8 +1198,8 @@ public static unsafe partial class NativeWebSceneApi
                 responseEntityTag,
                 responseEntityTagLength,
                 resource.Content,
-                default,
-                false,
+                resource.BinaryContent.GetValueOrDefault(),
+                resource.BinaryContent.HasValue,
                 contentLength,
                 checked((nuint)(
                     EnvelopeHeaderSize + responseEntityTagLength + contentLength)));

@@ -154,6 +154,10 @@ public readonly record struct WebSceneTextResource(
     string DisplayName,
     string? Directory)
 {
+    /// <summary>Optional original bytes for binary resources. Native hosts must prefer
+    /// these over UTF-8 encoding Content when present, including an empty payload.</summary>
+    public ReadOnlyMemory<byte>? BinaryContent { get; init; }
+
     public string? EntityTag { get; init; }
 
     public DateTimeOffset? LastModified { get; init; }

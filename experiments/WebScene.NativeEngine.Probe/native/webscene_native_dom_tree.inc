@@ -464,6 +464,7 @@ dom_node& native_document::create_node(dom_node_kind kind, std::string name)
 #endif
     nodes_.push_back(std::move(node));
     native_id_index_[result->id - 1U] = result;
+    if(kind==dom_node_kind::element&&(result->tag=="audio"||result->tag=="video"))media_elements_.push_back(result);
     mark_dirty();
     return *result;
 }
@@ -596,6 +597,7 @@ size_t native_document::erase_detached_subtrees(
             || native_id_index_[entry.scope_id - 1U] == nullptr
             || native_id_index_[entry.dialog_id - 1U] == nullptr;
     });
+    std::erase_if(media_elements_,[&](auto* node){return removed.contains(node);});
     std::erase_if(nodes_, [&](const auto& node) { return removed.contains(node.get()); });
     while (!native_id_index_.empty() && native_id_index_.back() == nullptr) {
         native_id_index_.pop_back();
@@ -915,6 +917,7 @@ void native_document::clear()
     modal_dialogs_.reset();
     retained_export_canvas_id_ = 0U;
     shadow_dom_storage_.reset();
+    media_elements_.clear();
     nodes_.clear();
     native_id_index_.clear();
 #if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
