@@ -12,6 +12,9 @@ using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+#if WEBSCENE_AVALONIA12
+using Avalonia.Input.Platform;
+#endif
 using Avalonia.Platform;
 using Avalonia.Threading;
 using WebScene.Core;
@@ -940,7 +943,11 @@ internal sealed class AvaloniaClipboard : IWebSceneClipboard
     {
         try
         {
+#if WEBSCENE_AVALONIA12
+            return _topLevel.Clipboard?.TryGetTextAsync().GetAwaiter().GetResult() ?? _lastText;
+#else
             return _topLevel.Clipboard?.GetTextAsync().GetAwaiter().GetResult() ?? _lastText;
+#endif
         }
         catch
         {
@@ -974,6 +981,18 @@ internal sealed class AvaloniaClipboard : IWebSceneClipboard
 
         try
         {
+#if WEBSCENE_AVALONIA12
+            var item = new DataTransferItem();
+            item.Set(DataFormat.CreateBytesPlatformFormat(format), bytes);
+            if (format.Equals("image/png", StringComparison.OrdinalIgnoreCase))
+            {
+                item.Set(DataFormat.CreateBytesPlatformFormat("public.png"), bytes);
+                item.Set(DataFormat.CreateBytesPlatformFormat("PNG"), bytes);
+            }
+            var clipboardData = new DataTransfer();
+            clipboardData.Add(item);
+            _topLevel.Clipboard?.SetDataAsync(clipboardData).GetAwaiter().GetResult();
+#else
             var clipboardData = new DataObject();
             clipboardData.Set(format, bytes);
             if (format.Equals("image/png", StringComparison.OrdinalIgnoreCase))
@@ -984,6 +1003,7 @@ internal sealed class AvaloniaClipboard : IWebSceneClipboard
                 clipboardData.Set("PNG", bytes);
             }
             _topLevel.Clipboard?.SetDataObjectAsync(clipboardData).GetAwaiter().GetResult();
+#endif
         }
         catch
         {

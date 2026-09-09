@@ -414,18 +414,14 @@ internal sealed class WebGpuDocumentProbeApp : Application
                             var initialWidth = desktop.MainWindow.Width;
                             var initialHeight = desktop.MainWindow.Height;
                             var traceStarted = System.Diagnostics.Stopwatch.GetTimestamp();
-                            var submittedSizes = new List<object>(80);
-                            var nativeWindowResizes = new List<object>();
-                            var surfaceSizeChanges = new List<object>();
+                            var submittedSizes = new List<ResizeSizeSample>(80);
+                            var nativeWindowResizes = new List<ResizeSizeSample>();
+                            var surfaceSizeChanges = new List<ResizeSizeSample>();
                             EventHandler<WindowResizedEventArgs> onNativeResize = (_, e) => {
-                                if (nativeWindowResizes.Count < 4096) nativeWindowResizes.Add(new {
-                                    timestamp = System.Diagnostics.Stopwatch.GetTimestamp(),
-                                    width = e.ClientSize.Width, height = e.ClientSize.Height, reason = e.Reason.ToString() });
+                                if (nativeWindowResizes.Count < 4096) nativeWindowResizes.Add(new ResizeSizeSample(System.Diagnostics.Stopwatch.GetTimestamp(), e.ClientSize.Width, e.ClientSize.Height, reason: e.Reason.ToString()));
                             };
                             EventHandler<SizeChangedEventArgs> onSurfaceResize = (_, e) => {
-                                if (surfaceSizeChanges.Count < 4096) surfaceSizeChanges.Add(new {
-                                    timestamp = System.Diagnostics.Stopwatch.GetTimestamp(),
-                                    width = e.NewSize.Width, height = e.NewSize.Height });
+                                if (surfaceSizeChanges.Count < 4096) surfaceSizeChanges.Add(new ResizeSizeSample(System.Diagnostics.Stopwatch.GetTimestamp(), e.NewSize.Width, e.NewSize.Height));
                             };
                             desktop.MainWindow.Resized += onNativeResize;
                             surface.SizeChanged += onSurfaceResize;
@@ -441,7 +437,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                 desktop.MainWindow.Width = width;
                                 desktop.MainWindow.Height = height;
                                 var timestamp = System.Diagnostics.Stopwatch.GetTimestamp();
-                                submittedSizes.Add(new { requestedAt, timestamp, width, height });
+                                submittedSizes.Add(new ResizeSizeSample(timestamp, width, height, requestedAt));
                                 // Include synchronous resize work in the 60Hz budget.
                                 // Adding a fresh 16ms sleep after it halves input cadence
                                 // when the native setter already takes one display slot.
@@ -464,15 +460,13 @@ internal sealed class WebGpuDocumentProbeApp : Application
                             var diagnostics = await view.EvaluateTextAsync("(()=>{const c=document.getElementById('scene'),r=c.getBoundingClientRect();const ancestors=[];for(let n=c.parentElement;n;n=n.parentElement){const b=n.getBoundingClientRect(),s=getComputedStyle(n);ancestors.push({id:n.id,tag:n.tagName,rect:[b.x,b.y,b.width,b.height],height:s.height,minHeight:s.minHeight,display:s.display,flex:s.flex,gridTemplateRows:s.gridTemplateRows});}return {window:[innerWidth,innerHeight],canvas:[c.width,c.height],css:[r.width,r.height],ancestors,dpr:devicePixelRatio,backend:document.getElementById('engine-label').textContent,errors:document.querySelectorAll('#command-history .history-error').length}})()");
                             var published = surface.PublishedScenes.Where(sample => sample.Timestamp >= traceStarted).ToArray();
                             var drawn = surface.RenderedScenes.Where(sample => sample.Timestamp >= traceStarted).ToArray();
-                            Console.WriteLine("Kestrel continuous window resize: " + System.Text.Json.JsonSerializer.Serialize(new {
-                                traceStarted, inputEnded, timestampFrequency = System.Diagnostics.Stopwatch.Frequency,
-                                submittedSizes, nativeWindowResizes, surfaceSizeChanges,
-                                nativeSubmissions = surface.SubmittedResizes.Where(sample => sample.Timestamp >= traceStarted),
-                                diagnostics, baseline, after = view.CapturePerformanceSnapshot(),
-                                publications = published, renderedScenes = drawn,
-                                scheduling = surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted),
-                                physicalPresentationVerified = false, nativeUserDragVerified = false
-                            }, new System.Text.Json.JsonSerializerOptions { IncludeFields = true }));
+                            Console.WriteLine("Kestrel continuous window resize: " + System.Text.Json.JsonSerializer.Serialize(
+                                new ResizeTrace(traceStarted, inputEnded, System.Diagnostics.Stopwatch.Frequency,
+                                    submittedSizes, nativeWindowResizes, surfaceSizeChanges,
+                                    surface.SubmittedResizes.Where(sample => sample.Timestamp >= traceStarted).ToArray(),
+                                    diagnostics, baseline, view.CapturePerformanceSnapshot(), published, drawn,
+                                    surface.SchedulingSamples.Where(sample => sample.Timestamp >= traceStarted).ToArray()),
+                                ResizeTraceJsonContext.Default.ResizeTrace));
                             ValidateResizeGeometry(diagnostics);
                             using var geometry = System.Text.Json.JsonDocument.Parse(diagnostics);
                             var finalWindow = geometry.RootElement.GetProperty("window");

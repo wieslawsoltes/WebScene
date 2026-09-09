@@ -22,6 +22,9 @@
   </PropertyGroup>
   <PropertyGroup>
     <AvaloniaVersion>11.3.4</AvaloniaVersion>
+    <!-- Opt-in host experiment only; shipping WebScene continues to target v11. -->
+    <AvaloniaVersion Condition="'$(WebSceneAvalonia12Sample)' == 'true'">12.1.1</AvaloniaVersion>
+    <DefineConstants Condition="'$(WebSceneAvalonia12Sample)' == 'true'">$(DefineConstants);WEBSCENE_AVALONIA12</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)LICENSE"

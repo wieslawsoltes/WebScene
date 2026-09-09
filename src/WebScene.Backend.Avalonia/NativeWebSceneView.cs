@@ -2,6 +2,9 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Input;
+#if WEBSCENE_AVALONIA12
+using Avalonia.Input.Platform;
+#endif
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -586,11 +589,21 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
                     "image/png",
                     StringComparison.OrdinalIgnoreCase))
             {
+#if WEBSCENE_AVALONIA12
+                var item = new DataTransferItem();
+                item.Set(DataFormat.CreateBytesPlatformFormat("image/png"), clipboardBytes);
+                item.Set(DataFormat.CreateBytesPlatformFormat("public.png"), clipboardBytes);
+                item.Set(DataFormat.CreateBytesPlatformFormat("PNG"), clipboardBytes);
+                var data = new DataTransfer();
+                data.Add(item);
+                await topLevel.Clipboard.SetDataAsync(data).ConfigureAwait(true);
+#else
                 var data = new DataObject();
                 data.Set("image/png", clipboardBytes);
                 data.Set("public.png", clipboardBytes);
                 data.Set("PNG", clipboardBytes);
                 await topLevel.Clipboard.SetDataObjectAsync(data).ConfigureAwait(true);
+#endif
             }
             else if (clipboardWrite.ContentType.StartsWith(
                          "text/",
@@ -601,9 +614,17 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
             }
             else
             {
+#if WEBSCENE_AVALONIA12
+                var item = new DataTransferItem();
+                item.Set(DataFormat.CreateBytesPlatformFormat(clipboardWrite.ContentType), clipboardBytes);
+                var data = new DataTransfer();
+                data.Add(item);
+                await topLevel.Clipboard.SetDataAsync(data).ConfigureAwait(true);
+#else
                 var data = new DataObject();
                 data.Set(clipboardWrite.ContentType, clipboardBytes);
                 await topLevel.Clipboard.SetDataObjectAsync(data).ConfigureAwait(true);
+#endif
             }
             return;
         }

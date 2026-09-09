@@ -1,3 +1,12 @@
+#if WEBSCENE_AVALONIA12
+// This private Avalonia 11 render-loop diagnostic is not part of the v12 sample.
+internal static class WindowsVSyncProbe
+{
+    public static Avalonia.AppBuilder Configure(Avalonia.AppBuilder builder)
+        => throw new PlatformNotSupportedException(
+            "The compositor-clock diagnostic requires the default Avalonia 11 configuration.");
+}
+#else
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -149,3 +158,5 @@ internal sealed class WindowsVSyncProbe : IRenderTimer
     [DllImport("dcomp.dll", ExactSpelling = true)] private static extern int DCompositionGetStatistics(ulong id, out FrameStats stats, uint count, IntPtr targets, IntPtr actualCount);
     [DllImport("dxgi.dll", ExactSpelling = true)] private static extern int DXGIDisableVBlankVirtualization();
 }
+
+#endif

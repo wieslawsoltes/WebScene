@@ -85,7 +85,7 @@ jobs:
       run: cmake --build artifacts/native-engine-portability --config Release --parallel
 
   native-aot:
-    name: NativeAOT contracts ${{ matrix.rid }}
+    name: NativeAOT contracts ${{ matrix.rid }} Avalonia ${{ matrix.avalonia }}
     strategy:
       fail-fast: false
       matrix:
@@ -93,9 +93,18 @@ jobs:
         - os: macos-latest
           rid: osx-arm64
           executable: WebScene.GpuHost.Probe
+          avalonia: 11
+          avalonia12Sample: false
         - os: windows-latest
           rid: win-x64
           executable: WebScene.GpuHost.Probe.exe
+          avalonia: 11
+          avalonia12Sample: false
+        - os: macos-latest
+          rid: osx-arm64
+          executable: WebScene.GpuHost.Probe
+          avalonia: 12
+          avalonia12Sample: true
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -108,6 +117,7 @@ jobs:
         set -o pipefail
         dotnet publish experiments/WebScene.GpuHost.Probe -c Release -r '${{ matrix.rid }}' \
           -p:PublishAot=true -p:JsonSerializerIsReflectionEnabledByDefault=false \
+          -p:WebSceneAvalonia12Sample=${{ matrix.avalonia12Sample }} \
           -o artifacts/aot-contracts 2>&1 | tee artifacts-aot-publish.log
         python scripts/verify-aot-warnings.py artifacts-aot-publish.log
     - name: Exercise checkpoint and archive contracts in native executable
@@ -116,5 +126,5 @@ jobs:
     - uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: aot-contracts-${{ matrix.rid }}
+        name: aot-contracts-${{ matrix.rid }}-avalonia-${{ matrix.avalonia }}
         path: artifacts-aot-publish.log

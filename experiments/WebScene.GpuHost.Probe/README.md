@@ -38,3 +38,36 @@ on the left and untouched white background on the right. Evidence is stored at
 for GL-to-Avalonia display, not a colorimetric pixel test or Dawn-to-host integration.
 The runtime JSON keeps presentationVerified=false because the program itself does
 not perform the independent window observation.
+
+## Kestrel on Avalonia 12 (sample only)
+
+WebScene's default build and published packages remain on Avalonia 11.3.4.
+For the Kestrel host, opt into Avalonia 12.1.1 and its matching Skia dependencies
+across the project-reference graph:
+
+```sh
+dotnet publish experiments/WebScene.GpuHost.Probe -c Release -r osx-arm64 \
+  -p:PublishAot=true -p:WebSceneAvalonia12Sample=true \
+  -o artifacts/kestrel-aot-avalonia12/publish
+artifacts/kestrel-aot-avalonia12/publish/WebScene.GpuHost.Probe --aot-serialization-probe
+WEBSCENE_TEST_NATIVE_LIBRARY="$PWD/artifacts/checkpoint-native/libwebscene_native_engine.dylib" \
+  artifacts/kestrel-aot-avalonia12/publish/WebScene.GpuHost.Probe \
+  --webgpu-metal --kestrel tests/GraphicsCompatibility/fixtures/Kestrel-CAD.zip \
+  --continuous-resize-kestrel --resize-kestrel --verify-kestrel
+```
+
+The native engine path must refer to a graphics-enabled macOS build with its
+Dawn runtime dependencies available. Omit the workload/verification switches
+to leave Kestrel open for manual use.
+
+Avalonia 12 includes the upstream Metal transactional presentation fix
+([PR 21588](https://github.com/AvaloniaUI/Avalonia/pull/21588)).
+This configuration does not patch Avalonia Native or change WebScene's
+GPU mailbox/texture sharing. Packaging with this opt-in property is rejected.
+The private Avalonia 11 Windows compositor-clock diagnostic is unavailable
+in this configuration; the sample otherwise uses Avalonia's default render loop.
+
+The continuous resize trace uses generated JSON metadata so it works in Native
+AOT. Its geometry/intermediate-frame assertions do not establish physical
+presentation cadence or native mouse-drag smoothness. Also check live edge/corner
+resizing, sidebar resizing, pan/zoom, and display-scale transitions manually.
