@@ -3207,7 +3207,7 @@ struct v8_dom_runtime::implementation final {
         install_console(local_context, global);
         install_host_bridge(local_context);
 
-        constexpr std::string_view crypto_source = R"JS(
+        constexpr std::string_view crypto_source_parts[] = {R"JS(
             class WebSceneBlob {
               constructor(parts = [], options = {}) {
                 __webSceneRecordWebApi(
@@ -3360,6 +3360,7 @@ struct v8_dom_runtime::implementation final {
                 if (form !== undefined) {
                   if (!(form instanceof HTMLFormElement)) throw new TypeError('FormData requires an HTMLFormElement');
                   const isSubmit = control => control && ((control.tagName === 'BUTTON' && (!control.type || control.type === 'submit')) ||
+        )JS", R"JS(
                     (control.tagName === 'INPUT' && ['submit', 'image'].includes(control.type)));
                   if (submitter !== null) {
                     if (!(submitter instanceof HTMLElement) || !isSubmit(submitter)) throw new TypeError('FormData submitter must be a submit button');
@@ -3497,6 +3498,7 @@ struct v8_dom_runtime::implementation final {
                   InUseAttributeError: 10,
                   InvalidStateError: 11,
                   SyntaxError: 12,
+        )JS", R"JS(
                   InvalidModificationError: 13,
                   NamespaceError: 14,
                   InvalidAccessError: 15,
@@ -3534,7 +3536,9 @@ struct v8_dom_runtime::implementation final {
                 }
               }, configurable: true }
             });
-        )JS";
+        )JS"};
+        std::string crypto_source;
+        for (const auto part : crypto_source_parts) crypto_source.append(part);
         auto crypto_script = v8::Script::Compile(
             local_context,
             js_string(isolate, std::string(crypto_source).c_str())).ToLocalChecked();

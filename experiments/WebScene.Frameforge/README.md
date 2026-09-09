@@ -51,3 +51,12 @@ preparation, playback/pause, native meter/track behavior and worker waveforms.
 describes bounds and platform scope. Windows/Linux parity is #61/#62; full editor
 rendering, persistent storage, recording and release qualification remain in #53.
 No application shims simulate these APIs.
+
+### Interactive video sample
+
+Run the published executable with `--media-demo` to keep an interactive native
+video window open. It plays the original MP4 assets, with play/pause, seeking,
+mute and clip switching. Resize the window to inspect retained video composition.
+Use the same `FRAMEFORGE_ASSETS` and `WEBSCENE_TEST_NATIVE_LIBRARY` environment
+variables as the media verification harness. This sample does not require the
+full editor or external video WebGPU APIs.

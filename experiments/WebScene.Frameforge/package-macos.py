@@ -17,7 +17,7 @@ if a.output.exists():
     raise SystemExit("Output already exists; choose a fresh path.")
 mac = a.output / "Contents/MacOS"
 mac.mkdir(parents=True)
-for name in ["media-verify.html", "Frameforge", "libAvaloniaNative.dylib", "libSkiaSharp.dylib", "libHarfBuzzSharp.dylib"]:
+for name in ["media-demo.html", "media-verify.html", "Frameforge", "libAvaloniaNative.dylib", "libSkiaSharp.dylib", "libHarfBuzzSharp.dylib"]:
     shutil.copy2(a.publish / name, mac / name)
 for name in ["libwebscene_native_engine.dylib", "libwebgpu_dawn.dylib", "icudtl.dat",
              "webscene_bootstrap_snapshot.bin", "webscene_bootstrap_snapshot.meta",

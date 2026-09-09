@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-  <ItemGroup><None Update="media-verify.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><None Update="media-demo.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /><None Update="media-verify.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><PackageReference Include="Avalonia.Desktop" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../../src/WebScene.Backend.Avalonia/WebScene.Backend.Avalonia.csproj" /></ItemGroup>
 </Project>

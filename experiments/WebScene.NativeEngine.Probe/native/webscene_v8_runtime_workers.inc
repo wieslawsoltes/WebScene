@@ -178,7 +178,7 @@
                     {std::lock_guard lock(raw->mutex);raw->wake_requested=true;}
                     raw->ready.notify_one();
                 };
-                runtime.set_resource_root(root);
+                runtime.set_resource_root(root.string());
                 if(!runtime.initialize())throw std::runtime_error(runtime.last_error());
                 {
                     std::lock_guard lock(raw->mutex);

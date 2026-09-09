@@ -40,9 +40,12 @@ internal sealed class StudioApp : Application
                 try
                 {
                     var mediaVerify = Environment.GetCommandLineArgs().Contains("--media-verify");
-                    await view.LoadAsync(_server.Origin + (mediaVerify ? "__webscene-media-verify.html" : "index.html"),
+                    var mediaDemo = Environment.GetCommandLineArgs().Contains("--media-demo");
+                    if (mediaDemo) window.Title = "Video in WebScene";
+                    await view.LoadAsync(_server.Origin + (mediaVerify ? "__webscene-media-verify.html" : mediaDemo ? "__webscene-media-demo.html" : "index.html"),
                         Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")
                         ?? Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "webscene_native_engine.dll" : OperatingSystem.IsMacOS() ? "libwebscene_native_engine.dylib" : "libwebscene_native_engine.so"));
+                    if (mediaDemo) return;
                     if (mediaVerify)
                     {
                         for (var i = 0; i < 120; i++)
@@ -115,10 +118,10 @@ internal sealed class AssetServer : IDisposable
         try
         {
             var relative = Uri.UnescapeDataString(context.Request.Url!.AbsolutePath).TrimStart('/');
-            if (relative == "__webscene-media-verify.html")
+            if (relative is "__webscene-media-verify.html" or "__webscene-media-demo.html")
             {
                 context.Response.ContentType = "text/html; charset=utf-8";
-                var bytes = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "media-verify.html"));
+                var bytes = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, relative == "__webscene-media-demo.html" ? "media-demo.html" : "media-verify.html"));
                 context.Response.ContentLength64 = bytes.Length;
                 await context.Response.OutputStream.WriteAsync(bytes);
                 return;
