@@ -8,9 +8,10 @@ namespace webscene::graphics {
 // including after the canvas owner is disposed. GPU completion remains explicit.
 class d3d12_canvas_images {
     struct storage final : image_provider_lifetime {
+        image_provider_kind kind() const noexcept override { return image_provider_kind::d3d12; }
         struct slot { std::unique_ptr<d3d12_shared_color> color; image_metadata metadata{}; };
         Microsoft::WRL::ComPtr<ID3D12Device> device;
-        std::array<slot,3> slots;
+        std::array<slot,4> slots;
         std::mutex mutex;
         uint64_t bytes{};
         explicit storage(ID3D12Device* value):device(value) {}
@@ -30,7 +31,7 @@ public:
     };
     d3d12_canvas_images(ID3D12Device* device,uint64_t budget,size_t tickets=128,
         std::shared_ptr<completion_wake> wake={})
-        :storage_(std::make_shared<storage>(device)),pool_(storage_,tickets,std::move(wake)),limit_(budget) {
+        :storage_(std::make_shared<storage>(device)),pool_(storage_,tickets,std::move(wake),4),limit_(budget) {
         if (!device || !budget) throw std::invalid_argument("D3D12 images require device and budget");
     }
     std::optional<frame> acquire(image_metadata metadata,HRESULT& status) {
@@ -39,7 +40,7 @@ public:
         if (!writer) { status=DXGI_ERROR_WAS_STILL_DRAWING; return {}; }
         // Reservations outlive the lock on exceptional unwind, so completion
         // wake callbacks cannot re-enter while the storage mutex is held.
-        std::array<std::optional<owned_image_pool::producer>,2> idle;
+        std::array<std::optional<owned_image_pool::producer>,3> idle;
         std::lock_guard lock(storage_->mutex);
         auto& slot=storage_->slots[writer->slot()];
         const bool reuse=slot.color && slot.metadata.width==metadata.width
@@ -74,8 +75,10 @@ public:
     static const d3d12_shared_color& resolve(const owned_image_pool::consumer& consumer,
         adapter_luid adapter) {
         const auto metadata=consumer.describe();
-        const auto provider=std::dynamic_pointer_cast<storage>(consumer.provider());
-        if (!provider || !adapter.valid) throw std::invalid_argument("foreign D3D12 image provider");
+        const auto anchor=consumer.provider();
+        if (!anchor || anchor->kind()!=image_provider_kind::d3d12 || !adapter.valid)
+            throw std::invalid_argument("foreign D3D12 image provider");
+        const auto provider=std::static_pointer_cast<storage>(anchor);
         std::lock_guard lock(provider->mutex);
         for (const auto& slot:provider->slots) {
             if (slot.color && slot.metadata.allocation==metadata.allocation
@@ -89,6 +92,7 @@ public:
     }
     uint64_t allocation_bytes() const { check_thread(); return storage_->bytes; }
     size_t busy_images() const { return pool_.busy_images(); }
+    image_lease_pool::occupancy inspect_occupancy() const { return pool_.inspect_occupancy(); }
     void close() { pool_.close(); }
 };
 } // namespace webscene::graphics

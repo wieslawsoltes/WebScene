@@ -202,9 +202,20 @@ void native_document::build_canvas_display_lists(
         added_dependency = false;
         for (const auto& node : nodes_) {
             if (!retained_canvas_ids.contains(node->id)) continue;
-            for (const auto& command : node->canvas().commands) {
-                if (command.kind == 27U
-                    && retained_canvas_ids.insert(command.resource_id).second) {
+            const auto& canvas = node->canvas();
+            if (canvas.dependency_generation != canvas.generation
+                || canvas.dependency_command_count > canvas.commands.size()) {
+                canvas.canvas_dependencies.clear();
+                canvas.dependency_command_count = 0;
+                canvas.dependency_generation = canvas.generation;
+            }
+            for (auto index = canvas.dependency_command_count; index < canvas.commands.size(); ++index) {
+                const auto& command = canvas.commands[index];
+                if (command.kind == 27U) canvas.canvas_dependencies.insert(command.resource_id);
+            }
+            canvas.dependency_command_count = canvas.commands.size();
+            for (const auto dependency : canvas.canvas_dependencies) {
+                if (retained_canvas_ids.insert(dependency).second) {
                     added_dependency = true;
                 }
             }
@@ -271,6 +282,16 @@ void native_document::retain_canvas_for_export(dom_node& node) noexcept
     if (node.tag != "canvas") return;
     retained_export_canvas_id_ = node.id;
     mark_scene_changed();
+}
+
+bool native_document::has_canvas_references(uint32_t node_id) const
+{
+    for (const auto& node : nodes_) {
+        if (node->tag != "canvas") continue;
+        for (const auto& command : node->canvas().commands)
+            if (command.kind == 27U && command.resource_id == node_id) return true;
+    }
+    return false;
 }
 
 bool native_document::release_canvas_export(uint32_t node_id) noexcept

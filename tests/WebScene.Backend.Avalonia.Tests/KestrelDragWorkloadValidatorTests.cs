@@ -17,6 +17,39 @@ public sealed class KestrelDragWorkloadValidatorTests
         KestrelDragWorkloadValidator.Validate(JsonSerializer.Serialize(new { events, errors, panning }), 100, 200, sidebar);
 
     [Fact]
+    public void CircularPanValidatesCoalescedCardinalPointsAndRejectsReversedMotion()
+    {
+        Pointer[] events = [new("pointerdown", 100, 200, 2, 2),
+            new("pointermove", 140, 240, -1, 2), new("pointermove", 180, 200, -1, 2),
+            new("pointermove", 140, 160, -1, 2), new("pointermove", 100, 200, -1, 2),
+            new("pointerup", 100, 200, 2, 0)];
+        var diagnostics = JsonSerializer.Serialize(new { events, errors = 0, panning = false });
+        KestrelDragWorkloadValidator.Validate(diagnostics, 100, 200, circular: true);
+        (events[1], events[3]) = (events[3], events[1]);
+        diagnostics = JsonSerializer.Serialize(new { events, errors = 0, panning = false });
+        Assert.Throws<InvalidOperationException>(() => KestrelDragWorkloadValidator.Validate(diagnostics, 100, 200, circular: true));
+    }
+
+    [Fact]
+    public void RepeatedPanRequiresTheExplicitCycleCount()
+    {
+        Pointer[] events = [
+            new("pointerdown", 100, 200, 2, 2),
+            new("pointermove", 260, 240, -1, 2),
+            new("pointermove", 100, 200, -1, 2),
+            new("pointermove", 260, 240, -1, 2),
+            new("pointermove", 100, 200, -1, 2),
+            new("pointerup", 100, 200, 2, 0)
+        ];
+        var diagnostics = JsonSerializer.Serialize(new { events, errors = 0, panning = false });
+        Assert.Throws<InvalidOperationException>(() => KestrelDragWorkloadValidator.Validate(diagnostics, 100, 200));
+        KestrelDragWorkloadValidator.Validate(diagnostics, 100, 200, panCycles: 2);
+        events[3] = events[3] with { y = 241 };
+        diagnostics = JsonSerializer.Serialize(new { events, errors = 0, panning = false });
+        Assert.Throws<InvalidOperationException>(() => KestrelDragWorkloadValidator.Validate(diagnostics, 100, 200, panCycles: 2));
+    }
+
+    [Fact]
     public void CoalescedSidebarMovesRemainValid() => Validate(Sidebar());
 
     [Theory]

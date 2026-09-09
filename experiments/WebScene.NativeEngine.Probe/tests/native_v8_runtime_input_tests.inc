@@ -1328,6 +1328,70 @@ void test_mouse_moves_are_raf_aligned_at_compositor_cadence()
             && after.coalesced_pointer_move_inputs
                 - before.coalesced_pointer_move_inputs == 2U,
         "rAF-aligned mouse metrics did not report coalesced device samples");
+
+    // The host can enqueue the RAF belonging to a boundary after a newer
+    // device sample has already been retained. That old RAF must not release
+    // the sample; only a subsequent display boundary or discrete input may.
+    pointer_move(engine, 70, 20, 9U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    animation_frame(engine, 1016.666, 10U);
+    wait_for_consumed_inputs(engine, after.consumed_inputs + 1U,
+        "already-observed RAF was not consumed");
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    require(consumed_input_count(engine) == after.consumed_inputs + 1U,
+        "already-observed RAF prematurely released a newer pointer sample");
+    webscene_engine_observe_compositor_frame(engine, 1025.0);
+    wait_for_consumed_inputs(engine, after.consumed_inputs + 2U,
+        "next boundary did not release the retained sample after an old RAF");
+    require(evaluate(engine, "globalThis.__pacedPointerMoves",
+        "native-frame-paced-old-raf.js") == "[30,40,60,70]",
+        "old RAF handling lost or duplicated pointer movement");
+
+    execute_and_wait(engine, R"JS(document.body.firstElementChild.addEventListener('pointermove', () => {
+      const deadline = performance.now() + 120;
+      while (performance.now() < deadline) {}
+      requestAnimationFrame(() => {});
+    }, {once:true}))JS", "native-pointer-demand-handoff-setup.js");
+    const auto handoff_inputs = consumed_input_count(engine);
+    pointer_move(engine, 80, 20, 11U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    webscene_engine_observe_compositor_frame(engine, 1041.666);
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    require((webscene_engine_requires_animation_frame(engine) & 4U) != 0,
+        "in-flight pointer handler temporarily lost its frame demand");
+    // This sample arrives while the previous handler is busy, before the
+    // next boundary. Dequeuing it after that boundary must not make it wait
+    // for yet another refresh. No script barrier is used to flush the input.
+    pointer_move(engine, 90, 20, 12U);
+    webscene_engine_observe_compositor_frame(engine, 1058.333);
+    wait_for_consumed_inputs(engine, handoff_inputs + 2,
+        "pointer handler did not finish its demand handoff");
+    require(evaluate(engine, "globalThis.__pacedPointerMoves.slice(-2)",
+        "native-frame-paced-busy-worker.js") == "[80,90]",
+        "busy worker deferred an eligible sample into an extra display interval");
+    require((webscene_engine_requires_animation_frame(engine) & 1U) != 0,
+        "pointer demand was cleared before publishing the handler's RAF demand");
+#if defined(_WIN32)
+    execute_and_wait(engine, R"JS(
+      document.body.firstElementChild.addEventListener('pointermove', event => {
+        event.target.style.cursor = 'ew-resize';
+        requestAnimationFrame(() => { event.target.style.cursor = 'ns-resize'; });
+      }, {once:true});
+    )JS", "native-paced-cursor-setup.js");
+    const auto cursor_inputs = consumed_input_count(engine);
+    pointer_move(engine, 100, 20, 13U);
+    webscene_engine_observe_compositor_frame(engine, 1075.0);
+    animation_frame(engine, 1075.0, 14U);
+    wait_for_consumed_inputs(engine, cursor_inputs + 2,
+        "paced cursor input and frame were not consumed");
+    const auto cursor_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (webscene_engine_get_cursor(engine) != WEBSCENE_CURSOR_NS_RESIZE
+        && std::chrono::steady_clock::now() < cursor_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(webscene_engine_get_cursor(engine) == WEBSCENE_CURSOR_NS_RESIZE,
+        "paced cursor was not resolved from the final animation/publication layout");
+#endif
     webscene_engine_destroy(engine);
 }
 

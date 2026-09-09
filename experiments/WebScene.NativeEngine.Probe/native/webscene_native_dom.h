@@ -862,6 +862,11 @@ struct canvas_node_data final {
     std::vector<webscene_canvas_command> commands;
     std::vector<std::string> strings;
     std::unordered_map<std::string, uint32_t> string_indices;
+    // Worker-owned derived state. Canvas commands append within a generation;
+    // resets advance the generation before clearing the command list.
+    mutable uint64_t dependency_generation{0};
+    mutable size_t dependency_command_count{0};
+    mutable std::unordered_set<uint32_t> canvas_dependencies;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     uint64_t fill_rect_calls{0};
     uint64_t probable_volume_fill_rect_calls{0};
@@ -1627,6 +1632,7 @@ public:
     layout_rect busiest_canvas_layout() const noexcept;
     uint64_t scene_generation() const noexcept;
     void mark_scene_changed() noexcept;
+    bool has_canvas_references(uint32_t node_id) const;
     bool dirty() const noexcept;
     void mark_dirty() noexcept;
     void mark_out_of_flow_geometry_dirty(dom_node& node) noexcept;

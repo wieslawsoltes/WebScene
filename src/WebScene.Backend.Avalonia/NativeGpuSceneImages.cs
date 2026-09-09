@@ -6,7 +6,7 @@ namespace WebScene.Backends.Avalonia.Native;
 // Indexed image ownership for one immutable scene version. Retain/Acquire are
 // CPU-only; preparation, drawing and retirement require the presenter's lease.
 // Keep this owner until TryComplete succeeds. GC cannot certify GPU completion.
-internal sealed class NativeMacOSGpuSceneImages
+internal sealed class NativeGpuSceneImages
 {
     private readonly NativeGpuImageLeaseV3?[] _sources;
     private readonly INativeRetainedGpuImage?[] _images;
@@ -14,14 +14,14 @@ internal sealed class NativeMacOSGpuSceneImages
     internal bool IsRetiring { get; private set; }
     internal int ImportedCount { get; private set; }
     internal int ImageCount => _images.Length;
-    private NativeMacOSGpuSceneImages(int count)
+    private NativeGpuSceneImages(int count)
     {
         _sources = new NativeGpuImageLeaseV3?[count];
         _images = new INativeRetainedGpuImage?[count];
         _metadata = new NativeGpuImageInfoV3[count];
     }
 
-    internal static NativeSceneAcquireStatus Acquire(NativeSceneLeaseV3 scene, out NativeMacOSGpuSceneImages? images)
+    internal static NativeSceneAcquireStatus Acquire(NativeSceneLeaseV3 scene, out NativeGpuSceneImages? images)
     {
         ArgumentNullException.ThrowIfNull(scene);
         return Capture(checked((int)scene.ImageCount),
@@ -29,17 +29,17 @@ internal sealed class NativeMacOSGpuSceneImages
     }
 
     internal static NativeSceneAcquireStatus Retain(IReadOnlyList<NativeGpuImageLeaseV3> sources,
-        out NativeMacOSGpuSceneImages? images)
+        out NativeGpuSceneImages? images)
     {
         ArgumentNullException.ThrowIfNull(sources);
         return Capture(sources.Count, (int index, out NativeGpuImageLeaseV3? image) => sources[index].Retain(out image), out images);
     }
 
     private delegate NativeSceneAcquireStatus CaptureImage(int index, out NativeGpuImageLeaseV3? image);
-    private static NativeSceneAcquireStatus Capture(int count, CaptureImage capture, out NativeMacOSGpuSceneImages? images)
+    private static NativeSceneAcquireStatus Capture(int count, CaptureImage capture, out NativeGpuSceneImages? images)
     {
         images = null;
-        var candidate = new NativeMacOSGpuSceneImages(count);
+        var candidate = new NativeGpuSceneImages(count);
         try
         {
             for (var index = 0; index < count; ++index)
@@ -49,7 +49,7 @@ internal sealed class NativeMacOSGpuSceneImages
                 var metadata = candidate._sources[index]!.Describe();
                 if (metadata.Format != 2 || metadata.ColorSpace != 1 ||
                     metadata.Alpha is not (1 or 2) || metadata.Orientation is not (1 or 2))
-                    throw new NotSupportedException("The macOS scene importer requires BGRA8 sRGB with opaque or premultiplied alpha.");
+                    throw new NotSupportedException("The scene importer requires BGRA8 sRGB with opaque or premultiplied alpha.");
                 candidate._metadata[index] = metadata;
             }
             images = candidate;
@@ -91,7 +91,9 @@ internal sealed class NativeMacOSGpuSceneImages
             var metadata = _metadata[index];
             var origin = metadata.Orientation == 1 ? GRSurfaceOrigin.TopLeft : GRSurfaceOrigin.BottomLeft;
             var alpha = metadata.Alpha == 1 ? SKAlphaType.Opaque : SKAlphaType.Premul;
-            INativeRetainedGpuImage? image = NativeMetalRetainedGpuImage.Supports(lease)
+            INativeRetainedGpuImage? image = OperatingSystem.IsWindows()
+                ? NativeWindowsRetainedGpuImage.Import(_sources[index]!, lease, origin, alpha)
+                : NativeMetalRetainedGpuImage.Supports(lease)
                 ? NativeMetalRetainedGpuImage.Import(_sources[index]!, lease, origin, alpha)
                 : NativeMacOSRetainedGpuImage.Import(_sources[index]!, lease,
                 metadata.Orientation == 1 ? GRSurfaceOrigin.TopLeft : GRSurfaceOrigin.BottomLeft,
@@ -144,6 +146,13 @@ internal sealed class NativeMacOSGpuSceneImages
             else complete = false;
         }
         return complete;
+    }
+
+    internal void SealForDetachedRetirement()
+    {
+        IsRetiring = true;
+        ReleaseSources();
+        foreach (var image in _images) image?.SealForDetachedRetirement();
     }
 
 }

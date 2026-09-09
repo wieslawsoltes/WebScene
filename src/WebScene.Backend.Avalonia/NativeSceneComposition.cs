@@ -50,6 +50,7 @@ internal enum NativeSceneCompositionMessage
 
 internal sealed class NativeScenePublicationMailbox
 {
+    internal event Action? Published;
     private long _published;
     private long _consumed;
 
@@ -63,7 +64,10 @@ internal sealed class NativeScenePublicationMailbox
     }
 
     public void Publish()
-        => Interlocked.Increment(ref _published);
+    {
+        Interlocked.Increment(ref _published);
+        Published?.Invoke();
+    }
 
     public bool TryConsume()
     {
@@ -449,14 +453,89 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private bool _stopped;
     private readonly object _engineAccessGate = new();
     private bool _engineAccessRevoked;
+    private readonly bool _asyncCanvasPreparation;
+    private readonly bool _singleScenePerFrame =
+        OperatingSystem.IsWindows()
+        && Environment.GetEnvironmentVariable("WEBSCENE_SINGLE_SCENE_PER_FRAME") == "1";
+    private int _canvasPreparationQueued;
+    private bool _canvasPreparationFailed;
+    private PreparedCanvasScene? _preparedCanvasScene;
+
+    private sealed class PreparedCanvasScene(NativeSceneLeaseV3 scene, NativeCanvasSceneRenderer.PreparedCanvasLayers layers) : IDisposable
+    {
+        private NativeSceneLeaseV3? _scene = scene;
+        public NativeCanvasSceneRenderer.PreparedCanvasLayers Layers => layers;
+        public NativeSceneLeaseV3 TakeScene()
+        {
+            var result = _scene ?? throw new InvalidOperationException("Prepared scene was already consumed.");
+            _scene = null;
+            return result;
+        }
+        public void Dispose() { _scene?.Dispose(); _scene = null; layers.Dispose(); }
+    }
+
+    private void OnCanvasPublication() => QueueCanvasPreparation(fromPublication: true);
+
+    private void QueueCanvasPreparation(bool fromPublication = false)
+    {
+        if (!_asyncCanvasPreparation || (!fromPublication && (_canvasPreparationFailed || !_running || _manualFrames
+            || _preparedCanvasScene is not null || _publicationMailbox.PendingCount == 0))
+            || Interlocked.CompareExchange(ref _canvasPreparationQueued, 1, 0) != 0) return;
+        ThreadPool.QueueUserWorkItem(state =>
+        {
+            try
+            {
+                lock (_engineAccessGate)
+                {
+                    if (_engineAccessRevoked || _stopped || _canvasPreparationFailed || !_running || _manualFrames
+                        || _hasPendingRenderMetrics
+                        || _preparedCanvasScene is not null || _publicationMailbox.PendingCount == 0) return;
+                    var options = NativeSceneAcquireOptionsV3.CpuOnly;
+                    options.ConsumerCapabilities = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability | NativeWebSceneApi.CanvasCheckpointCapability
+                        | (_gpuPresenter?.SupportsProducerGpuWaits == true ? NativeWebSceneApi.ProducerGpuWaitCapability : 0UL);
+                    var status = NativeSceneLeaseV3.Acquire(_engine, in options, true, out var scene);
+                    if (status != NativeSceneAcquireStatus.Success || scene is null) return;
+                    NativeCanvasSceneRenderer.PreparedCanvasLayers? layers = null;
+                    try
+                    {
+                        scene.WithView(view =>
+                        {
+                            if (view.SceneVersion == 3 && view.StructSize == System.Runtime.InteropServices.Marshal.SizeOf<NativeSceneViewV3>())
+                            {
+                                var cpu = (NativeSceneView*)view.CpuView;
+                                _renderObserver.RecordScheduling("prepare:start", 0, cpu->Header.Revision, false);
+                                layers = _renderer.PrepareCanvasLayers((NativeSceneView*)view.CpuView);
+                                _renderObserver.RecordScheduling("prepare:end", 0, cpu->Header.Revision, false);
+                            }
+                        });
+                        if (layers is null) return;
+                        _preparedCanvasScene = new PreparedCanvasScene(scene, layers);
+                        scene = null; layers = null;
+                    }
+                    finally { scene?.Dispose(); layers?.Dispose(); }
+                }
+            }
+            catch (Exception error)
+            {
+                lock (_engineAccessGate) _canvasPreparationFailed = true;
+                Console.Error.WriteLine("Canvas preparation fell back to synchronous compilation: " + error);
+            }
+            finally { Volatile.Write(ref _canvasPreparationQueued, 0); }
+        });
+    }
 
     internal void RevokeEngineAccess()
     {
         // Join any engine-using callback before the UI destroys the engine.
         // No compositor tick or GPU completion is needed to revoke access.
-        lock (_engineAccessGate) _engineAccessRevoked = true;
+        lock (_engineAccessGate)
+        {
+            _engineAccessRevoked = true;
+            _publicationMailbox.Published -= OnCanvasPublication;
+            _preparedCanvasScene?.Dispose(); _preparedCanvasScene = null;
+        }
     }
-    private NativeMacOSGpuScenePresenter? _gpuPresenter;
+    private NativeGpuScenePresenter? _gpuPresenter;
     private bool _gpuNeedsRender;
     internal Task GpuRetirement { get; private set; } = Task.CompletedTask;
     private readonly NativeCanvasSceneRenderer _renderer = new();
@@ -506,8 +585,9 @@ internal sealed unsafe class NativeSceneCompositionHandler
         double deviceScaleFactor,
         bool enableGpuScenes = false)
     {
-        if (enableGpuScenes && !OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException("GPU composition currently requires the negotiated macOS CGL route.");
-        _gpuPresenter = enableGpuScenes ? new NativeMacOSGpuScenePresenter() : null;
+        if (enableGpuScenes && !OperatingSystem.IsMacOS() && !OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("GPU composition requires a supported macOS or Windows graphics host.");
+        _gpuPresenter = enableGpuScenes ? new NativeGpuScenePresenter() : null;
         _engine = engine;
         _renderObserver = renderObserver;
         _publicationMailbox = publicationMailbox;
@@ -515,6 +595,9 @@ internal sealed unsafe class NativeSceneCompositionHandler
         _performanceInstrumentation = performanceInstrumentation;
         _scheduleUiWake = scheduleUiWake;
         _renderer.SetPresenterDeviceScaleFactor(deviceScaleFactor);
+        _asyncCanvasPreparation = enableGpuScenes && OperatingSystem.IsWindows()
+            && Environment.GetEnvironmentVariable("WEBSCENE_ASYNC_CANVAS_PREPARATION") == "1";
+        if (_asyncCanvasPreparation) _publicationMailbox.Published += OnCanvasPublication;
     }
 
     public override void OnMessage(object message)
@@ -674,13 +757,15 @@ internal sealed unsafe class NativeSceneCompositionHandler
         }
 
         _stopped = true;
+        _publicationMailbox.Published -= OnCanvasPublication;
+        _preparedCanvasScene?.Dispose(); _preparedCanvasScene = null;
         _running = false;
         _manualFrames = false;
         _animationFrameScheduled = false;
         _uiWakeGate.Complete();
         var retiring = _gpuPresenter;
         _gpuPresenter = null; _gpuNeedsRender = false;
-        if (retiring is not null) GpuRetirement = NativeMacOSGpuRetirement.Start(retiring);
+        if (retiring is not null) GpuRetirement = NativeGpuRetirement.Start(retiring);
         _renderer.Reset();
         _appliedRevision = 0;
         _viewportWidth = 0;
@@ -715,13 +800,15 @@ internal sealed unsafe class NativeSceneCompositionHandler
         }
         _renderObserver.RecordScheduling("frame", _publicationMailbox.PendingCount,
             _appliedRevision, _gpuPresenter?.HasPendingRetirements == true);
-        var frameTimestamp = Stopwatch.GetTimestamp();
+        var frameTimestamp = NativeCompositorFrameClock.ReadTimestamp();
+        if (frameTimestamp == 0) frameTimestamp = Stopwatch.GetTimestamp();
         var frameTimestampMilliseconds =
             frameTimestamp * 1000.0 / Stopwatch.Frequency;
+        _gpuPresenter?.PollWindowsRetirementsBeforeFrame();
         NativeWebSceneApi.EngineObserveCompositorFrame(
             _engine,
             frameTimestampMilliseconds);
-        if (frameTimestamp
+        if (Stopwatch.GetTimestamp()
             > Interlocked.Read(ref _liveResizeFrameDeadlineTimestamp))
         {
             var demand = NativeWebSceneApi.EngineRequiresAnimationFrame(_engine);
@@ -797,7 +884,10 @@ internal sealed unsafe class NativeSceneCompositionHandler
         // Consume at most the second slot already offered by the ordered
         // mailbox. Apply both diffs in order, then draw the newest coherent
         // scene once. Manual certification retains one scene per boundary.
+        // Optional single-scene pacing preserves queued intermediate frames,
+        // trading one refresh of latency for steadier drawing cadence.
         if (_gpuPresenter is not null && _running && !_manualFrames
+            && !_singleScenePerFrame
             && _publicationMailbox.PendingCount > 0
             && TryAcquireNextDiff(out var followingDamage))
         {
@@ -908,10 +998,19 @@ internal sealed unsafe class NativeSceneCompositionHandler
     private bool TryAcquireNextGpuDiff(out NativeSceneDamage damage)
     {
         damage = NativeSceneDamage.None;
+        using var prepared = _preparedCanvasScene;
+        _preparedCanvasScene = null;
         var options = NativeSceneAcquireOptionsV3.CpuOnly;
-        options.ConsumerCapabilities = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability
+        options.ConsumerCapabilities = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability | NativeWebSceneApi.CanvasCheckpointCapability
             | (_gpuPresenter?.SupportsProducerGpuWaits == true ? NativeWebSceneApi.ProducerGpuWaitCapability : 0UL);
-        var status = NativeSceneLeaseV3.Acquire(_engine, in options, true, out var scene);
+        NativeSceneLeaseV3? scene;
+        NativeSceneAcquireStatus status;
+        if (prepared is not null)
+        {
+            scene = prepared.TakeScene();
+            status = NativeSceneAcquireStatus.Success;
+        }
+        else status = NativeSceneLeaseV3.Acquire(_engine, in options, true, out scene);
         if (_performanceInstrumentation.IsEnabled)
             _renderObserver.RecordScheduling("acquire:" + status, _publicationMailbox.PendingCount,
             _appliedRevision, _gpuPresenter?.HasPendingRetirements == true);
@@ -927,7 +1026,7 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 if (!NativeSceneViewValidation.IsValid(view) || view->Header.Revision <= _appliedRevision) return;
                 var monitoring = _performanceInstrumentation.IsEnabled;
                 var started = monitoring ? Stopwatch.GetTimestamp() : 0;
-                var applied = _gpuPresenter!.ApplyScene(scene, _renderer, monitoring ? _renderObserver : null);
+                var applied = _gpuPresenter!.ApplyScene(scene, _renderer, monitoring ? _renderObserver : null, prepared?.Layers);
                 if (monitoring) _renderObserver.RecordScheduling("apply:" + applied, _publicationMailbox.PendingCount,
                     view->Header.Revision, _gpuPresenter.HasPendingRetirements);
                 if (applied == NativeGpuSceneApplyResult.Backpressure) return;
@@ -1076,6 +1175,8 @@ internal sealed unsafe class NativeSceneCompositionHandler
         }
 
         using var lease = feature.Lease();
+        // Finish an older checkpoint before submitting this frame's GPU draws.
+        _renderer.PollCanvasCheckpointReadback(lease);
         if (_gpuPresenter is not null && !_gpuPresenter.TryPrepare(lease))
         { _gpuNeedsRender = true; _scheduleUiWake(); return; }
         var skiaStarted = monitoring ? Stopwatch.GetTimestamp() : 0;
@@ -1106,7 +1207,9 @@ internal sealed unsafe class NativeSceneCompositionHandler
                 _viewportWidth,
                 _viewportHeight,
                 null,
-                _gpuPresenter is null ? null : (index, destination) => _gpuPresenter.Draw(lease, index, destination));
+                _gpuPresenter is null ? null : (index, destination) => _gpuPresenter.Draw(lease, index, destination),
+                OperatingSystem.IsWindows() ? lease.GrContext : null);
+            if (_gpuPresenter is not null) _renderer.CheckpointCanvasHistory(_engine, lease);
             _gpuNeedsRender = false;
             if (monitoring)
             {
@@ -1160,6 +1263,8 @@ internal sealed unsafe class NativeSceneCompositionHandler
             _pendingDiffApplyTicks = 0;
             _pendingDiffCanvasCommandCount = 0;
         }
+
+        QueueCanvasPreparation();
 
         // An ordered producer may publish two diffs before Avalonia processes
         // their coalesced notification. Active composition drains the second

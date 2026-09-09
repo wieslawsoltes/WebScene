@@ -209,10 +209,14 @@
                     address.data(), address.size(), css.data(), css.size());
             });
         }
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
         if(webgpu_policy_callback_)runtime_->set_webgpu_policy(graphics_wake_,[this](const std::string& url) {
-            return webgpu_policy_callback_(webgpu_policy_user_data_,url.data(),url.size())==WEBSCENE_WEBGPU_IOSURFACE
-                ? webscene::graphics::webgpu_canvas_interop::iosurface : webscene::graphics::webgpu_canvas_interop::none;
+            const auto decision=webgpu_policy_callback_(webgpu_policy_user_data_,url.data(),url.size());
+#if defined(_WIN32)
+            return decision==WEBSCENE_WEBGPU_DXGI ? webscene::graphics::webgpu_canvas_interop::dxgi : webscene::graphics::webgpu_canvas_interop::none;
+#else
+            return decision==WEBSCENE_WEBGPU_IOSURFACE ? webscene::graphics::webgpu_canvas_interop::iosurface : webscene::graphics::webgpu_canvas_interop::none;
+#endif
         });
 #endif
         if (!runtime_->initialize()) {
@@ -233,7 +237,7 @@
         auto next_scene_publication = std::chrono::steady_clock::now()
             + std::chrono::milliseconds(16);
         bool scene_pending = false;
-        std::optional<webscene_input_event> deferred_input;
+        std::optional<queued_input_event> deferred_input;
         struct pending_resize_frame_publication final {
             uint64_t sequence;
             std::chrono::steady_clock::time_point enqueued_at;
@@ -245,6 +249,7 @@
         std::optional<webscene_input_event> frame_paced_pointer_move;
         uint64_t frame_paced_pointer_move_count = 0;
         uint64_t frame_paced_pointer_observed_after_frame = 0;
+        uint64_t last_pointer_dispatch_frame = 0;
         while (!token.stop_requested()) {
             // Avalonia observes every compositor boundary even while no V8 RAF
             // or CSS animation is active. Import that clock without treating
@@ -259,7 +264,7 @@
                     static_cast<double>(
                         observed_host_timestamp_microseconds) / 1000.0);
             }
-            webscene_input_event event{};
+            queued_input_event event{};
             bool changed = checkpoint_requested_.exchange(
                 false,
                 std::memory_order_acq_rel);
@@ -277,6 +282,7 @@
                 component_ready_.load(std::memory_order_relaxed);
             bool resize_applied = false;
             bool host_frame_applied = false;
+            changed = apply_canvas_checkpoint() || changed;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
             const auto refresh_preferred_color_scheme = [&] {
                 if (!preferred_color_scheme_changed_.exchange(
@@ -312,6 +318,7 @@
             if (low_memory_requested_.exchange(false, std::memory_order_acq_rel)
                 && runtime_ != nullptr) {
                 runtime_->notify_low_memory();
+                trim_scene_storage();
                 low_memory_notifications_.fetch_add(1, std::memory_order_relaxed);
                 update_compilation_metrics();
             }
@@ -320,6 +327,7 @@
                     >= *hidden_low_memory_deadline
                 && runtime_ != nullptr) {
                 runtime_->notify_low_memory();
+                trim_scene_storage();
                 low_memory_notifications_.fetch_add(1, std::memory_order_relaxed);
                 hidden_low_memory_notifications_.fetch_add(
                     1,
@@ -418,10 +426,16 @@
                 frame_paced_pointer_move.reset();
                 frame_paced_pointer_move_count = 0;
                 frame_paced_pointer_observed_after_frame = 0;
+                last_pointer_dispatch_frame = observed_compositor_timestamp_microseconds_.load(
+                    std::memory_order_acquire);
+                apply(pointer_move);
+                // Transfer frame demand from the in-flight pointer handler to
+                // any RAF it requested before clearing the pointer demand bit.
+                update_host_animation_frame_demand();
+                pending_pointer_move_inputs_.fetch_sub(pointer_move_count, std::memory_order_release);
                 frame_paced_pointer_pending_.store(
                     false,
                     std::memory_order_release);
-                apply(pointer_move);
                 applied_pointer_move_inputs_.fetch_add(
                     1,
                     std::memory_order_relaxed);
@@ -461,7 +475,7 @@
                         std::memory_order_acquire);
                 if (frame_paced_pointer_move.has_value()
                     && compositor_timestamp_microseconds
-                        > frame_paced_pointer_observed_after_frame) {
+                        > std::max(frame_paced_pointer_observed_after_frame, last_pointer_dispatch_frame)) {
                     apply_frame_paced_pointer_move();
                     ++applied_input_groups;
                     continue;
@@ -481,20 +495,26 @@
                         event.kind == WEBSCENE_INPUT_POINTER_MOVE
                         && event.flags == frame_paced_pointer_move->flags
                         && compositor_timestamp_microseconds
-                            <= frame_paced_pointer_observed_after_frame;
+                            <= std::max(frame_paced_pointer_observed_after_frame, last_pointer_dispatch_frame);
                     if (compatible_pointer_move) {
                         frame_paced_pointer_move = event;
                         ++frame_paced_pointer_move_count;
                         continue;
                     }
 
-                    // A button/key/wheel event is an ordering barrier. Deliver
-                    // the latest preceding movement before that discrete input,
-                    // even when both arrived within one display interval.
-                    deferred_input = event;
-                    apply_frame_paced_pointer_move();
-                    ++applied_input_groups;
-                    continue;
+                    // A frame queued at the already observed boundary does not
+                    // release a newer pointer sample retained for the next one.
+                    // Button/key/wheel events still preserve input ordering.
+                    const auto already_observed_frame = event.kind == WEBSCENE_INPUT_FRAME
+                        && std::isfinite(event.x) && event.x >= 0
+                        && event.x * 1000.0 < static_cast<double>(std::max(
+                            frame_paced_pointer_observed_after_frame, last_pointer_dispatch_frame)) + 1.0;
+                    if (!already_observed_frame) {
+                        deferred_input = event;
+                        apply_frame_paced_pointer_move();
+                        ++applied_input_groups;
+                        continue;
+                    }
                 }
 
                 const auto frame_paced_pointer =
@@ -503,8 +523,12 @@
                 if (frame_paced_pointer) {
                     frame_paced_pointer_move = event;
                     frame_paced_pointer_move_count = 1;
+                    // Age the sample from host admission, not worker dequeue.
+                    // A busy handler must not move an already queued sample into
+                    // a later display interval. The dispatch boundary above still
+                    // limits continuous pointer work to once per observed frame.
                     frame_paced_pointer_observed_after_frame =
-                        compositor_timestamp_microseconds;
+                        event.observed_compositor_timestamp;
                     retain_frame_paced_pointer_move();
                     continue;
                 }
@@ -541,6 +565,11 @@
                             return true;
                         }
                         if (candidate.kind == WEBSCENE_INPUT_POINTER_MOVE) {
+                            // A frame/wheel prefix must not bypass the paced
+                            // pointer lane. Retain this move for the next
+                            // observed display boundary instead of dispatching
+                            // a second expensive pointer handler in this RAF.
+                            if (compositor_timestamp_microseconds != 0U) return false;
                             if (pointer_move.has_value()
                                 && pointer_move->flags != candidate.flags) {
                                 return false;
@@ -586,7 +615,7 @@
 
                     static_cast<void>(accumulate(event));
                     uint64_t consumed_count = 1;
-                    webscene_input_event next{};
+                    queued_input_event next{};
                     while (consumed_count < 256U && inputs_.try_pop(next)) {
                         if (!accumulate(next)) {
                             deferred_input = next;
@@ -633,6 +662,8 @@
                         const auto aggregate_count = item.count;
                         apply(aggregate);
                         if (aggregate.kind == WEBSCENE_INPUT_POINTER_MOVE) {
+                            update_host_animation_frame_demand();
+                            pending_pointer_move_inputs_.fetch_sub(aggregate_count, std::memory_order_release);
                             applied_pointer_move_inputs_.fetch_add(
                                 1,
                                 std::memory_order_relaxed);
@@ -679,6 +710,8 @@
                 apply(event);
                 consumed_inputs_.fetch_add(1, std::memory_order_relaxed);
                 if (event.kind == WEBSCENE_INPUT_POINTER_MOVE) {
+                    update_host_animation_frame_demand();
+                    pending_pointer_move_inputs_.fetch_sub(1, std::memory_order_release);
                     applied_pointer_move_inputs_.fetch_add(1, std::memory_order_relaxed);
                 } else if (event.kind == WEBSCENE_INPUT_WHEEL) {
                     applied_wheel_inputs_.fetch_add(1, std::memory_order_relaxed);
@@ -713,6 +746,7 @@
 
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
             if (runtime_ != nullptr && host_frame_applied) {
+                frame_trace_.mark("raf-start", last_input_sequence_);
                 // `signal_animation_frame` releases the callbacks belonging to
                 // this rendering opportunity; execute that complete RAF batch
                 // before publishing. Do not run unrelated resources/timers here,
@@ -749,6 +783,7 @@
                         maximum_resize_frame_animation_batch_nanoseconds_,
                         animation_frame_batch_nanoseconds);
                 }
+                frame_trace_.mark("raf-end", last_input_sequence_);
                 frame_scripts_executed_.store(
                     runtime_->frame_scripts_executed(),
                     std::memory_order_relaxed);
@@ -1100,7 +1135,11 @@
             if (scene_pending
                 && host_visible_.load(std::memory_order_acquire)
                 && (host_frame_boundary || now >= next_scene_publication)) {
+                frame_trace_.mark("publish-start", last_input_sequence_);
                 const auto publication=publish_scene();
+                frame_trace_.mark(publication == publication_result::deferred
+                    ? "publish-deferred" : publication == publication_result::published
+                    ? "publish-end" : "publish-discarded", last_input_sequence_);
                 if (publication!=publication_result::deferred) {
                     scene_pending = publication==publication_result::published
                         && document_.scene_generation()!=published_document_generation_;
@@ -1206,4 +1245,5 @@
 #endif
         runtime_.reset();
 #endif
+        frame_trace_.dump();
     }

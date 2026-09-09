@@ -21,6 +21,8 @@ def stage(sdk, native, output, rid):
     suffix = {"win-x64": ".dll", "osx-arm64": ".dylib", "linux-x64": ".so"}[rid]
     libraries = [("dawn", ("bin/webgpu_dawn" if rid == "win-x64" else "lib/libwebgpu_dawn") + suffix),
                  ("angle", "lib/libEGL" + suffix), ("angle", "lib/libGLESv2" + suffix)]
+    if rid == "win-x64":
+        libraries.append(("dawn", "bin/d3dcompiler_47.dll"))
     for component, relative in libraries:
         adjacent = native / Path(relative).name
         if not adjacent.is_file() or sdk_verifier.sha(adjacent) != packages[component]["files"][relative]:

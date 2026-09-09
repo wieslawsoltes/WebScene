@@ -50,7 +50,9 @@ void test_canvas_consumer_pixels(dawn_event_service& service,const wgpu::Device&
     auto encoder=device.CreateCommandEncoder();
     wgpu::RenderPassColorAttachment color{};
     color.view=frame->texture.CreateView(); color.loadOp=wgpu::LoadOp::Clear;
-    color.storeOp=wgpu::StoreOp::Store; color.clearValue={0.25,0.5,0.75,1};
+    // Exact UNORM byte values avoid implementation-dependent rounding of .5
+    // while retaining an exact, channel-sensitive cross-backend pixel check.
+    color.storeOp=wgpu::StoreOp::Store; color.clearValue={64.0/255.0,128.0/255.0,191.0/255.0,1};
     wgpu::RenderPassDescriptor pass{}; pass.colorAttachmentCount=1; pass.colorAttachments=&color;
     auto render=encoder.BeginRenderPass(&pass); render.End();
     auto producer_commands=encoder.Finish();
@@ -232,7 +234,7 @@ void test_canvas_storage(dawn_event_service& service,const wgpu::Device& device,
     });
     presenter.join(); consumer.reset(); require(anchor.expired());
 }
-int main() {
+int main() try {
     test_dxgi_fence_ownership();
     auto wake=std::make_shared<engine_wake>();
     graphics_service root(wake),other_root(wake);
@@ -1043,4 +1045,7 @@ int main() {
     if (terminated!=1 || *late_accepted || retained->has_ready()
         || retained->publish(pending,completion_status::success)) return 1;
     std::cout << "Native Dawn adapter/device/submission completion and deferred buffer release passed without RAF/UI\n";
+} catch(const std::exception& error) {
+    std::cerr << "Dawn event test failed: " << error.what() << '\n';
+    return 1;
 }

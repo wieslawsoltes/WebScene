@@ -1,5 +1,6 @@
     void apply(const webscene_input_event& event)
     {
+        frame_trace_.mark(event.kind == WEBSCENE_INPUT_FRAME ? "frame-start" : "input-start", event.sequence);
         last_input_sequence_ = std::max(last_input_sequence_, event.sequence);
         const auto measures_input_dispatch =
             event.kind != WEBSCENE_INPUT_RESIZE
@@ -15,7 +16,15 @@
             pointer_x_ = event.x;
             pointer_y_ = event.y;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+            // A paced pointer's cursor is resolved against the publication
+            // layout after RAF. Forcing layout here duplicates that work.
+#if defined(_WIN32)
+            if (runtime_ != nullptr && !runtime_->dispatch_input(event,
+                    event.kind == WEBSCENE_INPUT_POINTER_MOVE
+                    && observed_compositor_timestamp_microseconds_.load(std::memory_order_acquire) != 0)) {
+#else
             if (runtime_ != nullptr && !runtime_->dispatch_input(event)) {
+#endif
                 script_errors_.fetch_add(1, std::memory_order_relaxed);
                 record_input_dispatch_failure(event, runtime_->last_error());
             }
@@ -121,6 +130,7 @@
         default:
             break;
         }
+        frame_trace_.mark(event.kind == WEBSCENE_INPUT_FRAME ? "frame-end" : "input-end", event.sequence);
         if (measures_input_dispatch) {
             const auto elapsed = static_cast<uint64_t>(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(

@@ -49,8 +49,8 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
     internal readonly TaskCompletionSource Completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly NativeCanvasSceneRenderer _renderer = new();
     private NativeGpuImageLeaseV3? _source;
-    private NativeMacOSGpuScenePresenter? _retained;
-    private NativeMacOSGpuSceneImages? _replacement;
+    private NativeGpuScenePresenter? _retained;
+    private NativeGpuSceneImages? _replacement;
     internal int Frames, Imports, VerifiedPixels;
     internal bool DetachedBeforeRetirement;
     private int _retirementStarted;
@@ -99,12 +99,12 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
             using var lease = feature.Lease();
             if (_retained is null)
             {
-                var status = NativeMacOSGpuSceneImages.Retain(new[] { _source! }, out var first);
+                var status = NativeGpuSceneImages.Retain(new[] { _source! }, out var first);
                 if (status == NativeSceneAcquireStatus.Backpressure) return;
                 if (status != NativeSceneAcquireStatus.Success || first is null) throw new InvalidOperationException($"Scene image capture failed: {status}");
-                _retained = new NativeMacOSGpuScenePresenter();
+                _retained = new NativeGpuScenePresenter();
                 if (!_retained.TryReplace(first)) throw new InvalidOperationException("Initial scene rejected");
-                status = NativeMacOSGpuSceneImages.Retain(new[] { _source! }, out _replacement);
+                status = NativeGpuSceneImages.Retain(new[] { _source! }, out _replacement);
                 if (status != NativeSceneAcquireStatus.Success || _replacement is null) throw new InvalidOperationException("Replacement capture failed");
                 _source!.Dispose(); _source = null;
             }
@@ -166,8 +166,8 @@ internal sealed class GaneshImageControl : Control, ICustomDrawOperation
                             try
                             {
                                 if (Environment.CurrentManagedThreadId == renderingThread) throw new InvalidOperationException("Detached probe must retire on a different thread");
-                                await NativeMacOSGpuRetirement.Start(retiring).WaitAsync(TimeSpan.FromSeconds(5));
-                                if (NativeMacOSGpuRetirement.RetainedCount != 0) throw new InvalidOperationException("Completed retirement retained its owner");
+                                await NativeGpuRetirement.Start(retiring).WaitAsync(TimeSpan.FromSeconds(5));
+                                if (NativeGpuRetirement.RetainedCount != 0) throw new InvalidOperationException("Completed retirement retained its owner");
                                 _renderer.Reset();Completed.TrySetResult();
                             }
                             catch (Exception error) { Completed.TrySetException(error); }

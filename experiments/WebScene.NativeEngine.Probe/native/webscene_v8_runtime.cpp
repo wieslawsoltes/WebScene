@@ -1,14 +1,12 @@
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
-#include "graphics/dawn_scene_image_snapshot.h"
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+#include "graphics/platform_webgpu_canvas.h"
 #endif
 #include "webscene_v8_runtime.h"
+#include "webscene_frame_trace.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
 #include "graphics/graphics_service.h"
 #include "graphics/v8_webgpu_realm.h"
 #include "graphics/v8_webgpu_constants.h"
-#if defined(__APPLE__)
-#include "graphics/v8_webgpu_iosurface_canvas_host.h"
-#endif
 #endif
 #include "webscene_runtime_diagnostics.h"
 #include "webscene_embed_fallback.h"
@@ -220,6 +218,7 @@ void prewarm_v8_process()
 }
 
 struct v8_dom_runtime::implementation final {
+    webscene_frame_trace frame_trace;
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     bool graphics_transitioning{};
     bool graphics_delivering{};
@@ -232,10 +231,10 @@ struct v8_dom_runtime::implementation final {
     std::function<void(const std::string&)> webgpu_document_policy;
     webscene::graphics::webgpu_canvas_interop webgpu_interop=webscene::graphics::webgpu_canvas_interop::none;
     std::shared_ptr<webscene::graphics::completion_wake> webgpu_wake;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(_WIN32))
     struct gpu_canvas_entry {
         dom_node* node;
-        std::shared_ptr<webscene::graphics::dawn_iosurface_canvas_host> provider;
+        std::shared_ptr<webscene::graphics::platform_dawn_canvas_host> provider;
         std::unique_ptr<webscene::graphics::v8_webgpu_canvas_context> context;
         bool bitmap_reset_awaiting_frame=false;
         bool presentation_resize_pending=false;
@@ -4521,10 +4520,20 @@ uint64_t v8_dom_runtime::last_resize_observers_nanoseconds() const noexcept
 #endif
 }
 
-bool v8_dom_runtime::dispatch_input(const webscene_input_event& event)
+bool v8_dom_runtime::dispatch_input(const webscene_input_event& event, bool defer_cursor_update)
 {
-    return impl_->dispatch_input(event)
+    return impl_->dispatch_input(event, defer_cursor_update)
         && impl_->promote_pending_promise_error();
+}
+
+void v8_dom_runtime::refresh_pointer_cursor_after_layout()
+{
+    if (!impl_->pointer_cursor_update_pending) return;
+    impl_->pointer_cursor_update_pending = false;
+    auto* target = impl_->document.hit_test(impl_->document.body(),
+        static_cast<float>(impl_->last_pointer_x), static_cast<float>(impl_->last_pointer_y));
+    impl_->current_cursor_kind_value = target == nullptr
+        ? WEBSCENE_CURSOR_DEFAULT : impl_->cursor_kind_for(*target);
 }
 
 bool v8_dom_runtime::dispatch_transition_events()
@@ -4562,7 +4571,7 @@ void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
         ? timestamp_ms
         : std::chrono::duration<double, std::milli>(now.time_since_epoch()).count();
     impl_->last_animation_frame_timestamp_ms = timestamp;
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     // Admit a new RAF batch only when configured canvases can obtain storage.
     // Existing current textures still need their rendering opportunity to end.
     // Pending callbacks retain their sentinel until a later host frame; no wait
@@ -4605,7 +4614,7 @@ bool v8_dom_runtime::pump_animation_frame_task()
     auto local_context = impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(local_context);
     const bool result=impl_->drain_animation_frame_task()&&impl_->promote_pending_promise_error();
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     impl_->finish_gpu_rendering_opportunity(result);
 #endif
     return result;
@@ -4613,7 +4622,7 @@ bool v8_dom_runtime::pump_animation_frame_task()
 
 bool v8_dom_runtime::has_pending_animation_frame_task() const noexcept
 {
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     if(impl_->gpu_rendering_opportunity)return true;
 #endif
     return impl_->has_due_animation_frame_task();
@@ -4624,7 +4633,7 @@ uint8_t v8_dom_runtime::host_animation_frame_demand() const noexcept
     auto demand = impl_->has_waiting_animation_frame_task()
         ? uint8_t{1U}
         : uint8_t{0U};
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     for(const auto& [key,canvas]:impl_->gpu_canvases)if(canvas.context->has_current_texture()){demand|=1U;break;}
 #endif
     if (impl_->is_text_control(impl_->active_element)
@@ -4665,7 +4674,9 @@ void v8_dom_runtime::set_webgpu_policy(std::shared_ptr<webscene::graphics::compl
     if(!wake||!policy)throw std::invalid_argument("WebGPU policy requires a wake and host decision callback");
     impl_->webgpu_document_policy=[this,wake=std::move(wake),policy=std::move(policy)](const std::string& url) {
         const auto interop=policy(url);
-        if(interop==webscene::graphics::webgpu_canvas_interop::iosurface)install_webgpu(wake,true,interop);
+        #if defined(__APPLE__) || defined(_WIN32)
+        if(interop==webscene::graphics::platform_canvas_interop)install_webgpu(wake,true,interop);
+#endif
     };
 }
 
@@ -4689,7 +4700,13 @@ bool v8_dom_runtime::install_webgpu(std::shared_ptr<webscene::graphics::completi
             !global->Get(context,js_string(impl_->isolate,"DOMException")).ToLocal(&exception)||!exception->IsFunction())
             throw std::logic_error("WebGPU requires installed Navigator and DOMException");
         impl_->webgpu=std::make_unique<webscene::graphics::v8_webgpu_realm>(impl_->isolate,context,service,
-            exception.As<v8::Function>(),interop,wgpu::BackendType::Undefined,wgpu::TextureFormat::BGRA8Unorm
+            exception.As<v8::Function>(),interop,
+#if defined(_WIN32)
+            wgpu::BackendType::D3D12,
+#else
+            wgpu::BackendType::Undefined,
+#endif
+            wgpu::TextureFormat::BGRA8Unorm
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
             ,impl_->event_target_template.Get(impl_->isolate),[self=impl_.get()](v8::Local<v8::Object> object) {
                 if(self->next_standalone_event_target_id==UINT32_MAX)throw std::length_error("EventTarget identity exhausted");
@@ -4734,7 +4751,7 @@ webscene::graphics::graphics_service& v8_dom_runtime::initialize_graphics(
 void v8_dom_runtime::update_gpu_presentation_images(
     const std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images)
 {
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     for(auto& [key,entry]:impl_->gpu_canvases) {
         auto& canvas=entry.node->mutable_canvas();
         std::shared_ptr<const webscene_gpu_image_lease_v3> retained;
@@ -4754,7 +4771,7 @@ void v8_dom_runtime::update_gpu_presentation_images(
 
 bool v8_dom_runtime::has_open_gpu_output() const
 {
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     if(impl_->gpu_rendering_opportunity)return true;
     for(const auto& [key,canvas]:impl_->gpu_canvases)
         if(canvas.context->has_current_texture()
@@ -4772,7 +4789,7 @@ bool v8_dom_runtime::pump_task()
     auto local_context = impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(local_context);
     const bool result = impl_->drain_tasks() && impl_->promote_pending_promise_error();
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     impl_->finish_gpu_rendering_opportunity(result);
 #endif
     return result;
@@ -4782,7 +4799,7 @@ bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     if (impl_->graphics && impl_->graphics->has_ready_work()) return true;
-#if defined(__APPLE__)
+#if (defined(__APPLE__) || defined(_WIN32))
     if(impl_->gpu_rendering_opportunity)return true;
     for(const auto& [key,canvas]:impl_->gpu_canvases)if(canvas.provider->has_completed_retirements())return true;
 #endif

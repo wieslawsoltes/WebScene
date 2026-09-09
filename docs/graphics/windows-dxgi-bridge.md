@@ -1,7 +1,9 @@
 # Windows GPU image bridge (G04 / issue #26)
 
-Status: started. G01–G03 remain open. Native Windows import/export, synchronization,
-producer integration and mandatory hardware qualification are not complete.
+Current implementation and Windows hardware evidence are recorded in
+[Windows Kestrel](windows-kestrel.md). The sections below preserve the earlier
+foundation checkpoints and their then-outstanding work. Epic qualification remains
+open; the newer Avalonia WebGPU result does not qualify Uno or browser WebGL.
 
 ## Capability selection
 
@@ -205,7 +207,10 @@ compilation, successful allocation/import, budget/failure tests and GPU qualific
 
 ## D3D12 lease-provider integration
 
-`d3d12_canvas_images` anchors three shared-color slots in `owned_image_pool`.
+`d3d12_canvas_images` anchors four shared-color slots in `owned_image_pool`,
+within the existing allocation byte budget. Other providers retain the default
+three-slot configuration. The fourth Windows slot allows an ordered queued
+scene to coexist with current drawing, GPU retirement and producer work.
 Writers reserve idle slots, freeze validated image metadata and reuse matching
 allocations. Changed dimensions/formats replace only an idle allocation. Aggregate
 allocation bytes are bounded, and retained scenes/consumers keep the storage alive

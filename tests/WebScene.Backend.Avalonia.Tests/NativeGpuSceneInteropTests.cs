@@ -267,13 +267,13 @@ public sealed class NativeGpuSceneInteropTests
         var create = Marshal.GetDelegateForFunctionPointer<CreateIOSurface>(NativeLibrary.GetExport(library, "webscene_test_create_iosurface"));
         var alive = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_iosurface_alive"));
         Assert.Equal(1, create(out var source));
-        Assert.Equal(NativeSceneAcquireStatus.Success, NativeMacOSGpuSceneImages.Retain(new[] { source }, out var images));
+        Assert.Equal(NativeSceneAcquireStatus.Success, NativeGpuSceneImages.Retain(new[] { source }, out var images));
         source.Dispose();
         Assert.Equal(1, alive());
         images!.DiscardUnprepared();
         images.DiscardUnprepared();
         Assert.Equal(0, alive());
-        Assert.Throws<InvalidOperationException>(() => new NativeMacOSGpuScenePresenter().TryReplace(images));
+        Assert.Throws<InvalidOperationException>(() => new NativeGpuScenePresenter().TryReplace(images));
     }
 
     [IOSurfaceFixtureFact]
@@ -284,14 +284,14 @@ public sealed class NativeGpuSceneInteropTests
         var create = Marshal.GetDelegateForFunctionPointer<CreateIOSurface>(NativeLibrary.GetExport(library, "webscene_test_create_iosurface"));
         var alive = Marshal.GetDelegateForFunctionPointer<IOSurfaceAlive>(NativeLibrary.GetExport(library, "webscene_test_iosurface_alive"));
         Assert.Equal(1, create(out var source));
-        var groups = new List<NativeMacOSGpuSceneImages>();
-        var presenter = new NativeMacOSGpuScenePresenter();
+        var groups = new List<NativeGpuSceneImages>();
+        var presenter = new NativeGpuScenePresenter();
         try
         {
             for (var i = 0; i < 4; ++i)
             {
                 Assert.Equal(NativeSceneAcquireStatus.Success,
-                    NativeMacOSGpuSceneImages.Retain(new[] { source }, out var group));
+                    NativeGpuSceneImages.Retain(new[] { source }, out var group));
                 groups.Add(group!);
             }
             source.Dispose();
@@ -325,7 +325,7 @@ public sealed class NativeGpuSceneInteropTests
         {
             Assert.Equal(NativeSceneAcquireStatus.Success, image.Retain(out var disposed));
             disposed!.Dispose();
-            Assert.Throws<ObjectDisposedException>(() => NativeMacOSGpuSceneImages.Retain(new[] { image, disposed }, out _));
+            Assert.Throws<ObjectDisposedException>(() => NativeGpuSceneImages.Retain(new[] { image, disposed }, out _));
         }
         finally { image.Dispose(); }
         Assert.Equal(0, alive());
@@ -414,7 +414,7 @@ public sealed class NativeGpuSceneInteropTests
         var engine = NativeWebSceneApi.EngineCreate(0, null, new AvaloniaResourceLoader(), _ => { });
         NativeSceneLeaseV3? scene = null;
         var renderer = new NativeCanvasSceneRenderer();
-        var presenter = new NativeMacOSGpuScenePresenter();
+        var presenter = new NativeGpuScenePresenter();
         try
         {
             var deadline = DateTime.UtcNow.AddSeconds(5);

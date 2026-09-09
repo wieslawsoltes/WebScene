@@ -7,6 +7,7 @@ struct webscene_gpu_producer_dependencies {
     virtual ~webscene_gpu_producer_dependencies()=default;
     virtual size_t count() const noexcept=0;
     virtual bool metal_event(size_t index,void*& event,uint64_t& value) const=0;
+    virtual bool dxgi_fence(size_t,void*& handle,uint64_t& value) const { handle=nullptr;value=0;return false; }
 };
 // Native-only implementation of the opaque C handles. Never expose to JS.
 struct webscene_gpu_image_lease_v3 {

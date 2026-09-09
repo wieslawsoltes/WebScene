@@ -16,7 +16,7 @@ $signature = Get-AuthenticodeSignature $installer
 if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
     throw 'Windows SDK installer does not have a valid Microsoft signature.'
 }
-$process = Start-Process -FilePath $installer -ArgumentList '/q', '/norestart' -Wait -PassThru
+$process = Start-Process -FilePath $installer -ArgumentList '/q', '/norestart' -WindowStyle Hidden -Wait -PassThru
 if ($process.ExitCode -notin @(0, 3010)) { throw "SDK installation failed: $($process.ExitCode)" }
 $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10'
 foreach ($relative in @(

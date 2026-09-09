@@ -2,8 +2,8 @@
 
 ## History and diagnosis
 
-The properties divider changes a root CSS variable, --right-width. Its only
-stylesheet consumer is Kestrel's grid-template-columns declaration. The old CSSOM
+The properties divider changes a root CSS variable, --right-width. Its consumers include
+Kestrel's grid-template-columns declaration and the toast stack's right offset. The old CSSOM
 setter nevertheless recascades the entire root subtree on every processed update.
 
 That behavior is already present in main at 1154c70043d6ac71d599e019490ea493898961e8.
@@ -98,3 +98,8 @@ PowerShell focused test command:
 
 No Kestrel fixture, WebGPU implementation, frame-pacing code, or font-cache change
 is included. The optimization is in the shared native CSS runtime.
+
+The current benchmark additionally checks a positional toast offset. The table
+above records the earlier dimension-only workload; results for the expanded
+workload and Windows positional fix are recorded in
+[windows-divider-comparison.md](../graphics/windows-divider-comparison.md).

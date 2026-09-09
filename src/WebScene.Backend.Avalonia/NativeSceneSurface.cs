@@ -98,8 +98,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                     "WEBSCENE_AVALONIA_DIRECT_DRAW"),
                 "1",
                 StringComparison.Ordinal);
-        if (enableGpuScenes && (!OperatingSystem.IsMacOS() || !_useCompositionVisual))
-            throw new PlatformNotSupportedException("GPU scenes require macOS composition rendering.");
+        if (enableGpuScenes && ((!OperatingSystem.IsMacOS() && !OperatingSystem.IsWindows()) || !_useCompositionVisual))
+            throw new PlatformNotSupportedException("GPU scenes require macOS or Windows composition rendering.");
         _enableGpuScenes = enableGpuScenes;
         _submitAnimationFrames = submitAnimationFrames;
         Focusable = true;

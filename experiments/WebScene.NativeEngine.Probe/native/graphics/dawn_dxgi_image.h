@@ -30,6 +30,7 @@ class dawn_dxgi_image {
     wgpu::SharedTextureMemoryProperties properties_{};
     const std::thread::id thread_=std::this_thread::get_id();
     bool active_{},failed_{};
+    void* source_handle_{}; // Identity only; the owned duplicate anchors access.
     void check_thread() const {
         if (thread_!=std::this_thread::get_id()) throw std::logic_error("DXGI access requires its owner thread");
     }
@@ -45,7 +46,7 @@ class dawn_dxgi_image {
     }
     dxgi_import_status initialize(const wgpu::Device& device,void* handle,const image_metadata& image,
         dxgi_sync synchronization,wgpu::TextureUsage usage) {
-        device_=device;
+        device_=device; source_handle_=handle;
         wgpu::SharedTextureMemoryDXGISharedHandleDescriptor dxgi{};
         dxgi.handle=handle; dxgi.useKeyedMutex=synchronization==dxgi_sync::keyed_mutex;
         wgpu::SharedTextureMemoryDescriptor descriptor{}; descriptor.nextInChain=&dxgi;
@@ -62,6 +63,14 @@ class dawn_dxgi_image {
         return texture_ ? dxgi_import_status::success : dxgi_import_status::import_failure;
     }
 public:
+    bool matches(const wgpu::Device& device,void* handle) const noexcept {
+        return device_.Get()==device.Get() && source_handle_==handle;
+    }
+    bool expire_texture() {
+        check_thread();
+        if(active_ || failed_ || !texture_)return false;
+        texture_.Destroy();return true;
+    }
     dawn_dxgi_image()=default;
     dawn_dxgi_image(const dawn_dxgi_image&)=delete;
     dawn_dxgi_image& operator=(const dawn_dxgi_image&)=delete;
@@ -162,6 +171,7 @@ public:
             owned->handle_=handle;
             const auto status=owned->initialize(device,handle->value.get(),image,choice.synchronization,usage);
             if (status!=dxgi_import_status::success) return status;
+            owned->source_handle_=borrowed_nt_handle;
             result=std::move(owned); return dxgi_import_status::success;
         } catch (const std::bad_alloc&) { return dxgi_import_status::out_of_memory; }
           catch (const std::system_error&) { return dxgi_import_status::handle_failure; }

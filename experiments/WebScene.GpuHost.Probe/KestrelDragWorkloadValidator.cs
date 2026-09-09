@@ -1,7 +1,16 @@
 internal static class KestrelDragWorkloadValidator
 {
-    internal static void Validate(string diagnostics, double x, double y, bool sidebar = false)
+    internal static (double X, double Y) PanOffset(int step, bool circular)
     {
+        var phase = (step - 1) % 80 + 1;
+        if (circular) return (40 * (1 - Math.Cos(phase * Math.PI / 40)), 40 * Math.Sin(phase * Math.PI / 40));
+        var distance = phase <= 40 ? phase * 4 : (80 - phase) * 4;
+        return (distance, distance / 4.0);
+    }
+
+    internal static void Validate(string diagnostics, double x, double y, bool sidebar = false, int panCycles = 1, bool circular = false)
+    {
+        if (panCycles is < 1 or > 120) throw new ArgumentOutOfRangeException(nameof(panCycles));
         using var parsed = System.Text.Json.JsonDocument.Parse(diagnostics);
         var root = parsed.RootElement;
         var events = root.GetProperty("events").EnumerateArray().ToArray();
@@ -26,11 +35,11 @@ internal static class KestrelDragWorkloadValidator
                 || e.GetProperty("buttons").GetInt32() != (sidebar ? 1 : 2))
                 throw new InvalidOperationException("Invalid Kestrel drag workload: unexpected pointer event.");
             var matched = false;
-            while (nextStep <= (sidebar ? 60 : 80))
+            while (nextStep <= (sidebar ? 60 : 80 * panCycles))
             {
                 var step = nextStep++;
-                var distance = sidebar ? step * 2 : step <= 40 ? step * 4 : (80 - step) * 4;
-                if (!At(e, x + distance, sidebar ? y : y + distance / 4.0)) continue;
+                var offset = sidebar ? (X: step * 2.0, Y: 0.0) : PanOffset(step, circular);
+                if (!At(e, x + offset.X, y + offset.Y)) continue;
                 matched = true;
                 break;
             }

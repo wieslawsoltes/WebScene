@@ -341,6 +341,7 @@
     float scrollbar_drag_thumb_travel{0};
     dom_node* hover_target{nullptr};
     uint32_t current_cursor_kind_value{WEBSCENE_CURSOR_DEFAULT};
+    bool pointer_cursor_update_pending{false};
     dom_node* current_related_target{nullptr};
     double pointer_down_x{0};
     double pointer_down_y{0};

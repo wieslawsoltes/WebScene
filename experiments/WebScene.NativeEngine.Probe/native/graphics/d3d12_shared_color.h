@@ -36,7 +36,11 @@ public:
         description.DepthOrArraySize=1; description.MipLevels=1;
         description.Format=format; description.SampleDesc.Count=1;
         description.Layout=D3D12_TEXTURE_LAYOUT_UNKNOWN;
-        description.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+        // Dawn's D3D12 shared-texture import and D3D11 cross-device sampling
+        // require simultaneous-access resources. Explicit fences still order
+        // producer writes and consumer reads; this flag is not synchronization.
+        description.Flags=D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET
+            | D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
         const auto allocation=device->GetResourceAllocationInfo(0,1,&description);
         if (allocation.SizeInBytes==UINT64_MAX || !allocation.SizeInBytes) return E_INVALIDARG;
         if (allocation.SizeInBytes>available_bytes) return E_OUTOFMEMORY;

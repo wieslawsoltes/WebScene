@@ -72,6 +72,7 @@ if(MSVC)
 endif()
 
 add_library(webscene_native_engine SHARED
+    native/graphics/windows_gpu_interop.cpp
     native/webscene_native_engine.cpp
     native/webscene_native_dom.cpp)
 
@@ -86,6 +87,9 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     target_link_libraries(webscene_native_engine PRIVATE
         dawn::webgpu_dawn webscene_angle_EGL webscene_angle_GLESv2)
     target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=1)
+    if(WIN32)
+        target_link_libraries(webscene_native_engine PRIVATE d3d12 d3d11 dxgi)
+    endif()
     if(APPLE)
         target_link_libraries(webscene_native_engine PRIVATE
             "-framework CoreFoundation" "-framework IOSurface" "-framework CoreVideo")
@@ -129,6 +133,11 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     add_custom_command(TARGET webscene_native_engine POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "$<TARGET_FILE:dawn::webgpu_dawn>" "$<TARGET_FILE_DIR:webscene_native_engine>")
+    if(WIN32)
+        add_custom_command(TARGET webscene_native_engine POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${WEBSCENE_GRAPHICS_SDK_ROOT}/dawn/bin/d3dcompiler_47.dll" "$<TARGET_FILE_DIR:webscene_native_engine>")
+    endif()
     if(APPLE)
         set_target_properties(webscene_native_engine PROPERTIES BUILD_RPATH "@loader_path")
     elseif(UNIX)
@@ -1025,7 +1034,7 @@ if(MSVC)
     # conformance switch is enabled. V8 checks __cplusplus directly when
     # enforcing its C++20 embedder requirement.
     target_compile_options(webscene_native_engine PRIVATE
-        /W4 /permissive- /GR- /wd4996 /std:c++20 /Zc:__cplusplus)
+        /W4 /permissive- /GR- /wd4996 /std:c++20 /Zc:__cplusplus /bigobj)
     target_compile_definitions(webscene_native_engine PRIVATE NOMINMAX)
     if(TARGET webscene_native_engine_tests)
         set_property(TARGET webscene_native_engine_tests PROPERTY

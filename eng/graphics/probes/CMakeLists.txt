@@ -49,6 +49,19 @@ if("dawn" IN_LIST WEBSCENE_GRAPHICS_COMPONENTS)
     endif()
     if(WIN32)
         set(probe_backend d3d12)
+        add_custom_command(TARGET webscene_dawn_probe POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${WEBSCENE_GRAPHICS_SDK_ROOT}/dawn/bin/d3dcompiler_47.dll" "$<TARGET_FILE_DIR:webscene_dawn_probe>")
+        add_executable(webscene_windows_sharing_probe windows_sharing_probe.cpp)
+        target_compile_features(webscene_windows_sharing_probe PRIVATE cxx_std_20)
+        target_link_libraries(webscene_windows_sharing_probe PRIVATE dawn::webgpu_dawn d3d11 d3d12 dxgi)
+        add_custom_command(TARGET webscene_windows_sharing_probe POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:dawn::webgpu_dawn>" "$<TARGET_FILE_DIR:webscene_windows_sharing_probe>"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${WEBSCENE_GRAPHICS_SDK_ROOT}/dawn/bin/d3dcompiler_47.dll" "$<TARGET_FILE_DIR:webscene_windows_sharing_probe>")
+        add_test(NAME windows_dawn_d3d11_shared_pixels COMMAND webscene_windows_sharing_probe)
+        set_tests_properties(windows_dawn_d3d11_shared_pixels PROPERTIES TIMEOUT 90)
     elseif(APPLE)
         set(probe_backend metal)
     else()

@@ -560,7 +560,7 @@
                 perform_microtask_checkpoint();
         }
 #endif
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
         publish_ready_gpu_canvases();
 #endif
         if (websocket_transport.has_pending_events()) {
@@ -1424,6 +1424,7 @@
         bool* default_prevented = nullptr,
         dom_node* submitter = nullptr)
     {
+        webscene_frame_trace::scope trace(frame_trace, "event-start", "event-end", input.sequence);
         const auto previous_context = isolate->GetCurrentContext();
         auto local_context = context_for_node(target);
         v8::Context::Scope event_context_scope(local_context);
@@ -1848,6 +1849,7 @@
         event->Set(local_context, js_string(isolate, "currentTarget"), v8::Null(isolate)).Check();
         perform_microtask_checkpoint();
         style_batch.finish();
+
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         event_callback_counts[type] +=
             input_callback_invocation_count - callback_count_before;
@@ -2782,7 +2784,7 @@
         return std::nullopt;
     }
 
-    bool dispatch_input(const webscene_input_event& input)
+    bool dispatch_input(const webscene_input_event& input, bool defer_cursor_update = false)
     {
         current_input_sequence = input.sequence;
         auto isolate_locker = lock_shared_isolate();
@@ -2823,6 +2825,7 @@
             hover_target = nullptr;
             current_related_target = nullptr;
             current_cursor_kind_value = WEBSCENE_CURSOR_DEFAULT;
+            pointer_cursor_update_pending = false;
             has_pointer_position = false;
             current_movement_x = current_movement_y = 0;
             recascade_hover_transition(previous, nullptr, "host-pointer-exit");
@@ -3332,6 +3335,11 @@
         if (input.kind == WEBSCENE_INPUT_POINTER_MOVE
             || input.kind == WEBSCENE_INPUT_POINTER_DOWN
             || input.kind == WEBSCENE_INPUT_POINTER_UP) {
+            if (defer_cursor_update && input.kind == WEBSCENE_INPUT_POINTER_MOVE) {
+                pointer_cursor_update_pending = true;
+                return true;
+            }
+            pointer_cursor_update_pending = false;
             ensure_layout();
             auto* cursor_target = document.hit_test(
                 document.body(),
@@ -3340,6 +3348,7 @@
             current_cursor_kind_value = cursor_target == nullptr
                 ? WEBSCENE_CURSOR_DEFAULT
                 : cursor_kind_for(*cursor_target);
+
         }
         return true;
     }

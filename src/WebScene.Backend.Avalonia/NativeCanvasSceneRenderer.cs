@@ -33,19 +33,44 @@ namespace WebScene.Backends.Uno.Native;
 namespace WebScene.Backends.Avalonia.Native;
 #endif
 
-internal sealed unsafe class NativeCanvasSceneRenderer
+internal sealed unsafe partial class NativeCanvasSceneRenderer
 {
     private const uint CanvasCommandEvenOdd = 1u << 16;
     private const uint SceneCheckpoint = 1;
     private const uint SceneDomReplacement = 2;
     private const uint LayerReplace = 1;
     private const uint LayerRemove = 2;
+    private const uint LayerUnchangedPrefix = 4;
     private const uint OffscreenCanvasLayer = 1u << 31;
 
     private readonly Dictionary<uint, RetainedLayer> s_layers = new();
     private readonly List<RetainedLayer> s_orderedLayers = [];
     private readonly List<RetainedLayer> s_viewportLayers = [];
     private readonly Dictionary<StringKey, string> s_strings = new();
+    private readonly Dictionary<SKTypeface, SKShaper> _cachedShapers = new(ReferenceEqualityComparer.Instance);
+    private long _shaperFontVersion;
+
+    private SKShaper GetShaper(SKTypeface typeface)
+    {
+        if (_cachedShapers.TryGetValue(typeface, out var shaper)) return shaper;
+        shaper = new SKShaper(typeface);
+        // Do not evict a shaper that a local compilation dictionary may still
+        // be using. Overflow shapers belong to that compilation only.
+        if (_cachedShapers.Count < 64) _cachedShapers.Add(typeface, shaper);
+        return shaper;
+    }
+
+    private void ReleaseShaper(SKShaper shaper)
+    {
+        if (!_cachedShapers.TryGetValue(shaper.Typeface, out var cached) || !ReferenceEquals(cached, shaper))
+            shaper.Dispose();
+    }
+
+    private void ClearShapers()
+    {
+        foreach (var shaper in _cachedShapers.Values) shaper.Dispose();
+        _cachedShapers.Clear();
+    }
     private readonly Dictionary<string, SKTypeface> s_typefaces = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SharedSvgPictureLease> s_svgPictures =
         new(StringComparer.Ordinal);
@@ -130,7 +155,15 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             s_svgPictures.Count,
             SharedSvgPictureCache.EntryCount,
             SharedSvgPictureCache.ReferenceCount,
-            SharedSvgPictureCache.MemoryHitCount);
+            SharedSvgPictureCache.MemoryHitCount)
+        {
+            CanvasCheckpointSubmissions = _checkpointSubmissions,
+            MaximumRetainedCanvasCommands = _maximumCheckpointCommands,
+            MaximumCanvasCheckpointMilliseconds = _maximumCheckpointMilliseconds,
+            CanvasCheckpointDeferredReadbacks = _checkpointDeferredReadbacks,
+            CanvasCheckpointFencePolls = _checkpointFencePolls,
+            CanvasCheckpointWorkerReadbacks = _checkpointWorkerReadbacks
+        };
     }
 
     public bool ApplyDiffAndRender(SKCanvas canvas, NativeSceneView* view)
@@ -147,7 +180,49 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         return true;
     }
 
-    public bool ApplyDiff(NativeSceneView* view, bool orderedGpuImages = false)
+    internal sealed class PreparedCanvasLayers(ulong revision, float scale, long fontVersion) : IDisposable
+    {
+        internal readonly Dictionary<uint, RetainedLayer> Layers = [];
+        internal bool Matches(ulong candidateRevision, float candidateScale)
+            => revision == candidateRevision && scale == candidateScale
+                && fontVersion == NativeTextShaping.FontRegistrationVersion;
+        public void Dispose()
+        {
+            foreach (var layer in Layers.Values) layer.Dispose();
+            Layers.Clear();
+        }
+    }
+
+    // Called under the renderer owner's serialization. Only immutable pictures
+    // are prepared; visible layer dictionaries and GPU bindings are untouched.
+    // Canvas-to-canvas dependencies retain the existing synchronous path.
+    internal PreparedCanvasLayers? PrepareCanvasLayers(NativeSceneView* view)
+    {
+        if (!NativeSceneViewValidation.IsValid(view) || view->Header.CanvasLayerCount == 0) return null;
+        var changes = new ReadOnlySpan<NativeCanvasLayer>(view->CanvasLayers, checked((int)view->Header.CanvasLayerCount));
+        foreach (var layer in changes)
+        {
+            if ((layer.Flags & LayerRemove) != 0) continue;
+            if ((layer.Flags & LayerReplace) == 0 || !ValidateLayer(view, layer)) return null;
+            // A resumable prefix has already been checked and cannot contain
+            // mutable canvas dependencies. Inspect only its appended suffix.
+            var prefixCount = FindReplayPrefix(view, layer)?.CommandCount ?? 0;
+            foreach (ref readonly var command in new ReadOnlySpan<NativeCanvasCommand>(view->CanvasCommands + layer.CommandOffset + prefixCount,
+                         checked((int)layer.CommandCount) - prefixCount))
+                if (command.Kind == 27) return null;
+        }
+        var prepared = new PreparedCanvasLayers(view->Header.Revision, _presenterDeviceScaleFactor,
+            NativeTextShaping.FontRegistrationVersion);
+        try
+        {
+            foreach (var layer in changes)
+                if ((layer.Flags & LayerRemove) == 0) prepared.Layers.Add(layer.NodeId, CompileLayer(view, layer));
+            return prepared;
+        }
+        catch { prepared.Dispose(); throw; }
+    }
+
+    public bool ApplyDiff(NativeSceneView* view, bool orderedGpuImages = false, PreparedCanvasLayers? prepared = null)
     {
         var header = view->Header;
         var checkpoint = (header.Flags & SceneCheckpoint) != 0;
@@ -185,12 +260,18 @@ internal sealed unsafe class NativeCanvasSceneRenderer
 
         if (shouldApply)
         {
+            var fontVersion = NativeTextShaping.FontRegistrationVersion;
+            if (_shaperFontVersion != fontVersion)
+            {
+                ClearShapers();
+                _shaperFontVersion = fontVersion;
+            }
             _webTypefaceReference ??= _webTypefaces?.Retain();
             if ((header.Flags & SceneDomReplacement) != 0)
             {
                 var ordered = orderedGpuImages ? CompileOrderedGpuDom(view) : null;
                 var compiledDom = orderedGpuImages ? default : CompileDom(view);
-                DisposeOrderedGpuDom();
+                DisposeOrderedGpuDom(ordered);
                 _orderedGpuPaint = ordered;
                 s_domBackdropPicture?.Dispose();
                 s_domOverlayPicture?.Dispose();
@@ -260,7 +341,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         InstallReplacement(
                             view,
                             changes[index],
-                            ref layerOrderChanged);
+                            ref layerOrderChanged, prepared);
                         compiled[index] = 1;
                         remaining--;
                         madeProgress = true;
@@ -276,7 +357,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         InstallReplacement(
                             view,
                             changes[index],
-                            ref layerOrderChanged);
+                            ref layerOrderChanged, prepared);
                         compiled[index] = 1;
                         remaining--;
                         break;
@@ -300,15 +381,16 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         return true;
     }
 
-    private static bool LayerDependenciesAreCompiled(
+    private bool LayerDependenciesAreCompiled(
         NativeSceneView* view,
         in NativeCanvasLayer layer,
         ReadOnlySpan<NativeCanvasLayer> changes,
         ReadOnlySpan<byte> compiled)
     {
+        var prefixCount = FindReplayPrefix(view, layer)?.CommandCount ?? 0;
         var commands = new ReadOnlySpan<NativeCanvasCommand>(
-            view->CanvasCommands + layer.CommandOffset,
-            checked((int)layer.CommandCount));
+            view->CanvasCommands + layer.CommandOffset + prefixCount,
+            checked((int)layer.CommandCount) - prefixCount);
         foreach (ref readonly var command in commands)
         {
             if (command.Kind != 27 || command.ResourceId == layer.NodeId) continue;
@@ -328,12 +410,17 @@ internal sealed unsafe class NativeCanvasSceneRenderer
     private void InstallReplacement(
         NativeSceneView* view,
         in NativeCanvasLayer change,
-        ref bool layerOrderChanged)
+        ref bool layerOrderChanged,
+        PreparedCanvasLayers? prepared = null)
     {
-        var replacement = CompileLayer(view, change);
+        var replacement = prepared?.Matches(view->Header.Revision, _presenterDeviceScaleFactor) == true
+            && prepared.Layers.Remove(change.NodeId, out var compiled) ? compiled : CompileLayer(view, change);
         var orderChanged = true;
         if (s_layers.Remove(change.NodeId, out var previous))
         {
+            if (previous.Generation != replacement.Generation)
+                foreach (var key in s_strings.Keys.Where(key => key.NodeId == previous.NodeId).ToArray())
+                    s_strings.Remove(key);
             orderChanged = previous.ZOrder == replacement.ZOrder
                 ? !ReplaceOrderedLayer(previous, replacement)
                 : !RepositionOrderedLayer(previous, replacement);
@@ -371,11 +458,12 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         float viewportWidth,
         float viewportHeight,
         Func<SKRect, bool>? intersects,
-        Action<uint, SKRect>? drawGpuImage = null)
+        Action<uint, SKRect>? drawGpuImage = null,
+        GRContext? canvasGpuContext = null)
     {
         if (_orderedGpuPaint is not null)
         {
-            RenderOrderedGpuDom(canvas, drawGpuImage);
+            RenderOrderedGpuDom(canvas, drawGpuImage, canvasGpuContext);
             return;
         }
         if (s_domBackdropPicture is not null
@@ -390,7 +478,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             {
                 continue;
             }
-            DrawRetainedCanvasLayer(canvas, layer);
+            DrawRetainedCanvasLayer(canvas, layer, canvasGpuContext);
         }
         if (s_domOverlayPicture is not null
             && (intersects is null || intersects(new SKRect(0, 0, viewportWidth, viewportHeight))))
@@ -399,16 +487,17 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         }
     }
 
-    private static void DrawRetainedCanvasLayer(SKCanvas canvas, RetainedLayer layer)
+    private static void DrawRetainedCanvasLayer(SKCanvas canvas, RetainedLayer layer, GRContext? gpuContext = null)
     {
+        var backing = gpuContext is null ? null : MaterializeCanvasBacking(layer, gpuContext);
         var save = canvas.Save();
         try
         {
             canvas.ClipRect(new SKRect(layer.X, layer.Y, layer.X + layer.Width, layer.Y + layer.Height));
-            if (layer.RequiresIsolation) canvas.SaveLayer();
+            if (layer.RequiresIsolation && backing is null) canvas.SaveLayer();
             canvas.Translate(layer.X, layer.Y);
             canvas.Scale(layer.Width / layer.BitmapWidth, layer.Height / layer.BitmapHeight);
-            canvas.DrawPicture(layer.Picture);
+            canvas.DrawPicture(backing ?? layer.Picture);
         }
         finally { canvas.RestoreToCount(save); }
     }
@@ -729,7 +818,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         finally
         {
             if (sharedShapers is null)
-                foreach (var shaper in textShapers.Values) shaper.Dispose();
+                foreach (var shaper in textShapers.Values) ReleaseShaper(shaper);
         }
         return (backdropRecorder.EndRecording(), overlayRecorder.EndRecording());
     }
@@ -1797,7 +1886,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         var shaperKey = parts[4] + '\t' + fontWeight.ToString(CultureInfo.InvariantCulture);
         if (!shapers.TryGetValue(shaperKey, out var shaper))
         {
-            shaper = new SKShaper(typeface);
+            shaper = GetShaper(typeface);
             shapers.Add(shaperKey, shaper);
         }
         var tabularDigitScale = NativeTextShaping.ResolveTabularDigitScale(
@@ -2468,6 +2557,8 @@ internal sealed unsafe class NativeCanvasSceneRenderer
 
     private RetainedLayer CompileLayer(NativeSceneView* view, in NativeCanvasLayer layer)
     {
+        if (UseIncrementalCanvasBacking)
+            return CompileIncrementalCanvasLayer(view, layer);
         var requiresIsolation = RequiresIsolation(view, layer);
         using var recorder = new SKPictureRecorder();
         var canvas = recorder.BeginRecording(new SKRect(
@@ -2509,6 +2600,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                 // A clear before the first draw is a no-op on the initially
                 // transparent browser canvas and is omitted from the picture.
                 case 24 when hasDrawn:
+                case CanvasCheckpointCommand:
                 // drawImage(canvas) needs source-bitmap isolation semantics.
                 case 27:
                 // drawImage(SVGImageElement) needs the same crop/composite semantics.
@@ -2646,21 +2738,26 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         }
     }
 
-    private void Replay(
+    private CanvasReplaySnapshot? Replay(
         SKCanvas canvas,
         NativeSceneView* view,
         in NativeCanvasLayer layer,
-        bool skipLeadingClears = false)
+        bool skipLeadingClears = false,
+        CanvasReplaySnapshot? prefix = null,
+        bool captureContinuation = false)
     {
-        var state = CanvasState.Default;
+        var state = prefix?.State ?? CanvasState.Default;
         var states = new Stack<CanvasState>();
         var textShapers = new Dictionary<string, SKShaper>(StringComparer.Ordinal);
-        var hasDrawn = false;
-        using var path = new SKPath();
+        using var paints = new ReplayPaints(this);
+        var hasDrawn = prefix?.HasDrawn ?? false;
+        using var path = prefix is null ? new SKPath() : new SKPath(prefix.Path);
+        if (prefix is not null) canvas.SetMatrix(prefix.Matrix);
+        var canResume = true;
         var commands = new ReadOnlySpan<NativeCanvasCommand>(
             view->CanvasCommands + layer.CommandOffset,
             checked((int)layer.CommandCount));
-        foreach (ref readonly var command in commands)
+        foreach (ref readonly var command in commands[(prefix?.CommandCount ?? 0)..])
         {
             switch (command.Kind)
             {
@@ -2777,6 +2874,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                         (float)(command.V1 + command.V3)));
                     break;
                 case 18:
+                    canResume = false;
                     path.FillType = (command.Flags & CanvasCommandEvenOdd) != 0
                         ? SKPathFillType.EvenOdd
                         : SKPathFillType.Winding;
@@ -2799,37 +2897,32 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     break;
                 }
                 case 20:
-                    using (var stroke = CreatePaint(state, false, SKPaintStyle.Stroke))
-                    {
-                        canvas.DrawPath(path, stroke);
-                    }
+                    canvas.DrawPath(path, paints.Get(state, false).Paint);
                     hasDrawn = true;
                     break;
                 case 21:
-                    using (var fill = CreatePaint(state, true, SKPaintStyle.Fill))
                     {
                         path.FillType = (command.Flags & CanvasCommandEvenOdd) != 0
                             ? SKPathFillType.EvenOdd
                             : SKPathFillType.Winding;
-                        canvas.DrawPath(path, fill);
+                        canvas.DrawPath(path, paints.Get(state, true).Paint);
                     }
                     hasDrawn = true;
                     break;
                 case 22:
-                    using (var fill = CreatePaint(state, true, SKPaintStyle.Fill))
-                    {
-                        canvas.DrawRect(ToRect(command), fill);
-                    }
+                    canvas.DrawRect(ToRect(command), paints.Get(state, true).Paint);
                     hasDrawn = true;
                     break;
                 case 23:
-                    using (var stroke = CreatePaint(state, false, SKPaintStyle.Stroke))
-                    {
-                        canvas.DrawRect(ToRect(command), stroke);
-                    }
+                    canvas.DrawRect(ToRect(command), paints.Get(state, false).Paint);
                     hasDrawn = true;
                     break;
                 case 24 when skipLeadingClears && !hasDrawn:
+                    break;
+                case CanvasCheckpointCommand:
+                    state = ReplayCheckpoint(canvas, path, StringAt(view, layer, command.ResourceId),
+                        layer.BitmapWidth, layer.BitmapHeight);
+                    hasDrawn = true;
                     break;
                 case 24:
                     using (var clear = new SKPaint { BlendMode = SKBlendMode.Clear, Style = SKPaintStyle.Fill })
@@ -2838,14 +2931,15 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     }
                     break;
                 case 25:
-                    DrawText(canvas, view, layer, command, state, false, textShapers);
+                    DrawText(canvas, view, layer, command, state, false, textShapers, paints);
                     hasDrawn = true;
                     break;
                 case 26:
-                    DrawText(canvas, view, layer, command, state, true, textShapers);
+                    DrawText(canvas, view, layer, command, state, true, textShapers, paints);
                     hasDrawn = true;
                     break;
                 case 27:
+                    canResume = false;
                     DrawCanvas(canvas, command, state);
                     hasDrawn = true;
                     break;
@@ -2861,6 +2955,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     AppendEllipse(path, command);
                     break;
                 case 31:
+                    canResume = false;
                     DrawSvgImage(canvas, view, layer, command, state);
                     hasDrawn = true;
                     break;
@@ -2886,8 +2981,13 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         }
         foreach (var shaper in textShapers.Values)
         {
-            shaper.Dispose();
+            ReleaseShaper(shaper);
         }
+        return captureContinuation && canResume && states.Count == 0
+            && ((layer.Flags & LayerUnchangedPrefix) != 0 || commands.Length * (long)sizeof(NativeCanvasCommand) <= 16 * 1024 * 1024)
+            && layer.StringCount <= 4096
+            ? new CanvasReplaySnapshot(view, layer, state, canvas.TotalMatrix, path, hasDrawn,
+                _presenterDeviceScaleFactor, prefix) : null;
     }
 
     private void DrawSvgCanvasPath(
@@ -3016,27 +3116,20 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         in NativeCanvasCommand command,
         in CanvasState state,
         bool stroke,
-        Dictionary<string, SKShaper> shapers)
+        Dictionary<string, SKShaper> shapers,
+        ReplayPaints paints)
     {
         var text = StringAt(view, layer, command.ResourceId);
         if (text.Length == 0) return;
-        using var paint = CreatePaint(
-            state,
-            !stroke,
-            stroke ? SKPaintStyle.Stroke : SKPaintStyle.Fill);
-        var font = ConfigureFont(paint, state.Font);
-        paint.TextAlign = state.TextAlign switch
-        {
-            "center" => SKTextAlign.Center,
-            "right" or "end" => SKTextAlign.Right,
-            _ => SKTextAlign.Left
-        };
+        var prepared = paints.Get(state, !stroke, text: true);
+        var paint = prepared.Paint;
+        var font = prepared.Font;
         var y = (float)command.V1;
         var metrics = paint.FontMetrics;
         y += ResolveCanvasTextBaselineOffset(state.TextBaseline, metrics);
         if (!shapers.TryGetValue(state.Font, out var shaper))
         {
-            shaper = new SKShaper(paint.Typeface);
+            shaper = GetShaper(paint.Typeface);
             shapers.Add(state.Font, shaper);
         }
         var featureFlags = NativeTextShaping.ResolveFeatureFlags(
@@ -3125,6 +3218,48 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         return renderedWidth > maxWidth
             ? widthScale * maxWidth / renderedWidth
             : widthScale;
+    }
+
+    // Paints are immutable after preparation and live only for one replay.
+    // Font registration cannot change mid-replay; the next scene resolves it
+    // again. Array identity makes dash changes safe (at worst a cache miss).
+    private sealed class ReplayPaints(NativeCanvasSceneRenderer owner) : IDisposable
+    {
+        private readonly record struct Key(string Color, double Alpha, bool Fill,
+            double Width, double Miter, string Cap, string Join, string Composite,
+            double[]? Dash, double DashOffset, string? Font, string? Align);
+        private readonly Dictionary<Key, (SKPaint Paint, NativeTextShaping.CanvasFontDescription Font)> _paints = [];
+
+        public (SKPaint Paint, NativeTextShaping.CanvasFontDescription Font) Get(
+            in CanvasState state, bool fill, bool text = false)
+        {
+            var key = new Key(fill ? state.FillStyle : state.StrokeStyle, state.GlobalAlpha, fill,
+                state.LineWidth, state.MiterLimit, state.LineCap, state.LineJoin, state.Composite,
+                !fill && state.LineDash.Length > 0 ? state.LineDash : null, state.LineDashOffset,
+                text ? state.Font : null, text ? state.TextAlign : null);
+            if (_paints.TryGetValue(key, out var existing)) return existing;
+            if (_paints.Count >= 128) Dispose();
+            var paint = CreatePaint(state, fill, fill ? SKPaintStyle.Fill : SKPaintStyle.Stroke);
+            try
+            {
+                var font = text ? owner.ConfigureFont(paint, state.Font) : default;
+                if (text) paint.TextAlign = state.TextAlign switch
+                {
+                    "center" => SKTextAlign.Center,
+                    "right" or "end" => SKTextAlign.Right,
+                    _ => SKTextAlign.Left
+                };
+                _paints.Add(key, (paint, font));
+                return (paint, font);
+            }
+            catch { paint.Dispose(); throw; }
+        }
+
+        public void Dispose()
+        {
+            foreach (var entry in _paints.Values) entry.Paint.Dispose();
+            _paints.Clear();
+        }
     }
 
     private static SKPaint CreatePaint(in CanvasState state, bool fill, SKPaintStyle style)
@@ -3467,7 +3602,17 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             (byte)(rgba >> 8),
             (byte)rgba);
 
-    private sealed record OrderedGpuPaint(SceneCommand Command, DomCornerRadii Radii, SKPicture? Picture);
+    internal long ReusedDomPictureCount { get; private set; }
+    private sealed record DomPictureInput(byte[] Commands, string[] Resources,
+        float Width, float Height, float DeviceScale, long FontVersion)
+    {
+        public bool Matches(DomPictureInput other) => Width == other.Width && Height == other.Height
+            && DeviceScale == other.DeviceScale && FontVersion == other.FontVersion
+            && Commands.AsSpan().SequenceEqual(other.Commands)
+            && Resources.AsSpan().SequenceEqual(other.Resources);
+    }
+    private sealed record OrderedGpuPaint(SceneCommand Command, DomCornerRadii Radii, SKPicture? Picture,
+        DomPictureInput? Input = null);
 
     private bool ValidateOrderedCanvasPlacements(NativeSceneView* view, bool checkpoint)
     {
@@ -3527,9 +3672,28 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     continue;
                 if (start < index)
                 {
-                    var pictures = CompileDom(view, start, index, mergePaintOrder: true, sharedShapers: shapers);
-                    pictures.Overlay.Dispose();
-                    result.Add(new(default, default, pictures.Backdrop));
+                    // Compare exact commands and resolved resources, not string
+                    // IDs or a hash. Include the preceding command because it
+                    // can supply corner radii for the first command in a span.
+                    var input = new DomPictureInput(
+                        MemoryMarshal.AsBytes(commands.Slice(Math.Max(0, start - 1), index - Math.Max(0, start - 1))).ToArray(),
+                        commands.Slice(start, index - start).ToArray()
+                            .Select(command => DomStringAt(view, command.Flags)).ToArray(),
+                        view->Header.ViewportWidth, view->Header.ViewportHeight,
+                        _presenterDeviceScaleFactor, NativeTextShaping.FontRegistrationVersion);
+                    var previous = _orderedGpuPaint is not null && result.Count < _orderedGpuPaint.Count
+                        ? _orderedGpuPaint[result.Count] : null;
+                    if (previous?.Picture is not null && previous.Input?.Matches(input) == true)
+                    {
+                        ReusedDomPictureCount++;
+                        result.Add(previous);
+                    }
+                    else
+                    {
+                        var pictures = CompileDom(view, start, index, mergePaintOrder: true, sharedShapers: shapers);
+                        pictures.Overlay.Dispose();
+                        result.Add(new(default, default, pictures.Backdrop, input));
+                    }
                 }
                 if (index != commands.Length)
                     result.Add(new(commands[index], ResolveDomCornerRadii(commands, index), null));
@@ -3537,16 +3701,24 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             }
             return result;
         }
-        catch { foreach (var entry in result) entry.Picture?.Dispose(); throw; }
-        finally { foreach (var shaper in shapers.Values) shaper.Dispose(); }
+        catch
+        {
+            var previousPictures = _orderedGpuPaint?.Select(entry => entry.Picture).ToHashSet();
+            foreach (var entry in result)
+                if (previousPictures?.Contains(entry.Picture) != true) entry.Picture?.Dispose();
+            throw;
+        }
+        finally { foreach (var shaper in shapers.Values) ReleaseShaper(shaper); }
     }
-    private void DisposeOrderedGpuDom()
+    private void DisposeOrderedGpuDom(List<OrderedGpuPaint>? retained = null)
     {
         if (_orderedGpuPaint is null) return;
-        foreach (var entry in _orderedGpuPaint) entry.Picture?.Dispose();
+        var retainedPictures = retained?.Select(entry => entry.Picture).ToHashSet();
+        foreach (var entry in _orderedGpuPaint)
+            if (retainedPictures?.Contains(entry.Picture) != true) entry.Picture?.Dispose();
         _orderedGpuPaint = null;
     }
-    private void RenderOrderedGpuDom(SKCanvas canvas, Action<uint, SKRect>? drawGpuImage)
+    private void RenderOrderedGpuDom(SKCanvas canvas, Action<uint, SKRect>? drawGpuImage, GRContext? gpuContext)
     {
         if (drawGpuImage is null) throw new InvalidOperationException("Ordered GPU replay requires an image renderer.");
         var save = canvas.Save();
@@ -3573,7 +3745,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
                     case 257:
                         if (!s_layers.TryGetValue(command.NodeId, out var layer) || layer.IsOffscreen)
                             throw new InvalidOperationException("Ordered canvas layer is unavailable.");
-                        DrawRetainedCanvasLayer(canvas, layer);
+                        DrawRetainedCanvasLayer(canvas, layer, gpuContext);
                         break;
                     case 256:
                         drawGpuImage(command.Rgba, new SKRect(command.X, command.Y,
@@ -3602,6 +3774,13 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         foreach (var svg in s_svgPictures.Values) svg.Dispose();
         s_svgPictures.Clear();
         s_strings.Clear();
+        _checkpointAttempts.Clear();
+#if !WEBSCENE_UNO
+        _pendingReadback?.Dispose();
+        _pendingReadback = null;
+#endif
+        _pendingCheckpoint = null; // Encoder owns only its independent CPU snapshot.
+        ClearShapers();
         s_revision = 0;
         s_totalCommandCount = 0;
         _webTypefaceReference?.Dispose();
@@ -3715,7 +3894,7 @@ internal sealed unsafe class NativeCanvasSceneRenderer
             => (A * x + C * y + E, B * x + D * y + F);
     }
 
-    private sealed record RetainedLayer(
+    internal sealed record RetainedLayer(
         uint NodeId,
         ulong Generation,
         uint ZOrder,
@@ -3731,11 +3910,21 @@ internal sealed unsafe class NativeCanvasSceneRenderer
         SKPicture Picture) : IDisposable
     {
         public int OrderedIndex { get; set; } = -1;
+        internal CanvasReplaySnapshot? ReplaySnapshot { get; init; }
+        internal SKPicture? GpuPicture { get; set; }
+        internal GRContext? GpuContext { get; set; }
+        internal bool IsMaterialized { get; set; }
+        internal SKImage? CheckpointImage { get; set; }
+        internal CanvasPictureNode[]? CpuHistory { get; init; }
 
-        public void Dispose() => Picture.Dispose();
+        public void Dispose()
+        {
+            ReplaySnapshot?.Dispose(); GpuPicture?.Dispose(); CheckpointImage?.Dispose(); Picture.Dispose();
+            if (CpuHistory is not null) foreach (var node in CpuHistory) node.Dispose();
+        }
     }
 
-    private struct CanvasState
+    internal struct CanvasState
     {
         public string FillStyle;
         public string StrokeStyle;

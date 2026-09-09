@@ -2648,7 +2648,7 @@
             js_string(isolate, "source-over")).Check();
     }
 
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     void finish_gpu_rendering_opportunity(bool present) {
         if(!gpu_rendering_opportunity||has_due_animation_frame_task())return;
         gpu_rendering_opportunity=false;
@@ -2665,7 +2665,7 @@
                 output.reset();
                 if(present) {
                     auto ticket=canvas.provider->capture_latest_submission();
-                    if(ticket)output=std::make_shared<webscene::graphics::dawn_scene_image_snapshot>(std::move(ticket));
+                    if(ticket)output=std::make_shared<webscene::graphics::platform_dawn_scene_snapshot>(std::move(ticket));
                     else {
                         const auto& backing=canvas.node->canvas().backing;
                         output=std::make_shared<webscene_failed_gpu_image_snapshot>(webscene::graphics::image_metadata{
@@ -2699,8 +2699,8 @@
         const auto requested = info.Length() > 0
             ? to_utf8(info.GetIsolate(), info[0])
             : std::string{};
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && defined(__APPLE__)
-        if(requested=="webgpu"&&self->webgpu&&self->webgpu_interop==webscene::graphics::webgpu_canvas_interop::iosurface&&!self->in_frame_context()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+        if(requested=="webgpu"&&self->webgpu&&self->webgpu_interop==webscene::graphics::platform_canvas_interop&&!self->in_frame_context()) {
             using namespace webscene::graphics;
             auto& backing=node->mutable_canvas().backing;
             if(backing.mode()!=canvas_context_mode::none&&backing.mode()!=canvas_context_mode::webgpu) {
@@ -2714,8 +2714,8 @@
                 auto exception=self->webgpu_dom_exception.Get(info.GetIsolate());
                 auto width=canvas_bitmap_dimension(*node,"width",300),height=canvas_bitmap_dimension(*node,"height",150);
                 if(backing.width()!=width||backing.height()!=height)backing.reset_bitmap(width,height);
-                auto provider=std::make_shared<dawn_iosurface_canvas_host>(64ULL*1024*1024,self->webgpu_wake);
-                auto host=make_iosurface_webgpu_canvas_host(provider,[self,node] {
+                auto provider=std::make_shared<platform_dawn_canvas_host>(64ULL*1024*1024,self->webgpu_wake);
+                auto host=make_platform_webgpu_canvas_host(provider,[self,node] {
                     auto& backing=node->mutable_canvas().backing;backing.publish_content();
                     image_metadata metadata;metadata.canvas=backing.identity();metadata.allocation_generation=backing.allocation_generation();
                     metadata.content_serial=backing.content_serial();metadata.producer_timeline=self->gpu_canvas_timeline;metadata.producer_value=metadata.content_serial;

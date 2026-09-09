@@ -26,6 +26,7 @@
 
     void ensure_layout(const dom_node* reusable_client_geometry_subject = nullptr)
     {
+        webscene_frame_trace::scope trace(frame_trace, "layout-start", "layout-end", current_input_sequence);
         flush_pending_style_recascades();
         if (!document.dirty()) return;
         if (reusable_client_geometry_subject != nullptr

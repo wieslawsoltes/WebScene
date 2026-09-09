@@ -35,7 +35,9 @@ if(NOT inspector_symbols_status STREQUAL "0")
 endif()
 # Itanium and MSVC put the class/method names in opposite orders. On MSVC,
 # exclude UNDEF records: a reference does not prove the implementation exists.
-string(REGEX MATCHALL "[^\n]*V8InspectorImpl[^\n]*" inspector_symbol_lines "${inspector_symbols}")
+# Anchor each attempt at a line boundary. dumpbin emits a very large symbol
+# table on Windows; an unanchored leading wildcard rescans each long line.
+string(REGEX MATCHALL "(^|\n)[^\n]*V8InspectorImpl[^\n]*" inspector_symbol_lines "${inspector_symbols}")
 set(inspector_bridge_found OFF)
 foreach(symbol_line IN LISTS inspector_symbol_lines)
     if(symbol_line MATCHES "consoleAPICalled" AND NOT symbol_line MATCHES "UNDEF")

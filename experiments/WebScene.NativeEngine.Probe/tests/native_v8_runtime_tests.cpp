@@ -341,6 +341,7 @@ int main()
             auto* engine = webscene_engine_create(0);
             require(engine != nullptr, "inheritance engine creation failed");
             test_dimension_custom_property_inheritance(engine);
+    test_geometry_variable_positions(engine);
             webscene_engine_destroy(engine);
             return 0;
         }
@@ -376,6 +377,7 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "canvas-prefix-hint") { test_canvas_prefix_hint_tracks_append_and_reset(); return 0; }
         if (selected == "canvas-text-metrics") {
             test_canvas_text_metrics_use_host_font_axes();
             return 0;
@@ -559,6 +561,7 @@ int main()
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();
     test_mouse_moves_are_raf_aligned_at_compositor_cadence();
+    test_canvas_prefix_hint_tracks_append_and_reset();
     test_controlled_switch_native_activation_matches_browser_semantics();
     test_tradingview_switch_repeated_transitions_publish_dense_scenes();
     test_loaded_document_keeps_html_and_body_cascade_distinct();

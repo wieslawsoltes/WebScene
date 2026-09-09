@@ -38,6 +38,9 @@ foreach(component IN LISTS WEBSCENE_GRAPHICS_COMPONENTS)
     message(STATUS "${verification_output}")
     if(component STREQUAL "dawn")
         find_package(Dawn CONFIG REQUIRED PATHS "${sdk}/lib/cmake/Dawn" NO_DEFAULT_PATH)
+        if(WIN32)
+            target_compile_definitions(dawn::webgpu_dawn INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN)
+        endif()
         # CMake's cache may retain Dawn_DIR from an unrelated install. Reject that too.
         file(REAL_PATH "${Dawn_DIR}" resolved_dawn)
         file(REAL_PATH "${sdk}/lib/cmake/Dawn" expected_dawn)
@@ -50,6 +53,7 @@ foreach(component IN LISTS WEBSCENE_GRAPHICS_COMPONENTS)
             set_target_properties(webscene_angle_${library} PROPERTIES
                 INTERFACE_INCLUDE_DIRECTORIES "${sdk}/include")
             if(WIN32)
+                target_compile_definitions(webscene_angle_${library} INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN)
                 set_target_properties(webscene_angle_${library} PROPERTIES
                     IMPORTED_LOCATION "${sdk}/lib/lib${library}.dll"
                     IMPORTED_IMPLIB "${sdk}/lib/lib${library}.lib")

@@ -5,18 +5,18 @@ namespace WebScene.Backends.Avalonia.Native;
 
 // Owns detached presenters independently of their removed composition visual.
 // Failed retirement stays retained for diagnosis; timeout/loss is not completion.
-internal static class NativeMacOSGpuRetirement
+internal static class NativeGpuRetirement
 {
-    private sealed class Pending(NativeMacOSGpuScenePresenter presenter)
+    private sealed class Pending(NativeGpuScenePresenter presenter)
     {
-        internal readonly NativeMacOSGpuScenePresenter Presenter = presenter;
+        internal readonly NativeGpuScenePresenter Presenter = presenter;
         internal readonly TaskCompletionSource Completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
     private static readonly ConcurrentDictionary<long, Pending> Owners = new();
     private static long _nextId;
     internal static int RetainedCount => Owners.Count;
 
-    internal static Task Start(NativeMacOSGpuScenePresenter presenter)
+    internal static Task Start(NativeGpuScenePresenter presenter)
     {
         ArgumentNullException.ThrowIfNull(presenter);
         presenter.BeginShutdown();
@@ -29,6 +29,7 @@ internal static class NativeMacOSGpuRetirement
             // Stop is delivered on the composition owner. Seal GPU reads here,
             // before handing polling to a background task. In particular Metal
             // session finalization is not covered by only the GRContext monitor.
+            presenter.SealForDetachedRetirement();
             if (presenter.TryCompleteWithoutVisual())
             {
                 Owners.TryRemove(id, out _);

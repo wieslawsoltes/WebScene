@@ -50,6 +50,8 @@ public struct NativeTextMetrics
 
 public static class NativeTextShaping
 {
+    private static long _fontRegistrationVersion;
+    internal static long FontRegistrationVersion => Interlocked.Read(ref _fontRegistrationVersion);
     private static readonly ShapedRunCache ShapedRuns = new(2048, 4 * 1024 * 1024);
     private static readonly TextBlobCache TextBlobs = new();
     // Cache the immutable native glyph container as well as HarfBuzz output.
@@ -298,6 +300,7 @@ public static class NativeTextShaping
                     return true;
                 }
                 _typefaces[normalizedFamily] = [.. existing, new(lease, min, max, faceSlant)];
+                Interlocked.Increment(ref _fontRegistrationVersion);
                 return true;
             }
         }
@@ -358,6 +361,7 @@ public static class NativeTextShaping
                 foreach (var faces in _typefaces.Values)
                     foreach (var face in faces) face.Lease.Dispose();
                 _typefaces.Clear();
+                Interlocked.Increment(ref _fontRegistrationVersion);
             }
         }
         public void Dispose()
@@ -406,7 +410,11 @@ public static class NativeTextShaping
         if (typeface is null) return false;
 
         var normalizedFamily = family.Trim().Trim('"', '\'');
-        if (WebTypefaces.TryAdd(normalizedFamily, typeface)) return true;
+        if (WebTypefaces.TryAdd(normalizedFamily, typeface))
+        {
+            Interlocked.Increment(ref _fontRegistrationVersion);
+            return true;
+        }
 
         typeface.Dispose();
         return true;

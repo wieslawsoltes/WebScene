@@ -30,6 +30,14 @@ python3 eng/graphics/run-probes.py --rid osx-arm64 --sdk artifacts/graphics-sdk/
 
 Use `python` and an absolute path in PowerShell. `--sources`, `--build` and `--sdk` permit task-specific dependency caches. Sources are fetched at the lock, not the default branch. Tracked local source modifications are rejected. Both checkout and transitive gclient checkouts use LF line endings.
 
+On Windows, use a short source/build root (for example `C:/graphics`) because some
+upstream tools still have path-length limits. Git long paths are enabled by the
+builder. Dawn also stages the exact `d3dcompiler_47.dll` and redistributable license
+pinned in `windows-runtime.json`; supply the matching SDK with `--windows-sdk`
+or `WINDOWSSDKDIR`. These files are verified and deployed beside Dawn, including
+the native runtime and hardware probes. A different compiler on `PATH` is not a
+supported substitute.
+
 Both Dawn and ANGLE honor `--build`. To verify clean compilation while retaining the verified source checkout, select new `--build` and `--sdk` directories. ANGLE's GN output may live outside its source checkout; no existing build objects need to be deleted or reused.
 
 Each probe clears an RGBA texture and verifies all 68 pixels, including padded texture-copy rows for Dawn. ANGLE runs both ES 2 and ES 3 with WebGL compatibility and robust resource initialization. It requests the selected native hardware backend; Linux Vulkan additionally inspects the physical device type. Results distinguish `passed`, `failed` and `unavailable` (process codes 0, 1 and 77). The evidence runner rejects inconsistent process/JSON results, software/unknown hardware, missing adapter information and incomplete pixel checks. Declared Avalonia/Uno/Skia versions are repository target metadata; these native probes do not exercise framework composition.

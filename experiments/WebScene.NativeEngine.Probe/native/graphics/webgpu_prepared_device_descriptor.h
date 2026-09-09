@@ -64,6 +64,12 @@ public:
             }
         }
         if (need_compatibility) result->limits_.nextInChain=&result->compatibility_;
+        if(interop==webgpu_canvas_interop::dxgi) {
+            for(auto feature:{wgpu::FeatureName::SharedTextureMemoryDXGISharedHandle,wgpu::FeatureName::SharedFenceDXGISharedHandle}) {
+                if(!adapter.HasFeature(feature))return {};
+                features.push_back(feature);
+            }
+        }
         error=webgpu_device_request_error::none; return result;
     }
 };

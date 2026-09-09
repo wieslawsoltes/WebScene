@@ -4005,6 +4005,7 @@
         dom_node& node,
         std::string_view reason = {})
     {
+        webscene_frame_trace::scope cascade_trace(frame_trace, "recascade-start", "recascade-end", 0);
         if (!is_connected(node)) return;
         auto* previous_cascade_root = const_cast<dom_node*>(active_css_cascade_root);
         auto* node_cascade_root = css_cascade_root_for_node(node);

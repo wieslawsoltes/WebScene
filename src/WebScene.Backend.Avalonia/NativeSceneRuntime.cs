@@ -100,6 +100,9 @@ internal sealed class NativeSceneRenderObserver
     private readonly Queue<NativeSceneRenderSample> _renderedScenes = new(4096);
     private readonly Queue<NativeSceneSchedulingSample> _scheduling = new(4096);
     private readonly Queue<long> _presentations = new(4096);
+    // Optional draw-only timing avoids enabling the full performance census.
+    private readonly bool _traceDrawCallbacks =
+        Environment.GetEnvironmentVariable("WEBSCENE_TRACE_DRAW_CALLBACKS") == "1";
     private readonly NativePerformanceInstrumentation _instrumentation;
     private long _renderedSceneCount;
     private long _firstRenderedSceneTimestamp;
@@ -182,7 +185,7 @@ internal sealed class NativeSceneRenderObserver
 
     public void RecordPresented()
     {
-        if (!_instrumentation.IsEnabled)
+        if (!_instrumentation.IsEnabled && !_traceDrawCallbacks)
         {
             return;
         }
@@ -616,7 +619,7 @@ public static unsafe partial class NativeWebSceneApi
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate uint WebGpuPolicyCallback(IntPtr userData, IntPtr url, nuint urlLength);
 
-    // Admission certifies a secure document AND an IOSurface-capable consumer.
+    // Admission selects the platform transport for a trusted secure document.
     // The bridge and static delegate stay rooted until native engine destruction.
     private static uint EvaluateWebGpuPolicy(IntPtr userData, IntPtr url, nuint urlLength)
     {
@@ -624,7 +627,8 @@ public static unsafe partial class NativeWebSceneApi
         {
             var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
             return bridge?.AdmitWebGpuDocument(
-                Marshal.PtrToStringUTF8(url, checked((int)urlLength)) ?? string.Empty) == true ? 1u : 0u;
+                Marshal.PtrToStringUTF8(url, checked((int)urlLength)) ?? string.Empty) == true
+                ? (OperatingSystem.IsWindows() ? 2u : 1u) : 0u;
         }
         catch
         {
@@ -988,7 +992,7 @@ public static unsafe partial class NativeWebSceneApi
         Func<string, bool>? admitWebGpuDocument = null) : IDisposable
     {
         public bool AdmitWebGpuDocument(string url)
-            => OperatingSystem.IsMacOS() && admitWebGpuDocument?.Invoke(url) == true;
+            => (OperatingSystem.IsMacOS() || OperatingSystem.IsWindows()) && admitWebGpuDocument?.Invoke(url) == true;
 
         private const int EnvelopeHeaderSize = 2 + sizeof(uint) + sizeof(long) + sizeof(long);
         [ThreadStatic]

@@ -47,6 +47,29 @@ void test_capacity_wake() {
     pool.finish_producer(writer); require(wake->signals==4 && wake->last_busy==0);
     rejects([&] { pool.finish_producer(writer); }); require(wake->signals==4);
 }
+void test_four_image_capacity() {
+    rejects([] { image_lease_pool invalid(128, {}, 5); });
+    image_lease_pool pool(128, {}, 4);
+    std::array<image_write_token,4> writers;
+    std::array<image_lease_token,4> scenes;
+    for (size_t i=0;i<writers.size();++i) {
+        writers[i]=write(pool);
+        scenes[i]=submit(pool,writers[i]).value();
+    }
+    require(pool.busy_images()==4 && !pool.acquire_write());
+    auto consumer=pool.begin_consumer(scenes[0]).value();
+    pool.release(scenes[0]);
+    pool.finish_producer(writers[0]);
+    require(!pool.acquire_write()); // GPU consumer still owns the fourth slot.
+    pool.finish_consumer(consumer);
+    auto reused=pool.acquire_write().value();
+    require(reused.slot==writers[0].slot && reused.generation!=writers[0].generation);
+    pool.cancel_write(reused);
+    for(size_t i=1;i<writers.size();++i) {
+        pool.finish_producer(writers[i]); pool.release(scenes[i]);
+    }
+    require(pool.busy_images()==0);
+}
 void test_owned_lifetime() {
     struct provider final : image_provider_lifetime {
         std::atomic<int>& destroyed;
@@ -115,6 +138,7 @@ void test_cache_eviction_reservations() {
     require(reusable && reusable->slot()==protected_slot);
 }
 int main() {
+    test_four_image_capacity();
     test_cache_eviction_reservations();
     test_capacity_wake();
     test_owned_lifetime();

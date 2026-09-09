@@ -193,6 +193,59 @@
         return true;
     }
 
+    bool submit_canvas_checkpoint(uint32_t node_id, uint64_t generation,
+        uint32_t command_count, const char* payload, size_t length) {
+        if (!node_id || !command_count || !payload || !length || length > 32U*1024U*1024U) return false;
+        { std::lock_guard lock(canvas_checkpoint_mutex_);
+          if (canvas_checkpoint_) return false;
+          canvas_checkpoint_ = canvas_checkpoint_request{node_id,command_count,generation,std::string(payload,length)};
+        }
+        signal_worker(); return true;
+    }
+
+    bool apply_canvas_checkpoint() {
+        std::optional<canvas_checkpoint_request> request;
+        { std::lock_guard lock(canvas_checkpoint_mutex_); request.swap(canvas_checkpoint_); }
+        if (!request) return false;
+        auto* node = document_.find_by_native_id(request->node_id);
+        if (!node || node->tag != "canvas") return false;
+        auto& canvas = node->mutable_canvas();
+        if (canvas.generation != request->generation || request->command_count > canvas.commands.size()) return false;
+        // A source canvas command captures generation/index metadata. Do not
+        // rebase a dependent canvas until that protocol supports checkpoints.
+        if (!canvas.canvas_dependencies.empty() || document_.has_canvas_references(node->id)) return false;
+        std::vector<webscene_canvas_command> commands;
+        commands.reserve(1 + canvas.commands.size() - request->command_count);
+        webscene_canvas_command checkpoint{};
+        checkpoint.kind = WEBSCENE_CANVAS_COMMAND_RASTER_CHECKPOINT;
+        commands.push_back(checkpoint);
+        commands.insert(commands.end(),canvas.commands.begin()+request->command_count,canvas.commands.end());
+        std::vector<std::string> strings;
+        strings.push_back(std::move(request->payload));
+        std::unordered_map<std::string,uint32_t> indices;
+        indices.emplace(strings.front(),0);
+        for(size_t index=1;index<commands.size();++index) {
+            auto& command=commands[index];
+            switch(command.kind) {
+            case 25: case 26: case 28: case 29: case 31:
+            case 40: case 41: case 43: case 44: case 48: case 49: case 50:
+            case 52: case 53: case 54:
+                if(command.resource_id>=canvas.strings.size()) return false;
+                { const auto& value=canvas.strings[command.resource_id];
+                  auto [found,inserted]=indices.emplace(value,static_cast<uint32_t>(strings.size()));
+                  if(inserted)strings.push_back(value);
+                  command.resource_id=found->second;
+                }
+                break;
+            case 27: case WEBSCENE_CANVAS_COMMAND_RASTER_CHECKPOINT: return false;
+            }
+        }
+        canvas.commands.swap(commands);canvas.strings.swap(strings);canvas.string_indices.swap(indices);
+        ++canvas.generation;
+        document_.mark_scene_changed();
+        return true;
+    }
+
     bool release_canvas_export(uint32_t node_id)
     {
         if (node_id == 0U) return false;

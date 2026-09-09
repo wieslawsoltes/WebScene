@@ -27,7 +27,9 @@ internal static class Program
     [DllImport("webscene_graphite_host_probe", EntryPoint="webscene_graphite_host_shutdown")]
     internal static extern int ShutdownGraphite();
     [STAThread]
-    public static int Main(string[] args) => args.Contains("--metal-host")
+    public static int Main(string[] args) => args.Contains("--canvas-backing-probe")
+        ? AppBuilder.Configure<CanvasBackingProbeApp>().UsePlatformDetect().StartWithClassicDesktopLifetime(args)
+        : args.Contains("--metal-host")
         ? AppBuilder.Configure<MetalHostProbeApp>().UsePlatformDetect()
             .With(new AvaloniaNativePlatformOptions { RenderingMode = new[] { AvaloniaNativeRenderingMode.Metal } })
             .StartWithClassicDesktopLifetime(args)
@@ -42,6 +44,9 @@ internal static class Program
         : args.Contains("--webgpu-opengl")
         ? AppBuilder.Configure<WebGpuDocumentProbeApp>().UsePlatformDetect()
             .With(new AvaloniaNativePlatformOptions { RenderingMode = new[] { AvaloniaNativeRenderingMode.OpenGl } })
+            .StartWithClassicDesktopLifetime(args)
+        : args.Contains("--webgpu-vsync")
+        ? WindowsVSyncProbe.Configure(AppBuilder.Configure<WebGpuDocumentProbeApp>().UsePlatformDetect())
             .StartWithClassicDesktopLifetime(args)
         : args.Contains("--webgpu-document")
         ? AppBuilder.Configure<WebGpuDocumentProbeApp>().UsePlatformDetect().StartWithClassicDesktopLifetime(args)

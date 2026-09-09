@@ -2,6 +2,9 @@
 #include "webgpu_adapter_options.h"
 #include "completion_mailbox.h"
 #include <v8.h>
+#if defined(_WIN32)
+#include "windows_gpu_adapter.h"
+#endif
 
 namespace webscene::graphics {
 // Engine-owned promise state. Driver callbacks capture only native_result and
@@ -53,7 +56,16 @@ public:
         v8::Local<v8::Promise::Resolver> resolver;
         if (!v8::Promise::Resolver::New(context).ToLocal(&resolver)) return {};
         promise=resolver->GetPromise();
-        const auto options=make_dawn_adapter_options(requested,host_backend);
+        auto options=make_dawn_adapter_options(requested,host_backend);
+#if defined(_WIN32)
+        // Pinned Dawn RequestAdapterOptionsLUID ABI, using the C entry point
+        // only. No dependency on unexported Dawn-native C++ constructors.
+        struct luid_options : wgpu::ChainedStruct { LUID adapterLUID{}; } luid;
+        if(options && host_backend==wgpu::BackendType::D3D12) {
+            luid.sType=wgpu::SType::RequestAdapterOptionsLUID;
+            luid.adapterLUID=windows_gpu_adapter_luid();options->nextInChain=&luid;
+        }
+#endif
         auto ticket=options ? mailbox->reserve(operation,owner) : std::nullopt;
         if (!ticket) {
             if (resolver->Resolve(context,v8::Null(isolate)).IsNothing()) return {};

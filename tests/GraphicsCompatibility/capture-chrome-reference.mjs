@@ -199,7 +199,9 @@ async function captureCase(chrome, serverUrl, output, test, repetition) {
   const hardware = hardwareAssessment(system, app);
   if (!hardware.hardwareAccelerated) return { test, repetition, status: "unavailable", hardware, app, system };
   if (app.documentViewport.width !== test.documentViewport.width || app.documentViewport.height !== test.documentViewport.height
-      || app.documentViewport.dpr !== test.dpr || app.visibility !== "visible") throw new Error("Viewport/DPR/visibility mismatch");
+      || Math.abs(app.documentViewport.dpr - test.dpr) > 1e-6 || app.visibility !== "visible") throw new Error(
+        `Viewport/DPR/visibility mismatch: ${JSON.stringify({ actual: app.documentViewport, visibility: app.visibility,
+          expected: test.documentViewport, dpr: test.dpr })}`);
   const prefix = `${test.id}-run${repetition}`;
   const before = await snapshot(page, output, `${prefix}-before.png`, app.clip);
   const tracing = await beginTrace(chrome.browser);

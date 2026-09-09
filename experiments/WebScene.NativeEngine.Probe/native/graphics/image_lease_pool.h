@@ -9,7 +9,7 @@
 namespace webscene::graphics {
 struct image_write_token { uint64_t pool{},generation{}; uint32_t slot{}; };
 struct image_lease_token { uint64_t pool{},generation{}; uint32_t index{}; };
-// Three image slots, independent of scene publication counts. This class owns
+// Bounded image slots, independent of scene publication counts. This class owns
 // lifetime metadata only; the backend retains allocations until slots are idle.
 class image_lease_pool {
     enum class phase { idle,writing,published };
@@ -30,7 +30,7 @@ class image_lease_pool {
     };
     const uint64_t identity_=new_owner_token();
     mutable std::mutex mutex_;
-    std::array<image_slot,3> images_{};
+    std::vector<image_slot> images_;
     std::vector<lease_slot> leases_;
     bool closed_{};
     std::shared_ptr<completion_wake> wake_;
@@ -64,8 +64,10 @@ class image_lease_pool {
     }
     void signal_capacity() noexcept { if (wake_) wake_->signal(); }
 public:
-    explicit image_lease_pool(size_t lease_capacity=128,std::shared_ptr<completion_wake> wake={}) : wake_(std::move(wake)) {
+    explicit image_lease_pool(size_t lease_capacity=128,std::shared_ptr<completion_wake> wake={},size_t image_capacity=3) : wake_(std::move(wake)) {
         if (!lease_capacity || lease_capacity>UINT32_MAX) throw std::invalid_argument("invalid image lease capacity");
+        if (!image_capacity || image_capacity>4) throw std::invalid_argument("invalid image slot capacity");
+        images_.resize(image_capacity);
         leases_.resize(lease_capacity);
     }
     std::optional<image_write_token> acquire_write() {

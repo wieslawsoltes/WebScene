@@ -7,4 +7,6 @@ internal interface INativeRetainedGpuImage
     void Retire(ISkiaSharpApiLease lease);
     bool TryComplete(ISkiaSharpApiLease lease);
     bool TryRetireWithoutVisual();
+    // Called synchronously on the composition owner before detached polling.
+    void SealForDetachedRetirement() { TryRetireWithoutVisual(); }
 }

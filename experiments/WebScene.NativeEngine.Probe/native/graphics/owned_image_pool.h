@@ -7,7 +7,7 @@ namespace webscene::graphics {
 // Native provider lifetime anchor. Its destructor must be safe on a completion
 // thread (thread-affine GPU destruction must be dispatched by the provider).
 // No native pointer is exported through portable image metadata.
-enum class image_provider_kind { generic, iosurface };
+enum class image_provider_kind { generic, iosurface, d3d12 };
 struct image_provider_lifetime {
     virtual image_provider_kind kind() const noexcept { return image_provider_kind::generic; }
     virtual ~image_provider_lifetime() = default;
@@ -16,8 +16,8 @@ class owned_image_pool {
     struct state {
         std::shared_ptr<image_provider_lifetime> provider;
         image_lease_pool pool;
-        state(std::shared_ptr<image_provider_lifetime> p,size_t capacity,std::shared_ptr<completion_wake> wake)
-            : provider(std::move(p)),pool(capacity,std::move(wake)) {
+        state(std::shared_ptr<image_provider_lifetime> p,size_t capacity,std::shared_ptr<completion_wake> wake,size_t image_capacity)
+            : provider(std::move(p)),pool(capacity,std::move(wake),image_capacity) {
             if (!provider) throw std::invalid_argument("image provider required");
         }
     };
@@ -123,8 +123,8 @@ public:
         }
     };
     explicit owned_image_pool(std::shared_ptr<image_provider_lifetime> provider,size_t capacity=128,
-        std::shared_ptr<completion_wake> wake={})
-        : state_(std::make_shared<state>(std::move(provider),capacity,std::move(wake))) {}
+        std::shared_ptr<completion_wake> wake={},size_t image_capacity=3)
+        : state_(std::make_shared<state>(std::move(provider),capacity,std::move(wake),image_capacity)) {}
     owned_image_pool(const owned_image_pool&)=delete;
     owned_image_pool& operator=(const owned_image_pool&)=delete;
     ~owned_image_pool() { close(); }

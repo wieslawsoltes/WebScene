@@ -276,7 +276,9 @@ public:
     void update_gpu_presentation_images(const std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images);
     bool refresh_media_environment();
     bool set_visible(bool visible);
-    bool dispatch_input(const webscene_input_event& event);
+    bool dispatch_input(const webscene_input_event& event, bool defer_cursor_update = false);
+    // Worker-only: call after publication layout and ResizeObserver delivery.
+    void refresh_pointer_cursor_after_layout();
     bool dispatch_transition_events();
     uint32_t current_cursor_kind() const noexcept;
     void notify_low_memory();

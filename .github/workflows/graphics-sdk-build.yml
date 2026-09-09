@@ -51,7 +51,7 @@ jobs:
       name: Resolve graphics SDK cache identity
       shell: bash
       env:
-        SDK_INPUTS: ${{ hashFiles('eng/graphics/dependencies.lock.json', 'eng/graphics/build.py', 'eng/graphics/DawnSymbolBoundary.cmake', 'eng/graphics/dawn_exports.py', 'eng/graphics/install-windows-sdk.ps1', '.github/workflows/graphics-sdk-build.yml') }}
+        SDK_INPUTS: ${{ hashFiles('eng/graphics/dependencies.lock.json', 'eng/graphics/windows-runtime.json', 'eng/graphics/build.py', 'eng/graphics/DawnSymbolBoundary.cmake', 'eng/graphics/dawn_exports.py', 'eng/graphics/install-windows-sdk.ps1', '.github/workflows/graphics-sdk-build.yml') }}
       run: |
         echo "key=webscene-graphics-sdk-v1-${{ matrix.component }}-${{ matrix.rid }}-${ImageVersion:?Runner image version is required}-$SDK_INPUTS" >> "$GITHUB_OUTPUT"
     - id: sdk-cache

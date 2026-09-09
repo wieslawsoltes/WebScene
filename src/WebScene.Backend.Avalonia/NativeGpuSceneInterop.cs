@@ -59,6 +59,10 @@ public static unsafe partial class NativeWebSceneApi
     internal const uint GpuImagePaintCommand = 256;
     internal const ulong OrderedCanvasCapability = 2;
     internal const ulong ProducerGpuWaitCapability = 4;
+    internal const ulong CanvasCheckpointCapability = 8;
+    [DllImport(LibraryName, EntryPoint = "webscene_engine_submit_canvas_checkpoint_v3", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern byte SubmitCanvasCheckpoint(IntPtr engine, uint nodeId, ulong generation,
+        uint commandCount, byte[] payload, nuint payloadLength);
     internal const uint OrderedCanvasPaintCommand = 257;
 
     [DllImport(LibraryName, EntryPoint = "webscene_engine_acquire_latest_scene_v3", CallingConvention = CallingConvention.Cdecl)]
@@ -352,5 +356,26 @@ internal sealed class NativeGpuImageConsumerV3
         // Outstanding synchronous imports defer deletion without blocking a
         // completion thread or freeing a pointer still borrowed by an importer.
         if (retired != IntPtr.Zero) NativeWebSceneApi.GpuImageCompleteConsumerV3(retired);
+    }
+
+    internal T WithNativeHandle<T>(Func<IntPtr, T> use)
+    {
+        IntPtr pointer;
+        lock (_gate)
+        {
+            if (_completionRequested) throw new InvalidOperationException("GPU consumer already completed.");
+            ++_borrows; pointer = _handle;
+        }
+        try { return use(pointer); }
+        finally
+        {
+            IntPtr retired = IntPtr.Zero;
+            lock (_gate)
+            {
+                --_borrows;
+                if (_completionRequested && _borrows == 0) { retired = _handle; _handle = IntPtr.Zero; }
+            }
+            if (retired != IntPtr.Zero) NativeWebSceneApi.GpuImageCompleteConsumerV3(retired);
+        }
     }
 }

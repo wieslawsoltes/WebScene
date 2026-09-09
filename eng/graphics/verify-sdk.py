@@ -67,6 +67,12 @@ def verify(sdk, component, rid):
     else:
         if rid.startswith("win-"):
             required.add("lib/webgpu_dawn.lib")
+            required |= {"bin/d3dcompiler_47.dll", "build-info/windows-runtime.json", "licenses/windows-sdk/LICENSE.rtf"}
+            pin = json.loads(LOCK_PATH.with_name("windows-runtime.json").read_text())
+            if (files.get("bin/d3dcompiler_47.dll") != pin["sha256"]
+                    or files.get("licenses/windows-sdk/LICENSE.rtf") != pin["licenseSha256"]
+                    or files.get("build-info/windows-runtime.json") != sha(LOCK_PATH.with_name("windows-runtime.json"))):
+                raise ValueError("dawn: pinned Windows shader compiler or license mismatch")
         if sha(sdk / "build-info/DawnSymbolBoundary.cmake") != sha(LOCK_PATH.with_name("DawnSymbolBoundary.cmake")):
             raise ValueError("dawn: symbol isolation policy mismatch; rebuild the SDK")
     if not required <= set(files):

@@ -8,8 +8,10 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import stat
 import subprocess
 import sys
+import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCK_PATH = Path(__file__).with_name("dependencies.lock.json")
@@ -48,6 +50,8 @@ def checkout(name, directory):
         run(["git", "-C", directory, "remote", "add", "origin", source["repository"]])
     run(["git", "-C", directory, "config", "core.autocrlf", "false"])
     run(["git", "-C", directory, "config", "core.eol", "lf"])
+    if os.name == "nt":
+        run(["git", "-C", directory, "config", "core.longpaths", "true"])
     if capture(["git", "-C", directory, "remote", "get-url", "origin"]) != source["repository"]:
         raise ValueError(f"Wrong source remote: {directory}")
     current = subprocess.run(["git", "-C", str(directory), "rev-parse", "HEAD"], capture_output=True, text=True)
@@ -80,6 +84,24 @@ def copy_licenses(source, destination):
                     output = destination / path.relative_to(source)
                     output.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(path, output)
+
+
+def remove_sdk(sdk):
+    # CIPD license files can be read-only. Only retry that specific failure
+    # inside this generated SDK; preserve all other filesystem errors.
+    root = sdk.resolve()
+
+    def retry_readonly(function, path, exception_info):
+        error = exception_info[1]
+        target = Path(path).resolve()
+        if not target.is_relative_to(root) or not isinstance(error, PermissionError):
+            raise error
+        if target.stat().st_mode & stat.S_IWRITE:
+            raise error
+        target.chmod(target.stat().st_mode | stat.S_IWRITE)
+        function(path)
+
+    shutil.rmtree(root, onerror=retry_readonly)
 
 
 def source_graph(source, env=None):
@@ -133,7 +155,7 @@ def dawn(args):
     run(["cmake", "--build", output, "--parallel", args.jobs])
     # Old installed headers/libraries must not survive a dependency roll.
     if sdk.exists():
-        shutil.rmtree(sdk)
+        remove_sdk(sdk)
     run(["cmake", "--install", output])
     sdk.joinpath("build-info").mkdir()
     shutil.copy2(symbol_policy, sdk / "build-info/DawnSymbolBoundary.cmake")
@@ -145,9 +167,30 @@ def dawn(args):
         metadata = max(output.glob("CMakeFiles/*/" + name), key=lambda p: p.stat().st_mtime)
         shutil.copy2(metadata, sdk / "build-info" / name)
     shutil.copy2(source / "DEPS", sdk / "build-info/DEPS")
+    if args.rid == "win-x64":
+        stage_windows_runtime(args, sdk)
     seal("dawn", source, sdk, args.rid, settings,
          {"cmake": capture(["cmake", "--version"]), "ninja": capture(["ninja", "--version"]),
-          "python": sys.version, "host": platform.platform()})
+         "python": sys.version, "host": platform.platform()})
+
+
+def stage_windows_runtime(args, sdk):
+    pin_path = Path(__file__).with_name("windows-runtime.json")
+    pin = json.loads(pin_path.read_text())
+    root = Path(getattr(args, "windows_sdk", None) or os.environ.get("WINDOWSSDKDIR")
+                or r"C:\Program Files (x86)\Windows Kits\10")
+    compiler = root / pin["compiler"]
+    if not compiler.is_file() or sha(compiler) != pin["sha256"]:
+        raise ValueError(f"Windows runtime requires SDK {pin['release']} compiler at {compiler}")
+    shutil.copy2(compiler, sdk / "bin/d3dcompiler_47.dll")
+    license_dir = sdk / "licenses/windows-sdk"
+    license_dir.mkdir(parents=True, exist_ok=True)
+    license_path = license_dir / "LICENSE.rtf"
+    with urllib.request.urlopen(pin["licenseUrl"], timeout=60) as response:
+        license_path.write_bytes(response.read())
+    if sha(license_path) != pin["licenseSha256"]:
+        raise ValueError("Windows SDK license checksum mismatch")
+    shutil.copy2(pin_path, sdk / "build-info/windows-runtime.json")
 
 
 def angle(args):
@@ -189,7 +232,7 @@ def angle(args):
     run(["ninja", "-C", output, "-j", args.jobs, "libEGL", "libGLESv2"], cwd=source, env=env)
     sdk = args.sdk / args.rid / ("angle-gl" if args.angle_gl else "angle")
     if sdk.exists():
-        shutil.rmtree(sdk)
+        remove_sdk(sdk)
     shutil.copytree(source / "include", sdk / "include")
     if args.rid.startswith("linux-"):
         vulkan_headers = source / "third_party/vulkan-headers/src/include"
@@ -246,6 +289,7 @@ if __name__ == "__main__":
     parser.add_argument("--sdk", type=Path, default=ROOT / "artifacts/graphics-sdk")
     parser.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 1))
     parser.add_argument("--angle-gl", action="store_true", help="Separate ANGLE SDK with an explicit GL backend option")
+    parser.add_argument("--windows-sdk", type=Path, help="Pinned Windows SDK root (otherwise WINDOWSSDKDIR)")
     args = parser.parse_args()
     if args.rid != host_rid():
         parser.error("These baseline builds require a native host of the requested RID; cross compilation is not qualification.")

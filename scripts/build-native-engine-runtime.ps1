@@ -371,7 +371,7 @@ try {
     $consumerOutput = Join-Path $consumerDir "bin/Release/net8.0/$Rid"
     $copiedAssets = @("webscene_native_engine.dll", "icudtl.dat", "webscene-native-runtime.json")
     if ($GraphicsSdk) {
-        $copiedAssets += @("webgpu_dawn.dll", "libEGL.dll", "libGLESv2.dll", "webscene-graphics-runtime.json")
+        $copiedAssets += @("webgpu_dawn.dll", "d3dcompiler_47.dll", "libEGL.dll", "libGLESv2.dll", "webscene-graphics-runtime.json")
     }
     if ($V8Snapshot -eq "bootstrap") {
         $copiedAssets += @("webscene_bootstrap_snapshot.bin", "webscene_bootstrap_snapshot.meta")

@@ -484,6 +484,12 @@ struct webscene_scene_view {
 #define WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS (UINT64_C(1) << 1)
 /* Consumer must enqueue every native producer dependency before GPU reads. */
 #define WEBSCENE_SCENE_CAPABILITY_PRODUCER_GPU_WAITS (UINT64_C(1) << 2)
+#define WEBSCENE_SCENE_CAPABILITY_CANVAS_CHECKPOINTS (UINT64_C(1) << 3)
+/* UTF-8 versioned raster/state checkpoint resource, interpreted by capable hosts. */
+#define WEBSCENE_CANVAS_COMMAND_RASTER_CHECKPOINT 58U
+WEBSCENE_API uint8_t webscene_engine_submit_canvas_checkpoint_v3(
+    webscene_engine* engine, uint32_t node_id, uint64_t generation,
+    uint32_t command_count, const char* payload, size_t payload_length);
 /* Draw in the existing command stream at x/y/width/height. rgba carries the
  * scene GPU image index (not a color); node_id retains the canvas node ID. Existing transform/clip/isolation operations apply. */
 #define WEBSCENE_SCENE_COMMAND_GPU_IMAGE 256U
@@ -491,6 +497,10 @@ struct webscene_scene_view {
  * Ordered v3 placement of a retained Canvas2D layer. node_id selects the layer;
  * its current layout and bitmap dimensions provide placement/scaling. */
 #define WEBSCENE_SCENE_COMMAND_CANVAS_LAYER 257U
+/* Optional hint on a replacement canvas layer. Against header.base_revision,
+ * the previous layer's command and string arrays are unchanged prefixes of
+ * this complete replacement payload. Consumers may ignore this hint. */
+#define WEBSCENE_CANVAS_LAYER_UNCHANGED_PREFIX 4U
 typedef struct webscene_scene_acquire_options_v3 {
     uint32_t struct_size;
     uint32_t scene_version;
@@ -563,6 +573,16 @@ typedef struct webscene_gpu_iosurface_view_v3 {
 } webscene_gpu_iosurface_view_v3;
 WEBSCENE_API uint8_t webscene_gpu_image_get_iosurface_v3(
     const webscene_gpu_image_consumer_v3* consumer,webscene_gpu_iosurface_view_v3* result);
+
+/* Windows host-queue bridge. Keep consumer alive until seal on the drawing
+ * thread and poll returning S_OK (zero). Texture is borrowed from import_owner.
+ * Destroy only before any draw, or after completed retirement. */
+WEBSCENE_API int32_t webscene_gpu_d3d11_import_v3(webscene_gpu_image_consumer_v3* consumer,
+    void* borrowed_device,void** import_owner,void** borrowed_texture);
+WEBSCENE_API int32_t webscene_gpu_d3d11_supported_v3(void* borrowed_device);
+WEBSCENE_API int32_t webscene_gpu_d3d11_seal_v3(void* import_owner);
+WEBSCENE_API int32_t webscene_gpu_d3d11_poll_v3(void* import_owner);
+WEBSCENE_API void webscene_gpu_d3d11_destroy_v3(void* import_owner);
 
 /* Optional native producer synchronization. Borrowed event ownership follows the
  * consumer; callers must encode every dependency before reading an early image.
@@ -779,7 +799,7 @@ typedef void (*webscene_stylesheet_consumed_callback)(
  * IOSURFACE certifies both a secure context and a GPU-capable scene consumer.
  * Return DISABLED for untrusted/non-secure documents. No ABI reentry or throws.
  * Current implementation supports IOSURFACE only on graphics-enabled macOS. */
-enum { WEBSCENE_WEBGPU_DISABLED = 0, WEBSCENE_WEBGPU_IOSURFACE = 1 };
+enum { WEBSCENE_WEBGPU_DISABLED = 0, WEBSCENE_WEBGPU_IOSURFACE = 1, WEBSCENE_WEBGPU_DXGI = 2 };
 typedef uint32_t (*webscene_webgpu_policy_callback)(void* user_data,
     const char* document_url, size_t document_url_length);
 
