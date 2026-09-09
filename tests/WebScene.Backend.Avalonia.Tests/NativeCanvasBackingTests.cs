@@ -62,7 +62,9 @@ public sealed unsafe class NativeCanvasBackingTests
 
     private static SKColor[] Pixels(NativeCanvasSceneRenderer renderer)
     {
-        using var bitmap = new SKBitmap(20, 10);
+        // Compare with CaptureCanvasPng's surface format. The platform default
+        // is RGBA on macOS; mixing formats can round edge coverage differently.
+        using var bitmap = new SKBitmap(20, 10, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
         canvas.Clear(SKColors.Transparent);
         renderer.RenderRetained(canvas, 20, 10, null);
