@@ -693,6 +693,14 @@ void test_low_memory_reclaims_small_detached_dom_batches()
           }
         })()
     )JS", "small-detached-dom-create.js");
+    webscene_engine_memory_metrics created{sizeof(webscene_engine_memory_metrics)};
+    for (auto attempt = 0; attempt < 500; ++attempt) {
+        webscene_engine_get_memory_metrics(engine, &created);
+        if (created.native_dom_node_count >= before.native_dom_node_count + 32U) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(created.native_dom_node_count >= before.native_dom_node_count + 32U,
+        "small detached DOM batch was not visible in the worker snapshot");
     require(webscene_engine_request_low_memory(engine) != 0,
         "small detached DOM collection request failed");
     webscene_engine_memory_metrics after{sizeof(webscene_engine_memory_metrics)};
