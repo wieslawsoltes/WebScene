@@ -1624,7 +1624,7 @@ public:
     std::array<uint64_t, 4U> intrinsic_view_box_parse_counts() const noexcept;
 #endif
     size_t node_count() const noexcept;
-    const std::vector<dom_node*>& media_elements() const noexcept { return media_elements_; }
+    std::span<dom_node* const> media_elements() const noexcept { return auxiliary_nodes_ ? std::span<dom_node* const>(auxiliary_nodes_->media) : std::span<dom_node* const>{}; }
     allocation_metrics read_allocation_metrics() const noexcept;
     size_t count_tag(const std::string& tag) const noexcept;
     size_t sum_attribute_bytes(const std::string& tag, const std::string& attribute) const noexcept;
@@ -2001,9 +2001,10 @@ private:
     struct modal_dialog_entry final { uint32_t scope_id; uint32_t dialog_id; };
     // Most documents never open a modal. Keep the container allocation lazy
     // and its implementation-specific vector footprint out of every document.
-    std::unique_ptr<std::vector<modal_dialog_entry>> modal_dialogs_;
+    struct auxiliary_nodes { std::vector<modal_dialog_entry> dialogs; std::vector<dom_node*> media; };
+    std::unique_ptr<auxiliary_nodes> auxiliary_nodes_;
     std::span<const modal_dialog_entry> modal_dialogs() const noexcept {
-        return modal_dialogs_ ? std::span<const modal_dialog_entry>(*modal_dialogs_)
+        return auxiliary_nodes_ ? std::span<const modal_dialog_entry>(auxiliary_nodes_->dialogs)
                               : std::span<const modal_dialog_entry>{};
     }
 #if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
@@ -2018,7 +2019,6 @@ private:
     uint32_t retained_export_canvas_id_{0};
     float viewport_width_{1};
     float viewport_height_{1};
-    std::vector<dom_node*> media_elements_;
     uint32_t next_node_id_{1};
     uint64_t layout_passes_{0};
     double animation_frame_timestamp_ms_{0};

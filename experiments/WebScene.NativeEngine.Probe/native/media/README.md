@@ -22,6 +22,8 @@ Production Avalonia 11 remains supported; Frameforge can opt into Avalonia 12.
   A small native DOM media registry discovers markup/source changes at task
   boundaries, including parser-created nodes. It does not depend on the
   currently unsupported MutationObserver and does not traverse the full DOM.
+  The registry shares lazy auxiliary document storage with modal registration;
+  Linux sizeof(native_document) remains 368 bytes (384-byte budget).
 - A persistent `media_session` worker owns the source and decoder. Load generations
   cancel stale work. Rapid seek requests coalesce; completed current-generation
   frames can still present while a newer request waits, avoiding starvation.
@@ -163,3 +165,5 @@ round trips. The Avalonia suite passes on net8.0/net10.0 (305 passed, 15 existin
 skips per framework); Uno builds. The AOT media test passes with real decode and
 audio device output. Existing unrelated interop library IL warnings may still be
 emitted during compilation; media bindings add no reflection activation path.
+
+An Ubuntu 22.04 linux/amd64 container also passed the native document footprint, audio graph/capture and PCM decode/session tests. This validates portable native code, not Linux hardware video or audio-device qualification.

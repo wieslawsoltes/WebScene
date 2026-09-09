@@ -69,3 +69,10 @@ promise_test(async t=>{
  const buffer=another.createBuffer(1,128,48000);const rate=buffer.sampleRate;try{buffer.sampleRate=1;}catch{}assert_equals(buffer.sampleRate,rate);assert_equals(buffer.getChannelData(0).length,128);
 },'Media source ownership persists after context close and decoded buffer metadata is readonly');
 </script>
+
+<script>
+promise_test(async()=>{
+ const getter=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'readyState').get;assert_throws_js(TypeError,()=>getter.call({tagName:'AUDIO',hasAttribute:()=>false}));
+ const original=HTMLVideoElement;try{globalThis.HTMLVideoElement=function Replacement(){};const video=document.createElement('video');assert_true(video instanceof original);assert_equals(Object.prototype.toString.call(video),'[object HTMLVideoElement]');}finally{globalThis.HTMLVideoElement=original;}
+},'Media receivers require native DOM branding and constructor reassignment preserves intrinsic prototypes');
+</script>

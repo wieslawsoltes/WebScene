@@ -51,6 +51,8 @@ static void media_native_call(const v8::FunctionCallbackInfo<v8::Value> &info) {
             throw std::invalid_argument("Media element required");
         auto key = self->wrapper_key(*node);
         auto op = to_utf8(info.GetIsolate(), info[0]);
+        if (op == "brand")
+            return;
         if (op == "videoSupported") {
             info.GetReturnValue().Set(webscene::media::native_video_decode_available());
             return;
@@ -146,7 +148,8 @@ void synchronize_media_elements() {
         return;
     // Registry is O(media elements), never a traversal of the application's
     // DOM. Runs only on native content changes, including parser mutations.
-    auto elements = document.media_elements();
+    auto registry = document.media_elements();
+    std::vector<dom_node*> elements(registry.begin(),registry.end());
     for (auto *node : elements) {
         if (node->namespace_uri() != dom_node::html_namespace_uri)
             continue;
@@ -274,29 +277,24 @@ void install_media_globals(v8::Local<v8::Context> realm) {
     install_audio_globals(realm);
 }
 void attach_media_prototype(v8::Local<v8::Context> realm, dom_node &node, v8::Local<v8::Object> object) {
-    if (node.namespace_uri() != dom_node::html_namespace_uri || (node.tag != "audio" && node.tag != "video"))
+    if (node.namespace_uri() != dom_node::html_namespace_uri ||
+        (node.tag != "audio" && node.tag != "video") || media_initializer_key.IsEmpty())
         return;
-    v8::Local<v8::Value> ctor, prototype;
-    if (realm->Global()
-            ->Get(realm, js_string(isolate, node.tag == "video" ? "HTMLVideoElement" : "HTMLAudioElement"))
-            .ToLocal(&ctor) &&
-        ctor->IsFunction() &&
-        ctor.As<v8::Object>()->Get(realm, js_string(isolate, "prototype")).ToLocal(&prototype) &&
-        prototype->IsObject()) {
-        object->SetPrototype(realm, prototype).Check();
-        if (!media_initializer_key.IsEmpty()) {
-            v8::Local<v8::Value> initializer;
-            if (realm->Global()
-                    ->GetPrivate(realm, media_initializer_key.Get(isolate))
-                    .ToLocal(&initializer) &&
-                initializer->IsFunction()) {
-                v8::Local<v8::Value> args[] = {object, v8::Boolean::New(isolate, is_connected(node))};
-                auto result = initializer.As<v8::Function>()->Call(realm, realm->Global(), 2, args);
-                static_cast<void>(result);
-            }
-        }
-    }
+    v8::Local<v8::Value> initializer, prototype;
+    if (!realm->Global()->GetPrivate(realm, media_initializer_key.Get(isolate)).ToLocal(&initializer) ||
+        !initializer->IsFunction())
+        return;
+    if (!initializer.As<v8::Object>()
+             ->Get(realm, js_string(isolate, node.tag == "video" ? "videoPrototype" : "audioPrototype"))
+             .ToLocal(&prototype) ||
+        !prototype->IsObject())
+        return;
+    object->SetPrototype(realm, prototype).Check();
+    v8::Local<v8::Value> args[] = {object, v8::Boolean::New(isolate, is_connected(node))};
+    auto result = initializer.As<v8::Function>()->Call(realm, realm->Global(), 2, args);
+    static_cast<void>(result);
 }
+
 #endif
 
 #include "webscene_v8_runtime_audio.inc"

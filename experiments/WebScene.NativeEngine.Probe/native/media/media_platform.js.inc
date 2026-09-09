@@ -11,7 +11,7 @@ function mediaError(code,message){const error=Object.create(MediaError.prototype
 const fail=(message,name='InvalidStateError')=>new DOMException(message,name);
 function state(el){
  if(!el||!['VIDEO','AUDIO'].includes(el.tagName))throw new TypeError('Illegal media receiver');
- let s=states.get(el);if(!s){s={generation:0,readyState:0,networkState:0,duration:NaN,time:0,paused:true,ended:false,seeking:false,rate:1,defaultRate:1,volume:1,muted:el.hasAttribute('muted'),error:null,width:0,height:0,pending:[],played:[],playStart:0,currentSrc:'',frame:0,lastTick:0};states.set(el,s);}
+ let s=states.get(el);if(!s){native('brand',el);s={generation:0,readyState:0,networkState:0,duration:NaN,time:0,paused:true,ended:false,seeking:false,rate:1,defaultRate:1,volume:1,muted:el.hasAttribute('muted'),error:null,width:0,height:0,pending:[],played:[],playStart:0,currentSrc:'',frame:0,lastTick:0};states.set(el,s);}
  return s;
 }
 function emit(el,name){const generation=state(el).generation;setTimeout(()=>{if(state(el).generation===generation)el.dispatchEvent(new Event(name));},0);}
@@ -95,12 +95,14 @@ Object.defineProperty(TimeRanges.prototype,'length',{get(){return timeRanges.get
 for(const [method,index]of [['start',0],['end',1]])TimeRanges.prototype[method]=function(i){i=Number(i)>>>0;const ranges=timeRanges.get(this);if(i>=ranges.length)throw fail('TimeRanges index','IndexSizeError');return ranges[i][index];};
 for(const name of ['buffered','seekable','played'])prop(name,function(){const s=state(this);if(name==='played')recordPlayed(s,this.currentTime);const ranges=name==='played'?s.played.map(r=>r.slice()):s.readyState&&s.duration>0?[[0,s.duration]]:[];const result=Object.create(TimeRanges.prototype);timeRanges.set(result,ranges);return result;});
 Object.assign(globalThis,{MediaError,TimeRanges,HTMLMediaElement,HTMLVideoElement,HTMLAudioElement,Audio:function(src){const el=document.createElement('audio');el.preload='auto';if(src!==undefined)el.src=src;return el;}});
+for(const ctor of [HTMLMediaElement,HTMLVideoElement,HTMLAudioElement,MediaError,TimeRanges])Object.defineProperty(ctor.prototype,Symbol.toStringTag,{value:ctor.name,configurable:true});
 globalThis.Audio.prototype=HTMLAudioElement.prototype;
 function initialize(el,connected){
  const s=state(el);if(s.connected&&!connected)load(el,false);s.connected=connected;
  if(!connected||s.initializeQueued||s.sourceSignature===signature(el))return;
  s.initializeQueued=true;setTimeout(()=>{s.initializeQueued=false;if(s.sourceSignature!==signature(el)&&(el.hasAttribute('src')||el.querySelector('source')||s.currentSrc))load(el);},0);
 }
+initialize.videoPrototype=HTMLVideoElement.prototype;initialize.audioPrototype=HTMLAudioElement.prototype;
 globalThis.__websceneInitializeMedia=initialize;
 
 })();
