@@ -2,48 +2,48 @@
   {
     "library": "C:\\Users\\Dan\\wg\\css-resize-baseline\\webscene_native_engine.dll",
     "samples": 60,
-    "median_ms": 29.19709999859333,
-    "p95_ms": 31.86040000617504,
+    "median_ms": 29.92255000770092,
+    "p95_ms": 31.505999997258186,
     "variant": "baseline",
     "round": 1
   },
   {
     "library": "C:\\Users\\Dan\\wg\\css-resize-build\\Release\\webscene_native_engine.dll",
     "samples": 60,
-    "median_ms": 3.148699998855591,
-    "p95_ms": 3.625900000333786,
+    "median_ms": 3.2607999965548515,
+    "p95_ms": 4.802200004458427,
     "variant": "fixed",
     "round": 1
   },
   {
     "library": "C:\\Users\\Dan\\wg\\css-resize-baseline\\webscene_native_engine.dll",
     "samples": 60,
-    "median_ms": 29.73115000128746,
-    "p95_ms": 35.14930000901222,
+    "median_ms": 29.553599998354912,
+    "p95_ms": 30.793500006198883,
     "variant": "baseline",
     "round": 2
   },
   {
     "library": "C:\\Users\\Dan\\wg\\css-resize-build\\Release\\webscene_native_engine.dll",
     "samples": 60,
-    "median_ms": 3.090199999511242,
-    "p95_ms": 3.7712999880313873,
+    "median_ms": 3.174399994313717,
+    "p95_ms": 3.9174000024795532,
     "variant": "fixed",
     "round": 2
   },
   {
     "library": "C:\\Users\\Dan\\wg\\css-resize-baseline\\webscene_native_engine.dll",
     "samples": 60,
-    "median_ms": 29.038099996745586,
-    "p95_ms": 31.35070000588894,
+    "median_ms": 30.057700000703335,
+    "p95_ms": 31.650699988007545,
     "variant": "baseline",
     "round": 3
   },
   {
     "library": "C:\\Users\\Dan\\wg\\css-resize-build\\Release\\webscene_native_engine.dll",
     "samples": 60,
-    "median_ms": 3.091299995779991,
-    "p95_ms": 3.8217999935150146,
+    "median_ms": 3.1369500011205673,
+    "p95_ms": 4.1192000061273575,
     "variant": "fixed",
     "round": 3
   }

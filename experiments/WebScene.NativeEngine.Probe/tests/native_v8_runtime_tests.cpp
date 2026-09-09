@@ -313,6 +313,8 @@ int main()
         if (selected == "dimension-variable-compatibility") {
             const std::array tests{
                 test_dimension_custom_property_recascade,
+                test_dimension_custom_property_inheritance,
+                test_tradingview_settings_subgrid_keeps_controls_on_their_rows,
                 test_responsive_positioned_sizing,
                 test_attribute_selector_invalidation,
                 test_shadow_dom_composed_runtime_geometry,
@@ -331,6 +333,13 @@ int main()
                 webscene_engine_destroy(engine);
             }
             test_outer_dynamic_recascade_preserves_iframe_cascade();
+            return 0;
+        }
+        if (selected == "dimension-inheritance") {
+            auto* engine = webscene_engine_create(0);
+            require(engine != nullptr, "inheritance engine creation failed");
+            test_dimension_custom_property_inheritance(engine);
+            webscene_engine_destroy(engine);
             return 0;
         }
         if (selected == "dimension-variables") {
@@ -595,6 +604,7 @@ int main()
         "throw new Error('IntersectionObserver bootstrap missing')",
         "intersection-observer-bootstrap.js");
     test_dimension_custom_property_recascade(engine);
+    test_dimension_custom_property_inheritance(engine);
     test_responsive_positioned_sizing(engine);
     test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(engine);
     test_go_to_tab_lines_and_calendar_scroll_ranges(engine);

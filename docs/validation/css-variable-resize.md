@@ -34,7 +34,8 @@ Resolve consumers at the existing style-batch flush boundary. Repeated writes to
 one variable coalesce; mixed variables, overlapping roots, or other mutations
 promote the request to the ordinary full-subtree path.
 
-Aliases, inherited properties, pseudo-elements, shadow DOM, escaped selectors,
+Explicitly inherited dimensions (including var() fallbacks), aliases, inherited
+properties, pseudo-elements, shadow DOM, escaped selectors,
 and style-attribute dependencies retain the full path. This intentionally
 conservative coverage can be expanded separately. Synchronous geometry and
 computed-style reads retain their existing flush behavior.
@@ -51,7 +52,7 @@ Three alternating baseline/fixed process pairs:
 
 | Statistic | Main baseline | Fixed |
 |---|---:|---:|
-| Median of run medians | 29.20 ms | 3.09 ms |
+| Median of run medians | 29.92 ms | 3.17 ms |
 | Run p95 range | 31.35–35.15 ms | 3.63–3.82 ms |
 
 Approximately 9.4 times faster, or 89% less synchronous style/layout time in this
@@ -62,10 +63,29 @@ Run the benchmark with the library's matching ICU data and bootstrap files besid
 
     python benchmarks/css-variable-resize.py <native-library>
 
-The dimension-variable-compatibility native test filter passes all 12 checks on
-both baseline and patch. It includes the new dimension/priority/removal/fallback/
-batch tests and existing responsive layout, font-relative layout, shadow DOM,
-iframe cascade, and style-coalescing tests. The three parser suites also pass.
+The dimension-variable-compatibility native test filter passes all 14 checks on
+the corrected patch. It includes the new inheritance matrix, dimension/priority/
+removal/fallback/batch tests, and existing responsive layout, font-relative layout,
+subgrid, shadow DOM, iframe cascade, and style-coalescing tests. The three parser
+suites also pass.
+
+## Review regression and correction
+
+Review identified stale explicitly inherited width/height after the optimized
+parent recalculation. The new dimension-inheritance filter reproduced the
+regression before the correction. It now checks 24 combinations: stylesheet versus
+inline declarations, literal inherit versus var() fallback to inherit, one versus
+three descendant levels, and setProperty/removeProperty/empty setter. Each checks
+both width and height before and after the mutation. An additional case verifies
+that stylesheet !important wins over inline inheritance.
+
+The optimization now falls back to the ordinary ancestor-first subtree cascade
+when dimension declarations can inherit, including resolved var() values. Inline
+width/height inheritance is also replayed during a full cascade. The latter fixes
+an older issue independently confirmed on unchanged main: the new control test
+fails only the literal-inline cases and their priority check there, while the
+stylesheet cases pass. The previous PR revision also failed the stylesheet cases.
+The final benchmark numbers above were rerun after this correction.
 
 The full native suite fails on both baseline and patch at the existing assertion
 "iframe preparation did not overlap discovery with outer script work". The

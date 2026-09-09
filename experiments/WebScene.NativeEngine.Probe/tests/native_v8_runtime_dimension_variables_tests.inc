@@ -66,3 +66,43 @@ void test_dimension_custom_property_recascade(webscene_engine* engine)
     require(result == "true", "dimension custom property recascade failed: " + result);
 }
 
+
+void test_dimension_custom_property_inheritance(webscene_engine* engine)
+{
+    resize(engine, 1280, 720, 1);
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const failures=[];
+          const root=document.documentElement;
+          for(const inline of [false,true])for(const fallback of [false,true])for(const levels of [1,3])for(const operation of ['set','remove','empty']){
+            root.style.removeProperty('--size');
+            if(operation!=='set')root.style.setProperty('--size','200px');
+            const declarations=fallback?'width:var(--missing,inherit);height:var(--missing,inherit)':'width:inherit;height:inherit';
+            let children='';
+            for(let i=0;i<levels;i++)children+='<div class="child" id="child'+i+'"'+(inline?' style="'+declarations+'"':'')+'>';
+            children+='</div>'.repeat(levels);
+            document.body.innerHTML='<style>:root{--size:100px}.parent{width:var(--size);height:var(--size)}'+(inline?'':'.child{'+declarations+'}')+'</style><div class="parent" id="parent">'+children+'</div>';
+            const nodes=[document.getElementById('parent'),...Array.from({length:levels},(_,i)=>document.getElementById('child'+i))];
+            const geometry=()=>nodes.map(n=>{const r=n.getBoundingClientRect();return [r.width,r.height]});
+            const initial=operation==='set'?100:200;
+            const before=geometry();
+            if(before.some(r=>r[0]!==initial||r[1]!==initial))failures.push({inline,fallback,levels,operation,phase:'before',before});
+            if(operation==='set')root.style.setProperty('--size','200px');
+            else if(operation==='remove')root.style.removeProperty('--size');
+            else root.style.setProperty('--size','');
+            const expected=operation==='set'?200:100;
+            const after=geometry();
+            if(after.some(r=>r[0]!==expected||r[1]!==expected))failures.push({inline,fallback,levels,operation,phase:'after',after});
+          }
+          root.style.removeProperty('--size');
+          document.body.innerHTML='<style>:root{--size:100px}.parent{width:var(--size);height:var(--size)}.child{width:77px!important}</style><div class="parent"><div class="child" id="priority" style="width:inherit;height:inherit"></div></div>';
+          document.getElementById('priority').getBoundingClientRect();
+          root.style.setProperty('--size','200px');
+          const priority=document.getElementById('priority').getBoundingClientRect();
+          if(priority.width!==77||priority.height!==200)failures.push({phase:'inline-priority',width:priority.width,height:priority.height});
+          root.style.removeProperty('--size');
+          return failures;
+        })()
+    )JS", "dimension-custom-property-inheritance.js");
+    require(result == "[]", "dimension inheritance regression: " + result);
+}

@@ -3310,12 +3310,16 @@
         // defines one of its var() references is connected. Its first
         // computed-value attempt is then invalid, but the authored tokens must
         // remain live and be recomputed when the variable becomes available.
-        // Replay only variable-dependent inline declarations here. Temporarily
-        // removing their inline guard lets the declaration update its own
+        // Replay variable-dependent inline declarations and explicit dimension
+        // inheritance, whose computed values can change with the parent.
+        // Temporarily removing the inline guard lets a declaration update its own
         // computed value while the important-origin mask still prevents a
         // normal inline declaration from overriding an author !important rule.
         for (const auto& [name, value] : node.authored_style().declarations) {
-            if (name.starts_with("--") || value.find("var(") == std::string::npos) continue;
+            const auto inherited_dimension = (name == "width" || name == "height")
+                && trim_css_view(value) == "inherit";
+            if (name.starts_with("--")
+                || (value.find("var(") == std::string::npos && !inherited_dimension)) continue;
             const auto property_mask = inline_style_mask(name);
             const auto retained_inline_mask = node.style.inline_property_mask;
             node.style.inline_property_mask &= ~property_mask;
@@ -3858,8 +3862,8 @@
         return true;
     }
 
-    // A variable used exclusively for box dimensions cannot change descendant
-    // inherited styles. Re-run the complete cascade only on its consumers.
+    // Re-run the complete cascade only on dimension consumers when explicit
+    // inheritance does not require descendant style propagation.
     // Keep the ordinary subtree path for aliases, inherited values and pseudo
     // elements; this is intentionally a conservative, uncached fast path.
     bool recascade_dimension_custom_property(dom_node& root, const std::string& name)
@@ -3886,6 +3890,23 @@
                 || property == "min-height" || property == "max-height"
                 || property == "grid-template-columns" || property == "grid-template-rows";
         };
+        // Non-inherited-by-default dimensions can still explicitly inherit.
+        // Include variable-resolved inheritance, not just literal tokens. If
+        // present, the ordinary ancestor-first subtree cascade propagates it.
+        std::vector<const css_rule*> inheritance_rules;
+        for (const auto& rule : css_rules) {
+            bool potential = false;
+            for (const auto& declaration : rule.declarations()) {
+                if (!is_dimension(declaration.name)) continue;
+                if (trim_css_view(declaration.value) == "inherit") return false;
+                potential = potential || declaration.value.find("var(") != std::string::npos;
+            }
+            if (potential) {
+                std::string origin;
+                if (split_pseudo_element_selector(rule.selector(), origin) != 0) return false;
+                inheritance_rules.push_back(&rule);
+            }
+        }
         const auto references = [&](std::string_view value) {
             return css_variable_references(value).contains(name);
         };
@@ -3924,9 +3945,21 @@
             }
             bool affected = &node == &root;
             for (const auto& [property, value] : node.authored_style().declarations) {
+                if (is_dimension(property)
+                    && trim_css_view(resolve_css_value(node, value)) == "inherit") return false;
                 if (!references(value)) continue;
                 if (!is_dimension(property)) return false;
                 affected = true;
+            }
+            if (node.kind == dom_node_kind::element) {
+                for (const auto* rule : inheritance_rules) {
+                    if (!rule->media_matches || !css_rule_matches(node, *rule)) continue;
+                    for (const auto& declaration : rule->declarations()) {
+                        if (is_dimension(declaration.name)
+                            && trim_css_view(resolve_css_value(node, declaration.value)) == "inherit")
+                            return false;
+                    }
+                }
             }
             if (!affected && node.kind == dom_node_kind::element) {
                 affected = std::any_of(rules.begin(), rules.end(), [&](const auto* rule) {
