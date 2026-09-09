@@ -362,6 +362,7 @@
         dom_node* cascade_root{nullptr};
         bool subtree{false};
         std::string reason;
+        std::string custom_property;
     };
     bool batch_style_recascades{true};
     bool batch_connected_resource_style_recascades{true};
