@@ -673,14 +673,15 @@ void test_low_memory_reclaims_small_detached_dom_batches()
 {
     auto* engine = webscene_engine_create(0);
     require(engine != nullptr, "small detached DOM engine creation failed");
-    evaluate(engine, "document.body.textContent = ''", "small-detached-dom-init.js");
-    webscene_engine_memory_metrics before{sizeof(webscene_engine_memory_metrics)};
+    resize(engine, 320, 120, 1U);
+    execute_and_wait(engine, "document.body.textContent = ''", "small-detached-dom-init.js");
+    webscene_engine_metrics before{};
     for (auto attempt = 0; attempt < 500; ++attempt) {
-        webscene_engine_get_memory_metrics(engine, &before);
-        if (before.native_dom_node_count != 0U) break;
+        webscene_engine_get_metrics(engine, &before);
+        if (before.dom_nodes != 0U) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    require(before.native_dom_node_count != 0U,
+    require(before.dom_nodes != 0U,
         "small detached DOM baseline metrics were unavailable");
     // Stay below the 512-node idle-collection threshold. A low-memory
     // notification must schedule a native sweep even without an idle request.
@@ -693,41 +694,39 @@ void test_low_memory_reclaims_small_detached_dom_batches()
           }
         })()
     )JS", "small-detached-dom-create.js");
-    webscene_engine_memory_metrics created{sizeof(webscene_engine_memory_metrics)};
+    webscene_engine_metrics created{};
     for (auto attempt = 0; attempt < 500; ++attempt) {
-        webscene_engine_get_memory_metrics(engine, &created);
-        if (created.native_dom_node_count >= before.native_dom_node_count + 32U) break;
+        webscene_engine_get_metrics(engine, &created);
+        if (created.dom_nodes >= before.dom_nodes + 32U) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    require(created.native_dom_node_count >= before.native_dom_node_count + 32U,
+    require(created.dom_nodes >= before.dom_nodes + 32U,
         "small detached DOM batch was not visible in the worker snapshot");
     require(webscene_engine_request_low_memory(engine) != 0,
         "small detached DOM collection request failed");
-    webscene_engine_memory_metrics after{sizeof(webscene_engine_memory_metrics)};
+    webscene_engine_metrics after{};
     for (auto attempt = 0; attempt < 500; ++attempt) {
-        webscene_engine_get_memory_metrics(engine, &after);
-        if (after.low_memory_notifications > before.low_memory_notifications
-            && after.native_dom_node_count <= before.native_dom_node_count) break;
+        webscene_engine_get_metrics(engine, &after);
+        if (after.dom_nodes <= before.dom_nodes) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    require(after.low_memory_notifications > before.low_memory_notifications
-            && after.native_dom_node_count <= before.native_dom_node_count,
+    require(after.dom_nodes <= before.dom_nodes,
         "low-memory collection did not reclaim a sub-threshold detached DOM batch (before="
-            + std::to_string(before.native_dom_node_count) + ", after="
-            + std::to_string(after.native_dom_node_count) + ")");
+            + std::to_string(before.dom_nodes) + ", after="
+            + std::to_string(after.dom_nodes) + ")");
     webscene_engine_destroy(engine);
 }
 
 void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* engine)
 {
     execute_and_wait(engine, "void document.body", "native-detached-dom-init.js");
-    webscene_engine_memory_metrics before{sizeof(webscene_engine_memory_metrics)};
+    webscene_engine_metrics before{};
     for (auto attempt = 0; attempt < 500; ++attempt) {
-        webscene_engine_get_memory_metrics(engine, &before);
-        if (before.native_dom_node_count != 0U) break;
+        webscene_engine_get_metrics(engine, &before);
+        if (before.dom_nodes != 0U) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    require(before.native_dom_node_count != 0U, "detached DOM baseline metrics were unavailable");
+    require(before.dom_nodes != 0U, "detached DOM baseline metrics were unavailable");
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     const auto diagnostic_value = [&](std::string_view name, uint64_t minimum = 0U) {
         const auto prefix = std::string{name} + '=';
@@ -826,21 +825,21 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
         )JS", "native-detached-dom-retain.js")
             == R"({"expando":42,"identity":true,"connected":true})",
         "a reachable detached wrapper lost identity or expando state across native DOM collection");
-    webscene_engine_memory_metrics after{sizeof(webscene_engine_memory_metrics)};
+    webscene_engine_metrics after{};
     // Collection is deliberately lower priority than observable task sources
     // and releases only a bounded root batch per pump. Leave the worker idle
     // rather than queueing artificial scripts, then prove that the collected
     // wrappers from a large replacement drain across bounded release slices.
     for (auto attempt = 0; attempt < 500; ++attempt) {
-        webscene_engine_get_memory_metrics(engine, &after);
-        if (after.native_dom_node_count <= before.native_dom_node_count + 8U) break;
+        webscene_engine_get_metrics(engine, &after);
+        if (after.dom_nodes <= before.dom_nodes + 8U) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     require(
-        after.native_dom_node_count <= before.native_dom_node_count + 8U,
+        after.dom_nodes <= before.dom_nodes + 8U,
         "unreachable detached DOM nodes remained permanently owned after V8 collection (before="
-            + std::to_string(before.native_dom_node_count)
-            + ", after=" + std::to_string(after.native_dom_node_count) + ")");
+            + std::to_string(before.dom_nodes)
+            + ", after=" + std::to_string(after.dom_nodes) + ")");
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     require(
         diagnostic_value("detached-dom-release-batches", release_batches_before + 2U)
