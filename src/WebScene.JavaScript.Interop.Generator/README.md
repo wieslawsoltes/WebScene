@@ -149,3 +149,38 @@ assembly. The policy changes codec behavior explicitly without changing the
 TypeScript declarations, and writes still avoid intermediate DTOs, projected
 arrays, and per-element boxing for struct arrays. Invalid or incompatible policy
 entries produce `WEBSCENEJS004`.
+
+## Adapter-valued properties
+
+Instance and global properties whose declared value is a generated callback
+adapter use ABI 3 retained handles. Their getters return
+`JavaScriptObjectReference` (or `JavaScriptObjectReference?` for optional/nullable
+properties), rather than attempting to deserialize an abstract adapter class.
+Promise-valued properties await the promise before returning the handle. Writable
+adapter-valued instance properties likewise accept a handle; an existing adapter
+exposes its registered handle through `JavaScriptReference`.
+
+For example, `GetDotnetBridgeAsync()` now returns the JavaScript bridge object's
+handle. It does not recover the original registered .NET adapter instance or
+create a typed proxy for its methods. Keep the adapter instance separately when
+that is needed. Callback registration APIs and adapter classes are unchanged.
+
+Each non-null getter result owns a retained native handle. Release it through the
+same invoker when finished, independently of the adapter's registration lifetime:
+
+```csharp
+var bridgeReference = await host.GetDotnetBridgeAsync();
+try
+{
+    // Use bridgeReference in supported native interop operations.
+}
+finally
+{
+    await invoker.ReleaseAsync(bridgeReference);
+}
+```
+
+This changes the return type of previously unsupported adapter-valued getters.
+Ordinary generated-model and binding-valued properties retain their existing
+mapping. Mixed unions and collections of adapters are not projected to handles
+by this property-specific behavior.

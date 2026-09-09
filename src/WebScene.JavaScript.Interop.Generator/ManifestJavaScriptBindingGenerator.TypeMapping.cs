@@ -93,6 +93,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     : "double",
             "typeParameter" => EscapeIdentifier(type.GetProperty("name").GetString()!),
             "reference" => ResolveReference(generation, type),
+            "retainedHandle" => "global::WebScene.JavaScript.Interop.JavaScriptObjectReference",
             "union" => ResolveUnion(generation, type, member),
             _ => null
         };
@@ -1185,6 +1186,29 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         return mapping;
     }
 
+    // Adapter classes implement callbacks in .NET; they cannot be constructed
+    // from a JavaScript object. Property access returns an owned native handle.
+    private static JsonElement AdapterPropertyWireType(
+        GenerationContext generation, JsonElement type, bool optional)
+    {
+        var payload = type;
+        var nullable = optional;
+        if (Kind(type) == "union")
+        {
+            if (!TryGetBinaryUnionPayloadType(type, out payload)) return type;
+            nullable |= FlattenUnionTypes(type).Any(candidate => Kind(candidate) is "null" or "undefined");
+        }
+        if (Kind(payload) != "reference"
+            || !MapType(generation, payload, optional: false, "adapter property").IsObjectReferenceProvider)
+        {
+            return type;
+        }
+        using var projected = JsonDocument.Parse(nullable
+            ? "{\"kind\":\"union\",\"types\":[{\"kind\":\"retainedHandle\"},{\"kind\":\"null\"}]}"
+            : "{\"kind\":\"retainedHandle\"}");
+        return projected.RootElement.Clone();
+    }
+
     private static bool CanEmitBinaryType(
         GenerationContext generation,
         JsonElement type)
@@ -1192,7 +1216,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var kind = Kind(type);
         if (kind is "string" or "number" or "boolean" or "null"
             or "undefined" or "object" or "any" or "unknown"
-            or "callback")
+            or "callback" or "retainedHandle")
         {
             return true;
         }
@@ -1278,6 +1302,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var result = generation.NextLocal("binaryValue");
         switch (kind)
         {
+            case "retainedHandle":
+                source.Append(indent).Append("var ").Append(result).Append(" = writer.WriteHandle(")
+                    .Append(valueExpression).AppendLine(");");
+                return result;
             case "string":
                 source.Append(indent).Append("var ").Append(result)
                     .Append(" = writer.WriteString(")
@@ -1480,6 +1508,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var result = generation.NextLocal("binaryResult");
         switch (kind)
         {
+            case "retainedHandle":
+                source.Append(indent).Append("var ").Append(result).Append(" = ")
+                    .Append(valueExpression).AppendLine(".GetHandle();");
+                return result;
             case "string":
                 source.Append(indent).Append("var ").Append(result)
                     .Append(" = ").Append(valueExpression)
@@ -1729,6 +1761,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
             && (codec.ClrType == type || codec.ClrType == "global::" + type))
            || type is "bool" or "double" or "int" or "long"
             or "global::System.Numerics.BigInteger"
+            or "global::WebScene.JavaScript.Interop.JavaScriptObjectReference"
            || type.StartsWith("(", StringComparison.Ordinal)
            && !type.EndsWith("?", StringComparison.Ordinal);
 

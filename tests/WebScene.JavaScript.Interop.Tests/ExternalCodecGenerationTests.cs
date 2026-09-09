@@ -372,11 +372,11 @@ public sealed partial class ExternalCodecGenerationTests
         Emit(compilation);
     }
 
-    private static bool Run(Compilation compilation, byte[] contracts)
+    private static bool Run(Compilation compilation, byte[] contracts, IJavaScriptBinaryTransport? transport = null)
     {
         AssemblyLoadContext.Default.LoadFromStream(new MemoryStream(contracts));
         var assembly = AssemblyLoadContext.Default.LoadFromStream(new MemoryStream(Emit(compilation)));
-        using var invoker = new NativeJavaScriptInvoker(new EchoTransport());
+        using var invoker = new NativeJavaScriptInvoker(transport ?? new EchoTransport());
         return (bool)assembly.GetType("Generated.Bridge")!.GetMethod("Run")!.Invoke(null, [invoker])!;
     }
 
