@@ -4,7 +4,7 @@
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';webscene;'))">$(PackageTags);webscene</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';web-ui;'))">$(PackageTags);web-ui</PackageTags>
     <PackageTags Condition="!$([System.String]::Copy(';$(PackageTags);').Contains(';native-ui;'))">$(PackageTags);native-ui</PackageTags>
-    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Fixes hydrated iframe document replacement so loaded content retires the provisional about:blank layout root and occupies the iframe viewport, restoring embedded multi-chart rendering. Adds native lifecycle and WebPlatform contract coverage while retaining native ABI 3.</PackageReleaseNotes>
+    <PackageReleaseNotes Condition="'$(PackageReleaseNotes)' == ''">Adds generated ABI 3 codecs for external models, improves cross-platform web-font decoding, caches system-font probes and text shaping, and reduces CSS-variable resize recalculation while preserving dimension inheritance. Fixes detached DOM cleanup after memory-pressure collection and includes cross-platform runtime fixes.</PackageReleaseNotes>
   </PropertyGroup>
   <PropertyGroup Condition="'$(IsPackable)' == 'true' and '$(PackageReadmeFile)' == ''">
     <PackageReadmeFile>README.md</PackageReadmeFile>
