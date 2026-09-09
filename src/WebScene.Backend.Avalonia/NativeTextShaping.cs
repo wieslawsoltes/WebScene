@@ -55,34 +55,60 @@ public static class NativeTextShaping
     // Cache the immutable native glyph container as well as HarfBuzz output.
     // Draw coordinates and color are supplied at replay time. The short-run
     // limit and LRU bound native font/blob ownership to a small working set.
-    private sealed class TextBlobCache
+    internal sealed class TextBlobCache(int maximumEntries = 512) : IDisposable
     {
         private readonly record struct Key(int Face, string Text, float Size, float Scale,
             float Skew, bool Bold, bool AutoHint, SKTextEncoding Encoding, FontRasterizationProfile Profile);
-        private sealed record Entry(Key Key, WeakReference<SKTypeface> Face, SKTextBlob Blob);
+        internal sealed class BorrowedBlob(SKTextBlob blob)
+        {
+            internal SKTextBlob Blob { get; } = blob;
+            internal int Readers;
+            internal bool Retired;
+        }
+        private sealed record Entry(Key Key, WeakReference<SKTypeface> Face, BorrowedBlob Value);
         private readonly object _gate = new();
         private readonly Dictionary<Key, LinkedListNode<Entry>> _entries = [];
         private readonly LinkedList<Entry> _order = [];
+        private bool _disposed;
 
         public bool Draw(SKCanvas canvas, SKShaper shaper, string text, SKShaper.Result shaped,
             SKPaint paint, float x, float baseline, float deviceScale, NativeFontRasterizationMode? mode)
         {
-            if (text.Length > 256 || shaped.Codepoints.Length > 512) return false;
+            var borrowed = Acquire(shaper, text, shaped, paint, deviceScale, mode);
+            if (borrowed is null) return false;
+            try
+            {
+                canvas.DrawText(borrowed.Blob, x, baseline, paint);
+                return true;
+            }
+            finally
+            {
+                Release(borrowed);
+            }
+        }
+
+        internal BorrowedBlob? Acquire(SKShaper shaper, string text, SKShaper.Result shaped,
+            SKPaint paint, float deviceScale, NativeFontRasterizationMode? mode)
+        {
+            if (maximumEntries <= 0 || text.Length > 256 || shaped.Codepoints.Length > 512
+                || shaped.Codepoints.Length == 0 || shaped.Codepoints.Length != shaped.Points.Length)
+                return null;
             var face = shaper.Typeface;
             var key = new Key(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(face), text,
                 paint.TextSize, paint.TextScaleX, paint.TextSkewX, paint.FakeBoldText, paint.IsAutohinted, paint.TextEncoding,
                 ResolveFontRasterizationProfile(deviceScale, mode));
             lock (_gate)
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
                 if (_entries.TryGetValue(key, out var found))
                 {
                     if (found.Value.Face.TryGetTarget(out var previous) && ReferenceEquals(previous, face))
                     {
                         _order.Remove(found); _order.AddLast(found);
-                        canvas.DrawText(found.Value.Blob, x, baseline, paint);
-                        return true;
+                        found.Value.Value.Readers++;
+                        return found.Value.Value;
                     }
-                    _entries.Remove(key); _order.Remove(found); found.Value.Blob.Dispose();
+                    _entries.Remove(key); _order.Remove(found); Retire(found.Value.Value);
                 }
                 using var font = paint.ToFont();
                 font.Typeface = face;
@@ -96,15 +122,42 @@ public static class NativeTextShaping
                     run.GetPositionSpan()[index] = shaped.Points[index];
                 }
                 var blob = builder.Build();
-                if (blob is null) return false;
-                if (_entries.Count == 512)
+                if (blob is null) return null;
+                if (_entries.Count == maximumEntries)
                 {
                     var oldest = _order.First!;
-                    _entries.Remove(oldest.Value.Key); _order.RemoveFirst(); oldest.Value.Blob.Dispose();
+                    _entries.Remove(oldest.Value.Key); _order.RemoveFirst(); Retire(oldest.Value.Value);
                 }
-                _entries.Add(key, _order.AddLast(new Entry(key, new WeakReference<SKTypeface>(face), blob)));
-                canvas.DrawText(blob, x, baseline, paint);
-                return true;
+                var value = new BorrowedBlob(blob) { Readers = 1 };
+                _entries.Add(key, _order.AddLast(new Entry(key, new WeakReference<SKTypeface>(face), value)));
+                return value;
+            }
+        }
+
+        // Readers pin a blob across native drawing without holding the cache lock.
+        // Eviction releases cache ownership; the final reader disposes it.
+        private static void Retire(BorrowedBlob value)
+        {
+            value.Retired = true;
+            if (value.Readers == 0) value.Blob.Dispose();
+        }
+
+        internal void Release(BorrowedBlob value)
+        {
+            lock (_gate)
+            {
+                if (--value.Readers == 0 && value.Retired) value.Blob.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _disposed = true;
+                foreach (var entry in _order) Retire(entry.Value);
+                _entries.Clear();
+                _order.Clear();
             }
         }
     }

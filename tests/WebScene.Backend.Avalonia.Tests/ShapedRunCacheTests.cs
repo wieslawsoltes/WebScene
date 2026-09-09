@@ -107,4 +107,107 @@ public sealed class ShapedRunCacheTests
         Assert.Equal(before, cache.Occupancy);
         Assert.InRange(cache.Occupancy.Bytes, 1, 1024);
     }
+    [Fact]
+    public void BlobEvictionHonorsLruAndPinsActiveReaders()
+    {
+        using var cache = new NativeTextShaping.TextBlobCache(2);
+        using var shaper = new SKShaper(SKTypeface.Default);
+        using var paint = new SKPaint { TextSize = 18 };
+        NativeTextShaping.TextBlobCache.BorrowedBlob Acquire(string text)
+            => cache.Acquire(shaper, text, shaper.Shape(text, paint), paint, 1, null)!;
+        var first = Acquire("one");
+        cache.Release(first);
+        var second = Acquire("two");
+        cache.Release(second);
+        var reader = Acquire("one");
+        Assert.Same(first, reader);
+        var third = Acquire("three");
+        cache.Release(third);
+        Assert.Equal(IntPtr.Zero, second.Blob.Handle);
+        var fourth = Acquire("four");
+        cache.Release(fourth);
+        Assert.NotEqual(IntPtr.Zero, first.Blob.Handle);
+        cache.Release(reader);
+        Assert.Equal(IntPtr.Zero, first.Blob.Handle);
+        cache.Dispose();
+        Assert.Equal(IntPtr.Zero, third.Blob.Handle);
+        Assert.Equal(IntPtr.Zero, fourth.Blob.Handle);
+    }
+
+    [Fact]
+    public void DisposingCacheDefersDisposalUntilLastReaderReturns()
+    {
+        using var cache = new NativeTextShaping.TextBlobCache();
+        using var shaper = new SKShaper(SKTypeface.Default);
+        using var paint = new SKPaint { TextSize = 18 };
+        var shaped = shaper.Shape("same", paint);
+        var first = cache.Acquire(shaper, "same", shaped, paint, 1, null)!;
+        var second = cache.Acquire(shaper, "same", shaped, paint, 1, null)!;
+        Assert.Same(first, second);
+        cache.Dispose();
+        cache.Release(first);
+        Assert.NotEqual(IntPtr.Zero, second.Blob.Handle);
+        cache.Release(second);
+        Assert.Equal(IntPtr.Zero, second.Blob.Handle);
+    }
+
+    [Fact]
+    public void BlobCacheRejectsOversizedRunsAndSeparatesRasterizationProfiles()
+    {
+        using var cache = new NativeTextShaping.TextBlobCache();
+        using var shaper = new SKShaper(SKTypeface.Default);
+        using var paint = new SKPaint { TextSize = 18 };
+        var text = new string('W', 257);
+        Assert.Null(cache.Acquire(shaper, text, shaper.Shape(text, paint), paint, 1, null));
+        var shaped = shaper.Shape("label", paint);
+        var first = cache.Acquire(shaper, "label", shaped, paint, 1,
+            NativeTextShaping.NativeFontRasterizationMode.Current)!;
+        var second = cache.Acquire(shaper, "label", shaped, paint, 2,
+            NativeTextShaping.NativeFontRasterizationMode.Current)!;
+        Assert.NotSame(first, second);
+        paint.Color = SKColors.Red;
+        var colored = cache.Acquire(shaper, "label", shaped, paint, 1,
+            NativeTextShaping.NativeFontRasterizationMode.Current)!;
+        Assert.Same(first, colored);
+        cache.Release(first);
+        cache.Release(second);
+        cache.Release(colored);
+    }
+
+    [Fact]
+    public void ConcurrentDrawingDuringEvictionMatchesUncachedPixels()
+    {
+        using var cache = new NativeTextShaping.TextBlobCache(2);
+        Parallel.For(0, 8, worker =>
+        {
+            using var shaper = new SKShaper(SKTypeface.Default);
+            using var paint = new SKPaint { TextSize = 20, Color = SKColors.Black };
+            using var expected = new SKBitmap(300, 60);
+            using var actual = new SKBitmap(300, 60);
+            using var expectedCanvas = new SKCanvas(expected);
+            using var actualCanvas = new SKCanvas(actual);
+            for (var i = 0; i < 100; i++)
+            {
+                var text = $"office a\u0301 {worker} {i % 4}";
+                var shaped = shaper.Shape(text, paint);
+                expectedCanvas.Clear(SKColors.White);
+                actualCanvas.Clear(SKColors.White);
+                using var font = paint.ToFont();
+                NativeTextShaping.ApplyFontRasterizationProfile(font, 2,
+                    NativeTextShaping.NativeFontRasterizationMode.Current);
+                using var builder = new SKTextBlobBuilder();
+                var run = builder.AllocatePositionedRun(font, shaped.Codepoints.Length);
+                for (var j = 0; j < shaped.Codepoints.Length; j++)
+                {
+                    run.GetGlyphSpan()[j] = (ushort)shaped.Codepoints[j];
+                    run.GetPositionSpan()[j] = shaped.Points[j];
+                }
+                using var blob = builder.Build();
+                expectedCanvas.DrawText(blob, 13.25f, 30.125f, paint);
+                Assert.True(cache.Draw(actualCanvas, shaper, text, shaped, paint, 13.25f, 30.125f, 2,
+                    NativeTextShaping.NativeFontRasterizationMode.Current));
+                Assert.Equal(expected.Pixels, actual.Pixels);
+            }
+        });
+    }
 }
