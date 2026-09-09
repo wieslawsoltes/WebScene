@@ -141,6 +141,14 @@
         },
         "include": {
           "type": "boolean"
+        },
+        "propertyMappings": {
+          "description": "For external typeMappings, maps TypeScript property names to CLR property names. Unspecified names use PascalCase.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "additionalProperties": false

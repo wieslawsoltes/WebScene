@@ -441,7 +441,9 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         StringBuilder source,
         GenerationContext generation,
         string declarationName,
-        IReadOnlyList<ObjectModelProperty> properties)
+        IReadOnlyList<ObjectModelProperty> properties,
+        IReadOnlyList<string>? constructorProperties = null,
+        bool external = false)
     {
         var requiredCount = properties.Count(static property => !property.Optional);
         source.AppendLine()
@@ -473,12 +475,16 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     .AppendLine("        {");
             }
             var indent = property.Optional ? "            " : "        ";
+            var expression = "value." + propertyName + (property.Optional ? ".Value!" : string.Empty);
+            if (external && !property.Optional)
+            {
+                var local = generation.NextLocal("externalProperty");
+                source.Append(indent).Append(property.Mapping.CSharpType).Append(' ')
+                    .Append(local).Append(" = ").Append(expression).AppendLine(";");
+                expression = local;
+            }
             var value = EmitBinaryWriteValue(
-                source,
-                generation,
-                valueType,
-                "value." + propertyName + (property.Optional ? ".Value!" : string.Empty),
-                indent);
+                source, generation, valueType, expression, indent);
             source.Append(indent).Append("writer.SetObjectProperty(result, propertyIndex++, ")
                 .Append(Literal(property.JavaScriptName)).Append("u8, ")
                 .Append(value).AppendLine(");");
@@ -539,6 +545,14 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 .AppendLine(" = default;")
                 .AppendLine("        }");
             values.Add((property, localOptional));
+        }
+        if (constructorProperties is not null)
+        {
+            source.Append("        return new ").Append(declarationName).Append('(')
+                .Append(string.Join(", ", constructorProperties.Select(name =>
+                    values.Single(value => value.Property.CSharpName == name).Local)))
+                .AppendLine(");").AppendLine("    }");
+            return;
         }
         source.AppendLine("        return new()")
             .AppendLine("        {");

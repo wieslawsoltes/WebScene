@@ -113,6 +113,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     referenceName!,
                     out var sourceType)
                 && Kind(sourceType) == "typeAlias"
+                && !generation.ExternalCodecs.ContainsKey(sourceName)
                 && sourceType.TryGetProperty("aliasTarget", out var aliasTarget))
             {
                 referenceAliasMapping = MapType(
@@ -895,19 +896,19 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         }
         if (generation.TypeMappings.TryGetValue(name, out var mapping))
         {
-            return mapping;
+            return ResolveExternalMapping(generation, qualifiedName ?? name, mapping);
         }
         if (qualifiedName is not null
             && generation.TypeMappings.TryGetValue(qualifiedName, out mapping))
         {
-            return mapping;
+            return ResolveExternalMapping(generation, qualifiedName ?? name, mapping);
         }
         if (type.TryGetProperty("display", out var display)
             && generation.TypeMappings.TryGetValue(
                 display.GetString()!,
                 out mapping))
         {
-            return mapping;
+            return ResolveExternalMapping(generation, qualifiedName ?? name, mapping);
         }
         var sourceName = qualifiedName ?? name;
         if (TryGetType(generation.Types, sourceName, name, out var sourceType))
@@ -1162,6 +1163,28 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                              : ")")))
            + " }";
 
+    private static string ResolveExternalMapping(
+        GenerationContext generation,
+        string sourceName,
+        string mapping)
+    {
+        // Handle mappings already have a native wire representation. Other
+        // external contracts do not own the generated model codec methods.
+        if (mapping.TrimEnd('?') is not "global::WebScene.JavaScript.Interop.JavaScriptObjectReference"
+            and not "global::WebScene.JavaScript.Interop.JavaScriptFunctionReference"
+            && !TryPrepareExternalCodec(generation, sourceName, mapping, out var reason)
+            && generation.ReportedExternalMappings.Add(sourceName))
+        {
+            generation.Context.ReportDiagnostic(Diagnostic.Create(
+                ExternalMappingWithoutBinaryCodec,
+                Location.None,
+                sourceName,
+                mapping,
+                reason));
+        }
+        return mapping;
+    }
+
     private static bool CanEmitBinaryType(
         GenerationContext generation,
         JsonElement type)
@@ -1223,6 +1246,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var sourceName = type.TryGetProperty("qualifiedName", out var qualified)
             ? qualified.GetString()!
             : shortName;
+        if (generation.ExternalCodecs.ContainsKey(sourceName))
+        {
+            return true;
+        }
         if (!generation.ModelNames.ContainsKey(sourceName)
             && !generation.ModelNames.ContainsKey(shortName))
         {
@@ -1425,9 +1452,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 {
                     source.Append(indent).Append("var ").Append(result)
                         .Append(" = ").Append(
-                            QualifyGeneratedBinaryType(
-                                generation,
-                                mapping.NonNullableCSharpType))
+                            BinaryReferenceCodecType(generation, type, mapping.NonNullableCSharpType))
                         .Append(".__WebSceneWriteBinary(ref writer, ")
                         .Append(valueExpression).AppendLine(");");
                 }
@@ -1630,9 +1655,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 {
                     source.Append(indent).Append("var ").Append(result)
                         .Append(" = ").Append(
-                            QualifyGeneratedBinaryType(
-                                generation,
-                                mapping.NonNullableCSharpType))
+                            BinaryReferenceCodecType(generation, type, mapping.NonNullableCSharpType))
                         .Append(".__WebSceneReadBinary(")
                         .Append(valueExpression).Append(", ")
                         .Append(invokerExpression).AppendLine(");");
@@ -1702,6 +1725,16 @@ public sealed partial class ManifestJavaScriptBindingGenerator
             or "global::System.Numerics.BigInteger"
            || type.StartsWith("(", StringComparison.Ordinal)
            && !type.EndsWith("?", StringComparison.Ordinal);
+
+    private static string BinaryReferenceCodecType(
+        GenerationContext generation, JsonElement type, string clrType)
+    {
+        var name = type.TryGetProperty("qualifiedName", out var qualified)
+            ? qualified.GetString()! : type.GetProperty("name").GetString()!;
+        return generation.ExternalCodecs.TryGetValue(name, out var codec)
+            ? "global::" + generation.Namespace + "." + codec.Name
+            : QualifyGeneratedBinaryType(generation, clrType);
+    }
 
     private static string QualifyGeneratedBinaryType(
         GenerationContext generation,
