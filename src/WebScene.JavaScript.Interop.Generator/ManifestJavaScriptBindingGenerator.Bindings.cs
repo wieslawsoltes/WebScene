@@ -123,6 +123,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var effectiveType = Kind(declaredType) == "promise"
             ? declaredType.GetProperty("result")
             : declaredType;
+        effectiveType = AdapterPropertyWireType(generation, effectiveType, property.GetProperty("optional").GetBoolean());
         var mapping = MapType(
             generation,
             effectiveType,

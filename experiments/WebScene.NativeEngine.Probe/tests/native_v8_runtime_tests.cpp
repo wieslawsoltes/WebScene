@@ -79,6 +79,7 @@ uint8_t measure_baseline_fixture_text(
 #include "native_v8_runtime_diagnostics_tests.inc"
 #include "native_resource_failure_diagnostics_tests.inc"
 #include "native_v8_runtime_css_layout_tests.inc"
+#include "native_v8_runtime_dimension_variables_tests.inc"
 #include "native_go_to_overflow_tests.inc"
 #include "native_v8_runtime_media_query_tests.inc"
 #include "native_v8_runtime_animation_cssom_tests.inc"
@@ -309,9 +310,50 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
-        if (selected == "detached-dom-gc") {
+        if (selected == "dimension-variable-compatibility") {
+            const std::array tests{
+                test_dimension_custom_property_recascade,
+                test_dimension_custom_property_inheritance,
+                test_tradingview_settings_subgrid_keeps_controls_on_their_rows,
+                test_responsive_positioned_sizing,
+                test_attribute_selector_invalidation,
+                test_shadow_dom_composed_runtime_geometry,
+                test_inline_relative_line_height_uses_cascaded_font_size,
+                test_font_relative_box_lengths_follow_inherited_font_context,
+                test_important_custom_property_cascade_reaches_paint,
+                test_detached_style_retains_text_and_activates_when_connected,
+                test_flex_gap_and_variable_text_metrics,
+                test_calc_percent_with_pixel_offset,
+                test_window_post_message_coalesces_style_recascade
+            };
+            for (const auto test : tests) {
+                auto* engine = webscene_engine_create(0);
+                require(engine != nullptr, "compatibility engine creation failed");
+                test(engine);
+                webscene_engine_destroy(engine);
+            }
+            test_outer_dynamic_recascade_preserves_iframe_cascade();
+            return 0;
+        }
+        if (selected == "dimension-inheritance") {
+            auto* engine = webscene_engine_create(0);
+            require(engine != nullptr, "inheritance engine creation failed");
+            test_dimension_custom_property_inheritance(engine);
+            webscene_engine_destroy(engine);
+            return 0;
+        }
+        if (selected == "dimension-variables") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
+            test_dimension_custom_property_recascade(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "detached-dom-gc") {
+            test_low_memory_reclaims_small_detached_dom_batches();
+            auto* focused_engine = webscene_engine_create(0);
+            require(focused_engine != nullptr, "focused engine creation failed");
+            resize(focused_engine, 320, 120, 1U);
             test_detached_dom_wrappers_do_not_permanently_root_nodes(
                 focused_engine);
             webscene_engine_destroy(focused_engine);
@@ -563,6 +605,8 @@ int main()
         "typeof IntersectionObserverEntry !== 'function') "
         "throw new Error('IntersectionObserver bootstrap missing')",
         "intersection-observer-bootstrap.js");
+    test_dimension_custom_property_recascade(engine);
+    test_dimension_custom_property_inheritance(engine);
     test_responsive_positioned_sizing(engine);
     test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(engine);
     test_go_to_tab_lines_and_calendar_scroll_ranges(engine);
@@ -742,6 +786,7 @@ int main()
     test_dom_element_constructor_identity(engine);
     test_provisional_frame_focus_and_document_event_identity(engine);
     test_initial_frame_document_write_and_hidden_style(engine);
+    test_low_memory_reclaims_small_detached_dom_batches();
     test_detached_dom_wrappers_do_not_permanently_root_nodes(engine);
     test_connected_style_recascade_skips_detached_wrapper_retention(engine);
     test_resize_updates_device_pixel_ratio(engine);

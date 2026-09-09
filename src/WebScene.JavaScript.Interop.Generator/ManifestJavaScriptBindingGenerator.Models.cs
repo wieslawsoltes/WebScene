@@ -441,16 +441,22 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         StringBuilder source,
         GenerationContext generation,
         string declarationName,
-        IReadOnlyList<ObjectModelProperty> properties)
+        IReadOnlyList<ObjectModelProperty> properties,
+        IReadOnlyList<string>? constructorProperties = null,
+        bool external = false,
+        bool isValueType = false)
     {
         var requiredCount = properties.Count(static property => !property.Optional);
         source.AppendLine()
             .AppendLine("    internal static uint __WebSceneWriteBinary(")
             .AppendLine("        ref global::WebScene.JavaScript.Interop.JavaScriptBinaryWriter writer,")
             .Append("        ").Append(declarationName).AppendLine(" value)")
-            .AppendLine("    {")
-            .AppendLine("        global::System.ArgumentNullException.ThrowIfNull(value);")
-            .Append("        var propertyCount = ").Append(requiredCount)
+            .AppendLine("    {");
+        if (!isValueType)
+        {
+            source.AppendLine("        global::System.ArgumentNullException.ThrowIfNull(value);");
+        }
+        source.Append("        var propertyCount = ").Append(requiredCount)
             .AppendLine(";");
         foreach (var property in properties.Where(static property => property.Optional))
         {
@@ -473,12 +479,20 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     .AppendLine("        {");
             }
             var indent = property.Optional ? "            " : "        ";
+            var expression = "value." + propertyName + (property.Optional ? ".Value!" : string.Empty);
+            if (property.ExternalNumericType is not null)
+            {
+                expression = "__WebSceneWriteInt64(" + expression + ")";
+            }
+            if (external && !property.Optional)
+            {
+                var local = generation.NextLocal("externalProperty");
+                source.Append(indent).Append(property.Mapping.CSharpType).Append(' ')
+                    .Append(local).Append(" = ").Append(expression).AppendLine(";");
+                expression = local;
+            }
             var value = EmitBinaryWriteValue(
-                source,
-                generation,
-                valueType,
-                "value." + propertyName + (property.Optional ? ".Value!" : string.Empty),
-                indent);
+                source, generation, valueType, expression, indent);
             source.Append(indent).Append("writer.SetObjectProperty(result, propertyIndex++, ")
                 .Append(Literal(property.JavaScriptName)).Append("u8, ")
                 .Append(value).AppendLine(");");
@@ -499,6 +513,11 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var values = new List<(ObjectModelProperty Property, string Local)>();
         foreach (var property in properties)
         {
+            if (property.ExternalOptional is not null)
+            {
+                values.Add((property, EmitExternalOptionalRead(source, generation, property)));
+                continue;
+            }
             if (!property.Optional)
             {
                 var local = EmitBinaryReadValue(
@@ -508,6 +527,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     "value.GetRequiredProperty(" + Literal(property.JavaScriptName) + "u8)",
                     "invoker",
                     "        ");
+                if (property.ExternalNumericType is not null)
+                {
+                    local = "__WebSceneReadInt64(" + local + ")";
+                }
                 values.Add((property, local));
                 continue;
             }
@@ -539,6 +562,14 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 .AppendLine(" = default;")
                 .AppendLine("        }");
             values.Add((property, localOptional));
+        }
+        if (constructorProperties is not null)
+        {
+            source.Append("        return new ").Append(declarationName).Append('(')
+                .Append(string.Join(", ", constructorProperties.Select(name =>
+                    values.Single(value => value.Property.CSharpName == name).Local)))
+                .AppendLine(");").AppendLine("    }");
+            return;
         }
         source.AppendLine("        return new()")
             .AppendLine("        {");

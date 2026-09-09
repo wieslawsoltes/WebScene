@@ -141,6 +141,31 @@
         },
         "include": {
           "type": "boolean"
+        },
+        "optionalProperties": {
+          "description": "Explicit semantics for optional TypeScript properties mapped to ordinary external CLR properties. Omitted entries retain JavaScriptOptional<T> semantics.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["write", "read"],
+            "properties": {
+              "write": { "const": "always" },
+              "read": { "enum": ["reject", "null", "default"] },
+              "default": { "type": ["string", "number", "boolean", "null"] }
+            },
+            "if": { "properties": { "read": { "const": "default" } } },
+            "then": { "required": ["default"] },
+            "else": { "not": { "required": ["default"] } },
+            "additionalProperties": false
+          }
+        },
+        "propertyMappings": {
+          "description": "For external typeMappings, maps TypeScript property names to CLR property names. Unspecified names use PascalCase.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "additionalProperties": false

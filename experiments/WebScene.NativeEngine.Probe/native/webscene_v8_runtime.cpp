@@ -4545,6 +4545,14 @@ void v8_dom_runtime::notify_low_memory()
     auto isolate_locker = impl_->lock_shared_isolate();
     v8::Isolate::Scope isolate_scope(impl_->isolate);
     impl_->isolate->LowMemoryNotification();
+    // Idle tasks may previously have declined to collect weak wrappers. Now
+    // that V8 has collected, revisit roots in the normal bounded idle slices,
+    // including workloads smaller than the mutation-triggered GC threshold.
+    if (!impl_->detached_dom_roots.empty()) {
+        impl_->detached_dom_gc_requested = true;
+        impl_->detached_dom_gc_deferred_once = false;
+        impl_->detached_dom_gc_retry_count = 0U;
+    }
 }
 
 void v8_dom_runtime::signal_animation_frame(double timestamp_ms)

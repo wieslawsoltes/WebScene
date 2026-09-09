@@ -1,0 +1,225 @@
+{
+  "date": "2026-09-09",
+  "platform": "Windows x64",
+  "runtime": ".NET 10",
+  "command": "dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release -- probe text-cache",
+  "notes": "Warm repeated-label CPU microbenchmark; no GPU context. Managed allocations exclude native Skia memory. Not an end-to-end or cross-platform performance claim.",
+  "samples": [
+    {
+      "round": 0,
+      "operation": "shape_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 5.1399,
+      "managedBytesPerOperation": 1824.0128,
+      "cpuBitmap": true
+    },
+    {
+      "round": 0,
+      "operation": "shape_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 0.22379000000000002,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 0,
+      "operation": "draw_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 7.56773,
+      "managedBytesPerOperation": 2144,
+      "cpuBitmap": true
+    },
+    {
+      "round": 0,
+      "operation": "draw_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 3.42009,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 1,
+      "operation": "draw_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 3.3927099999999997,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 1,
+      "operation": "draw_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 8.98882,
+      "managedBytesPerOperation": 2144,
+      "cpuBitmap": true
+    },
+    {
+      "round": 1,
+      "operation": "shape_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 0.33883,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 1,
+      "operation": "shape_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 4.08424,
+      "managedBytesPerOperation": 1824,
+      "cpuBitmap": true
+    },
+    {
+      "round": 2,
+      "operation": "shape_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 3.45819,
+      "managedBytesPerOperation": 1824,
+      "cpuBitmap": true
+    },
+    {
+      "round": 2,
+      "operation": "shape_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 0.26668000000000003,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 2,
+      "operation": "draw_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 9.11837,
+      "managedBytesPerOperation": 2144,
+      "cpuBitmap": true
+    },
+    {
+      "round": 2,
+      "operation": "draw_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 4.1037300000000005,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 3,
+      "operation": "draw_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 3.13337,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 3,
+      "operation": "draw_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 6.56867,
+      "managedBytesPerOperation": 2111.3208,
+      "cpuBitmap": true
+    },
+    {
+      "round": 3,
+      "operation": "shape_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 0.06602000000000001,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 3,
+      "operation": "shape_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 2.41988,
+      "managedBytesPerOperation": 1824,
+      "cpuBitmap": true
+    },
+    {
+      "round": 4,
+      "operation": "shape_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 2.53397,
+      "managedBytesPerOperation": 1824,
+      "cpuBitmap": true
+    },
+    {
+      "round": 4,
+      "operation": "shape_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 0.08357,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 4,
+      "operation": "draw_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 5.87389,
+      "managedBytesPerOperation": 2088,
+      "cpuBitmap": true
+    },
+    {
+      "round": 4,
+      "operation": "draw_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 2.24661,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 5,
+      "operation": "draw_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 2.13576,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 5,
+      "operation": "draw_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 5.4349099999999995,
+      "managedBytesPerOperation": 2088,
+      "cpuBitmap": true
+    },
+    {
+      "round": 5,
+      "operation": "shape_cached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 0.06967999999999999,
+      "managedBytesPerOperation": 0,
+      "cpuBitmap": true
+    },
+    {
+      "round": 5,
+      "operation": "shape_uncached",
+      "iterations": 10000,
+      "family": "Segoe UI",
+      "microsecondsPerOperation": 2.41932,
+      "managedBytesPerOperation": 1824,
+      "cpuBitmap": true
+    }
+  ]
+}
