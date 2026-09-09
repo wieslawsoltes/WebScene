@@ -22,3 +22,11 @@ For each Kestrel check use `dotnet run --no-build -c Release --project experimen
 - `--mesh-kestrel --verify-kestrel`
 
 Scope: this validates the existing Metal Kestrel path after integrating Windows changes, not full WebGPU/WebGL conformance, physical 60fps, exhaustive app behavior, or all skipped platform tests. Pan telemetry contains an engine ScriptErrors count of 1 despite zero Kestrel command-history errors and successful workload validation; this report does not claim zero engine-wide errors or a new performance baseline. No native user-resize recording or full Chrome comparison was repeated.
+
+## Stabilization follow-up
+
+The previously unexplained engine ScriptErrors counter came from the pan probe's own ResizeObserver: it appended to `p.widths` without initializing that array, and the observer was left connected after cleanup. The probe now initializes the array, disconnects the observer, prints runtime/JavaScript failures, and rejects Kestrel verification when uncaught JavaScript exceptions occurred. Two subsequent pan attempts recorded engine errors 0 before/after but were rejected for unrelated zero-button pointer movements from the desktop. They are not new interaction or performance passes.
+
+The graphics metadata fixture explicitly targets `win-x64`; an additional host-OS-dependent compiler assertion conflicted with that target on macOS/Linux. Removing that duplicate preserves the existing exact `clang-cl.exe` assertion. The tooling suite passes locally (16 passed, one Windows-specific test skipped).
+
+Final original-Kestrel BOX plus four-size resize/startup verification exited 0 with zero uncaught JavaScript exceptions; see `stabilization-box-resize.log.gz`. Production renderer code was unchanged by these probe/test corrections.

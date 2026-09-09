@@ -90,6 +90,14 @@ internal sealed class WebGpuDocumentProbeApp : Application
             }
             var uri = new Uri(path).AbsoluteUri;
             var view = new NativeWebSceneView(true, url => url == uri || url == path);
+            long documentExceptions = 0;
+            view.JavaScriptException += error =>
+            {
+                Interlocked.Increment(ref documentExceptions);
+                Console.Error.WriteLine("WebGPU document JavaScript exception: " + System.Text.Json.JsonSerializer.Serialize(error));
+            };
+            view.RuntimeFailed += error => Console.Error.WriteLine(
+                "WebGPU document runtime failure: " + System.Text.Json.JsonSerializer.Serialize(error));
             if (arguments.Contains("--verify-webgpu")) view.EnablePerformanceMonitoring();
             desktop.MainWindow = new Window
             {
@@ -226,7 +234,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                                     """);
                             await view.EvaluateTextAsync("""
                                 (()=>{
-                                  const p=globalThis.kestrelPanProbe={events:[],captures:[],frames:[]};
+                                  const p=globalThis.kestrelPanProbe={events:[],captures:[],frames:[],widths:[]};
                                   p.originalRaf=window.requestAnimationFrame;
                                   p.raf=callback=>p.originalRaf.call(window,function(timestamp){
                                     const start=performance.now();
@@ -331,7 +339,7 @@ internal sealed class WebGpuDocumentProbeApp : Application
                             finally
                             {
                                 if (pressed) surface.SubmitPointerButton(3, x, y, 2, false);
-                                await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;if(window.requestAnimationFrame===p.raf)window.requestAnimationFrame=p.originalRaf;for(const n of ['pointerdown','pointermove','pointerup'])document.removeEventListener(n,p.event);for(const n of ['gotpointercapture','lostpointercapture'])document.removeEventListener(n,p.capture);delete globalThis.kestrelPanProbe;})()");
+                                await view.EvaluateTextAsync("(()=>{const p=globalThis.kestrelPanProbe;p.resize.disconnect();if(window.requestAnimationFrame===p.raf)window.requestAnimationFrame=p.originalRaf;for(const n of ['pointerdown','pointermove','pointerup'])document.removeEventListener(n,p.event);for(const n of ['gotpointercapture','lostpointercapture'])document.removeEventListener(n,p.capture);delete globalThis.kestrelPanProbe;})()");
                                 if (arguments.Contains("--trace-kestrel-methods"))
                                     await view.EvaluateTextAsync("(()=>{for(const restore of kestrelMethodProbe.restore)restore();delete globalThis.kestrelMethodProbe;})()");
                             }
@@ -495,6 +503,10 @@ internal sealed class WebGpuDocumentProbeApp : Application
                         if (arguments.Contains("--verify-kestrel"))
                         {
                             var webGpuReady = await view.EvaluateTextAsync("document.documentElement.dataset.ready==='true'&&document.getElementById('engine-label').textContent.startsWith('WebGPU')&&document.querySelectorAll('#command-history .history-error').length===0");
+                            using var diagnosticTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                            await view.FlushRuntimeDiagnosticsAsync(diagnosticTimeout.Token);
+                            Console.WriteLine($"Kestrel uncaught JavaScript exceptions: {Interlocked.Read(ref documentExceptions)}");
+                            if (Interlocked.Read(ref documentExceptions) != 0) webGpuReady = "false";
                             Console.WriteLine(webGpuReady == "true" ? "Kestrel WebGPU startup check passed (interaction qualification remains)." : "FAIL: Kestrel WebGPU startup or initial rendering reported an error.");
                             await view.DisposeAsync();
                             desktop.Shutdown(webGpuReady == "true" ? 0 : 1);

@@ -64,6 +64,3 @@ class AngleEnvironmentTests(unittest.TestCase):
             self.assertEqual(len(compiler_queries), 1)
             self.assertEqual(compiler_queries[0].args[0][0].name, "clang-cl.exe")
             self.assertEqual(os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"], "1")
-            compiler = next(call.args[0][0] for call in capture.call_args_list
-                            if "llvm-build" in str(call.args[0][0]))
-            self.assertEqual(Path(compiler).name, "clang-cl.exe" if os.name == "nt" else "clang")
