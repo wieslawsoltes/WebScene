@@ -1933,6 +1933,8 @@
         auto* self = current(info.GetIsolate());
         auto payload = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
         std::string download_payload;
+        native_file_data file_bytes;
+        bool has_file_bytes=false;
         uint32_t canvas_node_id = 0;
         if (info.Length() > 0 && info[0]->IsObject()) {
             auto local_context = info.GetIsolate()->GetCurrentContext();
@@ -1960,6 +1962,11 @@
                         js_string(info.GetIsolate(), "type")).ToLocal(&type_value)
                     ? to_utf8(info.GetIsolate(), type_value)
                     : std::string{};
+                if (view->ByteLength() <= 64u*1024u*1024u) {
+                    has_file_bytes=true;
+                    file_bytes.mime=type;
+                    if(view->ByteLength()) file_bytes.bytes.assign(bytes,bytes+view->ByteLength());
+                }
                 const auto is_textual = type.starts_with("text/")
                     || type == "application/xhtml+xml"
                     || type == "application/xml"
@@ -1975,6 +1982,7 @@
             }
         }
         const auto url = "blob:webscene-native/" + std::to_string(self->next_object_url_id++);
+        if(has_file_bytes) self->object_url_file_data[url]=std::move(file_bytes);
         self->object_urls[url] = std::move(payload);
         if (!download_payload.empty()) {
             self->object_url_download_payloads[url] = std::move(download_payload);
@@ -2273,4 +2281,14 @@
         }
 #endif
         if (capture) self->diagnostics->publish(std::move(record));
+    }
+
+    static void revoke_object_url(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        if(info.Length()==0) return;
+        auto* self=current(info.GetIsolate());
+        const auto url=to_utf8(info.GetIsolate(),info[0]);
+        self->object_urls.erase(url);
+        self->object_url_download_payloads.erase(url);
+        self->object_url_file_data.erase(url);
+        self->object_url_canvas_node_ids.erase(url);
     }

@@ -584,6 +584,7 @@ struct node_style final {
         // the live inherited foreground when the scene is serialized.
         std::string svg_fill;
         std::string svg_stroke;
+        std::string svg_text_anchor;
         std::string list_style_position;
         std::string list_style_type;
         // Vertical corner radii are cold: circular radii use the four hot

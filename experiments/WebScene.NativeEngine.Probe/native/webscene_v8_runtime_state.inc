@@ -137,6 +137,13 @@
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
+    std::atomic<bool> file_service_enabled{false};
+    std::mutex file_requests_mutex;
+    std::deque<std::unique_ptr<native_file_request>> file_requests;
+    struct file_target { uint32_t node_id{}; v8::Global<v8::Context> context; };
+    std::unordered_map<uint64_t,file_target> file_targets;
+    std::unordered_map<std::string,native_file_data> object_url_file_data;
+
     std::vector<std::unique_ptr<resize_observer_state>> resize_observers;
     bool resize_observers_pending{false};
     // DOM mutations stay on the native fast path until a realm registers its

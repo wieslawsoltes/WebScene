@@ -761,7 +761,7 @@
             pseudo.background_image.image_value = value;
             pseudo.background_image.image_markup.clear();
             pseudo.background_image.image_view_box.clear();
-            if (value != "none" && !lower_html_name(value).starts_with("linear-gradient(")) {
+            if (value != "none" && !(lower_html_name(value).starts_with("linear-gradient(") || lower_html_name(value).starts_with("radial-gradient("))) {
                 decision.classification = "unsupported";
                 decision.semantic_slice = "single linear-gradient layer";
             }
@@ -778,7 +778,7 @@
                 : native_document::parse_color(value);
             if (name == "background") {
                 const auto lower = lower_html_name(value);
-                const auto gradient_start = lower.find("linear-gradient(");
+                const auto gradient_start = std::min(lower.find("linear-gradient("), lower.find("radial-gradient("));
                 if (gradient_start == std::string::npos) {
                     pseudo.background_image.image_value = "none";
                 } else {
@@ -2670,7 +2670,7 @@
             background.image_markup.clear();
             background.image_view_box.clear();
             if (value == "none") return;
-            if (lower_html_name(value).starts_with("linear-gradient(")) {
+            if (lower_html_name(value).starts_with("linear-gradient(") || lower_html_name(value).starts_with("radial-gradient(")) {
                 decision.classification = "supported";
                 decision.semantic_slice =
                     "linear-gradient color stops, percentages, angles, and side/corner directions";
@@ -2743,7 +2743,7 @@
             }
             if (name == "background" && !is_inline(inline_background_image)) {
                 const auto lower = lower_html_name(value);
-                const auto gradient = lower.find("linear-gradient(");
+                const auto gradient = std::min(lower.find("linear-gradient("), lower.find("radial-gradient("));
                 if (gradient != std::string::npos) {
                     auto& background = node.style.mutable_background_image();
                     background.image_value = value.substr(gradient);
@@ -2822,6 +2822,14 @@
                 ? std::string{} : value;
             decision.classification = "partially-supported";
             decision.semantic_slice = "solid SVG paint, none, and currentColor";
+        } else if (name == "text-anchor" && !is_inline(inline_svg_text_anchor)) {
+            if (value == "start" || value == "middle" || value == "end") {
+                node.style.mutable_textual().svg_text_anchor = value;
+            } else if (value == "initial") {
+                node.style.mutable_textual().svg_text_anchor = "start";
+            } else if (value == "inherit" || value == "unset") {
+                node.style.mutable_textual().svg_text_anchor.clear();
+            }
         } else if (name == "cursor" && !is_inline(inline_cursor)) {
             node.style.mutable_textual().cursor =
                 value == "initial" ? "auto" : value;

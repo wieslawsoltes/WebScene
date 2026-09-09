@@ -1370,6 +1370,8 @@
             local_context,
             js_string(isolate, "__webSceneCreateObjectUrl"),
             v8::Function::New(local_context, create_object_url).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate,"__webSceneRevokeObjectUrl"),
+            v8::Function::New(local_context,revoke_object_url).ToLocalChecked()).Check();
         global->Set(
             local_context,
             js_string(isolate, "__webSceneResolveUrl"),
@@ -1473,7 +1475,9 @@
                   let size = 0;
                   for (const part of parts) {
                     let bytes;
-                    if (part instanceof ArrayBuffer) {
+                    if (part instanceof WebSceneBlob) {
+                    bytes = part._bytes;
+                  } else if (part instanceof ArrayBuffer) {
                       bytes = new Uint8Array(part);
                     } else if (ArrayBuffer.isView(part)) {
                       bytes = new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
@@ -1494,8 +1498,20 @@
                   this._text = Array.from(parts, String).join('');
                 }
                 toString() { return this._text; }
+              async text() { return new TextDecoder().decode(this._bytes); }
+              async arrayBuffer() { return this._bytes.slice().buffer; }
+              slice(start=0, end=this.size, type='') {
+                return new WebSceneBlob([this._bytes.slice(start,end)], {type});
               }
-              class WebSceneURLSearchParams {
+              }
+              globalThis.File = class File extends WebSceneBlob {
+              constructor(parts, name, options={}) {
+                super(parts,options);
+                this.name=String(name).replace(/[\/]/g, ':');
+                this.lastModified=Number(options.lastModified ?? Date.now());
+              }
+            };
+            class WebSceneURLSearchParams {
                 constructor(init = null) {
                   this._owner = init && typeof init === 'object'
                     && 'href' in init ? init : null;
@@ -1733,7 +1749,7 @@
                 }
                 toJSON() { return this.toString(); }
                 static createObjectURL(blob) { return __webSceneCreateObjectUrl(blob); }
-                static revokeObjectURL() {}
+                static revokeObjectURL(url) { __webSceneRevokeObjectUrl(url); }
               }
               class WebSceneDOMException extends Error {
                 constructor(message = '', name = 'Error') {

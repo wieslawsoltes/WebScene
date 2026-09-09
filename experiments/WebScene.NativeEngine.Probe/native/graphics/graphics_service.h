@@ -305,7 +305,7 @@ public:
         if (!commands_) commands_=std::make_shared<command_channel>(capacity,upload_limit,wake_);
         return commands_;
     }
-    std::shared_ptr<release_channel> release_endpoint(size_t capacity=256) {
+    std::shared_ptr<release_channel> release_endpoint(size_t capacity=4096) {
         check_open();
         if (!releases_) releases_=std::make_shared<release_channel>(capacity,command_endpoint(),wake_);
         return releases_;

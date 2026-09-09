@@ -766,7 +766,33 @@ void serialize_svg_subtree(const dom_node& node, std::string& output, bool root)
     bool has_color = false;
     const auto css_fill = node.style.textual().svg_fill;
     const auto css_stroke = node.style.textual().svg_stroke;
+    // Stylesheets outside the detached SVG are unavailable to the host SVG
+    // renderer. Project cascaded typography as presentation attributes, keeping
+    // local attributes and SVG inheritance when no CSS declaration overrides them.
+    std::vector<std::pair<std::string, std::string>> typography;
+    const auto collect_typography = [&](const dom_node& source, bool inherited) {
+        const auto add = [&](const char* name, std::string value) {
+            if (value.empty()) return;
+            if (inherited && node.attributes.contains(name)) return;
+            if (std::any_of(typography.begin(), typography.end(),
+                    [&](const auto& entry) { return entry.first == name; })) return;
+            typography.emplace_back(name, std::move(value));
+        };
+        if (source.style.font_size >= 0) add("font-size", std::to_string(source.style.font_size));
+        if (source.style.font_weight > 0) add("font-weight", std::to_string(source.style.font_weight));
+        add("font-family", source.style.textual().font_family);
+        if (source.style.letter_spacing_specified) add("letter-spacing", std::to_string(source.style.letter_spacing));
+        if (source.style.word_spacing_specified) add("word-spacing", std::to_string(source.style.word_spacing));
+        add("text-anchor", source.style.textual().svg_text_anchor);
+    };
+    collect_typography(node, false);
+    if (root) {
+        for (auto* ancestor = node.parent; ancestor; ancestor = ancestor->parent)
+            collect_typography(*ancestor, true);
+    }
     for (const auto& [name, value] : node.attributes) {
+        if (std::any_of(typography.begin(), typography.end(),
+                [&](const auto& entry) { return entry.first == name; })) continue;
         if (name == "xmlns") has_xmlns = true;
         else if (name == "id") has_id = true;
         else if (name == "class") has_class = true;
@@ -789,6 +815,11 @@ void serialize_svg_subtree(const dom_node& node, std::string& output, bool root)
         } else {
             append_xml_escaped(value, output, true);
         }
+        output.push_back('"');
+    }
+    for (const auto& [name, value] : typography) {
+        output += " " + name + "=\"";
+        append_xml_escaped(value, output, true);
         output.push_back('"');
     }
     if (root && !has_xmlns) output += " xmlns=\"http://www.w3.org/2000/svg\"";

@@ -466,6 +466,10 @@ struct v8_dom_runtime::implementation final {
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "src"), get_element_url, set_element_src);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "href"), get_element_url, set_element_href);
         element->InstanceTemplate()->SetNativeDataProperty(
+            js_string(isolate, "accept"),
+            get_reflected_string_attribute,
+            set_reflected_string_attribute);
+        element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "download"),
             get_reflected_string_attribute,
             set_reflected_string_attribute);
@@ -3090,6 +3094,8 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "__webSceneCreateObjectUrl"),
             v8::Function::New(local_context, create_object_url).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate,"__webSceneRevokeObjectUrl"),
+            v8::Function::New(local_context,revoke_object_url).ToLocalChecked()).Check();
         global->Set(
             local_context,
             js_string(isolate, "__webSceneResolveUrl"),
@@ -3154,6 +3160,8 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "__webSceneCreateObjectUrl"),
             v8::Function::New(local_context, create_object_url).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate,"__webSceneRevokeObjectUrl"),
+            v8::Function::New(local_context,revoke_object_url).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "Image"),
             v8::FunctionTemplate::New(isolate, image_constructor)
                 ->GetFunction(local_context).ToLocalChecked()).Check();
@@ -3202,7 +3210,9 @@ struct v8_dom_runtime::implementation final {
                 let size = 0;
                 for (const part of parts) {
                   let bytes;
-                  if (part instanceof ArrayBuffer) {
+                  if (part instanceof WebSceneBlob) {
+                    bytes = part._bytes;
+                  } else if (part instanceof ArrayBuffer) {
                     bytes = new Uint8Array(part);
                   } else if (ArrayBuffer.isView(part)) {
                     bytes = new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
@@ -3223,7 +3233,19 @@ struct v8_dom_runtime::implementation final {
                 this._text = Array.from(parts, String).join('');
               }
               toString() { return this._text; }
+              async text() { return new TextDecoder().decode(this._bytes); }
+              async arrayBuffer() { return this._bytes.slice().buffer; }
+              slice(start=0, end=this.size, type='') {
+                return new WebSceneBlob([this._bytes.slice(start,end)], {type});
+              }
             }
+            globalThis.File = class File extends WebSceneBlob {
+              constructor(parts, name, options={}) {
+                super(parts,options);
+                this.name=String(name).replace(/[\/]/g, ':');
+                this.lastModified=Number(options.lastModified ?? Date.now());
+              }
+            };
             class WebSceneURLSearchParams {
               constructor(init = null) {
                 this._owner = init && typeof init === 'object'
@@ -3460,7 +3482,7 @@ struct v8_dom_runtime::implementation final {
               }
               toJSON() { return this.toString(); }
               static createObjectURL(blob) { return __webSceneCreateObjectUrl(blob); }
-              static revokeObjectURL() {}
+              static revokeObjectURL(url) { __webSceneRevokeObjectUrl(url); }
             }
             class WebSceneDOMException extends Error {
               constructor(message = '', name = 'Error') {
@@ -3955,8 +3977,12 @@ struct v8_dom_runtime::implementation final {
         return true;
     }
 
+#include "webscene_v8_runtime_files.inc"
+
     bool queue_external_navigation(dom_node& target)
     {
+        if (file_service_enabled.load() && target.tag == "input"
+            && target.attributes["type"] == "file") return queue_file_request(target, false);
         auto* anchor = &target;
         while (anchor != nullptr && anchor->tag != "a") anchor = anchor->parent;
         if (anchor == nullptr) return true;
@@ -3964,6 +3990,7 @@ struct v8_dom_runtime::implementation final {
         const auto authored = anchor->attributes.find("href");
         if (authored == anchor->attributes.end() || authored->second.empty()) return true;
         if (anchor->attributes.contains("download")) {
+            if (file_service_enabled.load()) return queue_file_request(*anchor, true);
             auto local_context = frame_context.IsEmpty()
                 ? context.Get(isolate)
                 : frame_context.Get(isolate);
@@ -5843,3 +5870,25 @@ const std::string& v8_dom_runtime::frame_last_error() const noexcept
 }
 
 } // namespace webscene_native
+
+namespace webscene_native {
+void v8_dom_runtime::enable_file_service(bool enabled) { impl_->file_service_enabled.store(enabled); }
+std::unique_ptr<native_file_request> v8_dom_runtime::take_file_request() {
+    std::lock_guard lock(impl_->file_requests_mutex);
+    if(impl_->file_requests.empty()) return {};
+    auto result=std::move(impl_->file_requests.front()); impl_->file_requests.pop_front(); return result;
+}
+void v8_dom_runtime::complete_file_request(native_file_completion& completion) {
+    v8::Locker locker(impl_->isolate);
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handles(impl_->isolate);
+    v8::TryCatch caught(impl_->isolate);
+    impl_->complete_native_file(completion);
+    if(caught.HasCaught()) {
+        impl_->last_error=impl_->describe_reported_exception(caught);
+        std::lock_guard lock(impl_->console_message_mutex);
+        if(impl_->console_messages.size()<1024)
+            impl_->console_messages.push_back("error\nNative file completion: "+impl_->last_error);
+    }
+}
+}

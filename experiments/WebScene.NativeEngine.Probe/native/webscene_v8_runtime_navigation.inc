@@ -98,6 +98,12 @@
         retire_document_graphics();
 #endif
         stop_workers();
+        file_targets.clear();
+        { std::lock_guard lock(file_requests_mutex); file_requests.clear(); }
+        object_url_file_data.clear();
+        object_urls.clear();
+        object_url_download_payloads.clear();
+        object_url_canvas_node_ids.clear();
         module_map.clear();
         set_context_location(local_context, local_context->Global(), resolved_url);
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)

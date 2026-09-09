@@ -377,6 +377,7 @@ enum inline_style_property : uint64_t {
     inline_font_smoothing = 1ULL << 54U,
     inline_background_image = 1ULL << 55U,
     inline_contain = 1ULL << 56U,
+    inline_svg_text_anchor = 1ULL << 57U,
     inline_transition = inline_transition_property | inline_transition_duration
         | inline_transition_delay | inline_transition_timing
 };
