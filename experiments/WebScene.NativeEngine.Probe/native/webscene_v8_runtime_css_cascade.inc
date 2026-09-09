@@ -3873,11 +3873,13 @@
             if (rule.selector().find(static_cast<char>(92)) != std::string::npos
                 || copy_ascii_lower(rule.selector()).find("style") != std::string::npos) return false;
         }
-        const auto is_dimension = [](std::string_view property) {
+        const auto is_geometry_property = [](std::string_view property) {
             return property == "width" || property == "height"
                 || property == "min-width" || property == "max-width"
                 || property == "min-height" || property == "max-height"
-                || property == "grid-template-columns" || property == "grid-template-rows";
+                || property == "grid-template-columns" || property == "grid-template-rows"
+                || property == "left" || property == "right"
+                || property == "top" || property == "bottom";
         };
         // Non-inherited-by-default dimensions can still explicitly inherit.
         // Include variable-resolved inheritance, not just literal tokens. If
@@ -3886,7 +3888,7 @@
         for (const auto& rule : css_rules) {
             bool potential = false;
             for (const auto& declaration : rule.declarations()) {
-                if (!is_dimension(declaration.name)) continue;
+                if (!is_geometry_property(declaration.name)) continue;
                 if (trim_css_view(declaration.value) == "inherit") return false;
                 potential = potential || declaration.value.find("var(") != std::string::npos;
             }
@@ -3902,7 +3904,7 @@
         // An inherited inline alias may be authored above the mutation root.
         for (auto* parent = root.parent; parent != nullptr; parent = parent->parent) {
             for (const auto& [property, value] : parent->authored_style().declarations) {
-                if (references(value) && !is_dimension(property)) return false;
+                if (references(value) && !is_geometry_property(property)) return false;
             }
         }
         std::vector<const css_rule*> rules;
@@ -3915,7 +3917,7 @@
                     || split_pseudo_element_selector(rule.selector(), origin) != 0)
                     return false;
                 for (const auto& declaration : rule.declarations()) {
-                    if (references(declaration.value) && !is_dimension(declaration.name))
+                    if (references(declaration.value) && !is_geometry_property(declaration.name))
                         return false;
                 }
                 rules.push_back(&rule);
@@ -3934,17 +3936,17 @@
             }
             bool affected = &node == &root;
             for (const auto& [property, value] : node.authored_style().declarations) {
-                if (is_dimension(property)
+                if (is_geometry_property(property)
                     && trim_css_view(resolve_css_value(node, value)) == "inherit") return false;
                 if (!references(value)) continue;
-                if (!is_dimension(property)) return false;
+                if (!is_geometry_property(property)) return false;
                 affected = true;
             }
             if (node.kind == dom_node_kind::element) {
                 for (const auto* rule : inheritance_rules) {
                     if (!rule->media_matches || !css_rule_matches(node, *rule)) continue;
                     for (const auto& declaration : rule->declarations()) {
-                        if (is_dimension(declaration.name)
+                        if (is_geometry_property(declaration.name)
                             && trim_css_view(resolve_css_value(node, declaration.value)) == "inherit")
                             return false;
                     }
