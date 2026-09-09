@@ -62,8 +62,8 @@ jobs:
         path: artifacts/graphics-sdk/${{ matrix.rid }}/${{ matrix.component }}
         key: ${{ steps.sdk-identity.outputs.key }}
         # No prefix fallback: a different build recipe or toolchain must rebuild.
-    - name: Install pinned Windows SDK for ANGLE
-      if: matrix.rid == 'win-x64' && matrix.component == 'angle' && steps.sdk-cache.outputs.cache-hit != 'true'
+    - name: Install pinned Windows SDK for graphics runtime packaging
+      if: matrix.rid == 'win-x64' && steps.sdk-cache.outputs.cache-hit != 'true'
       shell: pwsh
       run: ./eng/graphics/install-windows-sdk.ps1
     - name: Initialize Windows x64 compiler environment
