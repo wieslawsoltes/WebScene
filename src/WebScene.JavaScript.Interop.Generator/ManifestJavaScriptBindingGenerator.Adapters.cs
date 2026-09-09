@@ -1478,7 +1478,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
             payloadType,
             optional: false,
             "binary callback argument");
-        var concreteExpression = IsValueType(requiredMapping.CSharpType)
+        var concreteExpression = IsNonNullableValueType(generation, requiredMapping.CSharpType)
             ? valueExpression + ".Value"
             : valueExpression;
         var encoded = EmitBinaryWriteValue(

@@ -21,11 +21,20 @@ public sealed class ExternalCodecGenerationTests
     [InlineData("nullableArray", false)]
     [InlineData("direct", true)]
     [InlineData("array", true)]
-    public void ExternalAssemblyContractsRoundTripThroughNativeInvoker(string shape, bool initializer)
+    [InlineData("direct", true, true, true)]
+    [InlineData("direct", false, true, true)]
+    [InlineData("array", false, true, true)]
+    [InlineData("nullable", false, true, true)]
+    [InlineData("nullableArray", false, true, true)]
+    [InlineData("direct", false, false, true)]
+    [InlineData("array", false, true, false)]
+    public void ExternalAssemblyContractsRoundTripThroughNativeInvoker(string shape, bool initializer, bool valueType = false, bool int64 = false)
     {
         var contract = initializer
             ? "public sealed record Sample { public required double Timestamp { get; init; } public double? Price { get; init; } }"
             : "public sealed record Sample(double? Price, double Timestamp);";
+        if (valueType) contract = contract.Replace("sealed record", "readonly record struct");
+        if (int64) contract = contract.Replace("double Timestamp", "long Timestamp");
         var construction = initializer ? "new Sample { Timestamp = 7, Price = null }" : "new Sample(null, 7)";
         var input = shape switch
         {
@@ -86,7 +95,6 @@ public sealed class ExternalCodecGenerationTests
     [InlineData("public sealed record Sample(double Missing, double? Price);", "Timestamp")]
     [InlineData("public sealed class Sample { public double Timestamp { get; } public double? Price { get; } }", "constructor")]
     [InlineData("public abstract record Sample(double Timestamp, double? Price);", "non-abstract")]
-    [InlineData("public readonly record struct Sample(double Timestamp, double? Price);", "record class")]
     public void UnsupportedContractsHaveActionableDiagnostics(string contract, string reason)
     {
         var (result, compilation, _) = Generate(contract, "direct", "");
@@ -224,6 +232,136 @@ public sealed class ExternalCodecGenerationTests
         });
         Assert.Empty(result.Diagnostics);
         Assert.True(Run(compilation, contracts));
+    }
+
+    [Fact]
+    public void Int64ConversionsPreserveSafeIntegersAndRejectLossyValues()
+    {
+        const string bridge = """
+            using System;
+            using Contracts;
+            using WebScene.JavaScript.Interop;
+            namespace Generated;
+            public static class Bridge
+            {
+                public static bool Run(IJavaScriptInvoker invoker)
+                {
+                    foreach (long number in new long[] { -9007199254740991L, -1700000000123L, -1, 0, 1, 1700000000123L, 9007199254740991L })
+                    {
+                        var sample = new Sample(number, number);
+                        if (JavaScriptGlobals.ExchangeAsync(invoker, sample).GetAwaiter().GetResult() != sample) return false;
+                        if (Read(number, null, invoker) != new Sample(number, null)) return false;
+                    }
+                    foreach (double number in new double[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity,
+                        0.5, -0.5, 9007199254740992d, -9007199254740992d, (double)long.MaxValue, (double)long.MinValue })
+                    {
+                        try { Read(number, null, invoker); return false; } catch (OverflowException) { }
+                        try { Read(0, number, invoker); return false; } catch (OverflowException) { }
+                    }
+                    foreach (long number in new long[] { long.MinValue, long.MaxValue, -9007199254740992L, 9007199254740992L })
+                    {
+                        try { Write(new Sample(number, null)); return false; } catch (OverflowException) { }
+                        try { Write(new Sample(0, number)); return false; } catch (OverflowException) { }
+                    }
+                    return true;
+                }
+                private static void Write(Sample sample)
+                {
+                    var writer = new JavaScriptBinaryWriter();
+                    try { __WebSceneExternalCodec0.__WebSceneWriteBinary(ref writer, sample); }
+                    finally { writer.Dispose(); }
+                }
+                private static unsafe Sample Read(double time, double? price, IJavaScriptInvoker invoker)
+                {
+                    var writer = new JavaScriptBinaryWriter();
+                    try
+                    {
+                        var root = GeneratedSample.__WebSceneWriteBinary(ref writer, new GeneratedSample { Time = time, Value = price });
+                        fixed (JavaScriptBinaryValueData* values = writer.Values)
+                        fixed (JavaScriptBinaryEdgeData* edges = writer.Edges)
+                        fixed (byte* utf8 = writer.Utf8)
+                        {
+                            return __WebSceneExternalCodec0.__WebSceneReadBinary(new JavaScriptBinaryValue(values, (uint)writer.Values.Length,
+                                edges, (uint)writer.Edges.Length, utf8, (uint)writer.Utf8.Length, root), invoker);
+                        }
+                    }
+                    finally { writer.Dispose(); }
+                }
+            }
+            """;
+        var (result, compilation, contracts) = Generate("public readonly record struct Sample(long Timestamp, long? Price);", "direct", bridge);
+        Assert.Empty(result.Diagnostics);
+        Assert.True(Run(compilation, contracts));
+    }
+
+    [Fact]
+    public void TradingViewBarStructArraysUseEquivalentWireFormatWithoutBoxing()
+    {
+        const string contract = "public readonly record struct TradingViewBar(long TimeMilliseconds, double Open, double High, double Low, double Close, double Volume);";
+        const string bridge = """
+            using System;
+            using System.Linq;
+            using System.Runtime.InteropServices;
+            using Contracts;
+            using WebScene.JavaScript.Interop;
+            namespace Generated;
+            public static class Bridge
+            {
+                public static unsafe bool Run(IJavaScriptInvoker invoker)
+                {
+                    var bars = new TradingViewBar[32];
+                    for (int i = 0; i < bars.Length; i++) bars[i] = new TradingViewBar(1700000000123L + i, 1.5, 3, 1, 2.5, 100);
+                    var result = JavaScriptGlobals.ExchangeAsync(invoker, bars).GetAwaiter().GetResult();
+                    if (!bars.SequenceEqual(result)) return false;
+                    var external = new JavaScriptBinaryWriter();
+                    var generated = new JavaScriptBinaryWriter();
+                    try
+                    {
+                        var root = external.BeginArray(bars.Length);
+                        var other = generated.BeginArray(bars.Length);
+                        for (int i = 0; i < bars.Length; i++)
+                        {
+                            var bar = bars[i];
+                            external.SetArrayItem(root, i, __WebSceneExternalCodec0.__WebSceneWriteBinary(ref external, bar));
+                            generated.SetArrayItem(other, i, GeneratedSample.__WebSceneWriteBinary(ref generated,
+                                new GeneratedSample { Time = bar.TimeMilliseconds, Open = bar.Open, High = bar.High,
+                                    Low = bar.Low, Close = bar.Close, Volume = bar.Volume }));
+                        }
+                        return external.Utf8.SequenceEqual(generated.Utf8)
+                            && MemoryMarshal.AsBytes(external.Values).SequenceEqual(MemoryMarshal.AsBytes(generated.Values))
+                            && MemoryMarshal.AsBytes(external.Edges).SequenceEqual(MemoryMarshal.AsBytes(generated.Edges));
+                    }
+                    finally { external.Dispose(); generated.Dispose(); }
+                }
+            }
+            """;
+        var (result, compilation, contracts) = Generate(contract, "array", bridge, (api, policy) =>
+        {
+            foreach (var schema in api["types"]!.AsArray())
+            {
+                var properties = new JsonArray();
+                foreach (var name in new[] { "time", "open", "high", "low", "close", "volume" })
+                    properties.Add(new JsonObject { ["name"] = name, ["optional"] = false, ["type"] = new JsonObject { ["kind"] = "number" } });
+                schema!["properties"] = properties;
+            }
+            foreach (var type in new[] { api["functions"]![0]!["parameters"]![0]!["type"]!, api["functions"]![0]!["returns"]! })
+                type["element"] = JsonNode.Parse("""{"kind":"reference","name":"Sample","qualifiedName":"Sample","typeArguments":[]} """);
+            policy["typeMappings"]!["Sample"] = "global::Contracts.TradingViewBar";
+            policy["models"]![0]!["propertyMappings"] = new JsonObject { ["time"] = "TimeMilliseconds" };
+        });
+        Assert.Empty(result.Diagnostics);
+        Assert.True(Run(compilation, contracts));
+    }
+
+    [Fact]
+    public void NullableStructMappingsAcceptClrNamesWithoutGlobalPrefix()
+    {
+        var (result, compilation, _) = Generate("public readonly record struct Sample(long Timestamp, double? Price);", "nullable", "", (_, policy) =>
+        {
+            policy["typeMappings"]!["Sample"] = "Contracts.Sample";
+        });
+        Assert.Empty(result.Diagnostics);
+        Emit(compilation);
     }
 
     private static bool Run(Compilation compilation, byte[] contracts)

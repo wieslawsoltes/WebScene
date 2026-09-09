@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
 
@@ -9,7 +10,8 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         string Name,
         string ClrType,
         IReadOnlyList<ObjectModelProperty> Properties,
-        IReadOnlyList<string>? ConstructorProperties);
+        IReadOnlyList<string>? ConstructorProperties,
+        bool IsValueType);
 
     private static bool TryPrepareExternalCodec(
         GenerationContext generation,
@@ -79,9 +81,9 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var metadataName = mapping.StartsWith("global::", StringComparison.Ordinal)
             ? mapping.Substring(8) : mapping;
         var symbol = generation.Compilation.GetTypeByMetadataName(metadataName);
-        reason = "the CLR type must be an accessible, non-abstract, non-generic class or record class";
-        if (symbol is null || symbol.TypeKind != TypeKind.Class || symbol.IsAbstract
-            || symbol.IsStatic || symbol.IsGenericType
+        reason = "the CLR type must be an accessible, non-abstract, non-generic class or struct";
+        if (symbol is null || symbol.TypeKind is not (TypeKind.Class or TypeKind.Struct) || symbol.IsAbstract
+            || symbol.IsStatic || symbol.IsGenericType || symbol.IsRefLikeType
             || !generation.Compilation.IsSymbolAccessibleWithin(symbol, generation.Compilation.Assembly))
         {
             return false;
@@ -145,11 +147,14 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 && array.NullableAnnotation != NullableAnnotation.Annotated
                 && expected == "global::System.Collections.Generic.IReadOnlyList<" + ExternalTypeName(array.ElementType) + ">";
             reason = $"property '{clrName}' has CLR type '{actual}', expected '{expected}'";
-            if (actual != expected && !arrayCompatible)
+            var int64Compatible = !optional && (actual == "long" && expected == "double"
+                || actual == "long?" && expected == "double?");
+            if (actual != expected && !arrayCompatible && !int64Compatible)
             {
                 return false;
             }
-            properties.Add(new ObjectModelProperty(jsName, clrName, optional, propertyMapping, propertyType.Clone()));
+            properties.Add(new ObjectModelProperty(jsName, clrName, optional, propertyMapping, propertyType.Clone(),
+                int64Compatible ? actual : null));
             symbols.Add(member);
         }
 
@@ -161,7 +166,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 && generation.Compilation.IsSymbolAccessibleWithin(setter, generation.Compilation.Assembly))
             && requiredMembers.All(member => symbols.Any(property => SymbolEqualityComparer.Default.Equals(property, member)));
         IReadOnlyList<string>? constructorProperties = null;
-        if (!canInitialize)
+        if (!canInitialize || symbol.IsValueType)
         {
             var constructors = symbol.InstanceConstructors.Where(ctor =>
                 generation.Compilation.IsSymbolAccessibleWithin(ctor, generation.Compilation.Assembly)
@@ -174,19 +179,47 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     attribute.AttributeClass?.ToDisplayString() == "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute")))
                 .ToArray();
             reason = "the CLR type needs an accessible parameterless constructor and writable properties, or one unambiguous constructor matching all mapped properties by name and type";
-            if (constructors.Length != 1)
+            if (constructors.Length != 1 && !canInitialize)
             {
                 return false;
             }
-            constructorProperties = constructors[0].Parameters.Select(parameter => symbols.Single(property =>
-                string.Equals(property.Name, parameter.Name, StringComparison.OrdinalIgnoreCase)).Name).ToArray();
+            if (constructors.Length == 1)
+            {
+                constructorProperties = constructors[0].Parameters.Select(parameter => symbols.Single(property =>
+                    string.Equals(property.Name, parameter.Name, StringComparison.OrdinalIgnoreCase)).Name).ToArray();
+            }
         }
         codec = new ExternalModelCodec(
             generation.NextExternalCodecName(),
-            symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), properties, constructorProperties);
+            symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), properties, constructorProperties, symbol.IsValueType);
         reason = string.Empty;
         return true;
     }
+
+    private static void EmitExternalInt64Conversions(StringBuilder source)
+        => source.AppendLine("""
+
+                private static double __WebSceneWriteInt64(long value)
+                {
+                    if (value < -9007199254740991L || value > 9007199254740991L)
+                        throw new global::System.OverflowException("Int64 value is outside the JavaScript safe-integer range [-9007199254740991, 9007199254740991].");
+                    return value;
+                }
+
+                private static double? __WebSceneWriteInt64(long? value)
+                    => value.HasValue ? __WebSceneWriteInt64(value.Value) : null;
+
+                private static long __WebSceneReadInt64(double value)
+                {
+                    if (value < -9007199254740991d || value > 9007199254740991d
+                        || value != global::System.Math.Truncate(value))
+                        throw new global::System.OverflowException("JavaScript number must be a finite integer in [-9007199254740991, 9007199254740991] to read an Int64 property.");
+                    return checked((long)value);
+                }
+
+                private static long? __WebSceneReadInt64(double? value)
+                    => value.HasValue ? __WebSceneReadInt64(value.Value) : null;
+            """);
 
     private static string ExternalTypeName(ITypeSymbol symbol)
         => symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(

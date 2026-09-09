@@ -1401,7 +1401,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     optional: false,
                     "binary union");
                 var concreteExpression = IsNonNullableValueType(
-                    mapping.CSharpType)
+                    generation, mapping.CSharpType)
                     ? valueExpression + ".Value"
                     : valueExpression;
                 var child = EmitBinaryWriteValue(
@@ -1720,8 +1720,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         return true;
     }
 
-    private static bool IsNonNullableValueType(string type)
-        => type is "bool" or "double" or "int" or "long"
+    private static bool IsNonNullableValueType(GenerationContext generation, string type)
+        => generation.ExternalCodecs.Values.Any(codec => codec.IsValueType
+            && (codec.ClrType == type || codec.ClrType == "global::" + type))
+           || type is "bool" or "double" or "int" or "long"
             or "global::System.Numerics.BigInteger"
            || type.StartsWith("(", StringComparison.Ordinal)
            && !type.EndsWith("?", StringComparison.Ordinal);

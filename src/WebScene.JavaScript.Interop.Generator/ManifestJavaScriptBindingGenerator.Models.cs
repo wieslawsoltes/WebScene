@@ -443,16 +443,20 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         string declarationName,
         IReadOnlyList<ObjectModelProperty> properties,
         IReadOnlyList<string>? constructorProperties = null,
-        bool external = false)
+        bool external = false,
+        bool isValueType = false)
     {
         var requiredCount = properties.Count(static property => !property.Optional);
         source.AppendLine()
             .AppendLine("    internal static uint __WebSceneWriteBinary(")
             .AppendLine("        ref global::WebScene.JavaScript.Interop.JavaScriptBinaryWriter writer,")
             .Append("        ").Append(declarationName).AppendLine(" value)")
-            .AppendLine("    {")
-            .AppendLine("        global::System.ArgumentNullException.ThrowIfNull(value);")
-            .Append("        var propertyCount = ").Append(requiredCount)
+            .AppendLine("    {");
+        if (!isValueType)
+        {
+            source.AppendLine("        global::System.ArgumentNullException.ThrowIfNull(value);");
+        }
+        source.Append("        var propertyCount = ").Append(requiredCount)
             .AppendLine(";");
         foreach (var property in properties.Where(static property => property.Optional))
         {
@@ -476,6 +480,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
             }
             var indent = property.Optional ? "            " : "        ";
             var expression = "value." + propertyName + (property.Optional ? ".Value!" : string.Empty);
+            if (property.ExternalNumericType is not null)
+            {
+                expression = "__WebSceneWriteInt64(" + expression + ")";
+            }
             if (external && !property.Optional)
             {
                 var local = generation.NextLocal("externalProperty");
@@ -514,6 +522,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     "value.GetRequiredProperty(" + Literal(property.JavaScriptName) + "u8)",
                     "invoker",
                     "        ");
+                if (property.ExternalNumericType is not null)
+                {
+                    local = "__WebSceneReadInt64(" + local + ")";
+                }
                 values.Add((property, local));
                 continue;
             }

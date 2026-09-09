@@ -394,7 +394,11 @@ public sealed partial class ManifestJavaScriptBindingGenerator : IIncrementalGen
             source.Append("namespace ").Append(namespaceName).AppendLine(";")
                 .Append("internal static class ").Append(codec.Name).AppendLine("\n{");
             EmitObjectModelBinaryCodec(source, generation, codec.ClrType, codec.Properties,
-                codec.ConstructorProperties, external: true);
+                codec.ConstructorProperties, external: true, isValueType: codec.IsValueType);
+            if (codec.Properties.Any(property => property.ExternalNumericType is not null))
+            {
+                EmitExternalInt64Conversions(source);
+            }
             source.AppendLine("}");
             context.AddSource($"{Sanitize(namespaceName)}_{codec.Name}.WebSceneExternalCodec.g.cs",
                 SourceText.From(source.ToString(), Encoding.UTF8));
@@ -592,7 +596,8 @@ public sealed partial class ManifestJavaScriptBindingGenerator : IIncrementalGen
         string CSharpName,
         bool Optional,
         TypeMapping Mapping,
-        JsonElement Type);
+        JsonElement Type,
+        string? ExternalNumericType = null);
 
     private sealed record ObjectModelIndex(
         string KeyType,
