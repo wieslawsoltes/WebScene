@@ -106,3 +106,29 @@ void test_dimension_custom_property_inheritance(webscene_engine* engine)
     )JS", "dimension-custom-property-inheritance.js");
     require(result == "[]", "dimension inheritance regression: " + result);
 }
+
+void test_geometry_variable_positions(webscene_engine* engine)
+{
+    resize(engine, 1280, 720, 1);
+    const auto result = evaluate(engine, R"JS(
+        (() => {
+          const root=document.documentElement;
+          root.style.removeProperty('--geometry-size');
+          document.body.innerHTML='<style>:root{--geometry-size:100px}#stage{position:relative;width:800px;height:600px}#grid{display:grid;grid-template-columns:100px 1fr var(--geometry-size)}.position{position:absolute;width:20px;height:20px}#left{left:calc(var(--geometry-size) + 16px);top:0}#right{right:calc(var(--geometry-size) + 16px);top:0}#top{top:calc(var(--geometry-size) + 16px);left:0}#bottom{bottom:calc(var(--geometry-size) + 16px);left:0}</style><div id="stage"><div id="grid"><div></div><div></div><div id="panel"></div></div><div class="position" id="left"></div><div class="position" id="right"></div><div class="position" id="top"></div><div class="position" id="bottom"></div></div>';
+          const rect=id=>document.getElementById(id).getBoundingClientRect();
+          const check=size=>{
+            const stage=rect('stage');
+            const actual=[rect('panel').width,rect('left').x-stage.x,stage.right-rect('right').right,rect('top').y-stage.y,stage.bottom-rect('bottom').bottom];
+            const expected=[size,size+16,size+16,size+16,size+16];
+            if(actual.some((v,i)=>Math.abs(v-expected[i])>.1))throw Error(JSON.stringify({size,actual,expected}));
+          };
+          check(100);
+          root.style.setProperty('--geometry-size','200px');check(200);
+          root.style.removeProperty('--geometry-size');check(100);
+          root.style.setProperty('--geometry-size','300px');check(300);
+          root.style.setProperty('--geometry-size','');check(100);
+          return true;
+        })()
+    )JS", "geometry-variable-positions.js");
+    require(result == "true", "geometry variable positions failed: " + result);
+}
