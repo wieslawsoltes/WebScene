@@ -53,6 +53,14 @@ class AngleEnvironmentTests(unittest.TestCase):
             self.assertIs(metadata.kwargs["env"], generation.kwargs["env"])
             self.assertEqual(metadata.kwargs["env"]["DEPOT_TOOLS_WIN_TOOLCHAIN"], "0")
             self.assertEqual(metadata.kwargs["env"]["DEPOT_TOOLS_UPDATE"], "0")
+            sync = next(call for call in run.call_args_list if call.args[0][1:2] == ["sync"])
+            self.assertIs(sync.kwargs["env"], generation.kwargs["env"])
+            for key, value in builder.angle_git_environment().items():
+                self.assertEqual(sync.kwargs["env"][key], value)
             self.assertTrue(metadata.kwargs["env"]["PATH"].startswith(str(depot) + os.pathsep))
             self.assertEqual((sdk / "build-info/resolved-args.gn").read_text(), "metadata\n")
+            compiler_queries = [call for call in capture.call_args_list
+                                if "llvm-build" in str(call.args[0][0])]
+            self.assertEqual(len(compiler_queries), 1)
+            self.assertEqual(compiler_queries[0].args[0][0].name, "clang-cl.exe")
             self.assertEqual(os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"], "1")

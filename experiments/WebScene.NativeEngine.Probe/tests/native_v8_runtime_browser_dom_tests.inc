@@ -1391,6 +1391,12 @@ void test_async_save_acknowledgement_publishes_without_pointer_input()
           });
         })()
     )JS", "async-save-publication-setup.js");
+    // Host scripts and input have separate queues. An input/frame consumption
+    // counter is not a barrier for installing the document and click listener.
+    require(evaluate(engine,
+        "document.getElementById('save').isConnected && __saveState.activations === 0",
+        "async-save-publication-ready.js") == "true",
+        "async-save fixture setup did not complete before activation");
     animation_frame_and_wait(engine, 0.0, 9101U);
 
     const auto consumed_before = consumed_input_count(engine);
