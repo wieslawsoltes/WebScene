@@ -513,6 +513,11 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var values = new List<(ObjectModelProperty Property, string Local)>();
         foreach (var property in properties)
         {
+            if (property.ExternalOptional is not null)
+            {
+                values.Add((property, EmitExternalOptionalRead(source, generation, property)));
+                continue;
+            }
             if (!property.Optional)
             {
                 var local = EmitBinaryReadValue(

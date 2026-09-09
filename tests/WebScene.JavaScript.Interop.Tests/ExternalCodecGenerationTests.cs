@@ -8,7 +8,7 @@ using Xunit;
 
 namespace WebScene.JavaScript.Interop.Tests;
 
-public sealed class ExternalCodecGenerationTests
+public sealed partial class ExternalCodecGenerationTests
 {
     private static readonly MetadataReference[] References = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
         .Split(Path.PathSeparator).Select(path => MetadataReference.CreateFromFile(path))
@@ -294,8 +294,10 @@ public sealed class ExternalCodecGenerationTests
         Assert.True(Run(compilation, contracts));
     }
 
-    [Fact]
-    public void TradingViewBarStructArraysUseEquivalentWireFormatWithoutBoxing()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TradingViewBarStructArraysUseEquivalentWireFormatWithoutBoxing(bool optionalVolume)
     {
         const string contract = "public readonly record struct TradingViewBar(long TimeMilliseconds, double Open, double High, double Low, double Close, double Volume);";
         const string bridge = """
@@ -348,6 +350,12 @@ public sealed class ExternalCodecGenerationTests
                 type["element"] = JsonNode.Parse("""{"kind":"reference","name":"Sample","qualifiedName":"Sample","typeArguments":[]} """);
             policy["typeMappings"]!["Sample"] = "global::Contracts.TradingViewBar";
             policy["models"]![0]!["propertyMappings"] = new JsonObject { ["time"] = "TimeMilliseconds" };
+            if (optionalVolume)
+            {
+                api["types"]![0]!["properties"]![5]!["optional"] = true;
+                policy["models"]![0]!["optionalProperties"] = JsonNode.Parse(
+                    """{"volume":{"write":"always","read":"default","default":0}} """);
+            }
         });
         Assert.Empty(result.Diagnostics);
         Assert.True(Run(compilation, contracts));

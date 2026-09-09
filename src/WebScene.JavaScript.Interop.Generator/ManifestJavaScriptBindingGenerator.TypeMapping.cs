@@ -1385,6 +1385,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                         valueExpression,
                         indent);
                 }
+                var nullableValue = generation.NextLocal("nullableValue");
+                source.Append(indent).Append("var ").Append(nullableValue).Append(" = ")
+                    .Append(valueExpression).AppendLine(";");
+                valueExpression = nullableValue;
                 source.Append(indent).Append("uint ").Append(result)
                     .AppendLine(";")
                     .Append(indent).Append("if (").Append(valueExpression)

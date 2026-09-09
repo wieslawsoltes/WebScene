@@ -65,8 +65,10 @@ accessible constructor matching all mapped properties by name (ignoring case)
 and type. Constructor parameter order may differ from wire property order.
 Required members must be initialized or satisfied by a `SetsRequiredMembers`
 constructor. Array properties accept `IReadOnlyList<T>` and, for non-nullable
-required arrays, `T[]`. Optional TypeScript properties require the existing
-`JavaScriptOptional<T>` representation to preserve absent versus null semantics.
+required arrays, `T[]`. By default, optional TypeScript properties require the
+existing `JavaScriptOptional<T>` representation to preserve absent versus null
+semantics. External models can explicitly choose ordinary CLR properties using
+`optionalProperties` as described below.
 
 Unsupported contracts (including recursive graphs, ref structs, generics, index
 signatures, incompatible properties, and unavailable constructors) emit warning
@@ -80,8 +82,10 @@ transport can promote the warning with
 
 External `long` properties can map to TypeScript `number`, and `long?` properties
 can map to `number | null`. The generated codec converts them to and from the
-ABI's double-precision number representation. This applies to required properties;
-optional properties using `JavaScriptOptional<long>` are not currently converted.
+ABI's double-precision number representation. This applies to required properties
+and optional properties explicitly mapped to ordinary CLR values with
+`optionalProperties`. Wrappers using `JavaScriptOptional<long>` are not currently
+converted.
 
 JavaScript numbers cannot represent every 64-bit integer. To prevent silent
 precision loss, both directions enforce the safe-integer interval
@@ -96,3 +100,52 @@ For example, a neutral `readonly record struct TradingViewBar(long TimeMilliseco
 double Open, double High, double Low, double Close, double Volume)` can use
 `"propertyMappings": { "time": "TimeMilliseconds" }` to match a candle schema
 with numeric `time`, `open`, `high`, `low`, `close`, and `volume` properties.
+
+### Optional fields in neutral contracts
+
+External model policies can explicitly map optional TypeScript fields to ordinary
+CLR properties. For example, `spreadBidPriceInBps?: number | null` can use
+`double? SpreadBidPriceInBps`, and `volume?: number` can use `double Volume`:
+
+```json
+{
+  "typeMappings": { "Point": "global::Application.Contracts.Point" },
+  "models": [{
+    "source": "Point",
+    "include": false,
+    "optionalProperties": {
+      "spreadBidPriceInBps": { "write": "always", "read": "null" },
+      "volume": { "write": "always", "read": "default", "default": 0 }
+    }
+  }]
+}
+```
+
+Keys are TypeScript property names, even when `propertyMappings` renames their
+CLR properties. Each entry must explicitly specify `write` and `read`:
+
+- `write: "always"` emits the property on every write, including a null value when
+  the declared type permits null. Values are never omitted based on their default
+  value. This is the only ordinary-property write mode currently supported.
+- `read: "reject"` throws `InvalidOperationException` when the property is absent.
+- `read: "null"` maps absence to null and requires a nullable CLR property
+  compatible with the TypeScript value type.
+- `read: "default"` maps absence to the explicit JSON `default` value. Defaults
+  support compatible strings, booleans, finite numbers, or null for nullable
+  properties (including external objects). Int64 defaults must be safe integers.
+  Object and array defaults are not supported.
+
+Explicit JavaScript `undefined` follows the same rule as absence. Explicit null
+is handled according to the declared value type: it remains null for nullable
+fields and is rejected for non-nullable fields. A configured default is never
+substituted for an explicit null or an invalid supplied value. In particular,
+`volume?: number` with default 0 rejects explicit null; it does not become a
+nullable property. Long conversions retain the range and precision checks above.
+
+Only fields listed in `optionalProperties` use these semantics. Other optional
+fields still require `JavaScriptOptional<T>` and preserve absent versus present
+null/value. Ordinary properties need no WebScene reference in the contracts
+assembly. The policy changes codec behavior explicitly without changing the
+TypeScript declarations, and writes still avoid intermediate DTOs, projected
+arrays, and per-element boxing for struct arrays. Invalid or incompatible policy
+entries produce `WEBSCENEJS004`.

@@ -597,7 +597,8 @@ public sealed partial class ManifestJavaScriptBindingGenerator : IIncrementalGen
         bool Optional,
         TypeMapping Mapping,
         JsonElement Type,
-        string? ExternalNumericType = null);
+        string? ExternalNumericType = null,
+        ExternalOptionalProperty? ExternalOptional = null);
 
     private sealed record ObjectModelIndex(
         string KeyType,

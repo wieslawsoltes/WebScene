@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
@@ -6,6 +7,8 @@ namespace WebScene.JavaScript.Interop.Generator;
 
 public sealed partial class ManifestJavaScriptBindingGenerator
 {
+    private sealed record ExternalOptionalProperty(string ClrType, string? MissingExpression);
+
     private sealed record ExternalModelCodec(
         string Name,
         string ClrType,
@@ -90,6 +93,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         }
 
         var renames = new Dictionary<string, string>(StringComparer.Ordinal);
+        var optionalPolicies = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         if (generation.Policy.TryGetProperty("models", out var models))
         {
             foreach (var model in models.EnumerateArray())
@@ -98,6 +102,13 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 if (modelSource == sourceName || modelSource == LastSegment(sourceName))
                 {
                     renames = ReadStringMap(model, "propertyMappings");
+                    if (model.TryGetProperty("optionalProperties", out var optionalSettings))
+                    {
+                        reason = "optionalProperties must be an object keyed by TypeScript property name";
+                        if (optionalSettings.ValueKind != JsonValueKind.Object) return false;
+                        optionalPolicies = optionalSettings.EnumerateObject().ToDictionary(
+                            item => item.Name, item => item.Value, StringComparer.Ordinal);
+                    }
                     break;
                 }
             }
@@ -105,6 +116,13 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var schemaProperties = schema.GetProperty("properties").EnumerateArray().ToArray();
         reason = "propertyMappings contains a property absent from the TypeScript schema";
         if (renames.Keys.Any(name => !schemaProperties.Any(property => property.GetProperty("name").GetString() == name)))
+        {
+            return false;
+        }
+
+        reason = "optionalProperties must name optional properties in the TypeScript schema";
+        if (optionalPolicies.Keys.Any(name => !schemaProperties.Any(property =>
+                property.GetProperty("name").GetString() == name && property.GetProperty("optional").GetBoolean())))
         {
             return false;
         }
@@ -125,6 +143,8 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 return false;
             }
             var propertyType = property.GetProperty("type");
+            var ordinaryOptional = optionalPolicies.TryGetValue(jsName, out var optionalPolicy);
+            if (ordinaryOptional) propertyType = OptionalParameterValueType(propertyType, optional: true);
             reason = $"property '{jsName}' has no supported ABI 3 representation";
             // Do this before mapping so recursive references cannot be accepted
             // merely because their CLR names resolve.
@@ -132,7 +152,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
             {
                 return false;
             }
-            var optional = property.GetProperty("optional").GetBoolean();
+            var optional = property.GetProperty("optional").GetBoolean() && !ordinaryOptional;
             var propertyMapping = MapOptionalParameterType(generation, propertyType, optional, sourceName + "." + jsName);
             if (optional)
             {
@@ -153,8 +173,14 @@ public sealed partial class ManifestJavaScriptBindingGenerator
             {
                 return false;
             }
+            ExternalOptionalProperty? externalOptional = null;
+            if (ordinaryOptional)
+            {
+                if (!TryReadExternalOptionalPolicy(optionalPolicy, actual, jsName, out var missing, out reason)) return false;
+                externalOptional = new ExternalOptionalProperty(actual, missing);
+            }
             properties.Add(new ObjectModelProperty(jsName, clrName, optional, propertyMapping, propertyType.Clone(),
-                int64Compatible ? actual : null));
+                int64Compatible ? actual : null, externalOptional));
             symbols.Add(member);
         }
 
@@ -194,6 +220,86 @@ public sealed partial class ManifestJavaScriptBindingGenerator
             symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), properties, constructorProperties, symbol.IsValueType);
         reason = string.Empty;
         return true;
+    }
+
+    private static bool TryReadExternalOptionalPolicy(
+        JsonElement policy, string clrType, string propertyName, out string? missing, out string reason)
+    {
+        missing = string.Empty;
+        reason = $"optionalProperties entry '{propertyName}' requires write: 'always' and read: 'reject', 'null', or 'default'";
+        if (policy.ValueKind != JsonValueKind.Object
+            || policy.EnumerateObject().Any(item => item.Name is not ("write" or "read" or "default"))
+            || OptionalString(policy, "write") != "always") return false;
+        var read = OptionalString(policy, "read");
+        var hasDefault = policy.TryGetProperty("default", out var defaultValue);
+        if (read != "default" && hasDefault) return false;
+        if (read == "reject")
+        {
+            missing = null;
+            return true;
+        }
+        if (read == "null")
+        {
+            reason = $"optionalProperties entry '{propertyName}' can use read: 'null' only with a nullable CLR property";
+            missing = "null";
+            return clrType.EndsWith("?", StringComparison.Ordinal);
+        }
+        if (read != "default" || !hasDefault) return false;
+        reason = $"optionalProperties default for '{propertyName}' must be a compatible scalar (or null for a nullable property); Int64 defaults must be JavaScript safe integers";
+        if (defaultValue.ValueKind == JsonValueKind.Null && clrType.EndsWith("?", StringComparison.Ordinal))
+        {
+            missing = "null";
+            return true;
+        }
+        switch (clrType.TrimEnd('?'))
+        {
+            case "string" when defaultValue.ValueKind == JsonValueKind.String:
+                missing = Literal(defaultValue.GetString()!);
+                return true;
+            case "bool" when defaultValue.ValueKind is JsonValueKind.True or JsonValueKind.False:
+                missing = defaultValue.GetBoolean() ? "true" : "false";
+                return true;
+            case "double" when defaultValue.ValueKind == JsonValueKind.Number
+                && defaultValue.TryGetDouble(out var number) && !double.IsInfinity(number) && !double.IsNaN(number):
+                missing = number.ToString("R", CultureInfo.InvariantCulture) + "d";
+                return true;
+            case "long" when defaultValue.ValueKind == JsonValueKind.Number
+                && defaultValue.TryGetInt64(out var integer) && integer >= -9007199254740991L && integer <= 9007199254740991L:
+                missing = integer.ToString(CultureInfo.InvariantCulture) + "L";
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static string EmitExternalOptionalRead(
+        StringBuilder source, GenerationContext generation, ObjectModelProperty property)
+    {
+        var policy = property.ExternalOptional!;
+        var local = generation.NextLocal("externalOptional");
+        var node = generation.NextLocal("externalProperty");
+        source.Append("        ").Append(policy.ClrType).Append(' ').Append(local).AppendLine(";")
+            .Append("        if (value.TryGetProperty(").Append(Literal(property.JavaScriptName))
+            .Append("u8, out var ").Append(node).AppendLine(")")
+            .Append("            && ").Append(node)
+            .AppendLine(".Kind != global::WebScene.JavaScript.Interop.JavaScriptBinaryValueKind.Undefined)")
+            .AppendLine("        {");
+        var child = EmitBinaryReadValue(source, generation, property.Type, node, "invoker", "            ");
+        if (property.ExternalNumericType is not null) child = "__WebSceneReadInt64(" + child + ")";
+        source.Append("            ").Append(local).Append(" = ").Append(child).AppendLine(";")
+            .AppendLine("        }").AppendLine("        else").AppendLine("        {");
+        if (policy.MissingExpression is null)
+        {
+            source.Append("            throw new global::System.InvalidOperationException(")
+                .Append(Literal("Missing optional property '" + property.JavaScriptName
+                    + "' is rejected by the external model policy.")).AppendLine(");");
+        }
+        else
+        {
+            source.Append("            ").Append(local).Append(" = ").Append(policy.MissingExpression).AppendLine(";");
+        }
+        source.AppendLine("        }");
+        return local;
     }
 
     private static void EmitExternalInt64Conversions(StringBuilder source)
