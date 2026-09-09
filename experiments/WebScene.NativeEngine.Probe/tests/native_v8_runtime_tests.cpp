@@ -314,6 +314,7 @@ int main()
             const std::array tests{
                 test_dimension_custom_property_recascade,
                 test_dimension_custom_property_inheritance,
+                test_geometry_variable_positions,
                 test_tradingview_settings_subgrid_keeps_controls_on_their_rows,
                 test_responsive_positioned_sizing,
                 test_attribute_selector_invalidation,
@@ -607,6 +608,7 @@ int main()
         "intersection-observer-bootstrap.js");
     test_dimension_custom_property_recascade(engine);
     test_dimension_custom_property_inheritance(engine);
+    test_geometry_variable_positions(engine);
     test_responsive_positioned_sizing(engine);
     test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(engine);
     test_go_to_tab_lines_and_calendar_scroll_ranges(engine);
