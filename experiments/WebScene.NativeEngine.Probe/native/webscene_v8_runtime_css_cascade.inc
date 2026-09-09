@@ -3310,12 +3310,16 @@
         // defines one of its var() references is connected. Its first
         // computed-value attempt is then invalid, but the authored tokens must
         // remain live and be recomputed when the variable becomes available.
-        // Replay only variable-dependent inline declarations here. Temporarily
-        // removing their inline guard lets the declaration update its own
+        // Replay variable-dependent inline declarations and explicit dimension
+        // inheritance, whose computed values can change with the parent.
+        // Temporarily removing the inline guard lets a declaration update its own
         // computed value while the important-origin mask still prevents a
         // normal inline declaration from overriding an author !important rule.
         for (const auto& [name, value] : node.authored_style().declarations) {
-            if (name.starts_with("--") || value.find("var(") == std::string::npos) continue;
+            const auto inherited_dimension = (name == "width" || name == "height")
+                && trim_css_view(value) == "inherit";
+            if (name.starts_with("--")
+                || (value.find("var(") == std::string::npos && !inherited_dimension)) continue;
             const auto property_mask = inline_style_mask(name);
             const auto retained_inline_mask = node.style.inline_property_mask;
             node.style.inline_property_mask &= ~property_mask;
@@ -3858,6 +3862,117 @@
         return true;
     }
 
+    // Re-run the complete cascade only on dimension consumers when explicit
+    // inheritance does not require descendant style propagation.
+    // Keep the ordinary subtree path for aliases, inherited values and pseudo
+    // elements; this is intentionally a conservative, uncached fast path.
+    bool recascade_dimension_custom_property(dom_node& root, const std::string& name)
+    {
+        if (!is_connected(root) || document.containing_shadow_root(root) != nullptr) return false;
+        auto* previous_root = const_cast<dom_node*>(active_css_cascade_root);
+        auto* cascade_root = css_cascade_root_for_node(root);
+        if (cascade_root != nullptr) activate_css_cascade(cascade_root);
+        const auto restore = [this, previous_root, cascade_root](void*) {
+            if (previous_root != nullptr && previous_root != cascade_root)
+                activate_css_cascade(previous_root);
+        };
+        std::unique_ptr<void, decltype(restore)> scope(this, restore);
+
+        if (css_attribute_dependencies.contains("style")) return false;
+        // The lightweight attribute-dependency index does not decode escapes.
+        for (const auto& rule : css_rules) {
+            if (rule.selector().find(static_cast<char>(92)) != std::string::npos
+                || copy_ascii_lower(rule.selector()).find("style") != std::string::npos) return false;
+        }
+        const auto is_dimension = [](std::string_view property) {
+            return property == "width" || property == "height"
+                || property == "min-width" || property == "max-width"
+                || property == "min-height" || property == "max-height"
+                || property == "grid-template-columns" || property == "grid-template-rows";
+        };
+        // Non-inherited-by-default dimensions can still explicitly inherit.
+        // Include variable-resolved inheritance, not just literal tokens. If
+        // present, the ordinary ancestor-first subtree cascade propagates it.
+        std::vector<const css_rule*> inheritance_rules;
+        for (const auto& rule : css_rules) {
+            bool potential = false;
+            for (const auto& declaration : rule.declarations()) {
+                if (!is_dimension(declaration.name)) continue;
+                if (trim_css_view(declaration.value) == "inherit") return false;
+                potential = potential || declaration.value.find("var(") != std::string::npos;
+            }
+            if (potential) {
+                std::string origin;
+                if (split_pseudo_element_selector(rule.selector(), origin) != 0) return false;
+                inheritance_rules.push_back(&rule);
+            }
+        }
+        const auto references = [&](std::string_view value) {
+            return css_variable_references(value).contains(name);
+        };
+        // An inherited inline alias may be authored above the mutation root.
+        for (auto* parent = root.parent; parent != nullptr; parent = parent->parent) {
+            for (const auto& [property, value] : parent->authored_style().declarations) {
+                if (references(value) && !is_dimension(property)) return false;
+            }
+        }
+        std::vector<const css_rule*> rules;
+        if (const auto found = css_rules_by_variable_reference.find(name);
+            found != css_rules_by_variable_reference.end()) {
+            for (const auto index : found->second) {
+                const auto& rule = css_rules[index];
+                std::string origin;
+                if (rule.shadow_scope_root_id != 0U
+                    || split_pseudo_element_selector(rule.selector(), origin) != 0)
+                    return false;
+                for (const auto& declaration : rule.declarations()) {
+                    if (references(declaration.value) && !is_dimension(declaration.name))
+                        return false;
+                }
+                rules.push_back(&rule);
+            }
+        }
+        std::vector<dom_node*> nodes{&root};
+        std::vector<dom_node*> consumers;
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            auto& node = *nodes[i];
+            // Shadow inheritance and independent browsing contexts retain their
+            // existing full-cascade handling.
+            if (document.shadow_dom(node) != nullptr) return false;
+            for (auto* child : node.children) {
+                if (child != nullptr && !inactive_css_cascades.contains(child))
+                    nodes.push_back(child);
+            }
+            bool affected = &node == &root;
+            for (const auto& [property, value] : node.authored_style().declarations) {
+                if (is_dimension(property)
+                    && trim_css_view(resolve_css_value(node, value)) == "inherit") return false;
+                if (!references(value)) continue;
+                if (!is_dimension(property)) return false;
+                affected = true;
+            }
+            if (node.kind == dom_node_kind::element) {
+                for (const auto* rule : inheritance_rules) {
+                    if (!rule->media_matches || !css_rule_matches(node, *rule)) continue;
+                    for (const auto& declaration : rule->declarations()) {
+                        if (is_dimension(declaration.name)
+                            && trim_css_view(resolve_css_value(node, declaration.value)) == "inherit")
+                            return false;
+                    }
+                }
+            }
+            if (!affected && node.kind == dom_node_kind::element) {
+                affected = std::any_of(rules.begin(), rules.end(), [&](const auto* rule) {
+                    return rule->media_matches && css_rule_matches(node, *rule);
+                });
+            }
+            if (affected) consumers.push_back(&node);
+        }
+        // No partial updates before all conservative fallback checks succeed.
+        for (auto* node : consumers) apply_css_rules(*node);
+        return true;
+    }
+
     void apply_css_rules_subtree(dom_node& node)
     {
         apply_css_rules(node);
@@ -3984,7 +4099,8 @@
     void schedule_style_recascade(
         dom_node& root,
         bool subtree,
-        std::string_view reason)
+        std::string_view reason,
+        std::string custom_property = {})
     {
         if (!is_connected(root)) return;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -3994,21 +4110,19 @@
         for (auto& pending : pending_style_recascades) {
             if (pending.root != &root || pending.cascade_root != cascade_root) continue;
             pending.subtree = pending.subtree || subtree;
+            if (pending.custom_property != custom_property) pending.custom_property.clear();
             if (pending.reason.empty() && !reason.empty()) pending.reason = reason;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
             ++style_recascade_coalesced_requests;
 #endif
             return;
         }
-        if (std::any_of(
-                pending_style_recascades.begin(),
-                pending_style_recascades.end(),
-                [this, &root, cascade_root](const pending_style_recascade& pending) {
-                    return pending.subtree
-                        && pending.cascade_root == cascade_root
-                        && pending.root != nullptr
-                        && subtree_contains(*pending.root, &root);
-                })) {
+        for (auto& pending : pending_style_recascades) {
+            if (!pending.subtree || pending.cascade_root != cascade_root
+                || pending.root == nullptr || !subtree_contains(*pending.root, &root))
+                continue;
+            // An ancestor request now covers another mutation as well.
+            pending.custom_property.clear();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
             ++style_recascade_coalesced_requests;
 #endif
@@ -4018,6 +4132,11 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
             const auto pending_before = pending_style_recascades.size();
 #endif
+            if (std::any_of(pending_style_recascades.begin(), pending_style_recascades.end(),
+                    [this, &root, cascade_root](const auto& pending) {
+                        return pending.root != nullptr && pending.cascade_root == cascade_root
+                            && subtree_contains(root, pending.root);
+                    })) custom_property.clear();
             std::erase_if(
                 pending_style_recascades,
                 [this, &root, cascade_root](const pending_style_recascade& pending) {
@@ -4035,7 +4154,8 @@
                 &root,
                 cascade_root,
                 subtree,
-                std::string(reason)});
+                std::string(reason),
+                std::move(custom_property)});
     }
 
     void flush_pending_style_recascades()
@@ -4053,13 +4173,24 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
                 ++style_recascade_flush_subtree_roots;
 #endif
-                recascade_connected_subtree_now(*recascade.root, recascade.reason);
+                if (recascade.custom_property.empty()
+                    || !recascade_dimension_custom_property(*recascade.root, recascade.custom_property))
+                    recascade_connected_subtree_now(*recascade.root, recascade.reason);
             } else {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
                 ++style_recascade_flush_node_roots;
 #endif
                 recascade_connected_node(*recascade.root);
             }
+        }
+    }
+
+    void recascade_custom_property(dom_node& node, const std::string& name)
+    {
+        if (style_recascade_batch_depth != 0U) {
+            schedule_style_recascade(node, true, "style.custom-property", name);
+        } else if (!recascade_dimension_custom_property(node, name)) {
+            recascade_connected_subtree_now(node, "style.custom-property");
         }
     }
 

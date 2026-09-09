@@ -526,7 +526,7 @@
                 authored.important_declarations.erase(name);
             }
             sync_style_attribute(*node);
-            self->recascade_connected_subtree(*node);
+            self->recascade_custom_property(*node, name);
             self->notify_custom_element_attribute(
                 *node, "style", old_value, node->attributes.at("style"));
             return;
@@ -1315,7 +1315,7 @@
             authored.declarations.erase(name);
             authored.important_declarations.erase(name);
             sync_style_attribute(*node);
-            self->recascade_connected_subtree(*node);
+            self->recascade_custom_property(*node, name);
             self->notify_custom_element_attribute(
                 *node, "style", old_value, node->attributes.at("style"));
             return;
