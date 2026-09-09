@@ -1209,7 +1209,36 @@ void test_pressed_drag_moves_remain_dispatchable_after_threshold()
 
 void test_mouse_moves_are_raf_aligned_at_compositor_cadence()
 {
-    auto* engine = webscene_engine_create(0);
+    struct pointer_handler_gate {
+        std::mutex mutex;
+        std::condition_variable changed;
+        bool entered{false};
+        bool released{false};
+        bool timed_out{false};
+    } gate;
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.text_measure_user_data = &gate;
+    options.text_measure_callback = +[](
+        void* user_data, const char* text, size_t length, const char*, size_t,
+        float font_size, int32_t, float, float, webscene_text_metrics* metrics) -> uint8_t {
+        if (text != nullptr && std::string_view(text, length) == "pointer-handoff-gate") {
+            auto& state = *static_cast<pointer_handler_gate*>(user_data);
+            std::unique_lock lock(state.mutex);
+            state.entered = true;
+            state.changed.notify_all();
+            // Test-only rendezvous inside the synchronous pointer handler.
+            // Production text callbacks must not block. This holds the handler
+            // open without depending on relative JS/test-thread sleep durations.
+            if (!state.changed.wait_for(lock, std::chrono::seconds(5),
+                    [&] { return state.released; })) state.timed_out = true;
+        }
+        metrics->advance_width = static_cast<float>(length) * font_size * 0.5F;
+        metrics->ascent = font_size * 0.75F;
+        metrics->descent = font_size * 0.25F;
+        return 1U;
+    };
+    auto* engine = webscene_engine_create_with_options(&options);
     require(engine != nullptr, "rAF-aligned mouse engine creation failed");
     resize(engine, 640, 360, 1U);
     execute(engine, R"JS(
@@ -1348,15 +1377,18 @@ void test_mouse_moves_are_raf_aligned_at_compositor_cadence()
         "old RAF handling lost or duplicated pointer movement");
 
     execute_and_wait(engine, R"JS(document.body.firstElementChild.addEventListener('pointermove', () => {
-      const deadline = performance.now() + 120;
-      while (performance.now() < deadline) {}
+      document.createElement('canvas').getContext('2d').measureText('pointer-handoff-gate');
       requestAnimationFrame(() => {});
     }, {once:true}))JS", "native-pointer-demand-handoff-setup.js");
     const auto handoff_inputs = consumed_input_count(engine);
     pointer_move(engine, 80, 20, 11U);
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     webscene_engine_observe_compositor_frame(engine, 1041.666);
-    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    {
+        std::unique_lock lock(gate.mutex);
+        require(gate.changed.wait_for(lock, std::chrono::seconds(5),
+            [&] { return gate.entered; }), "pointer handler did not enter its handoff gate");
+    }
     require((webscene_engine_requires_animation_frame(engine) & 4U) != 0,
         "in-flight pointer handler temporarily lost its frame demand");
     // This sample arrives while the previous handler is busy, before the
@@ -1364,6 +1396,12 @@ void test_mouse_moves_are_raf_aligned_at_compositor_cadence()
     // for yet another refresh. No script barrier is used to flush the input.
     pointer_move(engine, 90, 20, 12U);
     webscene_engine_observe_compositor_frame(engine, 1058.333);
+    {
+        std::lock_guard lock(gate.mutex);
+        require(!gate.timed_out, "pointer handler handoff gate timed out");
+        gate.released = true;
+    }
+    gate.changed.notify_all();
     wait_for_consumed_inputs(engine, handoff_inputs + 2,
         "pointer handler did not finish its demand handoff");
     require(evaluate(engine, "globalThis.__pacedPointerMoves.slice(-2)",
