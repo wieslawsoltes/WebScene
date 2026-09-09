@@ -669,26 +669,90 @@ void test_initial_frame_document_write_and_hidden_style(webscene_engine* engine)
         "initial iframe document replacement or hidden computed style regressed: " + result);
 }
 
+void test_low_memory_reclaims_small_detached_dom_batches()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "small detached DOM engine creation failed");
+    resize(engine, 320, 120, 1U);
+    execute_and_wait(engine, "document.body.textContent = ''", "small-detached-dom-init.js");
+    webscene_engine_metrics before{};
+    for (auto attempt = 0; attempt < 500; ++attempt) {
+        webscene_engine_get_metrics(engine, &before);
+        if (before.dom_nodes != 0U) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(before.dom_nodes != 0U,
+        "small detached DOM baseline metrics were unavailable");
+    // Stay below the 512-node idle-collection threshold. A low-memory
+    // notification must schedule a native sweep even without an idle request.
+    evaluate(engine, R"JS(
+        (() => {
+          for (let index = 0; index < 32; index++) {
+            const node = document.createElement('div');
+            document.body.appendChild(node);
+            node.remove();
+          }
+        })()
+    )JS", "small-detached-dom-create.js");
+    webscene_engine_metrics created{};
+    for (auto attempt = 0; attempt < 500; ++attempt) {
+        webscene_engine_get_metrics(engine, &created);
+        if (created.dom_nodes >= before.dom_nodes + 32U) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(created.dom_nodes >= before.dom_nodes + 32U,
+        "small detached DOM batch was not visible in the worker snapshot");
+    require(webscene_engine_request_low_memory(engine) != 0,
+        "small detached DOM collection request failed");
+    webscene_engine_metrics after{};
+    for (auto attempt = 0; attempt < 500; ++attempt) {
+        webscene_engine_get_metrics(engine, &after);
+        if (after.dom_nodes <= before.dom_nodes) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(after.dom_nodes <= before.dom_nodes,
+        "low-memory collection did not reclaim a sub-threshold detached DOM batch (before="
+            + std::to_string(before.dom_nodes) + ", after="
+            + std::to_string(after.dom_nodes) + ")");
+    webscene_engine_destroy(engine);
+}
+
 void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* engine)
 {
+    execute_and_wait(engine, "void document.body", "native-detached-dom-init.js");
     webscene_engine_metrics before{};
-    webscene_engine_get_metrics(engine, &before);
+    for (auto attempt = 0; attempt < 500; ++attempt) {
+        webscene_engine_get_metrics(engine, &before);
+        if (before.dom_nodes != 0U) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(before.dom_nodes != 0U, "detached DOM baseline metrics were unavailable");
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
-    const auto diagnostic_value = [&](std::string_view name) {
-        const auto report = diagnostics(engine);
+    const auto diagnostic_value = [&](std::string_view name, uint64_t minimum = 0U) {
         const auto prefix = std::string{name} + '=';
-        const auto position = report.find(prefix);
-        require(position != std::string::npos,
-            "detached DOM diagnostic was unavailable: " + report);
-        const auto first = position + prefix.size();
-        const auto last = report.find_first_not_of("0123456789", first);
         uint64_t value = 0U;
-        const auto parsed = std::from_chars(
-            report.data() + first,
-            report.data() + (last == std::string::npos ? report.size() : last),
-            value);
-        require(parsed.ec == std::errc{},
-            "detached DOM diagnostic was not numeric: " + report);
+        for (auto attempt = 0; attempt < 500; ++attempt) {
+            // Certification counters are published with scene diagnostics,
+            // throttled to 250 ms. Ask for another publication while waiting
+            // for a post-collection snapshot, without queueing more DOM work.
+            execute_and_wait(engine, "void 0", "native-detached-dom-diagnostics.js");
+            const auto report = diagnostics(engine);
+            const auto position = report.find(prefix);
+            if (position != std::string::npos) {
+                const auto first = position + prefix.size();
+                const auto last = report.find_first_not_of("0123456789", first);
+                const auto parsed = std::from_chars(
+                    report.data() + first,
+                    report.data() + (last == std::string::npos ? report.size() : last),
+                    value);
+                require(parsed.ec == std::errc{},
+                    "detached DOM diagnostic was not numeric: " + report);
+                if (value >= minimum) return value;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        fail("detached DOM diagnostic did not reach the expected value: "
+            + std::string{name} + "=" + std::to_string(value));
         return value;
     };
     const auto release_batches_before = diagnostic_value(
@@ -716,7 +780,7 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
     require(
         detached_event == R"({"calls":2,"dispatched":true,"connected":false})",
         "a detached element stopped dispatching custom events: " + detached_event);
-    execute(engine, R"JS(
+    evaluate(engine, R"JS(
         (() => {
           const retained = document.createElement('div');
           retained.id = 'retained-detached-node';
@@ -732,6 +796,21 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
           }
         })()
     )JS", "native-detached-dom-gc.js");
+    // RunIdleTasks only offers time to work already scheduled by V8; it does
+    // not guarantee a collection on a small heap. Explicitly request memory
+    // reclamation so this tests weak-wrapper ownership rather than GC policy.
+    webscene_engine_memory_metrics collection_before{sizeof(webscene_engine_memory_metrics)};
+    webscene_engine_get_memory_metrics(engine, &collection_before);
+    require(webscene_engine_request_low_memory(engine) != 0,
+        "detached DOM test could not request V8 collection");
+    webscene_engine_memory_metrics collected{sizeof(webscene_engine_memory_metrics)};
+    for (auto attempt = 0; attempt < 500; ++attempt) {
+        webscene_engine_get_memory_metrics(engine, &collected);
+        if (collected.low_memory_notifications > collection_before.low_memory_notifications) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(collected.low_memory_notifications > collection_before.low_memory_notifications,
+        "detached DOM test did not observe V8 collection");
     require(
         evaluate(engine, R"JS(
           (() => {
@@ -749,8 +828,8 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
     webscene_engine_metrics after{};
     // Collection is deliberately lower priority than observable task sources
     // and releases only a bounded root batch per pump. Leave the worker idle
-    // rather than queueing artificial scripts, then prove that a
-    // TradingView-sized replacement eventually drains.
+    // rather than queueing artificial scripts, then prove that the collected
+    // wrappers from a large replacement drain across bounded release slices.
     for (auto attempt = 0; attempt < 500; ++attempt) {
         webscene_engine_get_metrics(engine, &after);
         if (after.dom_nodes <= before.dom_nodes + 8U) break;
@@ -763,26 +842,26 @@ void test_detached_dom_wrappers_do_not_permanently_root_nodes(webscene_engine* e
             + ", after=" + std::to_string(after.dom_nodes) + ")");
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     require(
-        diagnostic_value("detached-dom-release-batches")
+        diagnostic_value("detached-dom-release-batches", release_batches_before + 2U)
             > release_batches_before + 1U,
         "large detached DOM replacement was not amortized across release batches");
     require(
-        diagnostic_value("detached-dom-release-roots")
+        diagnostic_value("detached-dom-release-roots", release_roots_before + 2048U)
             >= release_roots_before + 2048U,
         "detached DOM release did not coalesce the individual removed roots");
     require(
-        diagnostic_value("detached-dom-release-slices")
+        diagnostic_value("detached-dom-release-slices", release_slices_before + 2U)
             > release_slices_before + 1U,
         "large detached DOM replacement was not drained over multiple idle slices");
     require(
         diagnostic_value("detached-dom-release-max-roots-per-slice") <= 16U,
         "a detached DOM release slice exceeded the input-latency root budget");
     require(
-        diagnostic_value("detached-dom-idle-gc-notifications")
+        diagnostic_value("detached-dom-idle-gc-notifications", idle_gc_notifications_before + 1U)
             > idle_gc_notifications_before,
         "detached DOM cleanup did not use the browser-style V8 idle queue");
 #endif
-    execute(engine, R"JS(
+    evaluate(engine, R"JS(
         (() => {
           globalThis.__webSceneRetainedDetachedNode.remove();
           delete globalThis.__webSceneRetainedDetachedNode;
