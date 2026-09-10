@@ -92,6 +92,14 @@ class CompilerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode,0)
             self.assertIn(message,result.stderr)
 
+    def test_shadow_component_order_and_defaults(self):
+        for value in ['red inset 2px 0', '2px 0 red inset', 'inset 2px 0', '0 0 currentColor', 'red 1px 2px 3px 4px']:
+            result,_=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for value in ['red blue 1px 2px', 'inset inset 1px 2px', '1px red 2px', '0', '0 0 0 0 0']:
+            result,_=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_compiled_inset_shadow(self):
         for value in ['inset 0 -2px 0 var(--Accent)', 'inset 0 0 0 1px var(--Accent)', 'inset 2px 0 0 red', 'inset 1px 2px 3px 4px rgba(0,0,0,.5)']:
             result,_=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')

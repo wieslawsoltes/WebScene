@@ -885,7 +885,7 @@ void native_document::append_scene(
                 shadow_y,
                 shadow_width,
                 shadow_height,
-                with_opacity(node.style.box_shadow_rgba),
+                with_opacity(node.style.box_shadow_current_color ? resolved_foreground(node) : node.style.box_shadow_rgba),
                 node.id,
                 shadow_radii.top_left,
                 shadow_radii.top_right,
@@ -1051,7 +1051,7 @@ void native_document::append_scene(
             box.x + node.style.box_shadow_offset_x + spread,
             box.y + node.style.box_shadow_offset_y + spread,
             std::max(0.0F, box.width - 2 * spread), std::max(0.0F, box.height - 2 * spread),
-            with_opacity(node.style.box_shadow_rgba),node.id,
+            with_opacity(node.style.box_shadow_current_color ? resolved_foreground(node) : node.style.box_shadow_rgba),node.id,
             std::max(0.0F,tl-spread),std::max(0.0F,tr-spread),std::max(0.0F,br-spread),std::max(0.0F,bl-spread),
             node.style.box_shadow_blur_radius});
         commands.push_back(webscene_scene_command{13U,0U,0,0,0,0,0U,node.id});

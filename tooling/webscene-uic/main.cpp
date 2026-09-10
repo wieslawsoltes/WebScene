@@ -785,11 +785,23 @@ static std::string assignments(const std::string &name,
   if (name == "box-shadow") {
     if (value == "none") return "s.set_box_shadow(std::nullopt);";
     const auto components = component_values(value);
-    const size_t start = !components.empty() && ascii_keyword(components.front()) == "inset" ? 1 : 0;
     if (ascii_keyword(value).find("var(") == std::string::npos) {
-      if (components.size() < start + 3 || components.size() > start + 5 || !compiled_color(components.back()))
-        throw std::runtime_error("box-shadow requires [inset] x y [blur [spread]] color");
-      for (size_t i = start; i + 1 < components.size(); ++i) pixel_length(components[i], i == start + 2);
+      bool inset = false, color = false, closed_lengths = false;
+      size_t count = 0;
+      for (const auto &part : components) {
+        const auto keyword = ascii_keyword(part);
+        if (keyword == "inset") {
+          if (inset) throw std::runtime_error("duplicate shadow inset");
+          inset = true; if (count) closed_lengths = true;
+        } else if (keyword == "currentcolor" || compiled_color(part)) {
+          if (color) throw std::runtime_error("duplicate shadow color");
+          color = true; if (count) closed_lengths = true;
+        } else {
+          if (closed_lengths || count == 4) throw std::runtime_error("invalid shadow length group");
+          pixel_length(part, count == 2); ++count;
+        }
+      }
+      if (count < 2) throw std::runtime_error("shadow requires two to four lengths");
     }
     return "s.set_box_shadow(s.evaluate(" + variable_code(value) + "));";
   }

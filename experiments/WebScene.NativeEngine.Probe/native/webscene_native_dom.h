@@ -539,6 +539,7 @@ struct node_style final {
     uint32_t box_shadow_rgba{0};
     bool box_shadow_present{false};
     bool box_shadow_inset{false};
+    bool box_shadow_current_color{false};
     // Negative means unspecified/inherited. Zero is a valid CSS value and is
     // used by visually hidden accessibility content.
     float font_size{-1};

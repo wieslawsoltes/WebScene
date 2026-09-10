@@ -414,6 +414,12 @@ int main() {
       if (c.kind == 13 && shadow) restored = true;
     }
     check(restored, "inset shadow follows background and is bounded by balanced clipping");
+    d.attribute(shadowed, "class", "current");
+    const auto &current = d.render(800, 10000);
+    check(std::any_of(current.commands.begin(), current.commands.end(), [&](const auto &c) {
+      return c.node_id == shadowed && (c.kind == 17 || c.kind == 18) && c.flags == 1 && c.rgba == 0x0000ffffu;
+    }), "reordered inset shadow uses live default currentColor");
+    d.remove_attribute(shadowed, "class");
     d.render(800, 600);
   }
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,

@@ -237,26 +237,33 @@ public:
     value_.box_shadow_present = false;
     value_.box_shadow_inset = false;
     if (!tokens || tokens->empty()) return;
-    const size_t start = tokens->front().is_keyword("inset") ? 1 : 0;
-    if (tokens->size() < start + 3 || tokens->size() > start + 5) return;
-    // Typed shadow grammar: [inset] x y [blur [spread]] color.
-    // Typed payloads were parsed by the compiler, never by this writer.
-    const auto &color = tokens->back().color;
-    if (!color) return;
+    bool inset = false, have_color = false, closed_lengths = false;
+    std::optional<uint32_t> color;
+    size_t count = 0;
     float values[4]{};
-    for (size_t i = start; i + 1 < tokens->size(); ++i) {
-      const auto &length = (*tokens)[i].length;
-      if (!length || length->unit != length_unit::pixels) return;
-      values[i - start] = length->value;
+    for (const auto &token : *tokens) {
+      if (token.is_keyword("inset")) {
+        if (inset) return;
+        inset = true; if (count) closed_lengths = true;
+      } else if (token.color || token.is_keyword("currentcolor")) {
+        if (have_color) return;
+        have_color = true; color = token.color;
+        if (count) closed_lengths = true;
+      } else {
+        if (closed_lengths || count == 4 || !token.length || token.length->unit != length_unit::pixels) return;
+        values[count++] = token.length->value;
+      }
     }
+    if (count < 2) return;
     if (values[2] < 0) return;
     value_.box_shadow_offset_x = values[0];
     value_.box_shadow_offset_y = values[1];
     value_.box_shadow_blur_radius = values[2];
     value_.box_shadow_spread_radius = values[3];
-    value_.box_shadow_rgba = *color;
+    value_.box_shadow_rgba = color.value_or(0);
+    value_.box_shadow_current_color = !color;
     value_.box_shadow_present = true;
-    value_.box_shadow_inset = start != 0;
+    value_.box_shadow_inset = inset;
   }
   void reset_background() { value_.background_rgba = 0; value_.clear_background_image(); }
   void set_background_rgba(uint32_t value) { value_.background_rgba = value; }

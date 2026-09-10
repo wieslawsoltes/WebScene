@@ -181,3 +181,9 @@ full Kestrel parity from this CSS inventory or a static diagnostic preview.
   for this inverse path; non-Foco consumers need equivalent support before claiming
   embedding parity. Multiple shadows, arbitrary component ordering, elliptical
   corner/border details and browser comparisons remain open integration work.
+- Shadow shorthand follow-through: color and inset can precede or follow the
+  contiguous length group; omitted color and explicit currentColor resolve from
+  the live foreground. Duplicate colors/inset and interrupted length groups are
+  rejected, including after typed variable substitution. Compiler and native
+  mutation contracts pass; a reordered inset shadow paints blue after a foreground
+  change. Multiple shadows and non-pixel shadow lengths remain pending.
