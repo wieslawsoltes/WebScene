@@ -286,3 +286,116 @@ exposed to compiled `-webkit-font-smoothing` declarations (auto, none, antialias
 subpixel-antialiased, inherit/unset). A native contract verifies inherited
 antialiased metadata reaches text output. Compiler and native contract suites pass.
 This verifies propagation, not identical glyph rasterization across platforms.
+
+## Current grouped CSS backlog (2026-09-10)
+
+Regenerated after 5b14f19a: **60 distinct unsupported constructs**, 397 rules,
+1475 declarations. The original 80-item baseline above remains historical.
+These counts describe this stylesheet only; no feature family is closed by them.
+
+| Family | Distinct diagnostics |
+| --- | ---: |
+| Generated content and pseudo-elements | 9 |
+| Animation and conditional rules | 9 |
+| Input and native control presentation | 17 |
+| Paint, effects and transforms | 18 |
+| Layout and compiled expressions | 4 |
+| Text layout and font behavior | 3 |
+
+Next dependency to resolve: compiled expressions used by layout and paint.
+Variable evaluation currently handles typed token lists, but nested calc and
+color functions need typed expression evaluation rather than runtime parsing.
+Pseudo-element support also requires generated-content lifecycle and scene
+semantics, not selector acceptance alone. Input/control presentation requires
+engine/host review; text ellipsis is a confirmed engine gap. Ownership of the
+remaining items is provisional until their native paths are inspected.
+
+### Generated content and pseudo-elements
+
+```text
+#command-input::placeholder: unsupported selector: #command-input::placeholder
+#ribbon-tab-list button.active:after: unsupported selector: #ribbon-tab-list button.active::after
+.document-tab.active:after: unsupported selector: .document-tab.active::after
+.panel-tabs button.active:after: unsupported selector: .panel-tabs button.active::after
+.progress-line:after: unsupported selector: .progress-line::after
+.property-section-title:before: unsupported selector: .property-section-title::before
+content:"": unsupported Native Web CSS property: content
+content:"⌄": unsupported Native Web CSS property: content
+dialog::backdrop: unsupported selector: dialog::backdrop
+```
+
+### Animation and conditional rules
+
+```text
+@keyframes progress: unsupported at-rule or condition
+@keyframes toast-in: unsupported at-rule or condition
+@media (prefers-reduced-motion:reduce): unsupported at-rule or condition
+@media print: unsupported at-rule or condition
+animation:none: unsupported Native Web CSS property: animation
+animation:progress 1.2s infinite ease-in-out: unsupported Native Web CSS property: animation
+animation:toast-in .15s ease-out: unsupported Native Web CSS property: animation
+transition:fill .15s: unsupported Native Web CSS property: transition
+transition:none: unsupported Native Web CSS property: transition
+```
+
+### Input and native control presentation
+
+```text
+accent-color:var(--accent): compiled var() not supported for property: accent-color
+color-scheme:dark: unsupported Native Web CSS property: color-scheme
+color-scheme:light: unsupported Native Web CSS property: color-scheme
+cursor:col-resize: unsupported Native Web CSS property: cursor
+cursor:crosshair: unsupported Native Web CSS property: cursor
+cursor:grabbing: unsupported Native Web CSS property: cursor
+cursor:move: unsupported Native Web CSS property: cursor
+cursor:not-allowed: unsupported Native Web CSS property: cursor
+cursor:pointer: unsupported Native Web CSS property: cursor
+cursor:row-resize: unsupported Native Web CSS property: cursor
+resize:vertical: unsupported Native Web CSS property: resize
+scrollbar-color:var(--line) transparent: compiled var() not supported for property: scrollbar-color
+scrollbar-width:none: unsupported Native Web CSS property: scrollbar-width
+scrollbar-width:thin: unsupported Native Web CSS property: scrollbar-width
+touch-action:none: unsupported Native Web CSS property: touch-action
+user-select:none: unsupported Native Web CSS property: user-select
+user-select:text: unsupported Native Web CSS property: user-select
+```
+
+### Paint, effects and transforms
+
+```text
+backdrop-filter:blur(3px): unsupported Native Web CSS property: backdrop-filter
+backdrop-filter:blur(9px): unsupported Native Web CSS property: backdrop-filter
+background:color-mix(in srgb,var(--active) 63%,var(--panel)): compiled color-mix currently supports an sRGB color percentage mixed with transparent
+background:linear-gradient(125deg,var(--panel2),var(--panel)): unsupported custom-value token: linear-gradient(125deg,var(--panel2),var(--panel))
+background:linear-gradient(145deg,var(--panel2),var(--panel)): unsupported custom-value token: linear-gradient(145deg,var(--panel2),var(--panel))
+border:1px dashed #65c5a4: border shorthand currently requires width solid color, 0 or none
+border:2px dashed var(--accent): border shorthand currently requires width solid color, 0 or none
+box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent): unsupported custom-value token: color-mix(in
+box-shadow:inset 0 -2px 0 var(--accent): native compiled inset shadows are not supported yet
+box-shadow:inset 0 0 0 1px var(--accent-dim): native compiled inset shadows are not supported yet
+box-shadow:inset 2px 0 0 var(--accent): native compiled inset shadows are not supported yet
+filter:brightness(1.1): unsupported Native Web CSS property: filter
+outline-offset:-2px: unsupported Native Web CSS property: outline-offset
+outline:2px solid var(--accent): compiled var() not supported for property: outline
+outline:none: unsupported Native Web CSS property: outline
+transform:none: unsupported Native Web CSS property: transform
+transform:translateX(-50%): unsupported Native Web CSS property: transform
+transform:translateY(7px): unsupported Native Web CSS property: transform
+```
+
+### Layout and compiled expressions
+
+```text
+border-collapse:collapse: unsupported Native Web CSS property: border-collapse
+bottom:calc(var(--command-height) + 74px): unsupported custom-value token: calc(var(--command-height)
+grid-column:1/-1: unsupported Native Web CSS property: grid-column
+right:calc(var(--right-width) + 16px): unsupported custom-value token: calc(var(--right-width)
+```
+
+### Text layout and font behavior
+
+```text
+font-synthesis:none: unsupported Native Web CSS property: font-synthesis
+overflow-wrap:anywhere: unsupported Native Web CSS property: overflow-wrap
+text-overflow:ellipsis: unsupported Native Web CSS property: text-overflow
+```
