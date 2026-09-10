@@ -166,5 +166,22 @@ int main() {
     if(resolve_value(exempt,"calc(var(--size) + var(--size))",variables)!="calc(8px + 8px)") return 37;
     legend.style.mutable_custom_properties().values["--size"]="9px";
     if(resolve_value(exempt,"var(--size)",variables)!="9px") return 38;
+    using webscene_native::css::seed_inline_custom_properties;
+    using webscene_native::css::apply_custom_property;
+    exempt.mutable_authored_style().declarations["--size"]="11px";
+    seed_inline_custom_properties(exempt);
+    if(apply_custom_property(exempt,{"--size","20px",false}) ||
+       resolve_value(exempt,"var(--size)",variables)!="11px") return 39;
+    if(!apply_custom_property(exempt,{"--size","22px",true}) ||
+       resolve_value(exempt,"var(--size)",variables)!="22px") return 40;
+    exempt.mutable_authored_style().important_declarations.insert("--size");
+    seed_inline_custom_properties(exempt);
+    if(apply_custom_property(exempt,{"--size","30px",true}) ||
+       resolve_value(exempt,"var(--size)",variables)!="11px") return 41;
+    exempt.mutable_authored_style().declarations.erase("--size");
+    exempt.mutable_authored_style().important_declarations.erase("--size");
+    seed_inline_custom_properties(exempt);
+    if(!apply_custom_property(exempt,{"--size","33px",false}) ||
+       resolve_value(exempt,"var(--size)",variables)!="33px") return 42;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

@@ -409,3 +409,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   pass. This is behavior-preserving reuse, not full variable compliance: cycle
   semantics, quote/token awareness and the fixed expansion bound remain limitations
   of this existing resolver. Declaration application/cascade integration remains open.
+
+- Custom-property declaration application: inline seeding and stylesheet application
+  now share native helpers, preserving the runtime's existing inline/important
+  precedence. Native tests verify normal stylesheet declarations cannot replace
+  inline values, stylesheet important can replace normal inline, inline important
+  remains protected, and removing inline state allows later stylesheet values.
+  Service and runtime dimension-variable/inheritance/iframe regressions pass.
+  Ordinary style properties, whole-document cascade and app integration remain open.

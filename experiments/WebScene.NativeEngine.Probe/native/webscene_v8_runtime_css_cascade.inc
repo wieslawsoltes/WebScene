@@ -1694,36 +1694,8 @@
             return;
         }
         if (name.starts_with("--")) {
-            const auto& custom = node.style.custom_properties();
-            const auto existing_is_important =
-                custom.important.contains(name);
-            const auto existing_is_inline =
-                node.authored_style().declarations.contains(name)
-                && custom.values.contains(name);
-            const auto inline_is_important =
-                existing_is_inline
-                && node.authored_style().important_declarations.contains(name);
-            if (inline_is_important
-                || (!declaration.important && existing_is_important)
-                || (!declaration.important && existing_is_inline)) {
-                record_feature(
-                    "css",
-                    "custom-property",
-                    "supported",
-                    {},
-                    "style-application");
-                return;
-            }
-            auto& mutable_custom = node.style.mutable_custom_properties();
-            mutable_custom.values[name] = declaration.value;
-            if (declaration.important) mutable_custom.important.insert(name);
-            else mutable_custom.important.erase(name);
-            record_feature(
-                "css",
-                "custom-property",
-                "supported",
-                {},
-                "style-application");
+            css::apply_custom_property(node,declaration);
+            record_feature("css","custom-property","supported",{},"style-application");
             return;
         }
         feature_decision decision(
@@ -3126,15 +3098,7 @@
             node.style.word_spacing = 0;
             node.style.word_spacing_specified = false;
         }
-        node.style.clear_custom_properties();
-        for (const auto& [name, value] : node.authored_style().declarations) {
-            if (!name.starts_with("--")) continue;
-            auto& custom = node.style.mutable_custom_properties();
-            custom.values[name] = value;
-            if (node.authored_style().important_declarations.contains(name)) {
-                custom.important.insert(name);
-            }
-        }
+        css::seed_inline_custom_properties(node);
         node.style.clear_pseudo_elements();
         // Recompute stylesheet visibility from the current class/selector set.
         // React reuses toolbar nodes while replacing their responsive classes;

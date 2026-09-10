@@ -57,4 +57,29 @@ inline std::string resolve_value(const dom_node& node,std::string value,
         return trim_value(value);
     }
 
+inline void seed_inline_custom_properties(dom_node& node) {
+        node.style.clear_custom_properties();
+        for (const auto& [name, value] : node.authored_style().declarations) {
+            if (!name.starts_with("--")) continue;
+            auto& custom = node.style.mutable_custom_properties();
+            custom.values[name] = value;
+            if (node.authored_style().important_declarations.contains(name)) {
+                custom.important.insert(name);
+            }
+        }
+}
+inline bool apply_custom_property(dom_node& node,const css_declaration& declaration) {
+    const auto& name=declaration.name;
+    if(!name.starts_with("--")) return false;
+    const auto& custom=node.style.custom_properties();
+    const bool existing_important=custom.important.contains(name);
+    const bool existing_inline=node.authored_style().declarations.contains(name) && custom.values.contains(name);
+    const bool inline_important=existing_inline && node.authored_style().important_declarations.contains(name);
+    if(inline_important || (!declaration.important && (existing_important || existing_inline))) return false;
+    auto& values=node.style.mutable_custom_properties();
+    values.values[name]=declaration.value;
+    if(declaration.important) values.important.insert(name);
+    else values.important.erase(name);
+    return true;
+}
 } // namespace webscene_native::css
