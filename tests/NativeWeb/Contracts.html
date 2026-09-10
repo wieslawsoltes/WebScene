@@ -1,0 +1,11 @@
+<!doctype html><html><head><style>
+body { margin: 0; }
+.outer { padding: 10px; }
+button { width: 20px; height: 20px; }
+.outer > button { width: 30px; }
+.outer .chosen { width: 40px; }
+#target { width: 50px; }
+.chosen { width: 60px !important; }
+button:focus { height: 30px; }
+@media (max-width: 400px) { #target { height: 40px; } }
+</style></head><body><div class="outer"><button id="target" class="chosen" style="width: 70px">Go</button><button id="other">Other</button><canvas id="canvas" width="80" height="40"></canvas></div></body></html>

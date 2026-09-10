@@ -1,0 +1,17 @@
+body { margin: 0; background: #101923; color: #dce8f0; font-size: 16px; }
+main { padding: 32px; }
+.eyebrow { color: #78dcc1; font-size: 13px; }
+h1 { font-size: 36px; margin: 16px 0; }
+h2 { font-size: 21px; margin: 0 0 16px; }
+p { margin: 12px 0; }
+#workspace { display: flex; gap: 24px; margin-top: 28px; }
+.card { background: #1c2a38; border-radius: 16px; padding: 24px; flex-grow: 1; flex-basis: 0; min-width: 0; }
+.card.active { background: #254b48; }
+.actions { display: flex; gap: 12px; }
+button { background: #78dcc1; color: #101923; padding: 12px 18px; border-radius: 8px; margin: 8px 0; }
+button.secondary { background: #b0c4d4; }
+button:hover { background: #b9f4e4; }
+button:focus { background: #ffffff; }
+#count { font-size: 30px; }
+canvas { width: 300px; height: 120px; }
+@media (max-width: 700px) { #workspace { flex-direction: column; } main { padding: 20px; } }

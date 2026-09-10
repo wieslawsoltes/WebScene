@@ -259,3 +259,10 @@ safe renderer for arbitrary untrusted websites or scripts.
 The repository uses the terms in [LICENSE](LICENSE), including its Restricted Party
 Clause. Describe it as a custom source-available license, not unqualified MIT or an
 OSI-approved open-source license.
+
+## Native Web: compiled HTML/CSS and C++
+
+The [Native Web sample](samples/NativeWeb/README.md) compiles HTML/CSS into C++ and
+runs C++ application logic on WebScene's native DOM/layout with Foco's Cocoa/Metal
+host, without deploying V8 or runtime UI parsers. This is an initial, explicitly
+bounded compiler profile. See the [architecture and future binding note](docs/design/native-web.md).
