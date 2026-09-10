@@ -5,6 +5,7 @@
 #include "webscene_css_rule_operations.h"
 #include "webscene_css_variables.h"
 #include "webscene_css_box_values.h"
+#include "webscene_css_transitions.h"
 #include <iostream>
 int main() {
     using webscene_native::css::parse_declarations;
@@ -218,5 +219,15 @@ int main() {
     if(!pseudo.elliptical_border_radius || pseudo.border_top_right_radius_y.value!=4) return 54;
     apply_corner_radius_declaration("border-radius","3px",pseudo);
     if(pseudo.elliptical_border_radius || pseudo.border_top_left_radius.value!=3) return 55;
+    using webscene_native::css::apply_transition_shorthand;
+    apply_transition_shorthand(box,"opacity .2s ease-in 50ms, left 100ms linear -20ms");
+    if(box.animations().opacity_transition.duration_ms!=200 ||
+       box.animations().opacity_transition.delay_ms!=50 ||
+       box.animations().left_transition.duration_ms!=100 ||
+       box.animations().left_transition.delay_ms!=-20 ||
+       box.animations().left_transition.x1!=0) return 56;
+    apply_transition_shorthand(box,"none");
+    if(box.animations().opacity_transition.duration_ms!=0 ||
+       box.animations().left_transition.duration_ms!=0) return 57;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

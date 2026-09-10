@@ -634,4 +634,33 @@ inline bool apply_corner_radius_declaration(
         return true;
     }
 
+inline std::vector<std::string> split_css_component_list(
+        std::string_view value,
+        char separator)
+    {
+        std::vector<std::string> result;
+        size_t start = 0;
+        int depth = 0;
+        char quote = 0;
+        for (size_t index = 0; index <= value.size(); ++index) {
+            const auto character = index < value.size() ? value[index] : separator;
+            if (quote != 0) {
+                if (character == quote && (index == 0 || value[index - 1] != '\\')) quote = 0;
+                continue;
+            }
+            if (character == '\'' || character == '"') {
+                quote = character;
+                continue;
+            }
+            if (character == '(') ++depth;
+            else if (character == ')' && depth > 0) --depth;
+            if (character == separator && depth == 0) {
+                auto component = trim_value(std::string(value.substr(start, index - start)));
+                if (!component.empty()) result.push_back(std::move(component));
+                start = index + 1U;
+            }
+        }
+        return result;
+    }
+
 } // namespace webscene_native::css

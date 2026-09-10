@@ -442,3 +442,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   pseudo's elliptical state. Service and runtime elliptical-corner-radii and
   active-chart-pseudo-border tests pass. Parsing/logical-corner limitations are
   unchanged; full declaration dispatch and cascade orchestration remain open.
+
+- Transition configuration extraction: component-list splitting, time conversion,
+  timing curves, property-list configuration and transition shorthand now use shared
+  native helpers. Runtime adapters delegate without changing frame scheduling.
+  Native tests cover property lists, durations, positive/negative delays, linear
+  timing and none resets. Service and runtime logical-inset-transition,
+  dimension-variable-compatibility and iframe cascade tests pass. Existing timing
+  grammar/property-coverage limitations remain; no standalone animation scheduler
+  or application cascade integration has been added.

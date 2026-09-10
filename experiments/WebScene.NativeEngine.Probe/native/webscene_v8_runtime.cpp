@@ -30,6 +30,7 @@
 #include "webscene_css_rule_operations.h"
 #include "webscene_css_variables.h"
 #include "webscene_css_box_values.h"
+#include "webscene_css_transitions.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"
