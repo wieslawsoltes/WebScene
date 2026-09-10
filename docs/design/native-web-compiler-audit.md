@@ -1433,3 +1433,12 @@ rowspan clamps to 65534. Contracts cover invalid/zero colspan defaults, an overs
 colspan render and restoration to the original width. Rebuilt contracts pass.
 Rowspan=0 still follows the old one-row fallback rather than spanning the remaining
 row group; that semantic gap and dedicated rowspan geometry tests remain open.
+
+### Rowspan zero and row-group limits (2026-09-10)
+
+Table row collection now records each row's group. Rowspan parsing preserves zero
+and resolves it to the remaining rows in that group; positive spans are capped at
+the same boundary. The native fixture verifies a zero-span cell covers both rows
+and reserves its column beside the second-row cell. Rebuilt contracts pass.
+Multiple-group transitions, dynamic row insertion and comprehensive rowspan
+geometry still require dedicated coverage.

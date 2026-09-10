@@ -203,6 +203,11 @@ int main() {
   d.render(800, 600);
   check(d.bounds(span_cell).width == table_span.width,
         "cell colspan recovers after oversized value");
+  auto rowspan_box = d.bounds(d.find("zero-rowspan"));
+  auto rowspan_peer = d.bounds(d.find("zero-rowspan-peer"));
+  check(rowspan_peer.x >= rowspan_box.x + rowspan_box.width &&
+        rowspan_box.height >= rowspan_peer.y + rowspan_peer.height - rowspan_box.y,
+        "zero rowspan covers remaining row group and reserves column");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

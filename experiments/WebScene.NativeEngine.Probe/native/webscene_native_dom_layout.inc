@@ -1,11 +1,12 @@
-static size_t native_table_span(std::string_view text, size_t maximum = 1000) {
+static size_t native_table_span(std::string_view text, size_t maximum = 1000, bool preserve_zero = false) {
     size_t cursor = text.find_first_not_of(" \t\n\r\f");
     if (cursor == std::string_view::npos) return 1;
     if (text[cursor] == '+') ++cursor;
+    const auto first_digit = cursor;
     size_t value = 0;
     while (cursor < text.size() && text[cursor] >= '0' && text[cursor] <= '9')
         value = std::min<size_t>(maximum, value * 10 + (text[cursor++] - '0'));
-    return value ? value : 1;
+    return value || (preserve_zero && cursor > first_digit) ? value : 1;
 }
 
 void native_document::layout(float viewport_width, float viewport_height)
@@ -550,6 +551,7 @@ void native_document::layout_children(dom_node& parent)
         };
         struct table_row_placement final {
             dom_node* row{nullptr};
+            dom_node* group{nullptr};
             std::vector<table_cell_placement> cells;
         };
 
@@ -559,7 +561,7 @@ void native_document::layout_children(dom_node& parent)
                 if (child->style.display == display_mode::none
                     || is_table_track(child->style.display)) continue;
                 if (child->style.display == display_mode::table_row) {
-                    rows.push_back({child, {}});
+                    rows.push_back({child, &node, {}});
                 } else if (is_table_row_group(child->style.display)) {
                     collect_rows(*child);
                 }
@@ -582,10 +584,14 @@ void native_document::layout_children(dom_node& parent)
                     }
                     return found == child->attributes.end()
                         ? size_t{1}
-                        : native_table_span(found->second, name == "rowspan" ? 65534 : 1000);
+                        : native_table_span(found->second, name == "rowspan" ? 65534 : 1000, name == "rowspan");
                 };
                 const auto column_span = parse_span("colspan");
-                const auto row_span = parse_span("rowspan");
+                auto row_span = parse_span("rowspan");
+                size_t remaining_rows = 0;
+                for (size_t index = static_cast<size_t>(&row - rows.data());
+                     index < rows.size() && rows[index].group == row.group; ++index) ++remaining_rows;
+                row_span = row_span ? std::min(row_span, remaining_rows) : remaining_rows;
                 if (occupied_rows.size() < column + column_span) {
                     occupied_rows.resize(column + column_span, 0);
                 }
