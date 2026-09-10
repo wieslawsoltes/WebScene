@@ -180,6 +180,19 @@ int main() {
   check(d.bounds(translated).x - d.bounds(translate_parent).x == 10, "compiled percentage translation uses own width");
   d.render(800, 10000);
   auto clip_parent = d.find("translation-clip"), clip_child = d.find("translation-clipped");
+  const auto &clip_scene = d.render(800, 10000);
+  size_t clip_begin = clip_scene.commands.size(), child_paint = clip_begin, clip_end = clip_begin;
+  for (size_t i = 0; i < clip_scene.commands.size(); ++i) {
+    const auto &command = clip_scene.commands[i];
+    if (command.node_id == clip_parent && command.kind == 12) {
+      clip_begin = i;
+      check(command.width == 20 && command.height == 10, "overflow clip uses ancestor viewport");
+    }
+    if (command.node_id == clip_child && command.rgba == 0x123456ffu) child_paint = i;
+    if (command.node_id == clip_parent && command.kind == 13) clip_end = i;
+  }
+  check(clip_begin < child_paint && child_paint < clip_end && clip_end < clip_scene.commands.size(),
+        "native scene brackets translated descendant paint with overflow clip");
   int clipped_hits = 0;
   auto clip_subscription = d.on(clip_child, "pointerdown", [&](event&) { ++clipped_hits; });
   const auto clip_area = d.bounds(clip_parent);
@@ -195,6 +208,9 @@ int main() {
   d.render(800, 10000);
   click_clip(25);
   check(clipped_hits == 2, "overflow visible restores translated outside hit region");
+  check(std::none_of(clip_scene.commands.begin(), clip_scene.commands.end(), [&](const auto& command) {
+    return command.node_id == clip_parent && (command.kind == 12 || command.kind == 13);
+  }), "overflow visible removes ancestor clip commands");
   int translated_hits = 0;
   auto translated_subscription = d.on(translated, "pointerdown", [&](event&) { ++translated_hits; });
   auto translated_area = d.bounds(translated);

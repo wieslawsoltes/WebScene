@@ -880,3 +880,11 @@ The regression now passes: visible translated content is targetable, content
 outside overflow:hidden is excluded, and changing overflow to visible restores
 outside targeting. Native contracts pass. Rendered clipping parity, mixed-axis
 clipping and actual scroll interaction remain open and require further coverage.
+
+### Overflow scene clip coverage (2026-09-10)
+
+The compiled overflow fixture now paints its translated child. Native contracts
+verify clip begin/end commands bracket that child's paint and use the ancestor's
+20x10 viewport. Changing overflow to visible removes both ancestor clip commands.
+Native contracts pass. This verifies scene ordering and metadata, not final
+rasterized pixels; renderer differential and mixed-axis clipping remain open.
