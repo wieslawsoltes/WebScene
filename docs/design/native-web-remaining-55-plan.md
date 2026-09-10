@@ -596,3 +596,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   compact table, fixed dialog and dimension-inheritance regressions pass. Existing
   keyword/float/table coverage limitations remain; full cascade and application
   integration are not complete.
+
+- Paint application extraction: shadow parsing and background color/image/position/
+  size/repeat mutation now use shared native helpers. SVG loading remains a host
+  callback. Native tests cover inset/currentColor shadows, resource loading/failure,
+  gradient replacement and size resets. They exposed stale background-size second
+  components; clearing both components before parsing fixes updates from two values
+  to contain or one length. Native service and runtime shadow, relative resource,
+  SVG checker and active-chart pseudo-border regressions pass. Existing image,
+  gradient, shadow and tokenization limits remain; full cascade is unfinished.

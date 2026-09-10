@@ -17,6 +17,7 @@
 #include "webscene_css_property_mask.h"
 #include "webscene_css_reset.h"
 #include "webscene_css_box_application.h"
+#include "webscene_css_paint_values.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -533,5 +534,31 @@ int main(int argc,char** argv) {
     structure(flexible_column,"border-collapse","collapse");
     if(!flexible_column.style.z_index_auto || !flexible_column.style.table().border_collapsed ||
        flexible_column.style.table().border_spacing_vertical.value!=7) return 102;
+    size_t image_loads=0;
+    const auto paint=[&](const std::string& name,const std::string& value) {
+        return webscene_native::css::apply_paint_value(flexible_column,name,value,grid_result,unprotected,
+            [&](const std::string& url,std::string& markup,std::string& resolved,std::string& view_box) {
+                ++image_loads;
+                if(url!="asset://icon.svg") return false;
+                markup="<svg viewBox='0 0 20 10'></svg>";
+                resolved=url;view_box="0 0 20 10";return true;
+            });
+    };
+    paint("box-shadow","inset 1px 2px 3px currentColor");
+    if(!flexible_column.style.box_shadow_present || !flexible_column.style.box_shadow_inset ||
+       !flexible_column.style.box_shadow_current_color) return 103;
+    paint("background-image","url(asset://icon.svg)");
+    paint("background-position","bottom right");
+    paint("background-size","20px 30px");
+    paint("background-size","contain");
+    if(image_loads!=1 || flexible_column.style.background_image().image_view_box!="0 0 20 10" ||
+       flexible_column.style.background_image().position_y!="bottom" ||
+       flexible_column.style.background_image().size_y!="contain") return 104;
+    paint("background-size","20px");
+    if(flexible_column.style.background_image().size_y!="auto") return 107;
+    paint("background-image","linear-gradient(red, blue)");
+    if(image_loads!=1 || !flexible_column.style.background_image().image_markup.empty()) return 105;
+    paint("background-image","url(missing.svg)");
+    if(grid_result.classification!="unsupported" || !flexible_column.style.background_image().image_markup.empty()) return 106;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
