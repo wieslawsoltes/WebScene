@@ -400,6 +400,22 @@ int main() {
     d.remove_attribute(outlined, "class"); check_outline(0);
     d.render(800, 600);
   }
+  {
+    const auto shadowed = d.find("shadow-audit");
+    const auto &paint = d.render(800, 10000);
+    bool background = false, clipped = false, shadow = false, restored = false;
+    for (const auto &c : paint.commands) {
+      if (c.node_id != shadowed) continue;
+      if (c.rgba == 0xffffffffu) background = true;
+      if (c.kind == 12) clipped = background;
+      if ((c.kind == 17 || c.kind == 18) && c.flags == 1) {
+        shadow = clipped && c.rgba == 0xff0000ffu && c.x == d.bounds(shadowed).x + 2;
+      }
+      if (c.kind == 13 && shadow) restored = true;
+    }
+    check(restored, "inset shadow follows background and is bounded by balanced clipping");
+    d.render(800, 600);
+  }
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

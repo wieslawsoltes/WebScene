@@ -235,16 +235,19 @@ public:
   }
   void set_box_shadow(const variable_result &tokens) {
     value_.box_shadow_present = false;
-    if (!tokens || tokens->size() < 3 || tokens->size() > 5) return;
-    // First supported shadow grammar: x y [blur [spread]] color.
+    value_.box_shadow_inset = false;
+    if (!tokens || tokens->empty()) return;
+    const size_t start = tokens->front().is_keyword("inset") ? 1 : 0;
+    if (tokens->size() < start + 3 || tokens->size() > start + 5) return;
+    // Typed shadow grammar: [inset] x y [blur [spread]] color.
     // Typed payloads were parsed by the compiler, never by this writer.
     const auto &color = tokens->back().color;
     if (!color) return;
     float values[4]{};
-    for (size_t i = 0; i + 1 < tokens->size(); ++i) {
+    for (size_t i = start; i + 1 < tokens->size(); ++i) {
       const auto &length = (*tokens)[i].length;
       if (!length || length->unit != length_unit::pixels) return;
-      values[i] = length->value;
+      values[i - start] = length->value;
     }
     if (values[2] < 0) return;
     value_.box_shadow_offset_x = values[0];
@@ -253,6 +256,7 @@ public:
     value_.box_shadow_spread_radius = values[3];
     value_.box_shadow_rgba = *color;
     value_.box_shadow_present = true;
+    value_.box_shadow_inset = start != 0;
   }
   void reset_background() { value_.background_rgba = 0; value_.clear_background_image(); }
   void set_background_rgba(uint32_t value) { value_.background_rgba = value; }

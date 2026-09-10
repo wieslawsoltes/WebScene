@@ -858,7 +858,7 @@ void native_document::append_scene(
         node.layout.width,
         node.layout.height);
     if (paint_self
-        && node.style.box_shadow_present
+        && node.style.box_shadow_present && !node.style.box_shadow_inset
         && node.layout.width > 0
         && node.layout.height > 0) {
         const auto spread = node.style.box_shadow_spread_radius;
@@ -1031,6 +1031,30 @@ void native_document::append_scene(
             node.layout.height,
             0U,
             node.id});
+    }
+    if (paint_self && node.style.box_shadow_present && node.style.box_shadow_inset
+        && node.layout.width > 0 && node.layout.height > 0) {
+        const float left = resolve_length(node, node.style.border_left_width, node.layout.width, 0);
+        const float right = resolve_length(node, node.style.border_right_width, node.layout.width, 0);
+        const float top = resolve_length(node, node.style.border_top_width, node.layout.width, 0);
+        const float bottom = resolve_length(node, node.style.border_bottom_width, node.layout.width, 0);
+        const layout_rect box{node.layout.x + left, node.layout.y + top,
+            std::max(0.0F, node.layout.width - left - right), std::max(0.0F, node.layout.height - top - bottom)};
+        const float spread = node.style.box_shadow_spread_radius;
+        const auto tl = std::max(0.0F, radii.top_left - std::max(left, top));
+        const auto tr = std::max(0.0F, radii.top_right - std::max(right, top));
+        const auto br = std::max(0.0F, radii.bottom_right - std::max(right, bottom));
+        const auto bl = std::max(0.0F, radii.bottom_left - std::max(left, bottom));
+        commands.push_back(webscene_scene_command{12U,0U,box.x,box.y,box.width,box.height,0U,node.id,tl,tr,br,bl});
+        // Shadow flag 1 paints the inverse rounded hole inside the preceding clip.
+        commands.push_back(webscene_scene_command{paint_box_in_foreground ? 18U : 17U,1U,
+            box.x + node.style.box_shadow_offset_x + spread,
+            box.y + node.style.box_shadow_offset_y + spread,
+            std::max(0.0F, box.width - 2 * spread), std::max(0.0F, box.height - 2 * spread),
+            with_opacity(node.style.box_shadow_rgba),node.id,
+            std::max(0.0F,tl-spread),std::max(0.0F,tr-spread),std::max(0.0F,br-spread),std::max(0.0F,bl-spread),
+            node.style.box_shadow_blur_radius});
+        commands.push_back(webscene_scene_command{13U,0U,0,0,0,0,0U,node.id});
     }
     const auto append_border_rect = [&](float x, float y, float width, float height, uint32_t rgba) {
         if ((rgba & 0xFFU) == 0U || width <= 0 || height <= 0) return;

@@ -95,9 +95,9 @@ regression and integrated evidence; update this ledger with evidence as work lan
 | 21 | `border:1px dashed #65c5a4` | P | Open |
 | 22 | `border:2px dashed var(--accent)` | P | Open |
 | 23 | `box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent)` | P | Open |
-| 24 | `box-shadow:inset 0 -2px 0 var(--accent)` | P | Open |
-| 25 | `box-shadow:inset 0 0 0 1px var(--accent-dim)` | P | Open |
-| 26 | `box-shadow:inset 2px 0 0 var(--accent)` | P | Open |
+| 24 | `box-shadow:inset 0 -2px 0 var(--accent)` | P | Implemented; native command and Foco raster checks pass; integration pending |
+| 25 | `box-shadow:inset 0 0 0 1px var(--accent-dim)` | P | Implemented; native command and Foco raster checks pass; integration pending |
+| 26 | `box-shadow:inset 2px 0 0 var(--accent)` | P | Implemented; native command and Foco raster checks pass; integration pending |
 | 27 | `color-scheme:dark` | I | Open |
 | 28 | `color-scheme:light` | I | Open |
 | 29 | `content:""` | S | Open |
@@ -172,3 +172,12 @@ full Kestrel parity from this CSS inventory or a static diagnostic preview.
   as native_web_foco_paint; it passes. This fixes existing outer-shadow delivery;
   inset shadow geometry/commands are still pending. A stale standalone Foco build
   was not used for validation; tests ran against current Native Web dependencies.
+
+- Inset shadows: typed inset flag, padding-box clipping and inverse rounded-hole
+  shadow commands now connect to Foco's blur renderer. All three baseline inset
+  forms compile. Native contracts check background/clip/shadow/restore order;
+  Foco raster tests check hard inset edges, a transparent center, soft inward blur
+  and no paint outside the clip. Shadow command kinds 17/18 reserve flags bit 0
+  for this inverse path; non-Foco consumers need equivalent support before claiming
+  embedding parity. Multiple shadows, arbitrary component ordering, elliptical
+  corner/border details and browser comparisons remain open integration work.

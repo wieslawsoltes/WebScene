@@ -129,6 +129,8 @@ typedef struct webscene_scene_header {
     uint64_t content_hash;
 } webscene_scene_header;
 
+// Shadow kinds 17/18: flags bit 0 selects an inverse rounded hole;
+// producers must bracket inverse shadows with clip commands 12/13.
 typedef struct webscene_scene_command {
     uint32_t kind;
     uint32_t flags;

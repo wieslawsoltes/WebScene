@@ -92,6 +92,13 @@ class CompilerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode,0)
             self.assertIn(message,result.stderr)
 
+    def test_compiled_inset_shadow(self):
+        for value in ['inset 0 -2px 0 var(--Accent)', 'inset 0 0 0 1px var(--Accent)', 'inset 2px 0 0 red', 'inset 1px 2px 3px 4px rgba(0,0,0,.5)']:
+            result,_=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        result,_=self.compile('<div></div>', 'div { box-shadow:inset 0 0 -2px red; }')
+        self.assertNotEqual(result.returncode,0)
+
     def test_outline_shorthand_order_and_defaults(self):
         for value in ['solid', 'red solid', 'solid 2px', 'red 2px solid', 'thick solid currentColor', 'var(--Outline, solid red)']:
             result,_=self.compile('<div></div>', 'div { outline:'+value+'; }')
@@ -750,7 +757,7 @@ class CompilerTests(unittest.TestCase):
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn('set_box_shadow',out.read_text())
         result,_=self.compile('<div></div>', 'div { box-shadow:inset 0 0 1px #fff; }')
-        self.assertNotEqual(result.returncode,0)
+        self.assertEqual(result.returncode,0,result.stderr)
     def test_overflow_and_text_layout(self):
         result,out=self.compile('<div>Text</div>', 'div { overflow:hidden auto; text-align:center; white-space:nowrap; text-transform:uppercase; }')
         self.assertEqual(result.returncode,0,result.stderr)

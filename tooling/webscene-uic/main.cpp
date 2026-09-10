@@ -784,11 +784,13 @@ static std::string assignments(const std::string &name,
   }
   if (name == "box-shadow") {
     if (value == "none") return "s.set_box_shadow(std::nullopt);";
-    if (value.find("inset") != std::string::npos)
-      throw std::runtime_error("native compiled inset shadows are not supported yet");
-    if (ascii_keyword(value).find("var(") == std::string::npos &&
-        !std::regex_match(value, std::regex(R"((?:-?[0-9]+(?:\.[0-9]+)?px|0)\s+(?:-?[0-9]+(?:\.[0-9]+)?px|0)(?:\s+(?:[0-9]+(?:\.[0-9]+)?px|0))?(?:\s+(?:-?[0-9]+(?:\.[0-9]+)?px|0))?\s+(?:#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})|transparent|black|white))")))
-      throw std::runtime_error("box-shadow requires x y [blur [spread]] color");
+    const auto components = component_values(value);
+    const size_t start = !components.empty() && ascii_keyword(components.front()) == "inset" ? 1 : 0;
+    if (ascii_keyword(value).find("var(") == std::string::npos) {
+      if (components.size() < start + 3 || components.size() > start + 5 || !compiled_color(components.back()))
+        throw std::runtime_error("box-shadow requires [inset] x y [blur [spread]] color");
+      for (size_t i = start; i + 1 < components.size(); ++i) pixel_length(components[i], i == start + 2);
+    }
     return "s.set_box_shadow(s.evaluate(" + variable_code(value) + "));";
   }
   if (name == "border" || name == "border-left" || name == "border-top" || name == "border-right" || name == "border-bottom") {
