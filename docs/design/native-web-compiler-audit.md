@@ -1546,3 +1546,10 @@ invalidating the other axis. A native fixture verifies var(--MixedGap, NORMAL
 12px) preserves the 12px column gap, yielding the expected flex distribution.
 All 78 compiler tests and rebuilt contracts pass. This targets supported flex/grid
 semantics; multicol normal-gap behavior remains outside the profile.
+
+### Column-flex self alignment (2026-09-10)
+
+An independent compiled column-flex fixture verifies align-self:center places a
+20px child 40px from the left of a 100px container despite parent start alignment.
+Rebuilt contracts pass. This covers the horizontal cross-axis path; baseline,
+logical writing directions and grid self alignment remain open.
