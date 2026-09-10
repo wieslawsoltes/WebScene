@@ -1195,6 +1195,13 @@ static int check_css(const fs::path &path) {
     for (const auto &rule : css.rules)
       if (index >= rule.first_declaration && index < rule.first_declaration + rule.declaration_count) {
         owner = rule.kind == css_syntax_at_rule ? "@" + rule.name + " " + rule.prelude : rule.prelude;
+        for (auto parent = rule.parent_index; parent != css_syntax_no_parent;) {
+          const auto &ancestor = css.rules.at(parent);
+          auto label = ancestor.kind == css_syntax_at_rule
+              ? "@" + ancestor.name + " " + ancestor.prelude : ancestor.prelude;
+          owner = label + " > " + owner;
+          parent = ancestor.parent_index;
+        }
         break;
       }
     check(declaration.name + ":" + declaration.value, [&] {

@@ -489,3 +489,10 @@ preserving deduplication and the distinct-construct count. Repeated constructs
 can report multiple owners without inflating the baseline count. The compiler
 audit regression verifies owner output; all 41 compiler tests pass. Exact source
 line/column ranges and nested conditional ancestry remain diagnostic gaps.
+
+### Conditional ancestry in diagnostics (2026-09-10)
+
+Declaration ownership now includes the parent-rule chain, distinguishing e.g.
+`@media (max-width:400px) > div` from unconditional `div`. A regression verifies
+both contexts still deduplicate to one unsupported construct. All 41 compiler
+tests pass. Exact line/column source spans remain open.
