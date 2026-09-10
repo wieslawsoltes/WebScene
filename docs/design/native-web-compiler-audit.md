@@ -1553,3 +1553,12 @@ An independent compiled column-flex fixture verifies align-self:center places a
 20px child 40px from the left of a 100px container despite parent start alignment.
 Rebuilt contracts pass. This covers the horizontal cross-axis path; baseline,
 logical writing directions and grid self alignment remain open.
+
+### Grid self-alignment arrange defect (2026-09-10)
+
+A compiled 40px grid-row fixture with a 10px align-self:center child failed because
+the grid arrange pass ignored alignment. The pass now selects self/parent alignment,
+uses intrinsic height for nonstretched auto-height items, and applies center/end
+block-axis offsets. The 15px centering regression and native contracts pass.
+Auto margins, post-constraint offsets, baseline groups and alternate grid paths
+remain open; this fixes the exercised explicit-track arrange path only.

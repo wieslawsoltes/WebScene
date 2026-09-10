@@ -2345,9 +2345,13 @@ void native_document::layout_children(dom_node& parent)
                 auto width = is_specified(child->style.width)
                     ? outer_authored_size(*child, true, available_width)
                     : std::max(0.0F, available_width - margin_left - margin_right);
+                const auto alignment = child->style.align_self_specified
+                    ? child->style.align_self : parent.style.align_items;
                 auto height = is_specified(child->style.height)
                     ? outer_authored_size(*child, false, available_height)
-                    : std::max(0.0F, available_height - margin_top - margin_bottom);
+                    : alignment == align_mode::stretch
+                        ? std::max(0.0F, available_height - margin_top - margin_bottom)
+                        : intrinsic_size(*child, false, available_height);
                 if (child->style.grid().subgrid_columns) {
                     auto& inherited = child->mutable_grid_layout();
                     inherited.column_widths.assign(
@@ -2358,9 +2362,12 @@ void native_document::layout_children(dom_node& parent)
                 } else {
                     child->clear_grid_layout();
                 }
+                const auto remaining_height = available_height - margin_top - margin_bottom - height;
+                const auto alignment_offset = alignment == align_mode::center ? remaining_height * 0.5F
+                    : alignment == align_mode::end ? remaining_height : 0.0F;
                 layout_child(*child, parent.layout, {
                     column_offsets[item.column] + margin_left,
-                    row_offsets[item.row] + margin_top,
+                    row_offsets[item.row] + margin_top + alignment_offset,
                     width,
                     height}, true); // The resolved grid area supplies the stretched block size.
             };

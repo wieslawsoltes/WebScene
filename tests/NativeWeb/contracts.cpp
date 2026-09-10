@@ -314,6 +314,8 @@ int main() {
         "variable normal row gap preserves nonzero column gap");
   check(d.bounds(d.find("self-column-child")).x == d.bounds(d.find("self-column")).x + 40,
         "align-self center uses horizontal cross axis in column flex");
+  check(d.bounds(d.find("self-grid-child")).y == d.bounds(d.find("self-grid")).y + 15,
+        "compiled grid align-self centers within track");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
