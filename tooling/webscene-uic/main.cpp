@@ -1025,7 +1025,8 @@ struct compiler {
     }
     out << "}";
   }
-  void stylesheet(const std::string &text, bool exact_locations = false) {
+  void stylesheet(const std::string &text, bool exact_locations = false,
+                  std::array<float, 4> initial_bounds = {0, 1e9f, 0, 1e9f}) {
     const auto saved_locations = stylesheet_locations;
     stylesheet_locations = exact_locations;
     auto css = parse_css_syntax_stylesheet(text);
@@ -1034,7 +1035,7 @@ struct compiler {
       if (exact_locations) { location = css.metrics.first_error_line; column = css.metrics.first_error_column; }
       throw std::runtime_error("invalid CSS syntax (" + std::to_string(css.metrics.parse_error_count) + " parse errors)");
     }
-    std::vector<std::array<float, 4>> bounds(css.rules.size(), {0, 1e9f, 0, 1e9f});
+    std::vector<std::array<float, 4>> bounds(css.rules.size(), initial_bounds);
     for (size_t i = 0; i < css.rules.size(); ++i) {
       const auto &r = css.rules[i];
       if (exact_locations) { location = r.source_line; column = r.source_column; }
@@ -1188,11 +1189,25 @@ struct compiler {
       }
       if (n.tag == "body")
         body = &n;
+      std::array<float, 4> media_bounds{0, 1e9f, 0, 1e9f};
+      if ((n.tag == "style" || n.tag == "link") && n.attributes.contains("media")) {
+        const auto media = trim(n.attributes.at("media"));
+        if (!media.empty() && ascii_keyword(media) != "all") {
+          try {
+            const auto bound = compile_media_bound("media", media);
+            media_bounds[bound.axis + (bound.minimum ? 0 : 1)] = bound.value;
+          } catch (const std::exception &) {
+            if (!preview) throw;
+            warning("skipped stylesheet with unsupported media: " + media);
+            return;
+          }
+        }
+      }
       if (n.tag == "style") {
         std::string css;
         for (auto *c : n.children)
           css += c->text_content;
-        stylesheet(css);
+        stylesheet(css, false, media_bounds);
       }
       if (n.tag == "link") {
         auto rel = n.attributes.find("rel"), href = n.attributes.find("href");
@@ -1205,7 +1220,7 @@ struct compiler {
         auto saved_path = source;
         content = read(p);
         source = p;
-        stylesheet(content, true);
+        stylesheet(content, true, media_bounds);
         content = saved;
         source = saved_path;
       }

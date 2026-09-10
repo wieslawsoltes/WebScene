@@ -1287,3 +1287,13 @@ fixture verifies full containing width, explicit heights and vertical source-ord
 stacking. All 71 compiler tests and rebuilt native contracts pass. This closes
 construction/basic layout for these containers only; accessibility landmarks,
 complete UA styles and full HTML coverage are not established by these checks.
+
+### HTML stylesheet media attributes (2026-09-10)
+
+Style/link media attributes now seed compiled rule bounds using the existing
+pixel min/max width/height condition parser. Empty/all media remains unrestricted;
+unsupported media fails strict compilation and omits the whole stylesheet with a
+preview warning. Previously media was ignored and styles became unconditional.
+Compiler fixtures cover both embedded/linked styles and unsupported print media.
+All 72 compiler tests pass. Native resize validation, general media expressions,
+type/disabled/alternate stylesheet behavior remain open.

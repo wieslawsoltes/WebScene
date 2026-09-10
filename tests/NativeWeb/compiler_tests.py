@@ -307,6 +307,23 @@ class CompilerTests(unittest.TestCase):
             self.assertIn('duplicate id: root',result.stderr)
             self.assertFalse(output.exists())
 
+    def test_html_stylesheet_media_is_preserved(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        (root/'view.css').write_text('div { width:123px; }')
+        for element in ['<style media="(min-width:400px)">div { width:123px; }</style>',
+                        '<link rel="stylesheet" href="view.css" media="(min-width:400px)">']:
+            source.write_text('<html><head>'+element+'</head><body><div></div></body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn(',400.0f,1e+09f,0,0.0f,1e+09f}',output.read_text())
+            source.write_text(source.read_text().replace('(min-width:400px)','print'))
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            preview=subprocess.run([UIC,source,output,'--preview'],capture_output=True,text=True)
+            self.assertEqual(preview.returncode,0,preview.stderr)
+            self.assertNotIn('123.0f',output.read_text())
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'
