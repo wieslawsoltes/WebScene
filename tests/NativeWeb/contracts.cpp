@@ -313,8 +313,18 @@ int main() {
   check(d.scroll_offset(scroll_container).second == 17, "overflow hidden suppresses wheel default");
   d.attribute(scroll_container, "class", "clip-mode");
   d.render(800, 10000);
+  check(d.scroll_offset(scroll_container).second == 0 &&
+        d.bounds(scroll_content).y == d.bounds(scroll_container).y,
+        "switching to overflow clip clears retained offset during layout");
   d.scroll_to(scroll_container, 0, 17);
   check(d.scroll_offset(scroll_container).second == 0, "overflow clip rejects programmatic scrolling");
+  d.remove_attribute(scroll_container, "class");
+  d.render(800, 10000);
+  d.scroll_to(scroll_container, 0, 10);
+  d.attribute(scroll_container, "class", "visible-mode");
+  d.render(800, 10000);
+  check(d.scroll_offset(scroll_container).second == 0 && d.bounds(scroll_content).y == d.bounds(scroll_container).y,
+        "switching to overflow visible clears retained scrolling");
   d.remove_attribute(scroll_container, "class");
   d.render(800, 10000);
   int removal_calls = 0;

@@ -935,3 +935,12 @@ and a wheel handler can remove its scroll subtree without the default action
 accessing deleted nodes. Native contracts pass. Automatic offset reset solely
 from overflow changes, queued scroll events and nested scroll chaining remain
 open; the clip test explicitly calls scroll_to after changing mode.
+
+### Overflow mode changes reset scrolling (2026-09-10)
+
+After computing overflow axes, native cascade now clears retained scroll offsets
+on visible/clip axes. Hidden/auto/scroll offsets remain eligible for layout
+clamping. Native regressions switch a previously scrolled compiled container to
+clip and visible and verify both offset and child geometry reset without an
+explicit scroll request. Native contracts pass. Root viewport scrolling, RTL and
+scroll-event scheduling remain open.

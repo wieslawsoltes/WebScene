@@ -568,6 +568,8 @@ const scene &document::render(float width, float height) {
     else if (x == overflow_mode::clip && scrollable(y)) x = overflow_mode::hidden;
     if (y == overflow_mode::visible && scrollable(x)) y = overflow_mode::automatic;
     else if (y == overflow_mode::clip && scrollable(x)) y = overflow_mode::hidden;
+    if (x == overflow_mode::visible || x == overflow_mode::clip) n.scroll_left = 0;
+    if (y == overflow_mode::visible || y == overflow_mode::clip) n.scroll_top = 0;
     n.style.overflow_x = x;
     n.style.overflow_y = y;
     n.style.clip = x != overflow_mode::visible || y != overflow_mode::visible;
