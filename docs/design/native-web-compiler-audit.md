@@ -1489,3 +1489,11 @@ Native scene commands contain no wrapper paint with that color, while the existi
 child layout and pointer propagation checks still pass. Rebuilt contracts pass.
 This verifies background/border suppression in scene output, not raster pixels or
 all effects such as shadows, transforms and filters. Accessibility remains open.
+
+### Contents-to-block mutation (2026-09-10)
+
+Contracts switch the compiled contents wrapper to block via an important class
+rule. Its background/border paint returns and its children resume vertical block
+flow. Removing the class restores direct child participation in the outer flex
+row. Rebuilt contracts pass. This adds live role-change evidence; effects,
+accessibility and browser pixel comparisons remain open.

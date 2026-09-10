@@ -251,6 +251,19 @@ int main() {
     d.pointer("pointerup", target_box.x + 1, target_box.y + 1);
     check(child_hits == 1 && wrapper_hits == 1,
           "display contents child hit bubbles through DOM wrapper");
+    d.attribute(d.find("contents-wrapper"), "class", "box");
+    const auto &boxed_scene = d.render(800, 10000);
+    bool wrapper_painted = false;
+    for (const auto &command : boxed_scene.commands)
+      if (command.node_id == d.find("contents-wrapper") && command.rgba == 0x123456ffu)
+        wrapper_painted = true;
+    check(wrapper_painted, "changing contents to block restores wrapper paint");
+    check(d.bounds(d.find("contents-second")).y > d.bounds(d.find("contents-first")).y,
+          "changing contents to block restores child block flow");
+    d.remove_attribute(d.find("contents-wrapper"), "class");
+    d.render(800, 10000);
+    check(d.bounds(d.find("contents-second")).x == d.bounds(d.find("contents-first")).x + 20,
+          "removing block override restores contents flex participation");
     d.render(800, 600);
   }
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
