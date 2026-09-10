@@ -148,3 +148,12 @@ diagnostic readback. This is not the production presentation path and does not
 prove Foco compositor integration. The native platform host adapters reuse the
 existing IOSurface/DXGI providers; their end-to-end connection to the Native Web
 Foco carrier remains outstanding. Only macOS Metal has been run for this new test.
+
+`native_webgpu_surface` now combines native device initialization with the
+platform Canvas provider and retained scene-image snapshots. Its Metal test
+(`native_web_gpu_iosurface`) renders eight resized IOSurface frames, retires
+consumers, and separately verifies the combined surface API's snapshot resolution.
+The path does not require V8 or CPU image copying. These tests do not yet draw the
+image through Foco. Foco's current `webscene_scene_v1` command packet and picture
+compiler have no GPU image resource channel; adding lifetime-safe retained image
+transport and Graphite sampling is the next integration requirement.
