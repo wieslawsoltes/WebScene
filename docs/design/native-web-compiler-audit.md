@@ -1735,3 +1735,13 @@ retain existing computed-time validity handling. All 89 compiler tests pass;
 rebuilt native contracts passed after component lowering changes. New grammar
 cases do not yet have dedicated rendered comparisons. General two-color mixing,
 other color spaces and complete color syntax remain open.
+
+### Color-mix native paint and interpolation whitespace (2026-09-10)
+
+Native scene-command checks now cover nested fallback resolution, a Unicode
+custom-property override with existing alpha, and restoration after class removal.
+Expected background RGBA values are 12345680, abcdef40, then 12345680; rebuilt
+contracts pass. These inspect submitted paint colors, not browser pixel parity.
+Interpolation keywords now split on CSS whitespace and accept intervening comments
+in the supported `in srgb` prelude. All 90 compiler tests pass. General comment
+handling across component scans and rendered differential comparisons remain open.

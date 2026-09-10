@@ -83,6 +83,11 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb, #fff '+percent+', transparent); }')
             self.assertNotEqual(result.returncode,0,percent)
 
+    def test_color_mix_interpolation_whitespace(self):
+        for space in ['  ', '\t', '\n', ' /* separator */ ']:
+            result,_=self.compile('<div></div>', 'div { color:color-mix(IN'+space+'SRGB, #fff 50%, transparent); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+
     def test_color_mix_rejects_empty_arguments_and_invalid_colors(self):
         for value in ['in srgb,, #fff 50%, transparent', 'in srgb, #fff 50%, transparent,',
                       'in srgb, 12px 50%, transparent', 'in srgb, unknown 50%, transparent']:

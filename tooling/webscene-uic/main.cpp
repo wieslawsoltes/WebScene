@@ -520,8 +520,11 @@ static std::string assignments(const std::string &name,
         "compiled color-mix currently supports an sRGB color percentage mixed with transparent"); };
     if (!value.ends_with(')')) throw unsupported();
     const auto arguments = component_values(value.substr(10, value.size() - 11), ',');
-    if (arguments.size() != 3 || ascii_keyword(arguments[0]) != "in srgb" ||
-        ascii_keyword(arguments[2]) != "transparent") throw unsupported();
+    if (arguments.size() != 3 || ascii_keyword(arguments[2]) != "transparent") throw unsupported();
+    const auto interpolation = component_values(std::regex_replace(
+        arguments[0], std::regex(R"(/\*[\s\S]*?\*/)"), " "));
+    if (interpolation.size() != 2 || ascii_keyword(interpolation[0]) != "in" ||
+        ascii_keyword(interpolation[1]) != "srgb") throw unsupported();
     const auto stop = component_values(arguments[1]);
     if (stop.size() != 2 || !stop[1].ends_with('%') ||
         !css_number(stop[1].substr(0, stop[1].size() - 1))) throw unsupported();
