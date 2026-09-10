@@ -160,6 +160,12 @@ class CompilerTests(unittest.TestCase):
         for value in ['2.5','2147483648','bogus']:
             result,_=self.compile('<div></div>', 'div { z-index:'+value+'; }')
             self.assertNotEqual(result.returncode,0)
+    def test_transparent_color_mix(self):
+        result,out=self.compile('<div></div>', 'div { border-bottom:1px solid color-mix(in srgb,var(--accent) 25%,transparent); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('color_with_opacity',out.read_text())
+        result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb,#fff 101%,transparent); }')
+        self.assertNotEqual(result.returncode,0)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

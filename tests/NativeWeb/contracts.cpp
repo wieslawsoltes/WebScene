@@ -77,6 +77,8 @@ int main() {
   probe_root.root = true;
   compiled_variable_probe.match.parts.push_back(probe_root);
   compiled_variable_probe.declarations.push_back({false, +[](style &s) {
+    check(s.color_with_opacity({{variable_expression::kind::reference,"--accent"}},.25f) == 0x5ac6d240u,
+          "theme color mix preserves RGB and scales alpha");
     auto border = s.variable("--border");
     check(border && *border && (**border).size() == 3 &&
           (**border)[0].length && (**border)[0].length->value == 1 &&
@@ -110,7 +112,7 @@ int main() {
   check(d.bounds(d.find("grid-left")).width == 222, "compiled grid variable resolves");
   check(d.bounds(d.find("grid-right")).width == 252, "compiled grid preserves fixed track");
   check(d.bounds(d.find("variable-probe")).width == 222, "compiled var width resolves");
-  check(d.bounds(d.find("variable-probe")).height == 13, "compiled var fallback plus top border resolves");
+  check(d.bounds(d.find("variable-probe")).height == 14, "compiled var fallback plus borders resolves");
   d.attribute(d.root(), "data-theme", "light");
   d.render(800, 600);
   check(d.bounds(d.find("grid-left")).width == 195, "compiled grid variable updates with theme");

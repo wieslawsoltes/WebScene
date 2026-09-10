@@ -248,6 +248,23 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (value.starts_with("color-mix(")) {
+    std::smatch mix;
+    if (!std::regex_match(value,mix,std::regex(R"(color-mix\(\s*in\s+srgb\s*,\s*(var\(--[A-Za-z_][A-Za-z0-9_-]*\)|#[A-Fa-f0-9]+)\s+([0-9]+(?:\.[0-9]+)?)%\s*,\s*transparent\s*\))")))
+      throw std::runtime_error("compiled color-mix currently supports an sRGB color percentage mixed with transparent");
+    const float fraction = std::stof(mix[2]) / 100.f;
+    if (fraction > 1) throw std::runtime_error("color-mix percentage exceeds 100%");
+    std::string code = "auto mixed=s.color_with_opacity(" + variable_code(mix[1]) + "," + number(fraction) + ");";
+    if (name == "color" || name == "background" || name == "background-color")
+      return code + "s.set_" + (name == "color" ? "foreground_rgba" : "background_rgba") + "(mixed.value_or(0u));";
+    if (name == "border-color" || name == "border-left-color" || name == "border-top-color" || name == "border-right-color" || name == "border-bottom-color") {
+      for (const std::string side : {"left","top","right","bottom"})
+        if (name == "border-color" || name == "border-" + side + "-color")
+          code += "s.set_border_" + side + "_color(mixed.value_or(0u),!mixed);";
+      return code;
+    }
+    throw std::runtime_error("compiled color-mix unsupported for " + name);
+  }
   if (name == "z-index") {
     if (value == "auto") return "s.set_z_index(0,true);";
     if (!std::regex_match(value, std::regex(R"([+-]?[0-9]+)"))) throw std::runtime_error("z-index requires an integer or auto");

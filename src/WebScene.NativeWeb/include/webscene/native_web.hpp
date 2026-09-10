@@ -31,6 +31,13 @@ public:
   variable_result evaluate(const std::vector<variable_expression> &expressions) const {
     return evaluate_variables(expressions, variables_);
   }
+  std::optional<uint32_t> color_with_opacity(const std::vector<variable_expression> &expressions, float fraction) const {
+    auto tokens = evaluate(expressions);
+    if (!tokens || tokens->size() != 1 || !tokens->front().color) return std::nullopt;
+    const auto color = *tokens->front().color;
+    auto alpha = static_cast<uint32_t>((color & 255u) * fraction + .5f);
+    return (color & 0xffffff00u) | std::min(alpha,255u);
+  }
   const variable_result *variable(const std::string &name) const {
     auto found = variables_.find(name);
     return found == variables_.end() ? nullptr : &found->second;
