@@ -307,6 +307,11 @@ int main() {
   check(d.bounds(d.find("distribution-a")).x == distribution_x + 15 &&
         d.bounds(d.find("distribution-b")).x == distribution_x + 65,
         "normal gap restores zero flex gap");
+  d.attribute(d.find("distribution"), "class", "variable-normal");
+  d.render(800, 600);
+  check(d.bounds(d.find("distribution-a")).x == distribution_x + 12 &&
+        d.bounds(d.find("distribution-b")).x == distribution_x + 68,
+        "variable normal row gap preserves nonzero column gap");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

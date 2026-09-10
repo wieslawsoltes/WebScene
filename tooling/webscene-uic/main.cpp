@@ -434,8 +434,8 @@ static std::string assignments(const std::string &name,
   if (name == "gap" && ascii_keyword(value).find("var(") != std::string::npos) {
     return "auto v=s.evaluate(" + variable_code(value) + ");"
         "bool valid=v && !v->empty() && v->size()<=2;"
-        "if(valid) for(const auto& t:*v) valid=valid && t.length && t.length->value>=0;"
-        "auto side=[&](size_t i){return valid ? *(*v)[i].length : webscene::native_web::length" + length("0") + ";};"
+        "if(valid) for(const auto& t:*v) valid=valid && ((t.length && t.length->value>=0) || t.is_keyword(\"normal\"));"
+        "auto side=[&](size_t i){return valid && (*v)[i].length ? *(*v)[i].length : webscene::native_web::length" + length("0") + ";};"
         "s.set_row_gap(side(0));s.set_column_gap(side(valid && v->size()>1?1:0));";
   }
   if (name == "padding" && ascii_keyword(value).find("var(") != std::string::npos) {

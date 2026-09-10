@@ -1538,3 +1538,11 @@ coverage checks these forms; native flex geometry verifies switching from an
 explicit gap to normal restores zero-gap distribution. All 78 compiler tests and
 rebuilt contracts pass. Multicol's different normal-gap semantics require a distinct
 representation when that layout is supported; variable normal tokens remain open.
+
+### Normal tokens in variable gap shorthand (2026-09-10)
+
+Compiled variable gap shorthand now accepts normal tokens as zero without
+invalidating the other axis. A native fixture verifies var(--MixedGap, NORMAL
+12px) preserves the 12px column gap, yielding the expected flex distribution.
+All 78 compiler tests and rebuilt contracts pass. This targets supported flex/grid
+semantics; multicol normal-gap behavior remains outside the profile.
