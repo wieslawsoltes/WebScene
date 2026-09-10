@@ -1310,10 +1310,13 @@ struct compiler {
       return r;
     };
     std::ofstream dep(output.string() + ".d");
+    if (!dep) throw std::runtime_error("cannot write dependency file: " + output.string() + ".d");
     dep << escape(fs::absolute(output).string()) << ":";
     for (auto p : dependencies)
       dep << " " << escape(p.string());
     dep << "\n";
+    dep.close();
+    if (!dep) throw std::runtime_error("failed writing dependency file: " + output.string() + ".d");
   }
 };
 // Read-only compatibility audit using exactly the compiler's lowering paths.

@@ -1239,3 +1239,13 @@ attribute removes that declaration and activates the nested 1fr/1fr fallback,
 producing 150px/150px columns. Rebuilt contracts pass, confirming fractional
 metadata survives reference evaluation, inheritance and ancestor mutation.
 Full variable token grammar and browser differential closure remain open.
+
+### Dependency output failure reporting (2026-09-10)
+
+Compiler dependency-file creation and final flush are now checked. Previously a
+failed depfile write could report success, undermining subsequent rebuilds. A
+regression makes the dependency path a directory, verifies failure with its path,
+then removes the obstruction and verifies successful retry and source dependency.
+All 69 compiler tests pass. Generated source may already exist when depfile output
+fails; callers must honor the nonzero exit. Atomic source/depfile publication is
+not established by this change.

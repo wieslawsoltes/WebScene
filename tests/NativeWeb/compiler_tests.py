@@ -268,6 +268,19 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(preview.returncode,0,preview.stderr)
         self.assertIn(str(source)+':3:1: warning: preview: width: bogus:',preview.stderr)
 
+    def test_dependency_write_failure_is_not_success(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        source.write_text('<html><body><div></div></body></html>')
+        dependency=root/'view.hpp.d';dependency.mkdir()
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('cannot write dependency file: '+str(dependency),result.stderr)
+        dependency.rmdir()
+        retry=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertEqual(retry.returncode,0,retry.stderr)
+        self.assertIn(str(source),dependency.read_text())
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'
