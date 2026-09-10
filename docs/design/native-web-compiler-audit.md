@@ -1180,3 +1180,13 @@ uppercase variable fallbacks that previously lacked color metadata. Independent
 regressions verify both rejection and emitted typed color values. All 65 compiler
 tests and native contracts pass. Full CSS-wide custom-property semantics, broader
 named colors and context-sensitive fallback handling remain open.
+
+### Literal grid function casing and repeat integers (2026-09-10)
+
+Literal grid track lowering now accepts case-insensitive repeat/minmax names,
+track keywords and dimension units. Repeat counts accept an explicit positive
+sign while retaining integer-only syntax and the existing 1..1024 bound.
+Independent regressions compare uppercase and lowercase generated track rules,
+and reject zero, decimal/exponent integer spellings and duplicate signs. All 66
+compiler tests and native contracts pass. This does not add named grid lines,
+auto-repeat, additional intrinsic sizing or escaped identifiers.

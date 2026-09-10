@@ -109,6 +109,18 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
             self.assertNotEqual(result.returncode,0,tracks)
 
+    def test_grid_function_and_unit_casing(self):
+        for value in ['REPEAT(+2, MINMAX(0PX, .5FR) AUTO)', 'MIN-CONTENT 1FR', 'NONE']:
+            result,out=self.compile('<div></div>', 'div { grid-template-columns:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            reference,expected=self.compile('<div></div>', 'div { grid-template-columns:'+value.lower()+'; }')
+            self.assertEqual(reference.returncode,0,reference.stderr)
+            rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
+            self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
+        for count in ['+0', '+2.0', '+2e0', '++2']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:repeat('+count+', 1fr); }')
+            self.assertNotEqual(result.returncode,0,count)
+
     def test_grid_repeat_is_expanded_at_build_time(self):
         result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:repeat(3,1fr); }')
         self.assertEqual(result.returncode,0,result.stderr)
