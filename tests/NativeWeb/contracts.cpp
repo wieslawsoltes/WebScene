@@ -411,6 +411,16 @@ int main() {
   check(d.bounds(whitespace_variable).height == 60, "pre-line preserves explicit and blank lines");
   check(std::string_view(preline_scene.bytes.data(), preline_scene.bytes.size()).find("A   B") == std::string_view::npos,
         "pre-line collapses repeated spaces in paint text");
+  d.set_text(whitespace_variable, "MMMM MMMM\nX");
+  d.attribute(whitespace_variable, "class", "preline narrow");
+  d.render(800, 600);
+  check(d.bounds(whitespace_variable).height == 60,
+        "pre-line combines soft wrapping with explicit newline");
+  d.attribute(whitespace_variable, "class", "preline");
+  d.render(800, 600);
+  check(d.bounds(whitespace_variable).height == 40,
+        "wider pre-line removes soft wrap while retaining explicit newline");
+
   d.remove_attribute(whitespace_variable, "class");
   d.set_text(whitespace_variable, "  Spaced  ");
   const auto &spaces_scene = d.render(800, 10000);

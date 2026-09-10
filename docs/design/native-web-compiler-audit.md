@@ -1026,3 +1026,14 @@ boundaries for pre-line while collapsing spaces within each line. Compiled
 variable-style regression verifies three lines including an internal blank line
 and absence of repeated spaces in paint text. Native contracts pass. Soft-wrap
 boundaries, mixed inline styles, tabs and renderer pixel comparisons remain open.
+
+### Pre-line soft wrapping and width mutation (2026-09-10)
+
+An independent native contract combines two words and an explicit newline under
+compiled `white-space:var(--White, pre-line)`. At 15px width it occupies three
+20px lines; restoring 100px width removes the soft wrap and retains the explicit
+newline, producing two lines. Both native contracts and the compiler suite pass.
+This is geometry evidence only, not pixel parity or whitespace-family closure.
+The current whitespace regression is complete; resume the earliest open audit
+gate (source diagnostics and numeric/function grammar) before further layout or
+Kestrel work.
