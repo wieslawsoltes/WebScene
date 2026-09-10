@@ -2,6 +2,8 @@ module;
 #include "native_webgpu_surface.h"
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <unordered_set>
 export module kestrel.viewport;
 import kestrel.gpu_renderer;
 export import kestrel.render_data;
@@ -14,6 +16,12 @@ class viewport {
   gpu_renderer renderer;
   std::shared_ptr<webscene_gpu_image_snapshot> pending;
   uint32_t width, height;
+  const drawing *cached_document{};
+  uint64_t cached_revision{};
+  std::unordered_set<std::string> cached_selection;
+  render_options cached_options;
+  render_scene scene;
+  uint64_t scene_builds{};
 
 public:
   camera camera;
@@ -40,19 +48,36 @@ public:
     width = w;
     height = h;
   }
+  // Direct mutations outside drawing transactions must invalidate the scene.
+  void invalidate_scene() { cached_document = nullptr; }
+  uint64_t scene_build_count() const { return scene_builds; }
   bool submit(const drawing &document) {
     if (pending)
       return false;
     auto texture = surface.current_texture();
     if (!texture)
       return false;
-    auto scene = build_scene(document, camera.target, options);
-    auto grid =
-        build_grid(camera, camera.target, options.light_theme, grid_enabled);
+    const bool scene_changed =
+        cached_document != &document || cached_revision != document.revision ||
+        cached_selection != document.selection ||
+        cached_options.style != options.style ||
+        cached_options.light_theme != options.light_theme ||
+        cached_options.lineweights != options.lineweights;
+    if (scene_changed) {
+      scene = build_scene(document, camera.target, options);
+      cached_document = &document;
+      cached_revision = document.revision;
+      cached_selection = document.selection;
+      cached_options = options;
+      ++scene_builds;
+    }
+    // Keep the scene origin stable during camera movement, as renderer.js does.
+    const auto origin = scene.buffers.origin;
+    auto grid = build_grid(camera, origin, options.light_theme, grid_enabled);
     auto uniforms =
-        make_camera_uniforms(camera, camera.target, width, height, options);
+        make_camera_uniforms(camera, origin, width, height, options);
     renderer.render(texture.CreateView(), scene.buffers, uniforms, options,
-                    &grid);
+                    &grid, scene_changed);
     pending = surface.present();
     if (!pending)
       throw std::runtime_error("Viewport submission produced no snapshot");

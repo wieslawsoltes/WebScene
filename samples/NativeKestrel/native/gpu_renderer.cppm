@@ -52,15 +52,18 @@ public:
   }
   uint32_t render(const wgpu::TextureView &target, const render_data &data,
                   const camera_uniforms &uniforms, render_options options = {},
-                  const render_data *grid = nullptr) {
+                  const render_data *grid = nullptr, bool upload_scene = true) {
     if (!width || !height)
       throw std::logic_error("Resize viewport before rendering");
     if (grid)
       upload(grid_lines, grid->lines.data(),
              grid->lines.size() * sizeof(line_instance));
-    upload(lines, data.lines.data(), data.lines.size() * sizeof(line_instance));
-    upload(triangles, data.triangles.data(),
-           data.triangles.size() * sizeof(triangle_vertex));
+    if (upload_scene) {
+      upload(lines, data.lines.data(),
+             data.lines.size() * sizeof(line_instance));
+      upload(triangles, data.triangles.data(),
+             data.triangles.size() * sizeof(triangle_vertex));
+    }
     auto queue = device.GetQueue();
     queue.WriteBuffer(pipelines.uniform, 0, &uniforms, sizeof(uniforms));
     wgpu::RenderPassColorAttachment color;

@@ -84,10 +84,18 @@ int main() {
   kestrel::drawing drawing;
   drawing.add("MESH", kestrel::geo::box({-10, -10, 0}, 20, 20, 20));
   viewport.options.style = kestrel::display_style::shaded_edges;
-  for (int frame = 0; frame < 3; ++frame) {
+  for (int frame = 0; frame < 5; ++frame) {
     viewport.resize(160 + frame * 16, 120 + frame * 8);
+    viewport.camera.pan(10, 5);
+    if (frame == 3)
+      viewport.options.style = kestrel::display_style::wireframe;
+    if (frame == 4)
+      viewport.invalidate_scene();
     if (!viewport.submit(drawing) || viewport.submit(drawing))
       throw std::runtime_error("Viewport pending-frame contract failed");
+    if (viewport.scene_build_count() != (frame < 3 ? 1u : unsigned(frame - 1)))
+      throw std::runtime_error(
+          "Camera-only frame rebuilt scene or invalidation was lost");
     std::shared_ptr<const webscene_gpu_image_lease_v3> image;
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     do {
