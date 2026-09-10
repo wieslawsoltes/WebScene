@@ -6,6 +6,7 @@
 #include "webscene_css_variables.h"
 #include "webscene_css_box_values.h"
 #include "webscene_css_transitions.h"
+#include "webscene_css_layout_values.h"
 #include <iostream>
 int main() {
     using webscene_native::css::parse_declarations;
@@ -229,5 +230,21 @@ int main() {
     apply_transition_shorthand(box,"none");
     if(box.animations().opacity_transition.duration_ms!=0 ||
        box.animations().left_transition.duration_ms!=0) return 57;
+    using webscene_native::css::apply_grid_placement_declaration;
+    apply_grid_placement_declaration(box,"grid-area","1 / 2 / 3 / 4");
+    if(box.grid().row_start_value!="1" || box.grid().column_start_value!="2" ||
+       box.grid().row_end_value!="3" || box.grid().column_end_value!="4") return 58;
+    apply_grid_placement_declaration(box,"grid-column","2");
+    if(box.grid().column_value!="2" || box.grid().column_end_value!="auto" || box.grid().span_all) return 59;
+    webscene_native::css::apply_animation_shorthand(box,"progress 1.2s infinite ease-in-out");
+    if(box.animations().animation_name_value!="progress" ||
+       box.animations().animation_duration_value!="1.2s" ||
+       box.animations().animation_iteration_count_value!="infinite") return 60;
+    webscene_native::css::apply_animation_shorthand(box,"none");
+    if(box.animations().animation_name_value!="none" ||
+       box.animations().animation_duration_value!="0s") return 61;
+    if(webscene_native::css::is_css_time("progress") || webscene_native::css::is_css_time("NaNs") ||
+       webscene_native::css::is_css_time("1junkms") || !webscene_native::css::is_css_time("+.15s") ||
+       webscene_native::css::parse_css_time_ms("1e-1s")!=100) return 62;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

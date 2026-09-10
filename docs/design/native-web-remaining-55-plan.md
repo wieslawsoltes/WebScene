@@ -451,3 +451,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   dimension-variable-compatibility and iframe cascade tests pass. Existing timing
   grammar/property-coverage limitations remain; no standalone animation scheduler
   or application cascade integration has been added.
+
+- Grid/animation value extraction: grid placement application and animation
+  shorthand now use shared native helpers. Tests preserve area/line metadata and
+  reset behavior; this does not fix the runtime's general grid placement limits.
+  A new progress-animation test exposed the old time detector accepting any token
+  ending in s. Shared time parsing now requires a finite numeric value and complete
+  s/ms unit, so progress remains an animation name. Tests cover signed/fractional/
+  exponent times and malformed tokens. Native service and runtime compact grid,
+  symbol-search grid and logical-inset-transition tests pass. Full animation
+  playback and grid layout parity in the standalone app remain unverified.

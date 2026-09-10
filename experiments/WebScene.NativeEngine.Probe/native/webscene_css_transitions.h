@@ -1,24 +1,28 @@
 #pragma once
 #include "webscene_css_box_values.h"
 #include <cstdlib>
+#include <charconv>
+#include <cmath>
 
 namespace webscene_native::css {
-inline bool is_css_time(std::string_view value)
-    {
-        return value.ends_with("ms") || value.ends_with('s');
-    }
-
-inline float parse_css_time_ms(std::string value)
-    {
-        value = trim_value(std::move(value));
-        auto multiplier = 1.0F;
-        if (value.ends_with("ms")) value.resize(value.size() - 2U);
-        else if (value.ends_with('s')) {
-            value.pop_back();
-            multiplier = 1000.0F;
-        } else return 0;
-        return std::strtof(value.c_str(), nullptr) * multiplier;
-    }
+inline std::optional<float> css_time_ms(std::string_view text) {
+    text=trim_css_view(text);
+    float multiplier=1;
+    if(text.ends_with("ms")) text.remove_suffix(2);
+    else if(text.ends_with('s')) { text.remove_suffix(1); multiplier=1000; }
+    else return std::nullopt;
+    if(text.empty()) return std::nullopt;
+    if(text.front()=='+') text.remove_prefix(1);
+    if(text.empty() || (text.front()!='-' && text.front()!='.' &&
+        (text.front()<'0' || text.front()>'9')) || text.back()<'0' || text.back()>'9') return std::nullopt;
+    float value{};
+    const auto parsed=std::from_chars(text.data(),text.data()+text.size(),value);
+    if(parsed.ec!=std::errc{} || parsed.ptr!=text.data()+text.size() ||
+        !std::isfinite(value*multiplier)) return std::nullopt;
+    return value*multiplier;
+}
+inline bool is_css_time(std::string_view value) { return css_time_ms(value).has_value(); }
+inline float parse_css_time_ms(std::string value) { return css_time_ms(value).value_or(0); }
 
 inline void parse_transition_timing(
         const std::string& value,
@@ -132,6 +136,47 @@ inline void apply_transition_shorthand(node_style& style, const std::string& val
         animations.transition_delay_value = join(delays);
         animations.transition_timing_function_value = join(timings);
         configure_style_transitions(style);
+    }
+
+inline void apply_animation_shorthand(node_style& style, const std::string& value)
+    {
+        auto name = std::string("none");
+        auto duration = std::string("0s");
+        auto delay = std::string("0s");
+        auto timing = std::string("ease");
+        auto iterations = std::string("1");
+        auto saw_time = false;
+        const auto first = split_css_component_list(value, ',');
+        for (const auto& token : split_value_tokens(
+                 first.empty() ? std::string_view{} : std::string_view(first.front()))) {
+            const auto lower = ascii_lower(token);
+            if (is_css_time(lower)) {
+                if (!saw_time) duration = lower;
+                else delay = lower;
+                saw_time = true;
+            } else if (lower == "linear" || lower == "ease" || lower == "ease-in"
+                || lower == "ease-out" || lower == "ease-in-out"
+                || lower.starts_with("cubic-bezier(")) {
+                timing = lower;
+            } else if (lower == "infinite"
+                || std::all_of(lower.begin(), lower.end(), [](unsigned char character) {
+                    return std::isdigit(character) || character == '.';
+                })) {
+                iterations = lower;
+            } else if (lower != "normal" && lower != "none"
+                && lower != "forwards" && lower != "backwards" && lower != "both"
+                && lower != "running" && lower != "paused"
+                && lower != "alternate" && lower != "alternate-reverse"
+                && lower != "reverse") {
+                name = token;
+            }
+        }
+        auto& animations = style.mutable_animations();
+        animations.animation_name_value = name;
+        animations.animation_duration_value = duration;
+        animations.animation_delay_value = delay;
+        animations.animation_timing_function_value = timing;
+        animations.animation_iteration_count_value = iterations;
     }
 
 } // namespace webscene_native::css
