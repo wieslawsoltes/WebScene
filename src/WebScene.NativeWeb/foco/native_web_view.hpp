@@ -17,6 +17,10 @@ public:
   void set_gpu_image(native_web::node_id node, uint32_t width, uint32_t height,
                      uint64_t generation,
                      std::shared_ptr<const foco::composition_resource_attachment> owner) {
+    if (gpu_node_ != node) {
+      if (gpu_node_) document.set_external_canvas(gpu_node_, false);
+      document.set_external_canvas(node, true);
+    }
     gpu_node_ = node; gpu_width_ = width; gpu_height_ = height;
     gpu_generation_ = generation; gpu_owner_ = std::move(owner);
     gpu_dirty_ = true;
@@ -45,15 +49,13 @@ public:
     if (gpu_owner_ && gpu_node_) {
       const auto area = document.bounds(gpu_node_);
       std::erase_if(layers, [&](const auto& layer){ return layer.node_id == gpu_node_; });
-      for (const auto& layer : layers) {
-        webscene_scene_command placement{};placement.kind=257;placement.node_id=layer.node_id;
-        placement.x=layer.x;placement.y=layer.y;placement.width=layer.width;placement.height=layer.height;
-        commands.push_back(placement);
+      for (auto &command : commands) {
+        if (command.kind != 257 || command.node_id != gpu_node_) continue;
+        command.kind = 256;
+        command.rgba = 0;
+        command.x = area.x; command.y = area.y;
+        command.width = area.width; command.height = area.height;
       }
-      webscene_scene_command image{};
-      image.kind=256;image.node_id=gpu_node_;image.rgba=0;
-      image.x=area.x;image.y=area.y;image.width=area.width;image.height=area.height;
-      commands.push_back(image);
     }
     packet::header h{};
     h.magic_value = packet::magic;

@@ -202,5 +202,6 @@ most original commands are not wired, and the displayed document labels and
 renderer-status text are still static. It is not the complete Kestrel port.
 
 Visual check: native grid/mesh output fills the original viewport after sizing.
-The current GPU attachment paints above the viewport's HTML overlays, hiding its
-controls and view cube. Correct DOM/GPU composition ordering remains required.
+The GPU attachment now occupies the canvas's DOM paint-order position; the
+original viewport controls, view cube and footer render above the grid and mesh.
+Native contract tests cover placement ordering and external-canvas detachment.

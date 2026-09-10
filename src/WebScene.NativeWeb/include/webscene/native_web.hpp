@@ -294,6 +294,7 @@ public:
   void focus(node_id);
   void key(std::string_view key, bool shift = false);
   node_id focused() const;
+  void set_external_canvas(node_id, bool enabled);
   void clear_canvas(node_id);
   void fill_rect(node_id, float x, float y, float width, float height,
                  uint32_t rgba);

@@ -318,6 +318,12 @@ void document::key(std::string_view key, bool shift) {
       dispatch(state_->focus, "click");
   }
 }
+void document::set_external_canvas(node_id id, bool enabled) {
+  auto &node = state_->node(id);
+  if (node.tag != "canvas") throw std::invalid_argument("not a canvas");
+  node.mutable_canvas().externally_composited = enabled;
+  state_->dom.mark_dirty();
+}
 void document::clear_canvas(node_id id) {
   auto &n = state_->node(id);
   if (n.tag != "canvas")
@@ -493,7 +499,7 @@ const scene &document::render(float width, float height) {
   out.bytes.clear();
   out.layers.clear();
   out.canvas.clear();
-  s.dom.build_scene(out.commands, out.strings, out.bytes);
+  s.dom.build_scene(out.commands, out.strings, out.bytes, true);
   std::vector<webscene_scene_string> canvas_strings;
   std::vector<char> canvas_bytes;
   s.dom.build_canvas_display_lists(out.layers, out.canvas, canvas_strings,

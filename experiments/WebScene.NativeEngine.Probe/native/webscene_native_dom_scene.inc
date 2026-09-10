@@ -1335,7 +1335,7 @@ void native_document::append_scene(
             WEBSCENE_SCENE_COMMAND_GPU_IMAGE,0U,node.layout.x,node.layout.y,
             node.layout.width,node.layout.height,0U,node.id,0,0,0,0,0});
     }
-    if (ordered_canvas && paint_self && !paints_gpu && node.tag=="canvas" && !canvas.commands.empty()) {
+    if (ordered_canvas && paint_self && !paints_gpu && node.tag=="canvas" && (!canvas.commands.empty() || canvas.externally_composited)) {
         commands.push_back(webscene_scene_command{
             WEBSCENE_SCENE_COMMAND_CANVAS_LAYER,0U,0,0,0,0,0U,node.id,0,0,0,0,0});
     }

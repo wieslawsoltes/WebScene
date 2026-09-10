@@ -70,6 +70,25 @@ int main() {
     themed.render(800, 600);
     check(themed.bounds(panel).width == 222, "important variable beats theme specificity");
   }
+  {
+    document layered;
+    auto canvas = layered.element(layered.body(), "canvas");
+    auto overlay = layered.element(layered.body(), "button");
+    layered.set_text(overlay, "Overlay");
+    layered.set_external_canvas(canvas, true);
+    const auto &scene = layered.render(800, 600);
+    bool placed = false, text_after_canvas = false;
+    for (const auto &command : scene.commands) {
+      if (command.kind == 257 && command.node_id == canvas) placed = true;
+      if (placed && command.kind == 3) text_after_canvas = true;
+    }
+    check(placed && text_after_canvas, "external canvas placement precedes later DOM text");
+    layered.set_external_canvas(canvas, false);
+    const auto &cleared = layered.render(800, 600);
+    for (const auto &command : cleared.commands)
+      check(command.kind != 257 || command.node_id != canvas,
+            "detached external canvas removes its placement");
+  }
   document d;
   auto refs = compiled_ui::build(d);
   rule compiled_variable_probe;

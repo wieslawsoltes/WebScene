@@ -96,3 +96,14 @@ parity; avoid assuming fixed tessellation remains correct at every zoom level.
 This is a deferred optimization, not implemented by the current SVG markup and
 paint support. Measure parsing, allocation and rendering costs independently:
 removing path-string parsing does not by itself remove rasterization or GPU work.
+
+## Kestrel completion requirements
+
+The finished native Kestrel application must reach full functional and visual
+parity with the browser application. Panning and interactive window resizing must
+sustain 60 fps with no elastic-band lag. These are acceptance requirements, not
+claims about the current preview. Verify frame pacing and input-to-presentation
+latency during sustained pan and resize workloads, including frame coherence
+across viewport size changes; average throughput alone does not establish them.
+Continue using compiled templates and native application logic, with no JavaScript
+runtime or runtime HTML parsing.

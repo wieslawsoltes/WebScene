@@ -842,6 +842,7 @@ struct gpu_canvas_scene_binding final {
 };
 
 struct canvas_node_data final {
+    bool externally_composited{false};
     webscene::graphics::canvas_backing backing;
     std::shared_ptr<const webscene_gpu_image_lease_v3> gpu_image;
     std::shared_ptr<webscene_gpu_image_snapshot> gpu_snapshot;
