@@ -109,7 +109,27 @@ int main(int argc, char **argv) {
     } while (!image && std::chrono::steady_clock::now() < deadline);
     if (!image)
       throw std::runtime_error("Viewport shared image timed out");
+    auto metadata = image->value.describe();
+    if (metadata.width != unsigned(160 + frame * 16) ||
+        metadata.height != unsigned(120 + frame * 8))
+      throw std::runtime_error("Viewport published stale resize dimensions");
   }
+  // Resize while a frame is still pending, then ensure it cannot escape as
+  // content for the new allocation. This models consecutive live-resize ticks.
+  if (!viewport.submit(drawing)) throw std::runtime_error("Resize probe submission failed");
+  viewport.resize(333, 217);
+  if (viewport.poll()) throw std::runtime_error("Obsolete pending frame survived resize");
+  if (!viewport.submit(drawing)) throw std::runtime_error("Resized submission rejected");
+  std::shared_ptr<const webscene_gpu_image_lease_v3> resized;
+  auto resize_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  while (!(resized = viewport.poll())) {
+    if (std::chrono::steady_clock::now() >= resize_deadline)
+      throw std::runtime_error("Resized image timed out");
+    std::this_thread::yield();
+  }
+  auto resized_metadata = resized->value.describe();
+  if (resized_metadata.width != 333 || resized_metadata.height != 217)
+    throw std::runtime_error("Resized image allocation dimensions mismatch");
   if (argc == 2 && std::string_view(argv[1]) == "--benchmark") {
     for (bool resizing : {false, true}) {
       std::vector<double> timings;

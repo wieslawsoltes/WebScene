@@ -232,3 +232,12 @@ These are a small-scene GPU-path baseline, not proof of 60 fps application
 panning or window resizing. The probe uses active polling rather than the host's
 vsync cadence. Full acceptance still requires a representative CAD document,
 input-to-presentation timing, frame pacing, and coherent live window resizing.
+
+Resize coherence checks now assert image allocation dimensions after each resize
+and explicitly resize with a GPU frame still pending. The old pending image is
+discarded, and the replacement resolves at the new dimensions (333×217 in the
+regression). These checks pass on Metal. A separate host issue remains:
+`native_web_view` retains the displayed GPU image while resizing its destination
+rectangle with DOM layout. Until replacement content arrives, this can stretch
+old content. Resolving that presentation policy coherently, without introducing
+blank frames or blocking resize, remains part of the no-elastic-band requirement.
