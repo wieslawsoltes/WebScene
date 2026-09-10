@@ -399,3 +399,12 @@ font-synthesis:none: unsupported Native Web CSS property: font-synthesis
 overflow-wrap:anywhere: unsupported Native Web CSS property: overflow-wrap
 text-overflow:ellipsis: unsupported Native Web CSS property: text-overflow
 ```
+
+### Compiled expression foundation: length arithmetic (2026-09-10)
+
+Added typed addition/subtraction for the native relative-term-plus-pixel-offset
+representation. Tests verify percentage minus pixels, reversed subtraction,
+rejection of auto and rejection of mixed relative units that cannot be represented.
+Native contract tests pass. No CSS text is parsed by this helper. This is the
+runtime arithmetic foundation only: the compiler does not yet lower calc into it.
+General mixed-unit expressions require a richer representation and remain open.

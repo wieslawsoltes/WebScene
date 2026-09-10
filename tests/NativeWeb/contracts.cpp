@@ -95,6 +95,18 @@ int main() {
       check(command.kind != 257 || command.node_id != canvas,
             "detached external canvas removes its placement");
   }
+  {
+    auto difference = add_compiled_lengths({50,length_unit::percent}, {32,length_unit::pixels}, true);
+    check(difference && difference->value == 50 && difference->pixel_offset == -32 &&
+          difference->unit == length_unit::percent, "compiled length subtraction retains percentage basis");
+    auto reverse = add_compiled_lengths({32,length_unit::pixels}, {50,length_unit::percent}, true);
+    check(reverse && reverse->value == -50 && reverse->pixel_offset == 32,
+          "compiled subtraction preserves operand order");
+    check(!add_compiled_lengths({1,length_unit::em}, {1,length_unit::percent}),
+          "unrepresentable mixed units are not silently flattened");
+    check(!add_compiled_lengths({}, {1,length_unit::pixels}),
+          "automatic length is not an arithmetic operand");
+  }
   document d;
   auto refs = compiled_ui::build(d);
   rule compiled_variable_probe;

@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <cmath>
 #include "webscene_native_dom.h"
 #include <map>
 #include <optional>
@@ -8,6 +9,33 @@
 #include <vector>
 
 namespace webscene::native_web {
+// Arithmetic on compiled lengths. No CSS text is inspected at runtime.
+// The native representation retains one relative term plus an absolute offset.
+inline std::optional<webscene_native::css_length> add_compiled_lengths(
+    webscene_native::css_length left, webscene_native::css_length right,
+    bool subtract = false) {
+  using unit = webscene_native::length_unit;
+  const auto numeric = [](unit value) {
+    return value == unit::pixels || value == unit::percent || value == unit::em ||
+           value == unit::rem || value == unit::viewport_width || value == unit::viewport_height;
+  };
+  if (!numeric(left.unit) || !numeric(right.unit)) return std::nullopt;
+  if (subtract) { right.value = -right.value; right.pixel_offset = -right.pixel_offset; }
+  if (left.unit == right.unit) {
+    left.value += right.value;
+    left.pixel_offset += right.pixel_offset;
+  } else if (right.unit == unit::pixels) {
+    left.pixel_offset += right.value + right.pixel_offset;
+  } else if (left.unit == unit::pixels) {
+    right.pixel_offset += left.value + left.pixel_offset;
+    left = right;
+  } else {
+    return std::nullopt;
+  }
+  if (!std::isfinite(left.value) || !std::isfinite(left.pixel_offset)) return std::nullopt;
+  return left;
+}
+
 // Tokens are supplied by the compiler. Evaluation substitutes token sequences;
 // it never lexes CSS text. Property lowering consumes the resulting typed IR.
 struct variable_token {
