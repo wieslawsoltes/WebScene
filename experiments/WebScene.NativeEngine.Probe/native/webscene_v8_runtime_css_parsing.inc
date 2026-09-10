@@ -43,26 +43,11 @@
     }
 
     static void append_css_syntax_declaration(
-        std::vector<css_declaration>& result,
-        std::string_view raw_name,
-        std::string_view raw_value,
-        bool important,
+        std::vector<css_declaration>& result, std::string_view name,
+        std::string_view value, bool important,
         bool preserve_empty_custom_properties = false)
     {
-        auto name = raw_name.starts_with("--")
-            ? std::string(raw_name)
-            : copy_ascii_lower(raw_name);
-        auto value = std::string(raw_value);
-        const auto custom = name.starts_with("--");
-        if (custom && !valid_custom_property_name(name)) return;
-        if (!custom && name.starts_with("-")
-            && name != "-moz-transform"
-            && name != "-webkit-transform"
-            && name != "-webkit-font-smoothing") return;
-        if (custom && value.empty() && preserve_empty_custom_properties) value = " ";
-        if (!name.empty() && !value.empty()) {
-            result.push_back({std::move(name), std::move(value), important});
-        }
+        css::append_declaration(result,name,value,important,preserve_empty_custom_properties);
     }
 
     static std::vector<css_declaration> parse_css_declarations(
@@ -71,49 +56,7 @@
     {
         std::vector<css_declaration> result;
 #if defined(WEBSCENE_NATIVE_ENGINE_CSSPARSER)
-        class declaration_sink final : public css_syntax_sink {
-        public:
-            declaration_sink(
-                std::vector<css_declaration>& declarations,
-                bool preserve_empty_custom_properties)
-                : declarations_(declarations),
-                  preserve_empty_custom_properties_(preserve_empty_custom_properties)
-            {
-            }
-
-            bool begin_rule(
-                uint32_t,
-                bool,
-                size_t,
-                std::string_view,
-                std::string_view,
-                size_t&) override
-            {
-                return false;
-            }
-
-            bool declaration(
-                std::string_view name,
-                std::string_view value,
-                bool important) override
-            {
-                append_css_syntax_declaration(
-                    declarations_, name, value, important,
-                    preserve_empty_custom_properties_);
-                return true;
-            }
-
-            bool end_rule(size_t, size_t) override { return false; }
-
-        private:
-            std::vector<css_declaration>& declarations_;
-            bool preserve_empty_custom_properties_;
-        };
-
-        result.reserve(body.size() / 64U);
-        declaration_sink sink(result, preserve_empty_custom_properties);
-        const auto parsed = stream_css_syntax_declarations(body, sink);
-        if (!parsed) result.clear();
+        return css::parse_declarations(body, preserve_empty_custom_properties);
 #else
         size_t cursor = 0;
         while (cursor < body.size()) {

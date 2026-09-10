@@ -297,3 +297,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   compiler/native contracts, shared-shadow-values and iframe-dynamic-recascade
   tests pass. Next extraction boundaries are selector matching, property application
   and cascade/invalidation services, followed by a native-document integration test.
+
+- CSS service extraction: webscene_css_declarations.h now owns the Rust-backed
+  declaration parser and runtime declaration normalization. The V8 adapter calls
+  this service, retaining the legacy parser fallback. A separate native_web_css_service
+  executable links the Rust parser without V8 or the runtime engine and passes
+  custom-property case/empty values, escapes, important, nested functions, quoted
+  delimiters and malformed-declaration recovery checks. Its link dependencies and
+  undefined symbols contain no V8/runtime-engine dependency. Runtime shadow and
+  iframe dynamic-recascade checks pass after the extraction. This establishes a
+  reusable parser service, not yet a standalone cascade or a working Kestrel CSS
+  runtime; selector evaluation and cascade execution remain the next boundary.

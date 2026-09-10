@@ -1029,10 +1029,7 @@ bool is_css_whitespace(unsigned char character)
 
 bool valid_custom_property_name(std::string_view name)
 {
-    if (!name.starts_with("--") || name.size() <= 2U) return false;
-    return std::none_of(name.begin(), name.end(), [](unsigned char character) {
-        return character <= 0x20U || character == 0x7FU;
-    });
+    return css::valid_custom_property_name(name);
 }
 
 bool has_multiple_grid_columns(std::string_view value)
