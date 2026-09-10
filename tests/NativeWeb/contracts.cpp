@@ -172,6 +172,24 @@ int main() {
     states.pointer("pointercancel", area.x + 1, area.y + 1);
     states.render(500, 300);
     check(states.bounds(button).width != 123, "cancel clears pressed selector");
+    rule visible_rule;
+    selector_part visible_part;
+    visible_part.tag = "button";
+    visible_part.focus_visible = true;
+    visible_rule.match.parts.push_back(visible_part);
+    visible_rule.declarations.push_back({false, +[](style &s) {
+      s.set_width({140, length_unit::pixels});
+    }});
+    states.add_rule(std::move(visible_rule));
+    states.render(500, 300);
+    check(states.bounds(button).width != 140, "pointer focus has no keyboard indicator");
+    states.key("Tab");
+    states.render(500, 300);
+    check(states.bounds(button).width == 140, "keyboard focus indicator applies");
+    states.pointer("pointerdown", area.x + 1, area.y + 1);
+    states.pointer("pointerup", area.x + 1, area.y + 1);
+    states.render(500, 300);
+    check(states.bounds(button).width != 140, "pointer switches keyboard modality");
     rule disabled_rule;
     selector_part disabled_part;
     disabled_part.tag = "button";

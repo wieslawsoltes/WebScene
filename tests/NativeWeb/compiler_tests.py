@@ -36,7 +36,7 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
             self.assertNotEqual(result.returncode,0,tracks)
     def test_control_state_selectors(self):
-        result,out=self.compile('<button>Go</button>', 'button:active { width:20px; } button:disabled { opacity:0.34; }')
+        result,out=self.compile('<button>Go</button>', 'button:active { width:20px; } button:disabled { opacity:0.34; } button:focus-visible { width:30px; }')
         self.assertEqual(result.returncode,0,result.stderr)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')

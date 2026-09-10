@@ -102,7 +102,7 @@ struct selector_part {
   char relation{}; // relationship to the preceding (ancestor) part: ' ' or '>'
   bool root{};
   std::vector<attribute_selector> attributes;
-  bool active{}, disabled{};
+  bool active{}, disabled{}, focus_visible{};
 };
 struct selector {
   std::vector<selector_part> parts;

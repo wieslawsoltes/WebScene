@@ -20,6 +20,7 @@ struct document_state {
   native_document dom;
   std::thread::id owner{std::this_thread::get_id()};
   bool alive{true};
+  bool keyboard_modality{true};
   node_id focus{}, hover{}, pressed{}, body_id{};
   uint64_t next_listener{1};
   std::mutex listener_mutex;
@@ -261,6 +262,7 @@ void document::pointer(std::string type, float x, float y) {
       }
   }
   if (type == "pointerdown") {
+    state_->keyboard_modality = false;
     state_->pressed = id;
     state_->dom.mark_dirty();
   }
@@ -288,6 +290,10 @@ void document::pointer(std::string type, float x, float y) {
 }
 void document::key(std::string_view key, bool shift) {
   state_->check();
+  if (!state_->keyboard_modality) {
+    state_->keyboard_modality = true;
+    state_->dom.mark_dirty();
+  }
   if (key == "Tab") {
     std::vector<node_id> nodes;
     const auto visit = [&](auto &&self, dom_node &n) -> void {
@@ -377,6 +383,8 @@ static bool matches_part(const dom_node &n, const selector_part &p,
     if (!n.attributes.contains("class") ||
         !class_has(n.attributes.at("class"), c))
       return false;
+  if (p.focus_visible && (n.id != s.focus || !s.keyboard_modality))
+    return false;
   if (p.focus && n.id != s.focus)
     return false;
   if (p.disabled && (!(n.tag == "button" || n.tag == "input" ||
