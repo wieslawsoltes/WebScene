@@ -810,7 +810,7 @@ static std::string assignments(const std::string &name,
     if (value == "0") width = "0";
     else if (value != "none") {
       std::smatch match;
-      if (!std::regex_match(value, match, std::regex(R"(([^\s]+)\s+(solid)\s+(.+))")))
+      if (!std::regex_match(value, match, std::regex(R"(([^\s]+)\s+(solid|dashed)\s+(.+))")))
         throw std::runtime_error("border shorthand currently requires width solid color, 0 or none");
       width = match[1]; style = match[2]; color = match[3];
     }
@@ -829,6 +829,7 @@ static std::string assignments(const std::string &name,
       return "s.set_border_" + side + "_width(" + length(value) + ");";
     }
     if (name == "border-" + side + "-style") {
+      if (ascii_keyword(value) == "dashed") return "s.set_border_" + side + "_dashed();";
       if (value != "solid" && value != "none" && value != "hidden")
         throw std::runtime_error("native compiled borders currently support solid, none and hidden");
       return "s.set_border_" + side + "_solid(" + (value == "solid" ? "true" : "false") + ");";

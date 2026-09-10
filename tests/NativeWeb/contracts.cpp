@@ -422,6 +422,19 @@ int main() {
     d.remove_attribute(shadowed, "class");
     d.render(800, 600);
   }
+  {
+    const auto dashed = d.find("dash-audit");
+    const auto &paint = d.render(800, 10000);
+    check(std::any_of(paint.commands.begin(),paint.commands.end(),[&](const auto &c) {
+      return c.node_id == dashed && (c.kind == 40 || c.kind == 41) && c.stroke_width == 2 && c.rgba == 0xff0000ffu;
+    }), "compiled dashed border emits typed stroked perimeter");
+    d.attribute(dashed,"class","solid");
+    const auto &solid = d.render(800,10000);
+    check(std::none_of(solid.commands.begin(),solid.commands.end(),[&](const auto &c) {
+      return c.node_id == dashed && c.kind >= 40 && c.kind <= 43;
+    }), "solid style mutation clears dashed paint");
+    d.remove_attribute(dashed,"class"); d.render(800,600);
+  }
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

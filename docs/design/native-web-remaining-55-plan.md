@@ -92,8 +92,8 @@ regression and integrated evidence; update this ledger with evidence as work lan
 | 18 | `background:linear-gradient(125deg,var(--panel2),var(--panel))` | P | Open |
 | 19 | `background:linear-gradient(145deg,var(--panel2),var(--panel))` | P | Open |
 | 20 | `border-collapse:collapse` | L | Open |
-| 21 | `border:1px dashed #65c5a4` | P | Open |
-| 22 | `border:2px dashed var(--accent)` | P | Open |
+| 21 | `border:1px dashed #65c5a4` | P | Implemented; compiler/native/Foco raster tests pass; integration pending |
+| 22 | `border:2px dashed var(--accent)` | P | Implemented; compiler/native/Foco raster tests pass; integration pending |
 | 23 | `box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent)` | P | Open |
 | 24 | `box-shadow:inset 0 -2px 0 var(--accent)` | P | Implemented; native command and Foco raster checks pass; integration pending |
 | 25 | `box-shadow:inset 0 0 0 1px var(--accent-dim)` | P | Implemented; native command and Foco raster checks pass; integration pending |
@@ -187,3 +187,12 @@ full Kestrel parity from this CSS inventory or a static diagnostic preview.
   rejected, including after typed variable substitution. Compiler and native
   mutation contracts pass; a reordered inset shadow paints blue after a foreground
   change. Multiple shadows and non-pixel shadow lengths remain pending.
+
+- Dashed borders: typed per-side dash state, rounded uniform perimeter and mixed
+  straight-edge stroke commands connect to Foco dash path effects. Both baseline
+  dashed declarations compile; native mutation checks verify solid resets dash
+  state. Foco raster tests cover visible dash/gap runs for background/foreground
+  rounded and line commands. DOM kinds 40–43 are documented separately from canvas
+  opcodes. Compiler (103 tests), native contracts and Foco paint tests pass.
+  Mixed-width rounded corners, elliptical metadata, exact browser dash distribution
+  and non-Foco consumer support remain pending; no broad border parity claim.

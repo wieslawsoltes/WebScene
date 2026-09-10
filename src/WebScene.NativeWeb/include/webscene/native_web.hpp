@@ -157,7 +157,9 @@ public:
     border_widths_[0] = width;
     value_.border_left_width = border_visible_[0] ? width : length{0,length_unit::pixels};
   }
+  void set_border_left_dashed() { set_border_left_solid(true); value_.border_dashed[0] = true; }
   void set_border_left_solid(bool visible) {
+    value_.border_dashed[0] = false;
     border_visible_[0] = visible;
     value_.border_left_width = visible ? border_widths_[0] : length{0,length_unit::pixels};
   }
@@ -165,7 +167,9 @@ public:
     border_widths_[1] = width;
     value_.border_top_width = border_visible_[1] ? width : length{0,length_unit::pixels};
   }
+  void set_border_top_dashed() { set_border_top_solid(true); value_.border_dashed[1] = true; }
   void set_border_top_solid(bool visible) {
+    value_.border_dashed[1] = false;
     border_visible_[1] = visible;
     value_.border_top_width = visible ? border_widths_[1] : length{0,length_unit::pixels};
   }
@@ -173,7 +177,9 @@ public:
     border_widths_[2] = width;
     value_.border_right_width = border_visible_[2] ? width : length{0,length_unit::pixels};
   }
+  void set_border_right_dashed() { set_border_right_solid(true); value_.border_dashed[2] = true; }
   void set_border_right_solid(bool visible) {
+    value_.border_dashed[2] = false;
     border_visible_[2] = visible;
     value_.border_right_width = visible ? border_widths_[2] : length{0,length_unit::pixels};
   }
@@ -181,7 +187,9 @@ public:
     border_widths_[3] = width;
     value_.border_bottom_width = border_visible_[3] ? width : length{0,length_unit::pixels};
   }
+  void set_border_bottom_dashed() { set_border_bottom_solid(true); value_.border_dashed[3] = true; }
   void set_border_bottom_solid(bool visible) {
+    value_.border_dashed[3] = false;
     border_visible_[3] = visible;
     value_.border_bottom_width = visible ? border_widths_[3] : length{0,length_unit::pixels};
   }

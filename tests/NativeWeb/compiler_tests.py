@@ -92,6 +92,12 @@ class CompilerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode,0)
             self.assertIn(message,result.stderr)
 
+    def test_dashed_border_compilation(self):
+        for css in ['border:1px dashed #65c5a4;', 'border:2px dashed var(--Accent,red);', 'border-style:solid dashed;']:
+            result,out=self.compile('<div></div>', 'div {'+css+'}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('_dashed()',out.read_text())
+
     def test_shadow_component_order_and_defaults(self):
         for value in ['red inset 2px 0', '2px 0 red inset', 'inset 2px 0', '0 0 currentColor', 'red 1px 2px 3px 4px']:
             result,_=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
@@ -745,7 +751,7 @@ class CompilerTests(unittest.TestCase):
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn('set_border_left_width',out.read_text())
         result,_=self.compile('<div></div>', 'div { border:1px dashed red; }')
-        self.assertNotEqual(result.returncode,0)
+        self.assertEqual(result.returncode,0,result.stderr)
     def test_border_width_and_style_shorthands(self):
         result,out=self.compile('<div></div>', 'div { border-width:.5px +2e0px 0 -0px; border-style:solid none hidden solid; }')
         self.assertEqual(result.returncode,0,result.stderr)
@@ -755,7 +761,7 @@ class CompilerTests(unittest.TestCase):
         for value in ['.5px solid #fff','+2e0px solid black','-0px solid white','+0e0 solid black']:
             result,_=self.compile('<div></div>', 'div { border:'+value+'; }')
             self.assertEqual(result.returncode,0,result.stderr)
-        for name,value in [('border-width','-1px'),('border-width','2'),('border-width','1%'),('border-width','1px 2px 3px 4px 5px'),('border-style','solid dashed'),('border','-1px solid black')]:
+        for name,value in [('border-width','-1px'),('border-width','2'),('border-width','1%'),('border-width','1px 2px 3px 4px 5px'),('border','-1px solid black')]:
             result,_=self.compile('<div></div>', 'div { '+name+':'+value+'; }')
             self.assertNotEqual(result.returncode,0,name+':'+value)
 

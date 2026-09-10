@@ -1106,7 +1106,28 @@ void native_document::append_scene(
             && (right <= 0 || std::abs(right - rounded_stroke_width) < 0.01F)
             && (bottom <= 0 || std::abs(bottom - rounded_stroke_width) < 0.01F)
             && (left <= 0 || std::abs(left - rounded_stroke_width) < 0.01F);
-        if (radii.any() && compatible_rounded_widths) {
+        const auto &dash = node.style.border_dashed;
+        if (std::any_of(dash.begin(), dash.end(), [](bool value){ return value; })) {
+            if (uniform_width && uniform_color && std::all_of(dash.begin(), dash.end(), [](bool value){ return value; })) {
+                const float inset = top * .5F;
+                commands.push_back(webscene_scene_command{paint_box_in_foreground ? 41U : 40U,0U,
+                    node.layout.x+inset,node.layout.y+inset,
+                    std::max(0.0F,node.layout.width-top),std::max(0.0F,node.layout.height-top),
+                    with_opacity(border_top_rgba),node.id,
+                    std::max(0.0F,radii.top_left-inset),std::max(0.0F,radii.top_right-inset),
+                    std::max(0.0F,radii.bottom_right-inset),std::max(0.0F,radii.bottom_left-inset),top});
+            } else {
+                const auto edge = [&](float x,float y,float end_x,float end_y,float width,uint32_t color,bool dashed) {
+                    if (width <= 0) return;
+                    commands.push_back(webscene_scene_command{dashed ? (paint_box_in_foreground ? 43U : 42U) :
+                        (paint_box_in_foreground ? 14U : 2U),0U,x,y,end_x,end_y,with_opacity(color),node.id,0,0,0,0,width});
+                };
+                edge(node.layout.x,node.layout.y+top*.5F,node.layout.x+node.layout.width,node.layout.y+top*.5F,top,border_top_rgba,dash[1]);
+                edge(node.layout.x+node.layout.width-right*.5F,node.layout.y,node.layout.x+node.layout.width-right*.5F,node.layout.y+node.layout.height,right,border_right_rgba,dash[2]);
+                edge(node.layout.x,node.layout.y+node.layout.height-bottom*.5F,node.layout.x+node.layout.width,node.layout.y+node.layout.height-bottom*.5F,bottom,border_bottom_rgba,dash[3]);
+                edge(node.layout.x+left*.5F,node.layout.y,node.layout.x+left*.5F,node.layout.y+node.layout.height,left,border_left_rgba,dash[0]);
+            }
+        } else if (radii.any() && compatible_rounded_widths) {
             constexpr uint32_t border_top_flag = 1U << 28U;
             constexpr uint32_t border_right_flag = 1U << 29U;
             constexpr uint32_t border_bottom_flag = 1U << 30U;
