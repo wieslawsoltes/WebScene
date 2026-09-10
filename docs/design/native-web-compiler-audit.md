@@ -443,3 +443,11 @@ percentages, pixel offsets, groups and variable length operands. Compiler tests
 reject division by zero, length×length and scalar÷length. All 41 compiler tests
 and native contracts pass. Scalar variables/expressions, general dimensional
 algebra and additional calc-consuming properties remain open.
+
+### Calc resize semantics (2026-09-10)
+
+The calc layout fixture now uses a 25vw parent and checks two viewport widths.
+The parent grows from 200px to 300px, and its child's percentage-minus-pixel offset
+changes from 80px to 130px without rebuilding the generated document. The native
+contract suite passes. This verifies dynamic percentage resolution, not host
+window-resize frame pacing.

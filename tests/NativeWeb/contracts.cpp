@@ -190,6 +190,11 @@ int main() {
   check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 80 &&
         d.bounds(d.find("calc-child")).y == d.bounds(d.find("calc-parent")).y + 15,
         "compiled calc retains percentage and variable fallback arithmetic");
+  d.render(1200, 600);
+  check(d.bounds(d.find("calc-parent")).width == 300 &&
+        d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 130,
+        "compiled calc re-resolves its percentage basis after viewport resize");
+  d.render(800, 600);
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;
