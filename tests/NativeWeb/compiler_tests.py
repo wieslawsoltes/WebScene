@@ -12,10 +12,13 @@ class CompilerTests(unittest.TestCase):
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
     def test_opacity_clamps_but_negative_flex_factors_fail(self):
-        for value,expected in [('-0.5','0.0f'),('2','1.0f'),('5e-1','0.5f')]:
+        for value,expected in [('-0.5','0.0f'),('2','1.0f'),('5e-1','0.5f'),('50%','0.5f'),('-20%','0.0f'),('+2e2%','1.0f')]:
             result,out=self.compile('<div></div>', 'div { opacity:'+value+'; }')
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn('s.set_opacity('+expected+')',out.read_text())
+        for value in ['50%%','%','1e%','50 %']:
+            result,_=self.compile('<div></div>', 'div { opacity:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
         for name in ['flex-grow','flex-shrink']:
             result,_=self.compile('<div></div>', 'div { '+name+':-0.5; }')
             self.assertNotEqual(result.returncode,0)

@@ -204,3 +204,11 @@ nonnegative constraint. Compiler regressions cover negative and over-one opacity
 exponent notation, negative flex factors and negative line height. All 37 compiler
 tests pass. Percentage opacity, fractional font weights and range behavior in
 other property families still require review; this does not close numeric ranges.
+
+### Numeric ranges: percentage opacity (2026-09-10)
+
+Direct opacity percentages now normalize at build time and clamp to [0,1],
+including signed and exponent forms. Regression cases cover 50%, -20%, +2e2%,
+and malformed percentage tokens. All 37 compiler tests pass. This closes direct
+percentage literals only; variable-based opacity and CSS-wide keyword semantics
+remain part of the cascade/value audit.
