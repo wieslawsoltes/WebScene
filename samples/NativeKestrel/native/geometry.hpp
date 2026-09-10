@@ -2,6 +2,7 @@
 // Ported from KestrelCAD src/geometry.js at the README's pinned revision.
 #include "math.hpp"
 #include "drawing.hpp"
+#include <charconv>
 namespace kestrel::geo {
 inline vec3 point(const json& p){return {p.at(0).get<double>(),p.at(1).get<double>(),p.size()>2?p.at(2).get<double>():0};}
 inline std::vector<vec3> points(const json& array){std::vector<vec3> out;for(auto& p:array)out.push_back(point(p));return out;}
@@ -93,6 +94,37 @@ inline std::vector<segment> hatch_segments(const json& e){
 }
 
 inline json encode(vec3 p){return {p.x,p.y,p.z};}
+struct text_axes {vec3 x,y,n;};
+inline text_axes axes_for_text(const json& e){
+    auto b=basis(vector_property(e,"normal",{0,0,1}));auto r=number(e,"rotation",0);
+    auto x=e.contains("direction")?point(e["direction"]).normalized():b.x*std::cos(r)+b.y*std::sin(r);
+    return {x,b.n.cross(x).normalized(),b.n};
+}
+struct dimension_geometry {std::vector<segment> segments;json text;};
+inline dimension_geometry dimension(const json& e){
+    auto a=point(e.at("points").at(0)),b=point(e.at("points").at(1)),d=b-a;
+    auto length=d.length();auto u=d.normalized(),normal=vector_property(e,"normal",{0,0,1}),n=normal.cross(u).normalized();
+    auto offset=number(e,"offset",length*.12),height=number(e,"textHeight",0);
+    if(height==0)height=std::max(1.,length*.025);
+    auto aa=a+n*offset,bb=b+n*offset,mid=lerp(aa,bb,.5);auto sign=double((offset>0)-(offset<0));
+    dimension_geometry out{{{a+n*(sign*height*.3),aa+n*(sign*height*.8)},
+                           {b+n*(sign*height*.3),bb+n*(sign*height*.8)},{aa,bb}},json{}};
+    for(auto [p,dir]:{std::pair{aa,1.},std::pair{bb,-1.}}){
+        out.segments.push_back({p,p+u*(dir*height)+n*(height*.28)});
+        out.segments.push_back({p,p+u*(dir*height)-n*(height*.28)});
+    }
+    auto label=e.value("text",std::string{});
+    if(label.empty()){
+        auto precision=e.value("precision",0);if(precision<0||precision>100)throw std::invalid_argument("Dimension precision must be between 0 and 100");
+        std::array<char,512> buffer{};auto result=std::to_chars(buffer.data(),buffer.data()+buffer.size(),length,std::chars_format::fixed,precision);
+        if(result.ec!=std::errc{})throw std::runtime_error("Dimension label formatting failed");
+        label.assign(buffer.data(),result.ptr);
+    }
+    out.text={{"position",encode(mid+n*(height*.5))},{"text",label},{"height",height},{"rotation",std::atan2(u.y,u.x)},
+              {"direction",encode(u)},{"normal",encode(normal)},{"align","center"}};
+    return out;
+}
+
 inline json box(vec3 p,double w,double d,double h){
     json v=json::array();for(auto q:{vec3{0,0,0},vec3{w,0,0},vec3{w,d,0},vec3{0,d,0},vec3{0,0,h},vec3{w,0,h},vec3{w,d,h},vec3{0,d,h}})v.push_back(encode(p+q));
     return {{"type","MESH"},{"primitive","Box"},{"vertices",v},{"faces",{{3,2,1,0},{4,5,6,7},{0,1,5,4},{1,2,6,5},{2,3,7,6},{3,0,4,7}}}};

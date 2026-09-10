@@ -43,3 +43,11 @@ application. Browser JavaScript and native C++ application logic remain separate
 Native hatch-line generation now covers cross patterns, concave boundaries and
 non-XY planes, with endpoint comparisons against upstream geometry output.
 Solid hatch triangulation still needs wiring into the entity geometry output.
+
+Dimension geometry now emits extension lines, arrows and label metadata in C++.
+Reference cases cover default placement, negative and zero offsets, tilted planes,
+custom labels and coincident endpoints. Text orientation axes are also available.
+Numeric labels currently use C++ fixed formatting; exact JavaScript `toFixed`
+rounding at decimal ties and scientific formatting for very large values remain
+to be matched before claiming full label parity. Text rasterization and integration
+with the renderer are still outstanding.
