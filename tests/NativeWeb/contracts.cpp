@@ -238,6 +238,18 @@ int main() {
   auto contents_last = d.bounds(d.find("contents-last"));
   check(contents_second.x == contents_first.x + 20 && contents_last.x == contents_second.x + 30,
         "compiled display contents exposes children to parent flex layout");
+  {
+    int child_hits = 0, wrapper_hits = 0;
+    auto child_listener = d.on(d.find("contents-first"), "pointerdown", [&](event&) { ++child_hits; });
+    auto wrapper_listener = d.on(d.find("contents-wrapper"), "pointerdown", [&](event&) { ++wrapper_hits; });
+    d.render(800, 10000);
+    auto target_box = d.bounds(d.find("contents-first"));
+    d.pointer("pointerdown", target_box.x + 1, target_box.y + 1);
+    d.pointer("pointerup", target_box.x + 1, target_box.y + 1);
+    check(child_hits == 1 && wrapper_hits == 1,
+          "display contents child hit bubbles through DOM wrapper");
+    d.render(800, 600);
+  }
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

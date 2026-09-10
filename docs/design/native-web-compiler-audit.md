@@ -1474,3 +1474,10 @@ A compiled wrapper fixture verifies its two children participate directly in the
 parent flex row, followed by an outside sibling at the expected position. All 77
 compiler tests and rebuilt contracts pass. Box suppression in paint/hit testing,
 inheritance, dynamic role changes and accessibility remain separate coverage gaps.
+
+### Display contents pointer propagation (2026-09-10)
+
+Native contracts hit a visible child of the compiled display:contents wrapper
+using pointer coordinates and verify both child targeting and bubbling through
+the DOM wrapper. Rebuilt contracts pass. This verifies event ancestry survives
+layout flattening; wrapper paint suppression and accessibility remain open.
