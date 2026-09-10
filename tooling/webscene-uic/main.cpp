@@ -60,6 +60,47 @@ static std::string length(const std::string &value) {
          ", static_cast<webscene::native_web::length_unit>(" +
          std::to_string(int(v.unit)) + "), " + number(v.pixel_offset) + "}";
 }
+// Initial custom-value token grammar. Unsupported token forms remain errors;
+// declarations are never passed as CSS strings to the application.
+static std::string variable_code(const std::string &text) {
+  std::string result = "{";
+  size_t cursor = 0;
+  auto append = [&](const std::string &entry) {
+    if (result.size() > 1) result += ",";
+    result += entry;
+  };
+  const std::string kind = "webscene::native_web::variable_expression::kind::";
+  while (cursor < text.size()) {
+    if (std::isspace(static_cast<unsigned char>(text[cursor]))) { ++cursor; continue; }
+    if (text.compare(cursor, 4, "var(") == 0) {
+      size_t start = cursor + 4, end = start, comma = std::string::npos;
+      int depth = 1;
+      for (; end < text.size(); ++end) {
+        if (text[end] == '(') ++depth;
+        if (text[end] == ')' && --depth == 0) break;
+        if (text[end] == ',' && depth == 1 && comma == std::string::npos) comma = end;
+      }
+      if (end == text.size()) throw std::runtime_error("unclosed variable reference");
+      auto name = trim(text.substr(start, (comma == std::string::npos ? end : comma) - start));
+      if (!std::regex_match(name, std::regex("--[A-Za-z_][A-Za-z0-9_-]*")))
+        throw std::runtime_error("unsupported custom property name: " + name);
+      auto fallback = comma == std::string::npos ? "{}" : variable_code(text.substr(comma + 1, end - comma - 1));
+      append("{" + kind + "reference," + quote(name) + "," + fallback + "," + (comma == std::string::npos ? "false" : "true") + "}");
+      cursor = end + 1;
+      continue;
+    }
+    size_t end = cursor;
+    while (end < text.size() && !std::isspace(static_cast<unsigned char>(text[end]))) ++end;
+    auto token = text.substr(cursor, end - cursor);
+    if (!std::regex_match(token, std::regex(R"((#[A-Za-z0-9]+|[A-Za-z_-][A-Za-z0-9_-]*|[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([A-Za-z]+|%)?))")))
+      throw std::runtime_error("unsupported custom-value token: " + token);
+    if (token == "initial" || token == "inherit" || token == "unset" || token == "revert" || token == "revert-layer")
+      throw std::runtime_error("custom-property CSS-wide keywords are not supported yet");
+    append("{" + kind + "token," + quote(token) + "}");
+    cursor = end;
+  }
+  return result + "}";
+}
 // Build-time track lowering: emitted applications receive typed values only.
 static std::string grid_track_code(std::string value) {
   value = trim(value);
@@ -436,6 +477,11 @@ struct compiler {
       locate(d.name);
       if (j)
         out << ",";
+      if (d.name.starts_with("--")) {
+        out << "{" << (d.important ? "true" : "false") << ",nullptr,"
+            << quote(d.name) << "," << variable_code(trim(d.value)) << "}";
+        continue;
+      }
       out << "{" << (d.important ? "true" : "false")
           << ", +[](webscene::native_web::style& s){"
           << std::regex_replace(assignments(d.name, trim(d.value)),
@@ -738,7 +784,8 @@ static int check_css(const fs::path &path) {
   }
   for (const auto &declaration : css.declarations)
     check(declaration.name + ":" + declaration.value, [&] {
-      assignments(declaration.name, trim(declaration.value));
+      if (declaration.name.starts_with("--")) variable_code(trim(declaration.value));
+      else assignments(declaration.name, trim(declaration.value));
     });
   for (const auto &error : errors)
     std::cerr << path.string() << ": error: " << error << '\n';

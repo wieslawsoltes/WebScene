@@ -60,6 +60,12 @@ class CompilerTests(unittest.TestCase):
         source.write_text('div { display:grid; grid-template-columns:repeat(3,1fr); }')
         result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
+    def test_custom_property_expressions(self):
+        result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('variable_expression::kind::reference',out.read_text())
+        self.assertNotIn('var(',out.read_text())
+        self.assertIn('nullptr,"--accent"',out.read_text())
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

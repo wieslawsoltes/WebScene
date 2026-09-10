@@ -72,6 +72,16 @@ int main() {
   }
   document d;
   auto refs = compiled_ui::build(d);
+  rule compiled_variable_probe;
+  selector_part probe_root;
+  probe_root.root = true;
+  compiled_variable_probe.match.parts.push_back(probe_root);
+  compiled_variable_probe.declarations.push_back({false, +[](style &s) {
+    auto border = s.variable("--border");
+    check(border && *border && **border == variable_tokens({"1px", "solid", "#5ac6d2"}),
+          "compiler-generated variable expression reaches native cascade");
+  }});
+  d.add_rule(std::move(compiled_variable_probe));
   check(d.root() != d.body(), "HTML root differs from body");
   check(d.find("html-root") == d.root(),
         "compiled HTML root attributes preserved");
