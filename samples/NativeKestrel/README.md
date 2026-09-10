@@ -160,3 +160,17 @@ It hit-tests compiled controls, creates a line through native DOM pointer events
 checks undo/redo entity counts and requires a subsequent GPU frame. The resulting
 capture visibly contains the line. This tests the hosted DOM/controller/render
 path; it does not inject operating-system mouse events.
+
+### Foco frame scheduling
+
+The native host uses `window::requires_host_frames()` and
+`window::advance_host_frame()` through Foco's Cocoa display driver, matching
+FocoUI's `samples/NativeKestrel` integration. Do not introduce an independent
+fixed-interval rendering timer. GPU images continue through Foco's existing
+WebScene IOSurface import and retained compositor resources.
+
+Performance parity is not yet established: the native viewport currently
+publishes completed frames and rebuilds/uploads scene geometry for camera-only
+updates. Compare these with the existing WebScene integration before claiming
+panning parity; preserve its synchronization and frame admission design when
+extending the native API.

@@ -2,7 +2,7 @@
 #include "native_web_view.hpp"
 #include "native_webgpu_surface.h"
 #include "third_party/nlohmann/json.hpp"
-#include <dispatch/dispatch.h>
+#include <functional>
 #include <foco/app_builder.hpp>
 #include <fstream>
 #include <iostream>
@@ -13,39 +13,26 @@ import kestrel.viewport;
 
 static std::string capture_path;
 static bool exercise_commands = false;
+// Use the same Foco host-frame contract as FocoUI's NativeKestrel sample.
+// Cocoa's display driver owns cadence and compositor scheduling.
+class kestrel_window final : public foco::window {
+public:
+  std::function<void()> frame;
+  bool requires_host_frames() const noexcept override { return bool(frame); }
+  bool advance_host_frame(double) override {
+    if (frame) frame();
+    return false;
+  }
+};
 class kestrel_app final : public foco::application {
-  foco::ref<foco::window> window;
+  foco::ref<kestrel_window> window;
   foco::ref<webscene::foco_host::view> view;
   std::unique_ptr<kestrel::controller> controller;
   std::unique_ptr<kestrel::viewport> viewport;
-  std::shared_ptr<bool> alive = std::make_shared<bool>(true);
   uint32_t width{}, height{};
   uint64_t serial{};
   unsigned ticks{};
   foco::windowed_application_lifetime *lifetime{};
-  void schedule() {
-    struct task {
-      kestrel_app *app;
-      std::weak_ptr<bool> alive;
-    };
-    auto *next = new task{this, alive};
-    dispatch_after_f(dispatch_time(DISPATCH_TIME_NOW, 16 * NSEC_PER_MSEC),
-                     dispatch_get_main_queue(), next, [](void *context) {
-                       std::unique_ptr<task> task(
-                           static_cast<struct task *>(context));
-                       auto token = task->alive.lock();
-                       if (!token || !*token)
-                         return;
-                       try {
-                         task->app->tick();
-                         task->app->schedule();
-                       } catch (const std::exception &e) {
-                         std::cerr << "Kestrel viewport: " << e.what() << '\n';
-                         if (!capture_path.empty())
-                           task->app->lifetime->shutdown(5);
-                       }
-                     });
-  }
   void tick() {
     if (!capture_path.empty() && ++ticks == 120) {
       if (!serial || (exercise_commands && serial < 2)) {
@@ -122,13 +109,13 @@ class kestrel_app final : public foco::application {
   }
 
 public:
-  ~kestrel_app() { *alive = false; }
+  ~kestrel_app() { if (window) window->frame = {}; }
   foco::result<void> started(foco::application_lifetime &base) override {
     lifetime = dynamic_cast<foco::windowed_application_lifetime *>(&base);
     if (!lifetime)
       return foco::error{foco::error_code::invalid_argument,
                          "Desktop lifetime required"};
-    window = foco::make_ref<foco::window>();
+    window = foco::make_ref<kestrel_window>();
     window->set_title("Kestrel CAD · Native Web");
     window->set_width(1100);
     window->set_height(760);
@@ -139,10 +126,15 @@ public:
     controller->options.style = kestrel::display_style::shaded_edges;
     controller->refresh();
     window->add_child(view);
-    auto result = window->show(*lifetime);
-    if (result)
-      schedule();
-    return result;
+    window->frame = [this] {
+      try {
+        tick();
+      } catch (const std::exception &e) {
+        std::cerr << "Kestrel viewport: " << e.what() << '\n';
+        lifetime->shutdown(5);
+      }
+    };
+    return window->show(*lifetime);
   }
 };
 int main(int argc, char **argv) {
