@@ -15,6 +15,14 @@ class CompilerTests(unittest.TestCase):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn('s.set_font_family("Arial, sans-serif")',out.read_text())
+    def test_short_hex_colors(self):
+        for color,expected in [('#fff',0xffffffff),('#0005',0x55),('#aBc',0xaabbccff),('#1234',0x11223344)]:
+            result,out=self.compile('<p>Hello</p>', 'p { color: '+color+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_foreground_rgba('+str(expected)+'u)',out.read_text())
+        for color in ['#12','#12345','#1234567','#ggg']:
+            result,_=self.compile('<p>Hello</p>', 'p { color: '+color+'; }')
+            self.assertNotEqual(result.returncode,0)
     def test_module_output(self):
         result,out=self.compile('<button id="go">Hello</button>')
         self.assertEqual(result.returncode,0,result.stderr)

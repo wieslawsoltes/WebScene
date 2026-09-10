@@ -130,9 +130,9 @@ static std::string assignments(const std::string &name,
   }
   if (name == "background" || name == "background-color" || name == "color") {
     if (!std::regex_match(value,
-                          std::regex("#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?")) &&
+                          std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) &&
         value != "transparent" && value != "black" && value != "white")
-      throw std::runtime_error("initial color profile requires #rrggbb, "
+      throw std::runtime_error("color profile requires #rgb, #rgba, #rrggbb, "
                                "#rrggbbaa, black, white or transparent");
     return std::string("s.") +
            (name == "color" ? "foreground_rgba" : "background_rgba") + " = " +
