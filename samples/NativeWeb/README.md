@@ -112,3 +112,24 @@ This records 20 native construction/interaction runs, build-time UI parsing and 
 compilation costs, process RSS and bundle size in `measurements.json`. The report
 separates native document construction from process/GPU startup and explicitly labels
 warm filesystem caches and the Cocoa smoke test's deliberate delay.
+
+### Compiled templates
+
+Reusable dynamic UI can be declared as inert HTML templates:
+
+```html
+<template id="item"><button data-ref="button">Item</button></template>
+```
+
+The compiler emits native construction functions. Application code calls
+`compiled_ui::instantiate(document, parent, "item")`, obtains a `template_view`
+with `roots` and `named("button")`, and updates text/classes through the native
+API. No HTML string is parsed at runtime. Each instance has independent node
+handles. Remove its roots explicitly when disposing the instance; dropping the
+reference struct alone does not remove the nodes.
+
+Template children use `data-ref` rather than document-global IDs, so repeated
+instances cannot overwrite each other's ID lookup. Styles live in the document's
+compiled stylesheet and continue to match dynamic classes. Nested templates,
+unwrapped root text, scripts and unsupported elements are rejected at compile
+time. The Native Web sample's Add Item command now uses this path.

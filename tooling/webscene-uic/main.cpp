@@ -274,6 +274,8 @@ struct compiler {
   std::vector<std::pair<std::string, std::string>> names;
   std::vector<fs::path> dependencies;
   unsigned count{};
+  bool in_template{};
+  std::vector<std::pair<std::string, const dom_node*>> templates;
   void locate(std::string_view text) {
     auto at = content.find(text);
     location =
@@ -334,6 +336,10 @@ struct compiler {
     }
   }
   void node(const dom_node &n, const std::string &parent) {
+    if (n.tag == "template") {
+      if (in_template) throw std::runtime_error("nested compiled templates are not supported");
+      return; // Inert; emitted as an instantiation function.
+    }
     if (n.tag == "#comment" || n.tag == "#doctype")
       return;
     if (n.tag == "#text") {
@@ -378,7 +384,9 @@ struct compiler {
           k != "tabindex" && k != "disabled" && k != "type" && k != "role" &&
           !k.starts_with("aria-") && !k.starts_with("data-"))
         throw std::runtime_error("unsupported attribute: " + k);
-      if (k == "id") {
+      if (in_template && k == "id")
+        throw std::runtime_error("template elements use data-ref instead of document-global id");
+      if (k == "id" || (in_template && k == "data-ref")) {
         if (!ids.insert(v).second)
           throw std::runtime_error("duplicate id: " + v);
         names.emplace_back(v, local);
@@ -409,6 +417,15 @@ struct compiler {
     prefix.swap(out);
     const dom_node *body = nullptr;
     const auto walk = [&](auto &&self, const dom_node &n) -> void {
+      if (n.tag == "template") {
+        auto id = n.attributes.find("id");
+        if (id == n.attributes.end() || id->second.empty())
+          throw std::runtime_error("compiled template requires a nonempty id");
+        for (const auto& entry : templates)
+          if (entry.first == id->second) throw std::runtime_error("duplicate template: " + id->second);
+        templates.emplace_back(id->second, &n);
+        return;
+      }
       if (n.tag == "script")
         throw std::runtime_error("Native Web profile excludes scripts");
       if (n.tag == "body")
@@ -456,7 +473,39 @@ struct compiler {
         prefix << ",";
       prefix << names[i].second;
     }
-    prefix << "};\n}\n}\n";
+    prefix << "};\n}\n";
+    prefix << "struct template_view {\n"
+              "std::vector<webscene::native_web::node_id> roots;\n"
+              "std::vector<std::pair<std::string_view,webscene::native_web::node_id>> references;\n"
+              "webscene::native_web::node_id named(std::string_view name) const {\n"
+              "for(auto [key,value]:references) if(key==name) return value; return 0; }\n};\n"
+              "inline template_view instantiate(webscene::native_web::document& d, "
+              "webscene::native_web::node_id parent, std::string_view name) {\n";
+    for (const auto& [name, element] : templates) {
+      in_template = true;
+      ids.clear(); names.clear(); out.str(""); out.clear();
+      std::vector<std::string> roots;
+      if (element->template_contents) {
+        for (auto* child : element->template_contents->children) {
+          if (child->tag == "template")
+            throw std::runtime_error("nested compiled templates are not supported");
+          if (child->tag == "#text" && !trim(child->text_content).empty())
+            throw std::runtime_error("template root text must be wrapped in an element");
+          auto before = count;
+          node(*child, "parent");
+          if (count != before) roots.push_back("n" + std::to_string(before + 1));
+        }
+      }
+      prefix << "if(name==" << quote(name) << ") {\n" << out.str() << "return {{";
+      for (size_t i=0;i<roots.size();++i) { if(i) prefix << ","; prefix << roots[i]; }
+      prefix << "},{";
+      for (size_t i=0;i<names.size();++i) {
+        if(i) prefix << ",";
+        prefix << "{" << quote(names[i].first) << "," << names[i].second << "}";
+      }
+      prefix << "}};\n}\n";
+    }
+    prefix << "throw std::invalid_argument(\"Unknown compiled template\");\n}\n}\n";
     fs::create_directories(fs::absolute(output).parent_path());
     std::ofstream f(output);
     if (!f)

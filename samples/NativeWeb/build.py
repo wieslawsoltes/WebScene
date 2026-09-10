@@ -28,10 +28,10 @@ if args.foco:
     llvm=pathlib.Path('/opt/homebrew/opt/llvm/bin/clang++')
     if llvm.exists():configure += [f'-DCMAKE_CXX_COMPILER={llvm}',f'-DCMAKE_OBJCXX_COMPILER={llvm}']
 start=time.perf_counter();run(configure)
-targets=['webscene-uic','native_web_smoke','native_web_contracts']+(['FocoNativeWeb','native_web_foco_focus'] if args.foco else [])
+targets=['webscene-uic','native_web_smoke','native_web_contracts','native_web_templates']+(['FocoNativeWeb','native_web_foco_focus'] if args.foco else [])
 run(['cmake','--build',build,'--target',*targets,'-j','6'])
 build_seconds=time.perf_counter()-start
-run(['ctest','--test-dir',build,'--output-on-failure','-R','^native_web_(smoke|contracts|compiler|foco_focus)$'])
+run(['ctest','--test-dir',build,'--output-on-failure','-R','^native_web_(smoke|contracts|templates|compiler|foco_focus)$'])
 result={'build_seconds':build_seconds,'build_timing_note':'Configure plus build; may be incremental.','smoke':subprocess.check_output([build/'native_web_smoke'],text=True).strip()}
 if args.reference_engine:
     parsed=json.loads(subprocess.check_output(['python3',repo/'tests/NativeWeb/parsed_reference.py',args.reference_engine.resolve(),repo/'samples/NativeWeb/Main.html'],text=True))

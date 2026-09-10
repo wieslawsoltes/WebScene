@@ -30,4 +30,16 @@ class CompilerTests(unittest.TestCase):
         result,_=self.compile('<link rel="stylesheet" href="missing.css">');self.assertNotEqual(result.returncode,0)
     def test_nonzero_unitless_length_rejected(self):
         result,_=self.compile('<div></div>','div { width: 10; }');self.assertNotEqual(result.returncode,0)
+    def test_template_scripts_rejected(self):
+        result,_=self.compile('<template id="item"><script>alert(1)</script></template>')
+        self.assertNotEqual(result.returncode,0)
+    def test_template_global_ids_rejected(self):
+        result,_=self.compile('<template id="item"><div id="duplicate"></div></template>')
+        self.assertNotEqual(result.returncode,0);self.assertIn('data-ref',result.stderr)
+    def test_template_duplicate_references_rejected(self):
+        result,_=self.compile('<template id="item"><div data-ref="x"></div><div data-ref="x"></div></template>')
+        self.assertNotEqual(result.returncode,0)
+    def test_nested_templates_rejected(self):
+        result,_=self.compile('<template id="item"><div><template id="nested"></template></div></template>')
+        self.assertNotEqual(result.returncode,0)
 if __name__=='__main__':unittest.main()

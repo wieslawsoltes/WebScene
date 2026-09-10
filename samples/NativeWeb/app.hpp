@@ -26,8 +26,9 @@ struct app_state {
           redraw();
         }));
     subscriptions.push_back(d.on(d.find("add"), "click", [this, &d](auto &) {
-      auto item = d.element(d.find("items"), "button");
-      d.text(item, "Item " + std::to_string(++items) + " - click to remove");
+      auto instance = compiled_ui::instantiate(d, d.find("items"), "item");
+      auto item = instance.named("button");
+      d.set_text(item, "Item " + std::to_string(++items) + " - click to remove");
       subscriptions.push_back(
           d.on(item, "click", [&d, item](auto &) { d.remove(item); }));
     }));
