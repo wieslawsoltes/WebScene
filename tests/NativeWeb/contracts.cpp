@@ -191,6 +191,18 @@ int main() {
   d.render(800, 600);
   check(d.bounds(d.find("col-priority-second")).width > 60,
         "column span removal restores automatic second column");
+  for (auto invalid_span : {"-1", "0", "bogus"}) {
+    d.attribute(span_cell, "colspan", invalid_span);
+    d.render(800, 600);
+    check(d.bounds(span_cell).width == d.bounds(d.find("audit-cell-a")).width,
+          "invalid cell colspan defaults to one");
+  }
+  d.attribute(span_cell, "colspan", "999999999999999999999999");
+  d.render(800, 600);
+  d.attribute(span_cell, "colspan", "2");
+  d.render(800, 600);
+  check(d.bounds(span_cell).width == table_span.width,
+        "cell colspan recovers after oversized value");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

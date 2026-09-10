@@ -1424,3 +1424,12 @@ parsing. Contracts verify +2suffix repeats the 60px width, a very large integer
 renders without failure, and restoring +1 recovers the automatic second column.
 Rebuilt contracts pass. This supersedes the prior partial column-span guard;
 cell-span reflection and colgroup semantics remain separate audit items.
+
+### Cell span bounded parsing (2026-09-10)
+
+Cell placement and intrinsic column counting now use the shared bounded table-span
+parser instead of unchecked float conversions. Colspan clamps to 1000; positive
+rowspan clamps to 65534. Contracts cover invalid/zero colspan defaults, an oversized
+colspan render and restoration to the original width. Rebuilt contracts pass.
+Rowspan=0 still follows the old one-row fallback rather than spanning the remaining
+row group; that semantic gap and dedicated rowspan geometry tests remain open.

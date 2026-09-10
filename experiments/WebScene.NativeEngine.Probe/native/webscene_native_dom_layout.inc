@@ -1,10 +1,10 @@
-static size_t native_column_span(std::string_view text) {
+static size_t native_table_span(std::string_view text, size_t maximum = 1000) {
     size_t cursor = text.find_first_not_of(" \t\n\r\f");
     if (cursor == std::string_view::npos) return 1;
     if (text[cursor] == '+') ++cursor;
     size_t value = 0;
     while (cursor < text.size() && text[cursor] >= '0' && text[cursor] <= '9')
-        value = std::min<size_t>(1000, value * 10 + (text[cursor++] - '0'));
+        value = std::min<size_t>(maximum, value * 10 + (text[cursor++] - '0'));
     return value ? value : 1;
 }
 
@@ -582,7 +582,7 @@ void native_document::layout_children(dom_node& parent)
                     }
                     return found == child->attributes.end()
                         ? size_t{1}
-                        : std::max<size_t>(1, static_cast<size_t>(parse_number(found->second, 1)));
+                        : native_table_span(found->second, name == "rowspan" ? 65534 : 1000);
                 };
                 const auto column_span = parse_span("colspan");
                 const auto row_span = parse_span("rowspan");
@@ -616,7 +616,7 @@ void native_document::layout_children(dom_node& parent)
                 }
                 if (child->style.display != display_mode::table_column) continue;
                 const auto span_value = child->attributes.find("span");
-                const auto span = span_value == child->attributes.end() ? size_t{1} : native_column_span(span_value->second);
+                const auto span = span_value == child->attributes.end() ? size_t{1} : native_table_span(span_value->second);
                 const auto width = is_specified(child->style.width)
                     ? resolve_length(*child, child->style.width, content.width, 0)
                     : 0.0F;
@@ -879,7 +879,7 @@ void native_document::layout_children(dom_node& parent)
                 const auto span_value = track->attributes.find("span");
                 const auto span = span_value == track->attributes.end()
                     ? size_t{1}
-                    : native_column_span(span_value->second);
+                    : native_table_span(span_value->second);
                 const auto start = std::min(column_cursor, columns.size());
                 const auto end = std::min(columns.size(), column_cursor + span);
                 track->layout = {
@@ -3980,7 +3980,7 @@ float native_document::compute_intrinsic_size(
                     auto span_value = child->attributes.find("span");
                     const auto span = span_value == child->attributes.end()
                         ? size_t{1}
-                        : native_column_span(span_value->second);
+                        : native_table_span(span_value->second);
                     const auto width = is_specified(child->style.width)
                         ? resolve_length(*child, child->style.width, available, 0)
                         : 0.0F;
@@ -4030,7 +4030,7 @@ float native_document::compute_intrinsic_size(
                     auto span = cell->attributes.find("colspan");
                     if (span == cell->attributes.end()) span = cell->attributes.find("colSpan");
                     row_count += span == cell->attributes.end()
-                        ? 1U : std::max<size_t>(1, static_cast<size_t>(parse_number(span->second, 1)));
+                        ? 1U : native_table_span(span->second);
                 }
                 count = std::max(count, row_count);
             }
@@ -4049,7 +4049,7 @@ float native_document::compute_intrinsic_size(
                         span_value = cell->attributes.find("colSpan");
                     }
                     const auto span = span_value == cell->attributes.end()
-                        ? 1U : native_column_span(span_value->second);
+                        ? 1U : native_table_span(span_value->second);
                     const auto share = intrinsic_size(*cell, true, available)
                         / static_cast<float>(span);
                     for (size_t track = column; track < std::min(count, column + span); ++track) {
