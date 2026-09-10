@@ -191,6 +191,10 @@ static std::string assignments(const std::string &name,
                                     "::" + val->second) +
            ";";
   }
+  if (name == "font-family") {
+    if (value.empty()) throw std::runtime_error("Empty font family");
+    return "s.set_font_family(" + quote(value == "inherit" || value == "unset" ? "" : value) + ");";
+  }
   if (name == "font-size") {
     if (!value.ends_with("px"))
       throw std::runtime_error("font-size currently requires px");

@@ -12,7 +12,8 @@ int main() {
   document d;
   auto refs = compiled_ui::build(d);
   auto target = refs.named("target"), other = refs.named("other");
-  d.render(800, 600);
+  const auto &initial_scene = d.render(800, 600);
+  check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end()).find("Arial, sans-serif") != std::string::npos, "compiled font family reaches renderer");
   check(d.bounds(target).width == 60, "important beats inline");
   check(d.bounds(other).width == 30, "child selector");
   d.attribute(target, "class", "");

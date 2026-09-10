@@ -11,6 +11,10 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_font_family_compiles(self):
+        result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.set_font_family("Arial, sans-serif")',out.read_text())
     def test_module_output(self):
         result,out=self.compile('<button id="go">Hello</button>')
         self.assertEqual(result.returncode,0,result.stderr)

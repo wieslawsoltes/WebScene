@@ -54,6 +54,7 @@ public:
   void set_border_bottom_right_radius(length value) {
     value_.border_bottom_right_radius = value;
   }
+  void set_font_family(std::string value) { value_.mutable_textual().font_family = std::move(value); }
   void set_font_size(float value) { value_.font_size = value; }
   void set_flex_grow(float value) { value_.flex_grow = value; }
   void set_flex_shrink(float value) { value_.flex_shrink = value; }
