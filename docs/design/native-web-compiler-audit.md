@@ -868,3 +868,15 @@ targeting of the descendant, and descendant Y movement when the parent gains a
 vertical transform. Native contracts pass without engine changes. This covers
 nested translations only; clipping, stacking paint and rotation/scale composition
 remain open.
+
+### Native overflow derived state (2026-09-10)
+
+A translated-child clipping regression initially failed: native cascade stored
+axis overflow values but omitted the derived clipping/scroll flags populated by
+the JS-backed path. Native cascade now derives those flags after declarations,
+including cross-axis visible/clip normalization for that calculation.
+
+The regression now passes: visible translated content is targetable, content
+outside overflow:hidden is excluded, and changing overflow to visible restores
+outside targeting. Native contracts pass. Rendered clipping parity, mixed-axis
+clipping and actual scroll interaction remain open and require further coverage.

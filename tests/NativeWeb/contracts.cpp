@@ -179,6 +179,22 @@ int main() {
   auto translated = d.find("translated"), translate_parent = d.find("translate-parent");
   check(d.bounds(translated).x - d.bounds(translate_parent).x == 10, "compiled percentage translation uses own width");
   d.render(800, 10000);
+  auto clip_parent = d.find("translation-clip"), clip_child = d.find("translation-clipped");
+  int clipped_hits = 0;
+  auto clip_subscription = d.on(clip_child, "pointerdown", [&](event&) { ++clipped_hits; });
+  const auto clip_area = d.bounds(clip_parent);
+  const auto click_clip = [&](float offset) {
+    d.pointer("pointerdown", clip_area.x + offset, clip_area.y + 1);
+    d.pointer("pointerup", clip_area.x + offset, clip_area.y + 1);
+  };
+  click_clip(15);
+  check(clipped_hits == 1, "visible translated portion receives input");
+  click_clip(25);
+  check(clipped_hits == 1, "overflow hidden excludes translated portion outside ancestor");
+  d.attribute(clip_parent, "class", "visible");
+  d.render(800, 10000);
+  click_clip(25);
+  check(clipped_hits == 2, "overflow visible restores translated outside hit region");
   int translated_hits = 0;
   auto translated_subscription = d.on(translated, "pointerdown", [&](event&) { ++translated_hits; });
   auto translated_area = d.bounds(translated);

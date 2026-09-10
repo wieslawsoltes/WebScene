@@ -532,6 +532,17 @@ const scene &document::render(float width, float height) {
     for (const auto &d : declarations)
       if (d.value->custom_name.empty() && d.value->apply)
         d.value->apply(writer);
+    auto x = n.style.overflow_x, y = n.style.overflow_y;
+    const auto scrollable = [](overflow_mode value) {
+      return value != overflow_mode::visible && value != overflow_mode::clip;
+    };
+    if (x == overflow_mode::visible && scrollable(y)) x = overflow_mode::automatic;
+    else if (x == overflow_mode::clip && scrollable(y)) x = overflow_mode::hidden;
+    if (y == overflow_mode::visible && scrollable(x)) y = overflow_mode::automatic;
+    else if (y == overflow_mode::clip && scrollable(x)) y = overflow_mode::hidden;
+    n.style.clip = x != overflow_mode::visible || y != overflow_mode::visible;
+    n.style.scroll_x_enabled = x == overflow_mode::automatic || x == overflow_mode::scroll;
+    n.style.scroll_y_enabled = y == overflow_mode::automatic || y == overflow_mode::scroll;
     for (auto *c : n.children)
       self(self, *c, variables);
   };
