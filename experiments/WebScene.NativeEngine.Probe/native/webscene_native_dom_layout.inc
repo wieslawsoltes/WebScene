@@ -606,11 +606,21 @@ void native_document::layout_children(dom_node& parent)
                 }
                 if (child->style.display != display_mode::table_column) continue;
                 const auto span_value = child->attributes.find("span");
-                const auto span = span_value == child->attributes.end()
-                    ? size_t{1}
-                    : std::max<size_t>(
-                        1,
-                        static_cast<size_t>(parse_number(span_value->second, 1)));
+                size_t span = 1;
+                if (span_value != child->attributes.end()) {
+                    const auto& text = span_value->second;
+                    size_t cursor = text.find_first_not_of(" \t\n\r\f");
+                    if (cursor != std::string::npos) {
+                        if (text[cursor] == '+') ++cursor;
+                        size_t parsed = 0;
+                        bool digits = false;
+                        while (cursor < text.size() && text[cursor] >= '0' && text[cursor] <= '9') {
+                            digits = true;
+                            parsed = std::min<size_t>(1000, parsed * 10 + (text[cursor++] - '0'));
+                        }
+                        if (digits && parsed) span = parsed;
+                    }
+                }
                 const auto width = is_specified(child->style.width)
                     ? resolve_length(*child, child->style.width, content.width, 0)
                     : 0.0F;

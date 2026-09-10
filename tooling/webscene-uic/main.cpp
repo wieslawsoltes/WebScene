@@ -1144,6 +1144,7 @@ struct compiler {
       if (k != "hidden" && k != "id" && k != "class" && k != "width" && k != "height" &&
           k != "tabindex" && k != "disabled" && k != "type" && k != "role" &&
           !k.starts_with("aria-") && !k.starts_with("data-") &&
+          !(n.tag == "col" && k == "span") &&
           !((n.tag == "td" || n.tag == "th") && (k == "colspan" || k == "rowspan")) &&
           !(std::set<std::string>{"viewBox","viewbox","xmlns","d","points","fill","stroke","stroke-width","stroke-linecap","stroke-linejoin","x","y","x1","x2","y1","y2","cx","cy","r","rx","ry"}.contains(k)))
         { if (!preview) throw std::runtime_error("unsupported attribute: " + k); warning("generic native attribute: " + k); }

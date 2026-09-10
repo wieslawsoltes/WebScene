@@ -1405,3 +1405,12 @@ important class rule and verify the cell remains zero-width despite its own
 120px declaration. Removing the class restores 60px. Rebuilt contracts pass,
 confirming explicit zero is preserved independently of automatic sizing.
 Spanning-cell and percentage-column interactions remain open.
+
+### Column span input handling (2026-09-10)
+
+Compiled col elements now accept span. Native column collection replaces unchecked
+float-to-size conversion with bounded integer-prefix parsing: invalid/zero values
+default to one, positive values clamp to 1000 and an optional plus is accepted.
+Contracts cover compiled +1 and dynamic negative/zero/nonnumeric defaults without
+altering the 60px column. All 76 compiler tests and rebuilt contracts pass.
+Large-span geometry, colgroup span behavior and full table reflection remain open.

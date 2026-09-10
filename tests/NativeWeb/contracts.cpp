@@ -173,6 +173,13 @@ int main() {
   d.render(800, 600);
   check(d.bounds(d.find("col-priority")).width == 60,
         "column width recovers after zero-width mutation");
+  for (auto invalid_span : {"-1", "0", "bogus"}) {
+    d.attribute(d.find("priority-column"), "span", invalid_span);
+    d.render(800, 600);
+    check(d.bounds(d.find("col-priority")).width == 60,
+          "invalid column span defaults to one");
+  }
+  d.attribute(d.find("priority-column"), "span", "+1");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
