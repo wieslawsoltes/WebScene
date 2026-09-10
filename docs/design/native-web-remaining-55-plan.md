@@ -578,3 +578,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   and runtime dimension inheritance/variables, inset transition and iframe cascade
   regressions pass. Existing parsing, logical-direction and grouped precedence
   limitations are unchanged. Other declaration families and full cascade remain open.
+
+- Grid/flex application extraction: shared layout helpers now prepare the existing
+  grid tracks and apply grid/flex declarations, alignment and box sizing with the
+  owner-provided precedence predicate. Native layout tests verify fixed-plus-flexible
+  columns respond to 500px/700px viewports for both grid and flex. This preserves
+  existing repeat/named-line/dense-layout and shorthand limitations; it does not
+  claim complete grid/flex compatibility or presented-frame performance. Full
+  declaration dispatch and document cascade remain unfinished.
+  Runtime compact-go-to-grid, tradingview-symbol-search-grid,
+  dynamic-percentage-flex-list and dimension-inheritance regressions pass.

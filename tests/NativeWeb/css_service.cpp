@@ -488,5 +488,32 @@ int main(int argc,char** argv) {
        reset_node.style.row_gap.value!=7 || reset_node.style.column_gap.value!=11) return 93;
     apply_box("width","unset");
     if(reset_node.style.width.value==640 || apply_box("unknown-property","1px")) return 94;
+    webscene_native::native_document grid_document;
+    auto& grid_root=grid_document.body();
+    grid_root.style.display=webscene_native::display_mode::grid;
+    webscene_native::css::property_result grid_result;
+    if(!webscene_native::css::apply_grid_value(grid_root,"grid-template-columns",
+        "100px minmax(0,1fr)",grid_result,[](uint64_t) { return false; })) return 95;
+    auto& fixed_column=grid_document.create_element("div");
+    auto& flexible_column=grid_document.create_element("div");
+    grid_document.append_child(grid_root,fixed_column);
+    grid_document.append_child(grid_root,flexible_column);
+    grid_document.layout(500,100);
+    if(std::abs(fixed_column.layout.width-100)>.1f ||
+       std::abs(flexible_column.layout.width-400)>.1f) return 96;
+    grid_document.layout(700,100);
+    if(std::abs(fixed_column.layout.width-100)>.1f ||
+       std::abs(flexible_column.layout.width-600)>.1f) return 97;
+    grid_root.style.display=webscene_native::display_mode::flex;
+    const auto unprotected=[](uint64_t) { return false; };
+    webscene_native::css::apply_flex_value(grid_root,"flex-flow","row nowrap",unprotected);
+    fixed_column.style.width={100,webscene_native::length_unit::pixels};
+    webscene_native::css::apply_flex_value(fixed_column,"flex","none",unprotected);
+    webscene_native::css::apply_flex_value(flexible_column,"flex","1 1 0px",unprotected);
+    grid_document.layout(500,100);
+    if(std::abs(fixed_column.layout.width-100)>.1f ||
+       std::abs(flexible_column.layout.width-400)>.1f) return 98;
+    grid_document.layout(700,100);
+    if(std::abs(flexible_column.layout.width-600)>.1f) return 99;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

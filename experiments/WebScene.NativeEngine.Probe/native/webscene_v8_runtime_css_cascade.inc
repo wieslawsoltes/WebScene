@@ -932,49 +932,7 @@
                 decision.classification = "unsupported";
                 decision.semantic_slice = "auto and fixed keywords";
             }
-        } else if (name == "grid-template-columns" && !is_inline(inline_grid)) {
-            auto& grid = node.style.mutable_grid();
-            const auto first = value.find_first_not_of(" \t\r\n");
-            const auto last = value.find_last_not_of(" \t\r\n");
-            const auto trimmed = first == std::string::npos
-                ? std::string_view{}
-                : std::string_view(value).substr(first, last - first + 1U);
-            grid.subgrid_columns = trimmed == "subgrid"
-                || trimmed.starts_with("subgrid ");
-            grid.template_columns = grid.subgrid_columns
-                ? std::vector<node_style::grid_data::track>{}
-                : parse_simple_grid_tracks(value);
-            grid.two_columns = grid.subgrid_columns
-                || grid.template_columns.size() > 1U
-                || (grid.template_columns.empty() && has_multiple_grid_columns(value));
-            decision.classification = "partially-supported";
-            decision.semantic_slice =
-                "component grids with fixed, auto, fractional, minmax, and column subgrid tracks";
-        } else if (name == "grid-template-rows" && !is_inline(inline_grid)) {
-            auto& grid = node.style.mutable_grid();
-            grid.template_rows = parse_simple_grid_tracks(value);
-            grid.fractional_rows = std::any_of(
-                grid.template_rows.begin(),
-                grid.template_rows.end(),
-                [](const auto& track) { return track.fraction > 0; });
-            decision.classification = "partially-supported";
-            decision.semantic_slice = "fractional component rows and explicit fixed track lengths";
-        } else if (name == "grid-auto-columns" && !is_inline(inline_grid)) {
-            auto& grid = node.style.mutable_grid();
-            grid.auto_columns = parse_simple_grid_tracks(value);
-            decision.classification = "partially-supported";
-            decision.semantic_slice =
-                "fixed, auto, fractional, and minmax implicit column track lengths";
-        } else if (name == "grid-auto-flow" && !is_inline(inline_grid)) {
-            auto& grid = node.style.mutable_grid();
-            grid.auto_flow_column = value == "column" || value == "column dense";
-            decision.classification = "partially-supported";
-            decision.semantic_slice = "row and column auto-flow without dense backfill";
-        } else if (!is_inline(inline_grid)
-            && apply_grid_placement_declaration(node.style, name, value)) {
-            decision.classification = "supported";
-            decision.semantic_slice =
-                "grid-area, grid-row, grid-column, and placement longhand CSSOM values";
+        } else if (css::apply_grid_value(node,name,value,decision,is_inline)) {
         } else if (name == "position" && !is_inline(inline_position)) {
             const auto explicit_document_element = node.tag == "html"
                 && node.parent == &document.body();
@@ -1010,79 +968,7 @@
                 node.style.z_index = node.style.z_index_auto
                     ? 0 : std::atoi(value.c_str());
             }
-        } else if (name == "flex-direction" && !is_inline(inline_flex_direction)) {
-            node.style.direction = value == "row" || value == "row-reverse"
-                ? flex_direction::row : flex_direction::column;
-            node.style.flex_reverse = value == "row-reverse" || value == "column-reverse";
-        } else if (name == "flex-flow"
-            && (!is_inline(inline_flex_direction) || !is_inline(inline_flex_wrap))) {
-            const auto flow = parse_flex_flow(value);
-            if (!is_inline(inline_flex_direction)) {
-                node.style.direction = flow.direction;
-                node.style.flex_reverse = flow.reverse;
-            }
-            if (!is_inline(inline_flex_wrap)) node.style.flex_wrap = flow.wrap;
-        } else if (name == "flex-wrap" && !is_inline(inline_flex_wrap)) {
-            node.style.flex_wrap = value == "wrap" || value == "wrap-reverse";
-        } else if (name == "align-items" && !is_inline(inline_align_items)) {
-            node.style.align_items = value == "center" ? align_mode::center
-                : value == "flex-start" || value == "start" ? align_mode::start
-                : value == "flex-end" || value == "end" ? align_mode::end
-                : value == "baseline" || value == "first baseline" ? align_mode::baseline
-                : align_mode::stretch;
-        } else if (name == "vertical-align" && node.tag == "tr" && value == "middle"
-            && !is_inline(inline_align_items)) {
-            // A flex-backed row uses cross-axis alignment to preserve the table-row
-            // meaning of vertical-align: middle for its cells.
-            node.style.mutable_textual().vertical_align = value;
-            node.style.align_items = align_mode::center;
-        } else if (name == "align-self" && !is_inline(inline_align_self)) {
-            node.style.align_self_specified = value != "auto";
-            node.style.align_self = value == "center" ? align_mode::center
-                : value == "flex-start" || value == "start" ? align_mode::start
-                : value == "flex-end" || value == "end" ? align_mode::end
-                : value == "baseline" || value == "first baseline" ? align_mode::baseline
-                : align_mode::stretch;
-        } else if (name == "justify-content" && !is_inline(inline_justify_content)) {
-            node.style.justify_content = value == "center" ? justify_mode::center
-                : value == "flex-end" || value == "end" ? justify_mode::end
-                : value == "space-between" ? justify_mode::space_between
-                : value == "space-around" ? justify_mode::space_around
-                : value == "space-evenly" ? justify_mode::space_evenly
-                : justify_mode::start;
-        } else if (name == "flex-grow" && !is_inline(inline_flex_grow)) {
-            node.style.flex_grow = std::strtof(value.c_str(), nullptr);
-        } else if (name == "flex-shrink" && !is_inline(inline_flex_shrink)) {
-            node.style.flex_shrink = std::max(0.0F, std::strtof(value.c_str(), nullptr));
-        } else if (name == "flex-basis" && !is_inline(inline_flex_basis)) {
-            node.style.flex_basis = native_document::parse_length(value);
-        } else if (name == "flex"
-            && (!is_inline(inline_flex_grow) || !is_inline(inline_flex_shrink)
-                || !is_inline(inline_flex_basis))) {
-            if (value == "none") {
-                if (!is_inline(inline_flex_grow)) node.style.flex_grow = 0;
-                if (!is_inline(inline_flex_shrink)) node.style.flex_shrink = 0;
-                if (!is_inline(inline_flex_basis)) node.style.flex_basis = {};
-            } else {
-                std::istringstream stream(value);
-                std::string grow_value;
-                std::string shrink_value;
-                std::string basis_value;
-                stream >> grow_value >> shrink_value >> basis_value;
-                if (!is_inline(inline_flex_grow) && !grow_value.empty()) {
-                    node.style.flex_grow = grow_value == "auto" ? 1.0F
-                        : std::max(0.0F, std::strtof(grow_value.c_str(), nullptr));
-                }
-                if (!is_inline(inline_flex_shrink)) {
-                    node.style.flex_shrink = shrink_value.empty()
-                        ? 1.0F : std::max(0.0F, std::strtof(shrink_value.c_str(), nullptr));
-                }
-                if (!is_inline(inline_flex_basis) && !basis_value.empty()) {
-                    node.style.flex_basis = native_document::parse_length(basis_value);
-                }
-            }
-        } else if (name == "box-sizing" && !is_inline(inline_box_sizing)) {
-            node.style.border_box = value == "border-box";
+        } else if (css::apply_flex_value(node,name,value,is_inline)) {
         } else if (name == "box-shadow" && !is_inline(inline_box_shadow)) {
             auto complete = true;
             if (!apply_box_shadow_value(node.style, value, complete)) {
