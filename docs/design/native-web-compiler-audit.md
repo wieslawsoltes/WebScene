@@ -1158,3 +1158,14 @@ Independent regressions cover uppercase/mixed-case calc, nesting and --Offset
 preservation in both longhand and shorthand output. All 63 compiler tests and
 native contracts pass. Escaped function identifiers and general component-value
 lexing remain open; this does not extend calc to unsupported properties.
+
+### Var function-name casing across lowering paths (2026-09-10)
+
+Variable-expression parsing and property dispatch now recognize var names
+case-insensitively, including nested fallbacks, grid tracks and calc operands.
+Comparison uses normalized temporary strings; emitted custom-property names and
+fallback tokens retain their original case. An independent matrix compares
+uppercase/mixed-case generated rules with lowercase-function equivalents for
+width, margin, padding, gap, alignment, calc, grid and nested color fallbacks.
+All 64 compiler tests and native contracts pass. Escaped identifiers, richer
+custom-value token forms and CSS-wide custom-property semantics remain open.

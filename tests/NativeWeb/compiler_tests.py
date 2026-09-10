@@ -56,6 +56,23 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn('--Offset',out.read_text())
 
+    def test_var_function_case_across_lowering_paths(self):
+        for name,value in [('width','VAR(--Width, 10px)'),
+                           ('margin','VaR(--Margin, 1px 2px)'),
+                           ('padding','VAR(--Padding, 1px)'),
+                           ('gap','VAR(--Gap, 2px)'),
+                           ('text-align','VAR(--Align, CENTER)'),
+                           ('left','CALC(VAR(--Offset, 10px) + 5%)'),
+                           ('grid-template-columns','VAR(--Tracks, 10px 20px)'),
+                           ('color','VAR(--Color, VaR(--Fallback, #fff))')]:
+            result,out=self.compile('<div></div>', 'div { '+name+':'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            lower=value.replace('VAR(', 'var(').replace('VaR(', 'var(')
+            reference,expected=self.compile('<div></div>', 'div { '+name+':'+lower+'; }')
+            self.assertEqual(reference.returncode,0,reference.stderr)
+            rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
+            self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
+
     def test_calc_rejects_invalid_length_products(self):
         for value in ['calc(10px / 0)', 'calc(10px * 2px)', 'calc(2 / 10px)']:
             result,_=self.compile('<div></div>', 'div { left:'+value+'; }')

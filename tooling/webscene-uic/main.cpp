@@ -131,7 +131,7 @@ static std::string variable_code(const std::string &text) {
   const std::string kind = "webscene::native_web::variable_expression::kind::";
   while (cursor < text.size()) {
     if (std::isspace(static_cast<unsigned char>(text[cursor]))) { ++cursor; continue; }
-    if (text.compare(cursor, 4, "var(") == 0) {
+    if (ascii_keyword(text.substr(cursor, 4)) == "var(") {
       size_t start = cursor + 4, end = start, comma = std::string::npos;
       int depth = 1;
       for (; end < text.size(); ++end) {
@@ -219,7 +219,7 @@ static std::string compiled_length_expression(std::string value) {
           ";if(!v)return std::nullopt;return webscene::native_web::scale_compiled_length(*v," + number(factor) + ");}()";
     }
   }
-  if (value.starts_with("var("))
+  if (ascii_keyword(value.substr(0, 4)) == "var(")
     return "[&]()->std::optional<webscene::native_web::length>{auto v=s.evaluate(" + variable_code(value) +
         ");if(v&&v->size()==1)return (*v)[0].length;return std::nullopt;}()";
   if (value == "auto") throw std::runtime_error("auto is not a calc length");
@@ -310,7 +310,7 @@ static std::string variable_grid_code(const std::string &member, const std::stri
   int depth = 0;
   auto flush = [&] {
     if (token.empty()) return;
-    if (token.starts_with("var(")) {
+    if (ascii_keyword(token.substr(0, 4)) == "var(") {
       code += "{auto values=s.evaluate(" + variable_code(token) + ");";
       code += "if(!values || values->empty()) valid=false;else for(const auto& value:*values){";
       code += "if(value.length && value.length->value>=0) tracks.push_back({*value.length,*value.length,0.0f,webscene::native_web::grid_track::sizing::fixed});";
@@ -371,7 +371,7 @@ static std::string assignments(const std::string &name,
     return "{auto result=" + compiled_length_expression(value) + ";s.set_" + name +
         "(result.value_or(webscene::native_web::length" + length("auto") + "));}";
   }
-  if (name == "inset" && value.find("var(") != std::string::npos) {
+  if (name == "inset" && ascii_keyword(value).find("var(") != std::string::npos) {
     std::string code = "webscene::native_web::variable_result v=webscene::native_web::variable_tokens{};";
     for (const auto &component : component_values(value)) {
       if (ascii_keyword(component.substr(0, 5)) == "calc(") {
@@ -390,7 +390,7 @@ static std::string assignments(const std::string &name,
         "s.set_bottom(side(valid && v->size()>2?2:0));"
         "s.set_left(side(valid && v->size()>3?3:valid && v->size()>1?1:0));";
   }
-  if ((name == "margin" || (name.starts_with("margin-") && lengths.contains(name))) && value.find("var(") != std::string::npos) {
+  if ((name == "margin" || (name.starts_with("margin-") && lengths.contains(name))) && ascii_keyword(value).find("var(") != std::string::npos) {
     std::string code = "auto v=s.evaluate(" + variable_code(value) + ");bool valid=v && !v->empty() && v->size()<=" + (name == "margin" ? "4;" : "1;") +
         "if(valid) for(const auto& t:*v) valid=valid && (t.length || t.is_keyword(\"auto\"));";
     const std::vector<std::string> sides{"top", "right", "bottom", "left"};
@@ -402,18 +402,18 @@ static std::string assignments(const std::string &name,
     }
     return code;
   }
-  if (((name.starts_with("padding-") && lengths.contains(name)) || name == "row-gap" || name == "column-gap") && value.find("var(") != std::string::npos) {
+  if (((name.starts_with("padding-") && lengths.contains(name)) || name == "row-gap" || name == "column-gap") && ascii_keyword(value).find("var(") != std::string::npos) {
     return "auto v=s.evaluate(" + variable_code(value) + ");s.set_" + member +
         "(v && v->size()==1 && (*v)[0].length && (*v)[0].length->value>=0 ? *(*v)[0].length : webscene::native_web::length" + length("0") + ");";
   }
-  if (name == "gap" && value.find("var(") != std::string::npos) {
+  if (name == "gap" && ascii_keyword(value).find("var(") != std::string::npos) {
     return "auto v=s.evaluate(" + variable_code(value) + ");"
         "bool valid=v && !v->empty() && v->size()<=2;"
         "if(valid) for(const auto& t:*v) valid=valid && t.length && t.length->value>=0;"
         "auto side=[&](size_t i){return valid ? *(*v)[i].length : webscene::native_web::length" + length("0") + ";};"
         "s.set_row_gap(side(0));s.set_column_gap(side(valid && v->size()>1?1:0));";
   }
-  if (name == "padding" && value.find("var(") != std::string::npos) {
+  if (name == "padding" && ascii_keyword(value).find("var(") != std::string::npos) {
     return "auto v=s.evaluate(" + variable_code(value) + ");"
         "bool valid=v && !v->empty() && v->size()<=4;"
         "if(valid) for(const auto& t:*v) valid=valid && t.length && t.length->value>=0;"
@@ -462,7 +462,7 @@ static std::string assignments(const std::string &name,
   }
   if (name == "fill" || name == "stroke") {
     auto setter = name == "fill" ? "set_svg_fill" : "set_svg_stroke";
-    if (value.find("var(") != std::string::npos)
+    if (ascii_keyword(value).find("var(") != std::string::npos)
       return "auto v=s.evaluate(" + variable_code(value) + ");s." + setter +
           "(v && v->size()==1 && ((*v)[0].color || (*v)[0].text==\"none\" || (*v)[0].text==\"currentColor\") ? (*v)[0].text : \"\");";
     if (value == "inherit" || value == "unset") return std::string("s.") + setter + "(\"\");";
@@ -563,7 +563,7 @@ static std::string assignments(const std::string &name,
       {"text-align", {"left","right","center","start","end"}},
       {"white-space", {"normal","nowrap","pre","pre-wrap","pre-line","break-spaces"}},
       {"text-transform", {"none","uppercase","lowercase","capitalize"}}};
-    if (value.find("var(") != std::string::npos) {
+    if (ascii_keyword(value).find("var(") != std::string::npos) {
       std::string code = "auto v=s.evaluate(" + variable_code(value) + ");std::string keyword;";
       for (const auto &keyword : keywords.at(name))
         code += "if(v && v->size()==1 && (*v)[0].is_keyword(" + quote(keyword) + ")) keyword=" + quote(keyword) + ";";
@@ -578,7 +578,7 @@ static std::string assignments(const std::string &name,
     if (value == "none") return "s.set_box_shadow(std::nullopt);";
     if (value.find("inset") != std::string::npos)
       throw std::runtime_error("native compiled inset shadows are not supported yet");
-    if (value.find("var(") == std::string::npos &&
+    if (ascii_keyword(value).find("var(") == std::string::npos &&
         !std::regex_match(value, std::regex(R"((?:-?[0-9]+(?:\.[0-9]+)?px|0)\s+(?:-?[0-9]+(?:\.[0-9]+)?px|0)(?:\s+(?:[0-9]+(?:\.[0-9]+)?px|0))?(?:\s+(?:-?[0-9]+(?:\.[0-9]+)?px|0))?\s+(?:#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})|transparent|black|white))")))
       throw std::runtime_error("box-shadow requires x y [blur [spread]] color");
     return "s.set_box_shadow(s.evaluate(" + variable_code(value) + "));";
@@ -615,7 +615,7 @@ static std::string assignments(const std::string &name,
   if (name == "border-color" || name == "border-left-color" || name == "border-top-color" ||
       name == "border-right-color" || name == "border-bottom-color") {
     std::string code;
-    bool variable = value.find("var(") != std::string::npos;
+    bool variable = ascii_keyword(value).find("var(") != std::string::npos;
     std::string color, current;
     if (variable) {
       code = "auto v=s.evaluate(" + variable_code(value) + ");";
@@ -635,7 +635,7 @@ static std::string assignments(const std::string &name,
         code += "s.set_border_" + side + "_color(" + color + "," + current + ");";
     return code;
   }
-  if (value.find("var(") != std::string::npos) {
+  if (ascii_keyword(value).find("var(") != std::string::npos) {
     if (name == "grid-template-columns" || name == "grid-template-rows")
       return variable_grid_code(member, value);
     const bool color = name == "color" || name == "background" || name == "background-color";
