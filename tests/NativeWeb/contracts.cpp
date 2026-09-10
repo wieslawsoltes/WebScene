@@ -188,6 +188,15 @@ int main() {
   d.pointer("pointerdown", d.bounds(translate_parent).x + 1, translated_area.y + 1);
   d.pointer("pointerup", d.bounds(translate_parent).x + 1, translated_area.y + 1);
   check(translated_hits == 1, "translation removes hit coverage from original left edge");
+  auto translated_child = d.find("translated-child");
+  check(d.bounds(translated_child).x == d.bounds(translated).x + 2,
+        "nested translation composes child and parent offsets");
+  int child_hits = 0;
+  auto child_subscription = d.on(translated_child, "pointerdown", [&](event& e) { ++child_hits; e.stop_propagation(); });
+  auto child_area = d.bounds(translated_child);
+  d.pointer("pointerdown", child_area.x + 1, child_area.y + 1);
+  d.pointer("pointerup", child_area.x + 1, child_area.y + 1);
+  check(child_hits == 1, "nested translated child receives pointer input");
   const auto sibling_flow_offset = d.bounds(d.find("translate-sibling")).y - d.bounds(translate_parent).y;
   check(sibling_flow_offset == 10, "untranslated sibling follows source box height");
   d.attribute(translated, "class", "both");
@@ -197,6 +206,9 @@ int main() {
         "two-axis percentage translate uses own width and height");
   check(d.bounds(d.find("translate-sibling")).y - d.bounds(translate_parent).y == sibling_flow_offset,
         "vertical transform does not move following sibling flow position");
+  check(d.bounds(translated_child).x == d.bounds(translated).x + 2 &&
+        d.bounds(translated_child).y == d.bounds(translated).y,
+        "descendant follows parent vertical translation");
   d.render(1600, 10000);
   check(d.bounds(translated).width == 40 &&
         d.bounds(translated).x - d.bounds(translate_parent).x == 20 &&

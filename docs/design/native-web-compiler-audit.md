@@ -859,3 +859,12 @@ contracts verify its normal-flow position is unchanged when a vertical translati
 is applied and cleared. Also corrected transform:none keyword case handling;
 compiler coverage now includes NONE. Native contracts and all 53 compiler tests
 pass. Overflow/clipping, nested transforms and rendered stacking remain open.
+
+### Nested translation geometry and targeting (2026-09-10)
+
+Extended the compiled translation fixture with a child carrying its own X
+translation. Native contracts verify combined parent/child offsets, pointer
+targeting of the descendant, and descendant Y movement when the parent gains a
+vertical transform. Native contracts pass without engine changes. This covers
+nested translations only; clipping, stacking paint and rotation/scale composition
+remain open.
