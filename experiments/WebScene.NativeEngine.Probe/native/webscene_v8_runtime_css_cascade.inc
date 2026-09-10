@@ -253,23 +253,7 @@
     }
 
     static void append_utf8_codepoint(std::string& result, uint32_t codepoint)
-    {
-        if (codepoint <= 0x7FU) {
-            result.push_back(static_cast<char>(codepoint));
-        } else if (codepoint <= 0x7FFU) {
-            result.push_back(static_cast<char>(0xC0U | (codepoint >> 6U)));
-            result.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
-        } else if (codepoint <= 0xFFFFU) {
-            result.push_back(static_cast<char>(0xE0U | (codepoint >> 12U)));
-            result.push_back(static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
-            result.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
-        } else {
-            result.push_back(static_cast<char>(0xF0U | (codepoint >> 18U)));
-            result.push_back(static_cast<char>(0x80U | ((codepoint >> 12U) & 0x3FU)));
-            result.push_back(static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
-            result.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
-        }
-    }
+    { css::append_utf8_codepoint(result,codepoint); }
 
     static std::string decode_css_content(std::string value)
     {

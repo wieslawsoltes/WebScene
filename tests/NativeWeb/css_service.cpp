@@ -1,4 +1,5 @@
 #include "webscene_css_declarations.h"
+#include "webscene_css_selectors.h"
 #include <iostream>
 int main() {
     using webscene_native::css::parse_declarations;
@@ -15,5 +16,14 @@ int main() {
     if(recovered.size()!=2 || recovered[0].value!="blue") return 2;
     const auto escaped=parse_declarations(R"(c\6flor: red; --\54heme: black)");
     if(escaped.size()!=2 || escaped[0].name!="color" || escaped[1].name!="--Theme") return 3;
+    const auto selectors=webscene_native::css::compile_selector_list(
+        R"(#toolbar > button.active:hover, .panel::before)");
+    if(selectors.selectors.size()!=2 || selectors.selectors[0].compounds.size()!=2 ||
+       selectors.selectors[0].combinators[0]!='>' ||
+       !selectors.selectors[1].compiled_compounds[0].pseudo_element) return 4;
+    const auto escaped_selector=webscene_native::css::compile_selector(R"(.a\:b)");
+    if(escaped_selector.compiled_compounds.size()!=1 ||
+       escaped_selector.compiled_compounds[0].identities[0].second!="a:b") return 5;
+    if(!webscene_native::css::compile_selector_list("div > > span").selectors.empty()) return 6;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

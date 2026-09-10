@@ -308,3 +308,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   iframe dynamic-recascade checks pass after the extraction. This establishes a
   reusable parser service, not yet a standalone cascade or a working Kestrel CSS
   runtime; selector evaluation and cascade execution remain the next boundary.
+
+- Selector preparation extraction: webscene_css_selectors.h now owns the existing
+  identifier/escape handling, compound preparation and Servo-backed selector/list
+  preparation. The runtime delegates to it; its legacy selector fallback remains.
+  The V8-free CSS service test now links the selector bridge and verifies combinators,
+  pseudo-element metadata, escaped identifiers and malformed-selector rejection.
+  Runtime positional-selector-siblings, iframe-dynamic-recascade and shared-shadow-values
+  tests pass. This moves preparation, not DOM-dependent matching or cascade execution;
+  supported selector semantics are unchanged by this extraction.
