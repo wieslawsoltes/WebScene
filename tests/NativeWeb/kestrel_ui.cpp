@@ -52,4 +52,20 @@ int main() {
   document.pointer("pointermove", bounds.x + 60, bounds.y + 40);
   if ((app.camera.target - stopped).length() != 0)
     throw std::runtime_error("Pan continued after release");
+  auto entity_count = app.model.data["entities"].size();
+  document.dispatch(document.find("line"), "click");
+  for (auto x : {80.f, 140.f}) {
+    document.pointer("pointerdown", bounds.x + x, bounds.y + 80);
+    document.pointer("pointerup", bounds.x + x, bounds.y + 80);
+  }
+  if (app.model.data["entities"].size() != entity_count + 1 ||
+      app.model.data["entities"].back()["type"] != "LINE")
+    throw std::runtime_error("Native line creation failed");
+  document.dispatch(document.find("cancel"), "click");
+  document.dispatch(document.find("undo"), "click");
+  if (app.model.data["entities"].size() != entity_count)
+    throw std::runtime_error("Line undo failed");
+  document.dispatch(document.find("redo"), "click");
+  if (app.model.data["entities"].size() != entity_count + 1)
+    throw std::runtime_error("Line redo failed");
 }

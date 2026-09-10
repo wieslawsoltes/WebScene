@@ -1,5 +1,6 @@
 module;
 #include "../third_party/nlohmann/json.hpp"
+#include <optional>
 #include <string>
 #include <vector>
 #include <webscene/native_web.hpp>
@@ -13,7 +14,8 @@ class controller {
     std::string id;
     webscene::native_web::node_id name, visibility;
   };
-  bool pan_enabled{}, dragging{};
+  bool pan_enabled{}, dragging{}, line_enabled{};
+  std::optional<vec3> line_start;
   float pointer_x{}, pointer_y{};
   std::vector<layer_row> rows;
   std::vector<webscene::native_web::subscription> subscriptions;
@@ -82,12 +84,59 @@ public:
     subscriptions.push_back(
         document.on(view.named("pan"), "click", [this](auto &) {
           pan_enabled = !pan_enabled;
+          line_enabled = false;
+          line_start.reset();
+          document.attribute(document.find("line"), "class", "");
           dragging = false;
           document.attribute(document.find("pan"), "class",
                              pan_enabled ? "selected" : "");
         }));
     subscriptions.push_back(
+        document.on(view.named("line"), "click", [this](auto &) {
+          line_enabled = true;
+          pan_enabled = false;
+          dragging = false;
+          line_start.reset();
+          document.attribute(document.find("pan"), "class", "");
+          document.attribute(document.find("line"), "class", "selected");
+          document.set_text(document.find("status"),
+                            "Line: specify first point");
+        }));
+    subscriptions.push_back(
+        document.on(view.named("cancel"), "click", [this](auto &) {
+          line_enabled = false;
+          pan_enabled = false;
+          dragging = false;
+          line_start.reset();
+          document.attribute(document.find("line"), "class", "");
+          document.attribute(document.find("pan"), "class", "");
+          document.set_text(document.find("status"), "Ready");
+        }));
+    subscriptions.push_back(
         document.on(view.named("viewport"), "pointerdown", [this](auto &event) {
+          if (line_enabled) {
+            auto bounds = document.bounds(document.find("viewport"));
+            camera.resize(bounds.width, bounds.height);
+            auto point = camera.unproject(event.client_x - bounds.x,
+                                          event.client_y - bounds.y, 0);
+            if (!point)
+              return;
+            if (!line_start) {
+              line_start = *point;
+              document.set_text(document.find("status"),
+                                "Line: specify next point");
+            } else if ((*point - *line_start).length() > epsilon) {
+              auto start = *line_start, end = *point;
+              model.transaction("Line", [&] {
+                model.add("LINE",
+                          {{"points", {geo::encode(start), geo::encode(end)}}});
+              });
+              line_start = end;
+              refresh();
+            }
+            event.prevent_default();
+            return;
+          }
           if (!pan_enabled)
             return;
           dragging = true;

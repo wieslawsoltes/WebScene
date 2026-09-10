@@ -148,3 +148,9 @@ The POC Pan tool now moves the native camera through DOM pointer events and stop
 on release within the application. Native tests cover movement and release.
 Platform pointer capture/cancellation outside the window, wheel zoom and original
 Kestrel gesture mappings remain outstanding; this is not full input parity.
+
+The POC Line tool converts viewport pointer positions to the world XY plane and
+creates consecutive native LINE entities in undoable transactions. Cancel ends
+the operation. Tests exercise creation, undo and redo through DOM events. Snaps,
+preview geometry, numeric command entry and original command semantics are still
+pending; the POC is not yet a full replacement for upstream's Line tool.
