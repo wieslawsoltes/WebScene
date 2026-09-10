@@ -605,3 +605,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   to contain or one length. Native service and runtime shadow, relative resource,
   SVG checker and active-chart pseudo-border regressions pass. Existing image,
   gradient, shadow and tokenization limits remain; full cascade is unfinished.
+
+- Visibility/overflow extraction: native helpers now apply overflow, containment,
+  visibility, pointer-events and opacity, including computed overflow-axis coupling.
+  Native hit tests verify hidden/noninteractive elements are excluded; style tests
+  cover clipping/scroll flags and opacity clamping. Native service and runtime
+  overflow navigation, virtual-row scroll and pointer-exit regressions pass.
+  Existing inheritance/keyword coverage remains; this does not establish complete
+  scrolling behavior or presented-frame performance for Native Kestrel.

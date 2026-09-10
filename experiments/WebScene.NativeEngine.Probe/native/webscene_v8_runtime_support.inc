@@ -501,36 +501,9 @@ std::string flex_wrap_name(const node_style& style)
     return style.flex_wrap ? "wrap" : "nowrap";
 }
 
-overflow_mode parse_overflow_mode(std::string_view value)
-{
-    if (value == "hidden") return overflow_mode::hidden;
-    if (value == "clip") return overflow_mode::clip;
-    if (value == "auto") return overflow_mode::automatic;
-    if (value == "scroll") return overflow_mode::scroll;
-    return overflow_mode::visible;
-}
-
-std::pair<overflow_mode, overflow_mode> computed_overflow(const node_style& style)
-{
-    auto x = style.overflow_x;
-    auto y = style.overflow_y;
-    const auto neither_visible_nor_clip = [](overflow_mode value) {
-        return value != overflow_mode::visible && value != overflow_mode::clip;
-    };
-    if (x == overflow_mode::visible && neither_visible_nor_clip(y)) x = overflow_mode::automatic;
-    else if (x == overflow_mode::clip && neither_visible_nor_clip(y)) x = overflow_mode::hidden;
-    if (y == overflow_mode::visible && neither_visible_nor_clip(x)) y = overflow_mode::automatic;
-    else if (y == overflow_mode::clip && neither_visible_nor_clip(x)) y = overflow_mode::hidden;
-    return {x, y};
-}
-
-void refresh_overflow_state(node_style& style)
-{
-    const auto [x, y] = computed_overflow(style);
-    style.clip = x != overflow_mode::visible || y != overflow_mode::visible;
-    style.scroll_x_enabled = x == overflow_mode::automatic || x == overflow_mode::scroll;
-    style.scroll_y_enabled = y == overflow_mode::automatic || y == overflow_mode::scroll;
-}
+using css::parse_overflow_mode;
+using css::computed_overflow;
+using css::refresh_overflow_state;
 
 display_mode default_display_for_node(const dom_node& node)
 {

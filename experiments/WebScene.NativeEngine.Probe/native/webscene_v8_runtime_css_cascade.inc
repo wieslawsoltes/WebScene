@@ -821,55 +821,7 @@
                 view_box=svg_view_box(markup);
                 return true;
             })) {
-        } else if ((name == "overflow" || name == "overflow-x" || name == "overflow-y")
-            && !is_inline(inline_overflow)) {
-            const auto explicit_document_element = node.tag == "html"
-                && node.parent == &document.body();
-            if (value == "inherit" && node.parent != nullptr
-                && !explicit_document_element) {
-                if (name == "overflow") {
-                    node.style.overflow_x = node.parent->style.overflow_x;
-                    node.style.overflow_y = node.parent->style.overflow_y;
-                } else if (name == "overflow-x") {
-                    node.style.overflow_x = node.parent->style.overflow_x;
-                } else {
-                    node.style.overflow_y = node.parent->style.overflow_y;
-                }
-            } else if (name == "overflow") {
-                std::istringstream stream(value);
-                std::string x;
-                std::string y;
-                stream >> x >> y;
-                node.style.overflow_x = parse_overflow_mode(x);
-                node.style.overflow_y = parse_overflow_mode(y.empty() ? x : y);
-            } else if (name == "overflow-x") {
-                node.style.overflow_x = parse_overflow_mode(value);
-            } else {
-                node.style.overflow_y = parse_overflow_mode(value);
-            }
-            refresh_overflow_state(node.style);
-        } else if (name == "contain" && !is_inline(inline_contain)) {
-            auto contain = lower_html_name(value);
-            if (contain == "inherit" && node.parent != nullptr) {
-                contain = node.parent->style.textual().contain_value;
-            }
-            if (contain == "initial" || contain == "unset" || contain == "revert"
-                || contain.empty()) {
-                contain = "none";
-            }
-            node.style.mutable_textual().contain_value = contain;
-            node.style.contain_stacking_context = contain == "content"
-                || contain == "strict"
-                || (" " + contain + " ").find(" layout ") != std::string::npos
-                || (" " + contain + " ").find(" paint ") != std::string::npos;
-        } else if (name == "visibility" && !is_inline(inline_visibility)) {
-            node.style.visibility_specified = value != "inherit" && value != "unset";
-            node.style.visibility_hidden = value == "hidden" || value == "collapse";
-        } else if (name == "pointer-events" && !is_inline(inline_pointer_events)) {
-            node.style.pointer_events_specified = value != "inherit" && value != "unset";
-            node.style.pointer_events_none = value == "none";
-        } else if (name == "opacity" && !is_inline(inline_opacity)) {
-            node.style.opacity = std::clamp(std::strtof(value.c_str(), nullptr), 0.0F, 1.0F);
+        } else if (css::apply_visibility_value(document,node,name,value,is_inline)) {
         } else if (name == "color" && !is_inline(inline_color)) {
             const auto parsed = native_document::parse_color(value);
             if (is_explicit_css_color_token(value, parsed)) {

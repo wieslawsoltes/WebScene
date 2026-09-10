@@ -18,6 +18,7 @@
 #include "webscene_css_reset.h"
 #include "webscene_css_box_application.h"
 #include "webscene_css_paint_values.h"
+#include "webscene_css_visibility_values.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -560,5 +561,28 @@ int main(int argc,char** argv) {
     if(image_loads!=1 || !flexible_column.style.background_image().image_markup.empty()) return 105;
     paint("background-image","url(missing.svg)");
     if(grid_result.classification!="unsupported" || !flexible_column.style.background_image().image_markup.empty()) return 106;
+    webscene_native::native_document hit_document;
+    auto& hit_node=hit_document.create_element("div");
+    hit_document.append_child(hit_document.body(),hit_node);
+    hit_node.style.width={100,webscene_native::length_unit::pixels};
+    hit_node.style.height={100,webscene_native::length_unit::pixels};
+    const auto visibility=[&](const std::string& name,const std::string& value) {
+        return webscene_native::css::apply_visibility_value(hit_document,hit_node,name,value,unprotected);
+    };
+    hit_document.layout(200,200);
+    if(hit_document.hit_test(hit_document.body(),10,10)!=&hit_node) return 108;
+    visibility("pointer-events","none");
+    if(hit_document.hit_test(hit_document.body(),10,10)==&hit_node) return 109;
+    visibility("pointer-events","auto");
+    visibility("visibility","hidden");
+    if(hit_document.hit_test(hit_document.body(),10,10)==&hit_node) return 110;
+    visibility("visibility","visible");
+    visibility("overflow","visible scroll");
+    if(!hit_node.style.clip || !hit_node.style.scroll_x_enabled || !hit_node.style.scroll_y_enabled) return 111;
+    visibility("overflow","clip");
+    visibility("contain","paint");
+    visibility("opacity","2");
+    if(hit_node.style.scroll_x_enabled || hit_node.style.scroll_y_enabled ||
+       !hit_node.style.contain_stacking_context || hit_node.style.opacity!=1) return 112;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
