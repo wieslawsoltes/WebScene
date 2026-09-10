@@ -12,4 +12,13 @@ int main(){
     if(line_intersection({0,0,0},{10,0,0},{0,2,0},{10,2,0}))throw std::runtime_error("parallel intersection");
     std::array<vec3,4> polygon{{{0,0,0},{10,0,0},{10,4,0},{0,4,0}}};
     if(polygon_area(polygon)!=40||std::abs(sweep(0,0)-tau)>epsilon)throw std::runtime_error("area/sweep");
+    std::array<vec3,5> concave{{{0,0,0},{4,0,0},{4,4,0},{2,2,0},{0,4,0}}};
+    auto triangles=triangulate(concave);double area=0;
+    for(auto t:triangles){std::array<vec3,3> face{concave[t[0]],concave[t[1]],concave[t[2]]};area+=polygon_area(face);}
+    if(triangles.size()!=3||std::abs(area-polygon_area(concave))>epsilon)throw std::runtime_error("concave triangulation");
+    for(auto& p:concave){p.z=p.y;p.y=0;}
+    triangles=triangulate(concave);if(triangles.size()!=3)throw std::runtime_error("vertical triangulation");
+    auto closest=segment_distance({20,3,0},{0,0,0},{10,0,0});
+    if(closest.t!=1||closest.point.x!=10)throw std::runtime_error("segment endpoint clamp");
+    if(!inside({5,2,0},polygon)||inside({20,2,0},polygon))throw std::runtime_error("polygon containment");
 }

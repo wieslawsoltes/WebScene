@@ -7,6 +7,8 @@
 #include <numbers>
 #include <optional>
 #include <span>
+#include <vector>
+#include <numeric>
 namespace kestrel {
 inline constexpr double epsilon=1e-8, tau=2*std::numbers::pi;
 struct vec3 {
@@ -64,5 +66,60 @@ inline double polygon_area(std::span<const vec3> points){
     double area=0;if(points.empty())return 0;
     for(size_t i=0,j=points.size()-1;i<points.size();j=i++)area+=points[j].x*points[i].y-points[i].x*points[j].y;
     return area/2;
+}
+
+inline matrix ortho(double l,double r,double b,double t,double n,double f){
+    auto m=identity();m[0]=2/(r-l);m[5]=2/(t-b);m[10]=1/(n-f);
+    m[12]=-(r+l)/(r-l);m[13]=-(t+b)/(t-b);m[14]=n/(n-f);return m;
+}
+inline matrix perspective(double fov,double aspect,double n,double f){
+    matrix m{};auto t=1/std::tan(fov/2);m[0]=t/aspect;m[5]=t;m[10]=f/(n-f);m[11]=-1;m[14]=n*f/(n-f);return m;
+}
+struct coordinate_basis {vec3 x,y,n;};
+inline coordinate_basis basis(vec3 normal={0,0,1}){
+    auto n=normal.normalized();auto x=(std::abs(n.x)<1.0/64&&std::abs(n.y)<1.0/64?vec3{0,1,0}:vec3{0,0,1}).cross(n).normalized();
+    return {x,n.cross(x),n};
+}
+struct segment_result {double distance,t;vec3 point;};
+inline segment_result segment_distance(vec3 p,vec3 a,vec3 b){
+    auto dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy;
+    auto t=l?std::clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/l,0.,1.):0.;
+    return {std::hypot(p.x-a.x-t*dx,p.y-a.y-t*dy),t,{a.x+t*dx,a.y+t*dy,0}};
+}
+inline bool inside(vec3 p,std::span<const vec3> polygon){
+    bool yes=false;if(polygon.empty())return false;
+    for(size_t i=0,j=polygon.size()-1;i<polygon.size();j=i++){
+        auto a=polygon[i],b=polygon[j];
+        if((a.y>p.y)!=(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)yes=!yes;
+    }return yes;
+}
+inline vec3 face_normal(std::span<const vec3> points){
+    vec3 n;for(size_t i=0;i<points.size();++i){auto a=points[i],b=points[(i+1)%points.size()];
+        n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);
+    }return n.normalized();
+}
+inline std::vector<std::array<size_t,3>> triangulate(std::span<const vec3> points){
+    if(points.size()<3)return {};if(points.size()==3)return {{{0,1,2}}};
+    auto n=face_normal(points);auto drop=std::abs(n.x)>std::abs(n.y)?(std::abs(n.x)>std::abs(n.z)?0:2):(std::abs(n.y)>std::abs(n.z)?1:2);
+    std::vector<vec3> p;for(auto v:points)p.push_back(drop==0?vec3{v.y,v.z,0}:drop==1?vec3{v.x,v.z,0}:vec3{v.x,v.y,0});
+    double sign=polygon_area(p)>=0?1:-1;std::vector<size_t> indices(p.size());std::iota(indices.begin(),indices.end(),0);
+    std::vector<std::array<size_t,3>> out;
+    auto cross=[](vec3 a,vec3 b,vec3 c){return (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);};
+    size_t guard=points.size()*points.size();
+    while(indices.size()>3&&guard--){
+        bool found=false;
+        for(size_t k=0;k<indices.size();++k){
+            auto a=indices[(k+indices.size()-1)%indices.size()],b=indices[k],c=indices[(k+1)%indices.size()];
+            if(cross(p[a],p[b],p[c])*sign<=epsilon)continue;
+            bool blocked=false;for(auto j:indices){if(j==a||j==b||j==c)continue;
+                if(cross(p[a],p[b],p[j])*sign>=-epsilon&&cross(p[b],p[c],p[j])*sign>=-epsilon&&cross(p[c],p[a],p[j])*sign>=-epsilon){blocked=true;break;}}
+            if(!blocked){out.push_back({a,b,c});indices.erase(indices.begin()+k);found=true;break;}
+        }
+        if(!found){
+            size_t k=0;for(;k<indices.size();++k)if(std::abs(cross(p[indices[(k+indices.size()-1)%indices.size()]],p[indices[k]],p[indices[(k+1)%indices.size()]]))<epsilon)break;
+            if(k<indices.size())indices.erase(indices.begin()+k);else break;
+        }
+    }
+    if(indices.size()==3)out.push_back({indices[0],indices[1],indices[2]});return out;
 }
 }
