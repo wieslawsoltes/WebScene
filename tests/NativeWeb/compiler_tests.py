@@ -110,6 +110,13 @@ class CompilerTests(unittest.TestCase):
         for selector in ['first-child','last-child','only-child']:
             result,out=self.compile('<div></div>', 'div:'+selector+' { width:10px; }')
             self.assertEqual(result.returncode,0,result.stderr)
+    def test_compound_negation(self):
+        for selector in ['div:not([type=checkbox])','div:not(.hidden, #excluded)','div:not(:not(.visible))']:
+            result,out=self.compile('<div></div>', selector+' { width:10px; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('.parts.front()',out.read_text())
+        result,_=self.compile('<div></div>', 'div:not(section > div) { width:10px; }')
+        self.assertNotEqual(result.returncode,0)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

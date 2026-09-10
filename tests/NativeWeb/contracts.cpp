@@ -291,6 +291,10 @@ int main() {
     document responsive;
     auto references = compiled_ui::build(responsive);
     responsive.render(1000, 301);
+    check(responsive.bounds(responsive.find("negation")).width == 20, "compiled negation matches absent attribute");
+    responsive.attribute(responsive.find("negation"), "data-excluded", "");
+    responsive.render(1000, 301);
+    check(responsive.bounds(responsive.find("negation")).width == 10, "attribute mutation updates negation");
     check(responsive.bounds(responsive.find("grid-left")).width == 222, "height media inactive above boundary");
     responsive.render(1000, 300);
     check(responsive.bounds(responsive.find("grid-left")).width == 175, "height media active at boundary");

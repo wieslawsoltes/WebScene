@@ -369,6 +369,8 @@ static bool class_has(const std::string &list, const std::string &name) {
 }
 static bool matches_part(const dom_node &n, const selector_part &p,
                          document_state &s) {
+  for (const auto &excluded : p.excluded)
+    if (matches_part(n, excluded, s)) return false;
   if (p.first_child || p.last_child || p.only_child) {
     const dom_node *first = nullptr, *last = nullptr;
     if (n.parent) {

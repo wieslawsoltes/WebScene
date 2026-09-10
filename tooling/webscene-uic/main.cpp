@@ -507,11 +507,36 @@ static std::string selector_code(const selector_syntax_selector &sel) {
   for (size_t i = 0; i < sel.compounds.size(); ++i) {
     std::string tag, id;
     std::vector<std::string> classes;
-    std::vector<std::string> attributes;
+    std::vector<std::string> attributes, excluded;
     bool focus = false, hover = false, root = false, active = false, disabled = false, focus_visible = false, first_child = false, last_child = false, only_child = false;
     auto input = sel.compounds[i];
     size_t p = 0;
     while (p < input.size()) {
+      if (input.compare(p, 5, ":not(") == 0) {
+        auto start = p + 5, end = start;
+        int depth = 1;
+        char quoted = 0;
+        for (; end < input.size(); ++end) {
+          auto c = input[end];
+          if (quoted) {
+            if (c == '\\') ++end;
+            else if (c == quoted) quoted = 0;
+            continue;
+          }
+          if (c == '\'' || c == '"') { quoted = c; continue; }
+          if (c == '(') ++depth;
+          if (c == ')' && --depth == 0) break;
+        }
+        if (end == input.size()) throw std::runtime_error("unclosed :not selector");
+        auto inner = parse_selector_syntax(input.substr(start, end - start));
+        if (!inner || inner.selectors.empty()) throw std::runtime_error("invalid :not selector");
+        for (const auto &entry : inner.selectors) {
+          if (entry.compounds.size() != 1) throw std::runtime_error(":not currently requires compound selectors");
+          excluded.push_back("(webscene::native_web::selector" + selector_code(entry) + ").parts.front()");
+        }
+        p = end + 1;
+        continue;
+      }
       if (input[p] == '[') {
         // The selector parser validates CSS syntax first. This profile supports
         // presence and exact equality, retaining explicit diagnostics for
@@ -589,7 +614,12 @@ static std::string selector_code(const selector_syntax_selector &sel) {
         result += ",";
       result += attributes[j];
     }
-    result += "}," + std::string(active ? "true" : "false") + "," + (disabled ? "true" : "false") + "," + (focus_visible ? "true" : "false") + "," + (first_child ? "true" : "false") + "," + (last_child ? "true" : "false") + "," + (only_child ? "true" : "false") + "}";
+    result += "}," + std::string(active ? "true" : "false") + "," + (disabled ? "true" : "false") + "," + (focus_visible ? "true" : "false") + "," + (first_child ? "true" : "false") + "," + (last_child ? "true" : "false") + "," + (only_child ? "true" : "false") + ",{";
+    for (size_t index = 0; index < excluded.size(); ++index) {
+      if (index) result += ",";
+      result += excluded[index];
+    }
+    result += "}}";
   }
   return result + "}," + std::to_string(sel.specificity) + "}";
 }
