@@ -27,6 +27,12 @@ int main() {
     check(calls == 1, "native template event");
     d.render(500, 400);
     check(d.bounds(second.named("row")).height == 45, "independent instance survives removal");
+    auto mixed_parent = d.element(d.body(), "div");
+    auto mixed = compiled_ui::instantiate(d, mixed_parent, "mixed");
+    check(mixed.roots.size() == 3, "mixed template tracks whitespace, element and text roots");
+    check(d.text_content(mixed_parent) == " Value tail ", "mixed template preserves original text");
+    for (auto root : mixed.roots) d.remove(root);
+    check(d.text_content(mixed_parent).empty(), "template removal leaves no orphan text");
     bool missing = false;
     try { compiled_ui::instantiate(d, parent, "unknown"); }
     catch (const std::invalid_argument&) { missing = true; }

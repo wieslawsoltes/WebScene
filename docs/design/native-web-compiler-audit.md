@@ -623,3 +623,17 @@ programmatic negative focus, invalid input and dynamic tabindex removal. All 45
 compiler tests and native contracts pass. Shadow-tree focus scopes, full form
 control coverage, hidden-ancestor programmatic focus and focused-control disabling
 remain open; this is not complete browser focus parity.
+
+### Mixed template root ownership (2026-09-10)
+
+Template root whitespace was emitted without inclusion in the instance root list,
+so removing an instance could leave text behind. The compiler now records every
+nonempty root text node in that list and permits mixed text/element template
+content without introducing wrapper elements. This remains predefined generated
+construction with no runtime parsing.
+
+Both generated-header and C++ module template tests instantiate a whitespace,
+element and text sequence, verify its text and three roots, then remove every
+root and verify no text remains. Both template suites, native contracts and all
+45 compiler tests pass. Nested template support and transactional construction
+failure cleanup remain open.

@@ -1123,9 +1123,14 @@ struct compiler {
           if (child->tag == "template")
             throw std::runtime_error(
                 "nested compiled templates are not supported");
-          if (child->tag == "#text" && !trim(child->text_content).empty())
-            throw std::runtime_error(
-                "template root text must be wrapped in an element");
+          if (child->tag == "#text") {
+            if (!child->text_content.empty()) {
+              auto local = "n" + std::to_string(++count);
+              out << "auto " << local << " = d.text(parent," << quote(child->text_content) << ");\n";
+              roots.push_back(local);
+            }
+            continue;
+          }
           auto before = count;
           node(*child, "parent");
           if (count != before)
