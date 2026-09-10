@@ -228,4 +228,87 @@ inline bool target_matches(const dom_node& node,std::string_view hash) {
     if(hash.starts_with('#')) hash.remove_prefix(1);
     return !hash.empty() && node.id_attribute==hash;
 }
+inline const dom_node* previous_element_sibling(const dom_node& node)
+    {
+        if (node.parent == nullptr) return nullptr;
+        const auto position = std::find(
+            node.parent->children.begin(),
+            node.parent->children.end(),
+            &node);
+        if (position == node.parent->children.begin()
+            || position == node.parent->children.end()) {
+            return nullptr;
+        }
+        auto sibling = position;
+        while (sibling != node.parent->children.begin()) {
+            --sibling;
+            if (*sibling != nullptr && !(*sibling)->tag.starts_with('#')) {
+                return *sibling;
+            }
+        }
+        return nullptr;
+    }
+
+template<typename CompoundMatcher>
+inline bool selector_matches(const native_document& document,const dom_node& node,
+    const compiled_css_selector& selector,size_t component,const dom_node* scope_root,
+    const CompoundMatcher& match_compound)
+    {
+        if (selector.compounds.empty()
+            || selector.compiled_compounds.size() != selector.compounds.size()
+            || component >= selector.compiled_compounds.size()
+            || !match_compound(
+                node,
+                selector.compiled_compounds[component],
+                scope_root)) {
+            return false;
+        }
+        if (component == 0U) return true;
+        if (selector.combinators.size() < component) return false;
+
+        const auto combinator = selector.combinators[component - 1U];
+        if (combinator == '>') {
+            const auto* parent = document.dom_parent(node);
+            return parent != nullptr
+                && selector_matches(document,
+                    *parent,
+                    selector,
+                    component - 1U,
+                    scope_root,match_compound);
+        }
+        if (combinator == '+') {
+            const auto* sibling = previous_element_sibling(node);
+            return sibling != nullptr
+                && selector_matches(document,
+                    *sibling,
+                    selector,
+                    component - 1U,
+                    scope_root,match_compound);
+        }
+        if (combinator == '~') {
+            for (auto* sibling = previous_element_sibling(node); sibling != nullptr;
+                sibling = previous_element_sibling(*sibling)) {
+                if (selector_matches(document,
+                        *sibling,
+                        selector,
+                        component - 1U,
+                        scope_root,match_compound)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
+            ancestor = document.dom_parent(*ancestor)) {
+            if (selector_matches(document,
+                    *ancestor,
+                    selector,
+                    component - 1U,
+                    scope_root,match_compound)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 } // namespace webscene_native::css

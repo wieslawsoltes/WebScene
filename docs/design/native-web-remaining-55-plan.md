@@ -362,3 +362,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Service and runtime pointer/positional/iframe cascade regressions pass. Compound
   matching still contains recursive selector/cache dependencies and is not yet a
   standalone service; no additional browser-compliance claim is made.
+
+- Combinator traversal extraction: native selector traversal now owns child,
+  descendant, adjacent-sibling and general-sibling walking. A compound predicate
+  is supplied explicitly; the runtime supplies its existing compound matcher.
+  Native service tests isolate traversal with a tag predicate, verifying positive
+  and negative relationships. Service and runtime positional/iframe/pointer tests
+  pass. These tests do not imply the standalone service can evaluate all compound
+  selectors yet; that predicate and cascade execution remain open.

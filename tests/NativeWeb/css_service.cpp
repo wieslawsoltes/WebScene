@@ -103,5 +103,17 @@ int main() {
     if(!webscene_native::css::target_matches(blocked,"#destination") ||
        webscene_native::css::target_matches(blocked,"#") ||
        webscene_native::css::target_matches(blocked,"#elsewhere")) return 26;
+    const auto tag_match=[](const webscene_native::dom_node& n,
+        const webscene_native::css::compiled_css_compound& c,const webscene_native::dom_node*) {
+        return c.valid && c.tag==n.tag;
+    };
+    const auto matches=[&](const webscene_native::dom_node& n,std::string_view text) {
+        const auto prepared=webscene_native::css::compile_selector(text);
+        return !prepared.compounds.empty() && webscene_native::css::selector_matches(document,n,
+            prepared,prepared.compounds.size()-1,nullptr,tag_match);
+    };
+    if(!matches(exempt,"fieldset button") || !matches(exempt,"legend > button") ||
+       matches(exempt,"fieldset > button") || !matches(blocked,"legend + input") ||
+       !matches(blocked,"legend ~ input") || matches(exempt,"input + button")) return 27;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

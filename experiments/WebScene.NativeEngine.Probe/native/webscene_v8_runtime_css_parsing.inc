@@ -2509,25 +2509,7 @@
     }
 
     static const dom_node* previous_element_sibling(const dom_node& node)
-    {
-        if (node.parent == nullptr) return nullptr;
-        const auto position = std::find(
-            node.parent->children.begin(),
-            node.parent->children.end(),
-            &node);
-        if (position == node.parent->children.begin()
-            || position == node.parent->children.end()) {
-            return nullptr;
-        }
-        auto sibling = position;
-        while (sibling != node.parent->children.begin()) {
-            --sibling;
-            if (*sibling != nullptr && !(*sibling)->tag.starts_with('#')) {
-                return *sibling;
-            }
-        }
-        return nullptr;
-    }
+    { return css::previous_element_sibling(node); }
 
     bool css_selector_matches(
         const dom_node& node,
@@ -2540,67 +2522,13 @@
             scope_root);
     }
 
-    bool compiled_css_selector_matches(
-        const dom_node& node,
-        const compiled_css_selector& selector,
-        size_t component,
-        const dom_node* scope_root = nullptr) const
+    bool compiled_css_selector_matches(const dom_node& node,const compiled_css_selector& selector,
+        size_t component,const dom_node* scope_root = nullptr) const
     {
-        if (selector.compounds.empty()
-            || selector.compiled_compounds.size() != selector.compounds.size()
-            || component >= selector.compiled_compounds.size()
-            || !css_compound_selector_matches(
-                node,
-                selector.compiled_compounds[component],
-                scope_root)) {
-            return false;
-        }
-        if (component == 0U) return true;
-        if (selector.combinators.size() < component) return false;
-
-        const auto combinator = selector.combinators[component - 1U];
-        if (combinator == '>') {
-            const auto* parent = document.dom_parent(node);
-            return parent != nullptr
-                && compiled_css_selector_matches(
-                    *parent,
-                    selector,
-                    component - 1U,
-                    scope_root);
-        }
-        if (combinator == '+') {
-            const auto* sibling = previous_element_sibling(node);
-            return sibling != nullptr
-                && compiled_css_selector_matches(
-                    *sibling,
-                    selector,
-                    component - 1U,
-                    scope_root);
-        }
-        if (combinator == '~') {
-            for (auto* sibling = previous_element_sibling(node); sibling != nullptr;
-                sibling = previous_element_sibling(*sibling)) {
-                if (compiled_css_selector_matches(
-                        *sibling,
-                        selector,
-                        component - 1U,
-                        scope_root)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
-            ancestor = document.dom_parent(*ancestor)) {
-            if (compiled_css_selector_matches(
-                    *ancestor,
-                    selector,
-                    component - 1U,
-                    scope_root)) {
-                return true;
-            }
-        }
-        return false;
+        return css::selector_matches(document,node,selector,component,scope_root,
+            [&](const dom_node& candidate,const compiled_css_compound& compound,const dom_node* scope) {
+                return css_compound_selector_matches(candidate,compound,scope);
+            });
     }
 
     bool css_rule_matches(
