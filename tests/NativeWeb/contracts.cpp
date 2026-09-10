@@ -303,6 +303,29 @@ int main() {
   }
   d.wheel(scroll_area.x + 1, scroll_area.y + 1, -7);
   check(d.scroll_offset(scroll_container).second == 5, "wheel resumes after listener disposal");
+  d.render(800, 10000);
+  d.attribute(scroll_container, "class", "hidden-mode");
+  d.render(800, 10000);
+  d.scroll_to(scroll_container, 0, 17);
+  check(d.scroll_offset(scroll_container).second == 17, "overflow hidden permits programmatic scrolling");
+  d.render(800, 10000);
+  d.wheel(scroll_area.x + 1, scroll_area.y + 1, 6);
+  check(d.scroll_offset(scroll_container).second == 17, "overflow hidden suppresses wheel default");
+  d.attribute(scroll_container, "class", "clip-mode");
+  d.render(800, 10000);
+  d.scroll_to(scroll_container, 0, 17);
+  check(d.scroll_offset(scroll_container).second == 0, "overflow clip rejects programmatic scrolling");
+  d.remove_attribute(scroll_container, "class");
+  d.render(800, 10000);
+  int removal_calls = 0;
+  auto remove_during_wheel = d.on(scroll_content, "wheel", [&](event&) {
+    ++removal_calls;
+    d.remove(scroll_container);
+  });
+  d.wheel(scroll_area.x + 1, scroll_area.y + 1, 6);
+  check(removal_calls == 1 && !d.find("native-scroll"),
+        "wheel default safely skips scroll subtree removed by handler");
+
   d.render(800, 600);
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,

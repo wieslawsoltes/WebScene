@@ -926,3 +926,12 @@ Native contracts verify scrolling, cancellation and resumption after listener
 disposal. Contracts pass. Horizontal/delta-mode support, scroll events, overscroll
 policy, gesture momentum and host frame pacing remain open; current API deltas
 are treated as pixel distances.
+
+### Scroll modes and wheel removal safety (2026-09-10)
+
+Native regressions verify overflow:hidden accepts programmatic scrolling but
+suppresses wheel default, overflow:clip rejects a programmatic scroll request,
+and a wheel handler can remove its scroll subtree without the default action
+accessing deleted nodes. Native contracts pass. Automatic offset reset solely
+from overflow changes, queued scroll events and nested scroll chaining remain
+open; the clip test explicitly calls scroll_to after changing mode.
