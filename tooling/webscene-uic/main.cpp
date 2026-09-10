@@ -304,7 +304,7 @@ static std::string variable_grid_code(const std::string &member, const std::stri
       code += "{auto values=s.evaluate(" + variable_code(token) + ");";
       code += "if(!values || values->empty()) valid=false;else for(const auto& value:*values){";
       code += "if(value.length && value.length->value>=0) tracks.push_back({*value.length,*value.length,0.0f,webscene::native_web::grid_track::sizing::fixed});";
-      code += "else if(value.text==\"auto\") tracks.push_back({});else valid=false;}}";
+      code += "else if(value.is_keyword(\"auto\")) tracks.push_back({});else valid=false;}}";
     } else {
       auto static_tracks = grid_tracks_code(token);
       code += "{std::vector<webscene::native_web::grid_track> fixed=" + static_tracks + ";tracks.insert(tracks.end(),fixed.begin(),fixed.end());}";
@@ -367,7 +367,7 @@ static std::string assignments(const std::string &name,
     }
     return code +
         "bool valid=v && !v->empty() && v->size()<=4;"
-        "if(valid) for(const auto& t:*v) valid=valid && (t.length.has_value() || t.text==\"auto\");"
+        "if(valid) for(const auto& t:*v) valid=valid && (t.length.has_value() || t.is_keyword(\"auto\"));"
         "auto side=[&](size_t i){return valid ? ((*v)[i].length.value_or(webscene::native_web::length" + length("auto") + ")) : webscene::native_web::length" + length("auto") + ";};"
         "s.set_top(side(0));s.set_right(side(valid && v->size()>1?1:0));"
         "s.set_bottom(side(valid && v->size()>2?2:0));"
@@ -375,13 +375,13 @@ static std::string assignments(const std::string &name,
   }
   if ((name == "margin" || (name.starts_with("margin-") && lengths.contains(name))) && value.find("var(") != std::string::npos) {
     std::string code = "auto v=s.evaluate(" + variable_code(value) + ");bool valid=v && !v->empty() && v->size()<=" + (name == "margin" ? "4;" : "1;") +
-        "if(valid) for(const auto& t:*v) valid=valid && (t.length || t.text==\"auto\");";
+        "if(valid) for(const auto& t:*v) valid=valid && (t.length || t.is_keyword(\"auto\"));";
     const std::vector<std::string> sides{"top", "right", "bottom", "left"};
     const std::vector<std::string> indices{"0", "valid && v->size()>1?1:0", "valid && v->size()>2?2:0", "valid && v->size()>3?3:valid && v->size()>1?1:0"};
     for (size_t i=0; i<sides.size(); ++i) {
       if (name != "margin" && name != "margin-" + sides[i]) continue;
       auto index = name == "margin" ? indices[i] : "0";
-      code += "{auto i=" + index + ";s.set_margin_" + sides[i] + "(valid ? (*v)[i].length.value_or(webscene::native_web::length" + length("0") + ") : webscene::native_web::length" + length("0") + ");s.set_margin_" + sides[i] + "_auto(valid && (*v)[i].text==\"auto\");}";
+      code += "{auto i=" + index + ";s.set_margin_" + sides[i] + "(valid ? (*v)[i].length.value_or(webscene::native_web::length" + length("0") + ") : webscene::native_web::length" + length("0") + ");s.set_margin_" + sides[i] + "_auto(valid && (*v)[i].is_keyword(\"auto\"));}";
     }
     return code;
   }

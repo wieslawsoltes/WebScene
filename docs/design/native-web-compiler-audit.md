@@ -781,3 +781,12 @@ a subsequent auto value restores centering, and class removal retains shorthand
 auto behavior. The native contract suite passes without a lowering change. This
 closes the missing longhand interaction regression for the supported token
 profile; collapsing margins and broader keyword/expression support remain open.
+
+### Variable auto keyword casing (2026-09-10)
+
+Typed variable tokens now expose ASCII case-insensitive keyword comparison without
+normalizing stored text or custom-property names. Margin, inset and variable grid
+track auto consumers use it. Existing margin centering/cascade regressions now
+exercise uppercase AUTO and mixed-case AuTo. All 50 compiler tests and native
+contracts pass. Escaped identifiers and other keyword consumers remain open;
+this helper compares already compiled tokens and does not parse CSS at runtime.

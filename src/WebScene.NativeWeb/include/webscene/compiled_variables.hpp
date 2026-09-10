@@ -6,6 +6,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace webscene::native_web {
@@ -58,6 +59,13 @@ struct variable_token {
   variable_token(std::string value) : text(std::move(value)) {}
   variable_token(std::string value, std::optional<webscene_native::css_length> l,
                  std::optional<uint32_t> c) : text(std::move(value)), length(l), color(c) {}
+  bool is_keyword(std::string_view keyword) const {
+    if (text.size() != keyword.size()) return false;
+    const auto lower = [](unsigned char c) { return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c; };
+    for (size_t i = 0; i < text.size(); ++i)
+      if (lower(text[i]) != lower(keyword[i])) return false;
+    return true;
+  }
   bool operator==(const variable_token &other) const {
     return text == other.text && color == other.color &&
       length.has_value() == other.length.has_value() &&
