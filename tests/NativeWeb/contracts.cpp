@@ -337,6 +337,22 @@ int main() {
         "grid alignment and auto margins use constrained dimensions");
   d.remove_attribute(d.find("self-grid-child"), "class");
   d.render(800, 600);
+  const auto check_grid_box = [&](const char* classes, float width, float height) {
+    d.attribute(d.find("self-grid-child"), "class", classes);
+    d.render(800, 600);
+    const auto item = d.bounds(d.find("self-grid-child"));
+    const auto grid = d.bounds(d.find("self-grid"));
+    check(item.width == width && item.height == height &&
+          item.x == grid.x + (100 - width) / 2 &&
+          item.y == grid.y + (40 - height) / 2,
+          classes);
+  };
+  check_grid_box("maximum", 10, 6);
+  check_grid_box("box", 46, 26);
+  check_grid_box("box border-box", 40, 20);
+  check_grid_box("box conflict", 46, 26);
+  d.remove_attribute(d.find("self-grid-child"), "class");
+  d.render(800, 600);
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

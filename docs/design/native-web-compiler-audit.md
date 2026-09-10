@@ -1596,3 +1596,17 @@ track. It failed before the change and passes afterward; compiler and native
 contract suites pass. Maximum-size, percentage and box-sizing combinations still
 need dedicated coverage. Alternate grid paths and broader layout parity remain
 open; this does not close the layout audit family.
+
+### Final height constraints and grid box sizing (2026-09-10)
+
+Independent compiled grid fixtures now exercise both auto margins, maximum sizes,
+content-box padding/borders, border-box constraints, and minimum/maximum conflicts.
+The conflict fixture failed: arrangement selected the correct 26px outer height,
+but layout_child's final max-height clamp reduced it to 6px. That shared clamp now
+accounts for content-box edges and lets minimum height win over maximum height.
+The cases pass with expected sizes/offsets after the fix. Rebuilt smoke, templates,
+C++ module templates, contracts and compiler suites all pass (five CTest entries).
+This shared engine change has not been verified across V8 hosts or against browser
+screenshots. Percentage containing blocks and automatic minimum sizes remain open.
+After closing this discovered regression, resume the earliest open audit gates
+listed above rather than extending grid coverage indefinitely.

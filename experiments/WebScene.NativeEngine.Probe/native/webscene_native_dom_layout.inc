@@ -4858,13 +4858,23 @@ void native_document::layout_child(
         // mount node. Re-resolving against that mount collapses an otherwise
         // valid auto-height dialog after its descendants have been laid out.
         const auto available_height = containing_block.height;
-        const auto capped_height = std::min(
+        const auto box_adjustment = child.style.border_box ? 0.0F
+            : resolve_vertical_padding(child, child.style.padding_top, available_height, 0)
+                + resolve_vertical_padding(child, child.style.padding_bottom, available_height, 0)
+                + resolve_length(child, child.style.border_top_width, available_height, 0)
+                + resolve_length(child, child.style.border_bottom_width, available_height, 0);
+        auto capped_height = std::min(
             child.layout.height,
             resolve_length(
                 child,
                 child.style.max_height,
                 available_height,
-                child.layout.height));
+                child.layout.height) + box_adjustment);
+        if (is_specified(child.style.min_height)) {
+            capped_height = std::max(capped_height,
+                resolve_length(child, child.style.min_height, available_height, 0)
+                    + box_adjustment);
+        }
         if (capped_height + 0.01F < child.layout.height) {
             child.layout.height = capped_height;
             child.used_height_is_definite = true;
