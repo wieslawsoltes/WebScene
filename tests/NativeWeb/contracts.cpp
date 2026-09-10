@@ -405,6 +405,13 @@ int main() {
   d.set_text(whitespace_variable, "\nA");
   d.render(800, 600);
   check(d.bounds(whitespace_variable).height == 40, "leading pre newline retains its blank line");
+  d.attribute(whitespace_variable, "class", "preline");
+  d.set_text(whitespace_variable, "A   B\n\nC");
+  const auto &preline_scene = d.render(800, 10000);
+  check(d.bounds(whitespace_variable).height == 60, "pre-line preserves explicit and blank lines");
+  check(std::string_view(preline_scene.bytes.data(), preline_scene.bytes.size()).find("A   B") == std::string_view::npos,
+        "pre-line collapses repeated spaces in paint text");
+  d.remove_attribute(whitespace_variable, "class");
   d.set_text(whitespace_variable, "  Spaced  ");
   const auto &spaces_scene = d.render(800, 10000);
   check(std::string_view(spaces_scene.bytes.data(), spaces_scene.bytes.size()).find("  Spaced  ") != std::string_view::npos,

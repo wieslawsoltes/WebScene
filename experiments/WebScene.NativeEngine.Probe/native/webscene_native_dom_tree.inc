@@ -203,6 +203,20 @@ std::vector<std::string> native_document::wrap_text_lines(
         white_space = current->style.textual().white_space;
         break;
     }
+    if (white_space == "pre-line" && value.find('\n') != std::string::npos) {
+        std::vector<std::string> lines;
+        size_t start = 0;
+        while (start < value.size()) {
+            auto end = value.find('\n', start);
+            auto segment = value.substr(start, end == std::string::npos ? end : end - start);
+            auto wrapped = wrap_text_lines(segment, available_width, node, allow_wrap);
+            if (wrapped.empty()) lines.emplace_back();
+            else lines.insert(lines.end(), wrapped.begin(), wrapped.end());
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+        return lines;
+    }
     if (white_space == "pre") {
         std::vector<std::string> lines;
         size_t start = 0;

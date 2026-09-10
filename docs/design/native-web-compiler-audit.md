@@ -1018,3 +1018,11 @@ trailing newline after text. The cases produce one line, two lines and one line
 respectively at the fixture's 20px line height. Contracts pass without further
 layout changes. Tab stops, cross-element whitespace boundaries, pre-wrap,
 pre-line and break-spaces remain open.
+
+### Pre-line explicit newlines (2026-09-10)
+
+Native text wrapping and flattened inline layout now preserve explicit newline
+boundaries for pre-line while collapsing spaces within each line. Compiled
+variable-style regression verifies three lines including an internal blank line
+and absence of repeated spaces in paint text. Native contracts pass. Soft-wrap
+boundaries, mixed inline styles, tabs and renderer pixel comparisons remain open.

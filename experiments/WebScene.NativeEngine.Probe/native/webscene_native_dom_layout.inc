@@ -1488,7 +1488,13 @@ void native_document::layout_children(dom_node& parent)
                     pending_space_run = nullptr;
                 };
                 for (const auto character : transformed_text) {
-                    if (std::isspace(static_cast<unsigned char>(character))) {
+                    if (character == '\n' && whitespace == "pre-line") {
+                        flush_word();
+                        pending_space = false;
+                        pending_space_run = nullptr;
+                        current_line_height = std::max(current_line_height, resolved_line_height(*run, resolved_font_size(*run)));
+                        start_new_line();
+                    } else if (std::isspace(static_cast<unsigned char>(character))) {
                         flush_word();
                         pending_space = true;
                         pending_space_run = run;
