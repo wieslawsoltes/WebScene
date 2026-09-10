@@ -260,8 +260,14 @@ void document::pointer(std::string type, float x, float y) {
         return;
       }
   }
-  if (type == "pointerdown")
+  if (type == "pointerdown") {
     state_->pressed = id;
+    state_->dom.mark_dirty();
+  }
+  if (type == "pointercancel") {
+    state_->pressed = 0;
+    state_->dom.mark_dirty();
+  }
   const bool default_allowed = !id || dispatch(id, type, x, y);
   if (!state_->alive)
     return;
@@ -275,6 +281,7 @@ void document::pointer(std::string type, float x, float y) {
   }
   if (type == "pointerup") {
     const auto pressed = std::exchange(state_->pressed, 0);
+    state_->dom.mark_dirty();
     if (id && id == pressed && state_->dom.find_by_native_id(id))
       dispatch(id, "click", x, y);
   }
@@ -372,6 +379,15 @@ static bool matches_part(const dom_node &n, const selector_part &p,
       return false;
   if (p.focus && n.id != s.focus)
     return false;
+  if (p.disabled && (!(n.tag == "button" || n.tag == "input" ||
+      n.tag == "select" || n.tag == "textarea" || n.tag == "option" ||
+      n.tag == "optgroup" || n.tag == "fieldset") ||
+      !n.attributes.contains("disabled"))) return false;
+  if (p.active) {
+    auto *pressed = s.dom.find_by_native_id(s.pressed);
+    while (pressed && pressed->id != n.id) pressed = pressed->parent;
+    if (!pressed) return false;
+  }
   if (p.hover) {
     auto *h = s.dom.find_by_native_id(s.hover);
     bool found = false;

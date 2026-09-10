@@ -151,5 +151,39 @@ int main() {
     check(std::abs(grid_document.bounds(center).width - old_width - 200) < 1,
           "compiled grid fractional track responds to resize");
   }
+  {
+    document states;
+    auto button = states.element(states.body(), "button");
+    states.set_text(button, "Press");
+    rule active_rule;
+    selector_part active_part;
+    active_part.tag = "button";
+    active_part.active = true;
+    active_rule.match.parts.push_back(active_part);
+    active_rule.declarations.push_back({false, +[](style &s) {
+      s.set_width({123, length_unit::pixels});
+    }});
+    states.add_rule(std::move(active_rule));
+    states.render(500, 300);
+    auto area = states.bounds(button);
+    states.pointer("pointerdown", area.x + 1, area.y + 1);
+    states.render(500, 300);
+    check(states.bounds(button).width == 123, "pressed selector applies");
+    states.pointer("pointercancel", area.x + 1, area.y + 1);
+    states.render(500, 300);
+    check(states.bounds(button).width != 123, "cancel clears pressed selector");
+    rule disabled_rule;
+    selector_part disabled_part;
+    disabled_part.tag = "button";
+    disabled_part.disabled = true;
+    disabled_rule.match.parts.push_back(disabled_part);
+    disabled_rule.declarations.push_back({false, +[](style &s) {
+      s.set_width({150, length_unit::pixels});
+    }});
+    states.add_rule(std::move(disabled_rule));
+    states.attribute(button, "disabled", "");
+    states.render(500, 300);
+    check(states.bounds(button).width == 150, "disabled selector applies");
+  }
   std::cout << "Native Web contracts passed\n";
 }

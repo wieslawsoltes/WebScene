@@ -308,7 +308,7 @@ static std::string selector_code(const selector_syntax_selector &sel) {
     std::string tag, id;
     std::vector<std::string> classes;
     std::vector<std::string> attributes;
-    bool focus = false, hover = false, root = false;
+    bool focus = false, hover = false, root = false, active = false, disabled = false;
     auto input = sel.compounds[i];
     size_t p = 0;
     while (p < input.size()) {
@@ -354,6 +354,10 @@ static std::string selector_code(const selector_syntax_selector &sel) {
           focus = true;
         else if (name == "root")
           root = true;
+        else if (name == "active")
+          active = true;
+        else if (name == "disabled")
+          disabled = true;
         else if (name == "hover")
           hover = true;
         else
@@ -380,7 +384,7 @@ static std::string selector_code(const selector_syntax_selector &sel) {
         result += ",";
       result += attributes[j];
     }
-    result += "}}";
+    result += "}," + std::string(active ? "true" : "false") + "," + (disabled ? "true" : "false") + "}";
   }
   return result + "}," + std::to_string(sel.specificity) + "}";
 }

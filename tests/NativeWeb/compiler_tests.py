@@ -35,6 +35,9 @@ class CompilerTests(unittest.TestCase):
         for tracks in ['repeat(0,1fr)', 'repeat(-1,1fr)', 'repeat(2,none)', 'repeat(2,repeat(2,1fr))', 'repeat(2.5,1fr)', 'repeat(1025,1fr)']:
             result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
             self.assertNotEqual(result.returncode,0,tracks)
+    def test_control_state_selectors(self):
+        result,out=self.compile('<button>Go</button>', 'button:active { width:20px; } button:disabled { opacity:0.34; }')
+        self.assertEqual(result.returncode,0,result.stderr)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)
