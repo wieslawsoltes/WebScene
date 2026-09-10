@@ -1331,3 +1331,14 @@ and reports stream failures with the source path. Regression coverage checks a
 directory supplied as HTML, as linked CSS and to --check-css; each fails without
 output. All 75 compiler tests pass. This verifies directory rejection; simulated
 mid-read I/O faults and atomic artifact publication remain untested.
+
+### Generated module/template integration checkpoint (2026-09-10)
+
+Rebuilt native_web_smoke, native_web_templates, native_web_module_templates and
+native_web_contracts against current compiler/HTML ABI/variable metadata changes.
+All four executables and the 75-test compiler suite pass. Template checks exercise
+instance-local references, native events, independent-instance survival after
+removal, mixed text roots and cleanup. This confirms current generated headers
+and C++ modules integrate with the native API; it is not SDK packaging, V8 linkage,
+GPU presentation or browser parity evidence. The unbuilt native_web_gpu target
+observed in the test inventory remains outside this compiler checkpoint.
