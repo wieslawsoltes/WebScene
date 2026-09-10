@@ -164,3 +164,10 @@ Reconciled-path validation: the optional GPU app was built and run on macOS Meta
 WebGPU clear in the compiled Canvas bounds. Cocoa input/template smoke completed
 with `count=1 items=1`. This proves a first native GPU frame through the existing
 Foco importer, not full redraw/resize stress coverage or Kestrel parity.
+
+The compiler can also emit a C++20 module:
+`webscene-uic input.html output.cppm --module myapp.ui`.
+CMake consumers can use `webscene_compile_html_module(target input module_name)`.
+Module output exports the same construction, named-reference and template APIs.
+The `native_web_module_templates` test verifies compiled template use via import.
+Existing header output remains for current hosts while their migration continues.

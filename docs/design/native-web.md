@@ -36,3 +36,11 @@ README documents its deliberately bounded HTML/CSS profile; `validation.md` reco
 actual acceptance results and limitations. Foco integration uses one scene carrier,
 its compositor, and an embedded-focus navigation hook. Broader host extraction and
 full web API coverage remain subsequent work.
+
+## Optional mixed-language application logic
+
+Accepted: compiled views can support C++, JavaScript and TypeScript application
+logic together, enabling gradual migration to C++ through generated interop on
+one native document. Pure-native deployment remains runtime-free. Kestrel's
+current target remains entirely C++. See [ADR 0014](../architecture/adr/0014-mixed-language-compiled-applications.md)
+for ownership, identity, deployment and verification requirements.
