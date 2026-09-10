@@ -130,6 +130,20 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { grid-template-columns:'+value+'; }')
             self.assertNotEqual(result.returncode,0,value)
 
+    def test_grid_function_argument_validation_matches_audit(self):
+        for value in ['repeat(2,)', 'repeat(2, )', 'repeat(, 1fr)',
+                      'repeat(2, 1fr, 2fr)', 'repeat(2, none)',
+                      'minmax(, 1fr)', 'minmax(0,)', 'minmax(0, 1fr, 2fr)',
+                      'repeat(2, minmax(0,))']:
+            css='div { grid-template-columns:'+value+'; }'
+            result,out=self.compile('<div></div>',css)
+            self.assertNotEqual(result.returncode,0,value)
+            self.assertFalse(out.exists())
+            source=out.with_suffix('.css');source.write_text(css)
+            audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+            self.assertNotEqual(audit.returncode,0,value)
+            self.assertIn('grid-template-columns',audit.stderr)
+
     def test_grid_repeat_is_expanded_at_build_time(self):
         result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:repeat(3,1fr); }')
         self.assertEqual(result.returncode,0,result.stderr)

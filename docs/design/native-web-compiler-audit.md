@@ -1200,3 +1200,14 @@ range checks. Regressions cover zero across units, negative values, overflow and
 invalid fractional minima. All 67 compiler tests and native contracts pass.
 These checks validate compiler input and typed output construction, not complete
 grid layout parity; intrinsic track sizing and browser comparisons remain open.
+
+### Grid function argument rejection coverage (2026-09-10)
+
+Audited empty/missing/excess repeat and minmax arguments, including malformed
+minmax nested in repeat. Existing guards reject all nine cases; no engine or
+compiler change was necessary. The new regression verifies both strict compiler
+failure without an output artifact and --check-css rejection. All 68 compiler
+tests pass. This records verified existing behavior rather than new support.
+Variable grid tracks still accept only typed lengths and auto: fractional values
+in custom properties remain an identified lowering gap requiring typed metadata,
+not runtime string parsing.
