@@ -245,3 +245,14 @@ an invalid identifier, verifies old offsets are cleared while independent width/
 height survive, and restores the valid cascade before the theme-update checks.
 The native contract suite passes. This validates the invalid-computed-value path
 for this case; explicit inherit/revert semantics are still open.
+
+### SVG paint: stroke-width literals (2026-09-10)
+
+Fresh pre-change baseline was 66 unsupported constructs. Added nonnegative SVG
+stroke-width literals (unitless, px and percentage, including decimal/exponent
+forms). The compiler validates them and the native SVG serializer projects the
+cascaded value as a presentation attribute, overriding an authored attribute when
+CSS specifies the property. The existing SVG serialization contract now checks
+`.8` stroke width. Compiler and native contract suites pass. Variable values,
+CSS-wide keywords and broader SVG unit coverage remain open; SVG path compilation
+remains the separately documented future optimization.

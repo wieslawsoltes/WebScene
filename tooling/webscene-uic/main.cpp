@@ -265,6 +265,12 @@ static std::string assignments(const std::string &name,
         "s.set_bottom(side(valid && v->size()>2?2:0));"
         "s.set_left(side(valid && v->size()>3?3:valid && v->size()>1?1:0));";
   }
+  if (name == "stroke-width") {
+    if (!std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%)?)")))
+      throw std::runtime_error("stroke-width requires a nonnegative number, px or percentage");
+    if (!std::isfinite(std::stof(value))) throw std::runtime_error("non-finite stroke-width");
+    return "s.set_svg_stroke_width(" + quote(value) + ");";
+  }
   if (name == "fill" || name == "stroke") {
     auto setter = name == "fill" ? "set_svg_fill" : "set_svg_stroke";
     if (value.find("var(") != std::string::npos)
