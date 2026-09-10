@@ -442,6 +442,7 @@ const scene &document::render(float width, float height) {
     size_t order = 0;
     for (const auto &r : s.rules) {
       bool match = width >= r.min_width && width <= r.max_width &&
+                   height >= r.min_height && height <= r.max_height &&
                    (r.inline_target ? r.inline_target == n.id
                                     : !r.match.parts.empty() &&
                                           matches(&n, r.match,

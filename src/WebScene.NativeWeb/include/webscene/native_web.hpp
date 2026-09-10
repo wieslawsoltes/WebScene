@@ -215,6 +215,7 @@ struct rule {
   std::vector<declaration> declarations;
   float min_width{}, max_width{1e9f};
   node_id inline_target{};
+  float min_height{}, max_height{1e9f};
 };
 struct event {
   std::string type;

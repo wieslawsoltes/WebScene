@@ -3,6 +3,7 @@
 #include "webscene_html_parser.h"
 #include "webscene_selector_parser.h"
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -632,7 +633,7 @@ struct compiler {
     auto css = parse_css_syntax_stylesheet(text);
     if (!css || css.metrics.parse_error_count)
       throw std::runtime_error("invalid CSS stylesheet: " + css.error);
-    std::vector<std::pair<float, float>> bounds(css.rules.size(), {0, 1e9f});
+    std::vector<std::array<float, 4>> bounds(css.rules.size(), {0, 1e9f, 0, 1e9f});
     for (size_t i = 0; i < css.rules.size(); ++i) {
       const auto &r = css.rules[i];
       auto &range = bounds[i];
@@ -643,14 +644,14 @@ struct compiler {
         if (r.name != "media" ||
             !std::regex_match(
                 r.prelude, match,
-                std::regex(R"(\s*\((min|max)-width\s*:\s*([0-9]+)px\)\s*)")))
-          throw std::runtime_error("only @media (min-width: Npx) / (max-width: "
-                                   "Npx) supported initially");
-        auto v = std::stof(match[2]);
+                std::regex(R"(\s*\((min|max)-(width|height)\s*:\s*([0-9]+)px\)\s*)")))
+          throw std::runtime_error("only min/max width or height media conditions in px are supported");
+        auto v = std::stof(match[3]);
+        const size_t axis = match[2] == "width" ? 0 : 2;
         if (match[1] == "min")
-          range.first = std::max(range.first, v);
+          range[axis] = std::max(range[axis], v);
         else
-          range.second = std::min(range.second, v);
+          range[axis + 1] = std::min(range[axis + 1], v);
         continue;
       }
       auto selectors = parse_selector_syntax(r.prelude);
@@ -659,8 +660,8 @@ struct compiler {
       for (const auto &sel : selectors.selectors) {
         out << "d.add_rule({" << selector_code(sel) << ",";
         declarations(css, r);
-        out << "," << number(range.first) << "," << number(range.second)
-            << "});\n";
+        out << "," << number(range[0]) << "," << number(range[1])
+            << ",0," << number(range[2]) << "," << number(range[3]) << "});\n";
       }
     }
   }
@@ -908,7 +909,7 @@ static int check_css(const fs::path &path) {
     if (rule.kind == css_syntax_at_rule) {
       check("@" + rule.name + " " + rule.prelude, [&] {
         if (rule.name != "media" || !std::regex_match(rule.prelude,
-            std::regex(R"(\s*\((min|max)-width\s*:\s*([0-9]+)px\)\s*)")))
+            std::regex(R"(\s*\((min|max)-(width|height)\s*:\s*([0-9]+)px\)\s*)")))
           throw std::runtime_error("unsupported at-rule or condition");
       });
     } else {

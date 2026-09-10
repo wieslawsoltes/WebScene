@@ -287,5 +287,15 @@ int main() {
     states.render(500, 300);
     check(states.bounds(button).width == 150, "disabled selector applies");
   }
+  {
+    document responsive;
+    auto references = compiled_ui::build(responsive);
+    responsive.render(1000, 301);
+    check(responsive.bounds(responsive.find("grid-left")).width == 222, "height media inactive above boundary");
+    responsive.render(1000, 300);
+    check(responsive.bounds(responsive.find("grid-left")).width == 175, "height media active at boundary");
+    responsive.render(1000, 700);
+    check(responsive.bounds(responsive.find("grid-left")).width == 222, "height media restores variable on resize");
+  }
   std::cout << "Native Web contracts passed\n";
 }
