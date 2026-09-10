@@ -1712,3 +1712,14 @@ it failed before the fix. Native coverage now uses escaped names in a four-sided
 inset shorthand and verifies both offsets equal 38px. All 86 compiler tests and
 native contracts pass. This covers escaped punctuation inside variable functions;
 quoted token sequences and complete CSS component-token handling remain open.
+
+### Escaped references within calc expressions (2026-09-10)
+
+Calc's enclosing-group and reverse operator scans still counted escaped identifier
+punctuation, rejecting valid variable expressions. The forward scan now skips
+escapes and the reverse scans check backslash parity before interpreting syntax.
+Regression coverage for escaped parentheses, multiplication and division symbols
+failed before the fix. All 87 compiler tests pass; native contracts verify an
+inherited escaped name inside a calc shorthand resolves 38px + 2px to 40px.
+General token-tree lowering remains open; this repairs the existing typed calc
+path without adding runtime parsing or claiming unrestricted CSS math support.

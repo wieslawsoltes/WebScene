@@ -809,8 +809,8 @@ int main() {
   d.attribute(d.find("calc-parent"), "class", "delimiter-offset");
   d.render(800, 600);
   check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 38 &&
-        d.bounds(d.find("calc-child")).y == d.bounds(d.find("calc-parent")).y + 38,
-        "escaped commas and parentheses retain reference identity in inherited shorthand");
+        d.bounds(d.find("calc-child")).y == d.bounds(d.find("calc-parent")).y + 40,
+        "escaped references retain identity through inherited calc shorthand");
   d.remove_attribute(d.find("calc-parent"), "class");
   d.render(800, 600);
   check(d.bounds(d.find("zero-variable")).width == 0,

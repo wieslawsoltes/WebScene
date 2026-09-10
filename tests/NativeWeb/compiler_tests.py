@@ -73,6 +73,13 @@ class CompilerTests(unittest.TestCase):
             rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
             self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
 
+    def test_calc_preserves_escaped_custom_names(self):
+        for name in [r'--a\)b', r'--a\(b', r'--a\*b', r'--a\/b']:
+            for value in ['calc(var('+name+', 3px) + 2px)', 'calc(2 * (var('+name+', 3px) - 1px))']:
+                result,out=self.compile('<div></div>', 'div { left:'+value+'; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn('add_compiled_lengths',out.read_text())
+
     def test_shorthand_components_preserve_escaped_names(self):
         for name in [r'--a\)b', r'--a\(b', r'--a\,b']:
             for property in ['inset', 'padding', 'margin', 'gap']:

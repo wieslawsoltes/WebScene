@@ -206,6 +206,7 @@ static std::string compiled_length_expression(std::string value) {
     int nesting = 0;
     size_t closing = std::string::npos;
     for (size_t i = opening; i < value.size(); ++i) {
+      if (value[i] == '\\' && i + 1 < value.size()) { ++i; continue; }
       if (value[i] == '(') ++nesting;
       else if (value[i] == ')' && --nesting == 0) { closing = i; break; }
     }
@@ -213,8 +214,14 @@ static std::string compiled_length_expression(std::string value) {
     if (closing + 1 != value.size()) break;
     value = trim(value.substr(opening + 1, closing - opening - 1));
   }
+  const auto escaped = [&](size_t position) {
+    size_t slashes = 0;
+    while (position > 0 && value[--position] == '\\') ++slashes;
+    return slashes % 2 != 0;
+  };
   int depth = 0;
   for (size_t i = value.size(); i-- > 0;) {
+    if (escaped(i)) continue;
     if (value[i] == ')') ++depth;
     else if (value[i] == '(') --depth;
     else if (depth == 0 && (value[i] == '+' || value[i] == '-') && i > 0 && i + 1 < value.size() &&
@@ -229,6 +236,7 @@ static std::string compiled_length_expression(std::string value) {
   }
   depth = 0;
   for (size_t i = value.size(); i-- > 0;) {
+    if (escaped(i)) continue;
     if (value[i] == ')') ++depth;
     else if (value[i] == '(') --depth;
     else if (depth == 0 && (value[i] == '*' || value[i] == '/')) {
