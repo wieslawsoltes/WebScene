@@ -60,6 +60,7 @@ public:
   void set_visibility(bool hidden, bool specified = true) { value_.visibility_hidden = hidden; value_.visibility_specified = specified; }
   void set_overflow_x(overflow_mode value) { value_.overflow_x = value; }
   void set_overflow_y(overflow_mode value) { value_.overflow_y = value; }
+  void set_svg_text_anchor(std::string value) { value_.mutable_textual().svg_text_anchor = std::move(value); }
   void set_svg_stroke_width(std::string value) { value_.mutable_textual().svg_stroke_width = std::move(value); }
   void set_svg_fill(std::string value) { value_.mutable_textual().svg_fill = std::move(value); }
   void set_svg_stroke(std::string value) { value_.mutable_textual().svg_stroke = std::move(value); }

@@ -265,6 +265,11 @@ static std::string assignments(const std::string &name,
         "s.set_bottom(side(valid && v->size()>2?2:0));"
         "s.set_left(side(valid && v->size()>3?3:valid && v->size()>1?1:0));";
   }
+  if (name == "text-anchor") {
+    if (value != "start" && value != "middle" && value != "end")
+      throw std::runtime_error("text-anchor requires start, middle or end");
+    return "s.set_svg_text_anchor(" + quote(value) + ");";
+  }
   if (name == "stroke-width") {
     if (!std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%)?)")))
       throw std::runtime_error("stroke-width requires a nonnegative number, px or percentage");
@@ -842,7 +847,7 @@ struct compiler {
     }
     static const std::set<std::string> tags = {
         "body", "main",   "section", "div", "span", "p",      "h1",     "h2",
-        "svg", "g", "path", "polygon", "rect", "circle", "ellipse", "line", "polyline", "h3",   "button", "canvas",  "ul",  "li",   "header", "footer", "nav"};
+        "svg", "g", "text", "tspan", "path", "polygon", "rect", "circle", "ellipse", "line", "polyline", "h3",   "button", "canvas",  "ul",  "li",   "header", "footer", "nav"};
     if (preview && (n.tag == "script" || n.tag == "noscript")) { warning("skipped " + n.tag); return; }
     if (!tags.contains(n.tag)) {
       if (!preview) throw std::runtime_error("unsupported Native Web element: " + n.tag);

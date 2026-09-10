@@ -171,6 +171,8 @@ int main() {
   d.render(800, 600);
   check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end()).find("stroke-width=\".8\"") != std::string::npos,
         "compiled SVG stroke width reaches serialized geometry");
+  check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end()).find("text-anchor=\"middle\"") != std::string::npos,
+        "compiled SVG text anchor reaches serialized text");
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;

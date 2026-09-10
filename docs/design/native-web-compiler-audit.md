@@ -256,3 +256,12 @@ CSS specifies the property. The existing SVG serialization contract now checks
 `.8` stroke width. Compiler and native contract suites pass. Variable values,
 CSS-wide keywords and broader SVG unit coverage remain open; SVG path compilation
 remains the separately documented future optimization.
+
+### SVG text: text-anchor and text elements (2026-09-10)
+
+Strict compilation now accepts SVG text/tspan elements and the start/middle/end
+text-anchor keywords. The public style writer uses the native engine's existing
+SVG text-anchor field and serializer. A compiled text element regression verifies
+that middle alignment reaches serialized SVG. Compiler and native contract tests
+pass. Full SVG text layout, additional positioning attributes, variable values
+and CSS-wide keywords remain open; this is not a general SVG conformance claim.
