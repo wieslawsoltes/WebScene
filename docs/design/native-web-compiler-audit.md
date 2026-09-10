@@ -481,3 +481,11 @@ unitless zero as typed zero lengths, matching direct length consumption rather
 than recognizing only the exact string `0`. A native regression verifies
 `--zero:+0e0; width:var(--zero)` produces zero width. Compiler and native contract
 suites pass. Nonzero unitless numbers remain distinct from lengths.
+
+### Audit diagnostic ownership (2026-09-10)
+
+CSS audit errors now list the rule owning each unsupported declaration, while
+preserving deduplication and the distinct-construct count. Repeated constructs
+can report multiple owners without inflating the baseline count. The compiler
+audit regression verifies owner output; all 41 compiler tests pass. Exact source
+line/column ranges and nested conditional ancestry remain diagnostic gaps.

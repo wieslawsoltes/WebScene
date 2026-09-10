@@ -100,6 +100,7 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(result.returncode,1)
         self.assertIn('filter',result.stderr)
         self.assertIn('cursor',result.stderr)
+        self.assertIn('in rule: div',result.stderr)
         self.assertIn('has',result.stderr)
         self.assertIn('3 distinct unsupported constructs',result.stdout)
         self.assertEqual(list(source.parent.iterdir()),[source])

@@ -1166,11 +1166,12 @@ static int check_css(const fs::path &path) {
   auto css = parse_css_syntax_stylesheet(read(path));
   if (!css || css.metrics.parse_error_count)
     throw std::runtime_error("invalid CSS stylesheet: " + css.error);
-  std::set<std::string> errors;
-  auto check = [&](const std::string &context, auto action) {
+  std::map<std::string, std::set<std::string>> errors;
+  auto check = [&](const std::string &context, auto action, const std::string &owner = "") {
     try { action(); }
     catch (const std::exception &e) {
-      errors.insert(context + ": " + e.what());
+      auto &owners = errors[context + ": " + e.what()];
+      if (!owner.empty()) owners.insert(owner);
     }
   };
   for (const auto &rule : css.rules) {
@@ -1188,13 +1189,23 @@ static int check_css(const fs::path &path) {
       });
     }
   }
-  for (const auto &declaration : css.declarations)
+  for (size_t index = 0; index < css.declarations.size(); ++index) {
+    const auto &declaration = css.declarations[index];
+    std::string owner;
+    for (const auto &rule : css.rules)
+      if (index >= rule.first_declaration && index < rule.first_declaration + rule.declaration_count) {
+        owner = rule.kind == css_syntax_at_rule ? "@" + rule.name + " " + rule.prelude : rule.prelude;
+        break;
+      }
     check(declaration.name + ":" + declaration.value, [&] {
       if (declaration.name.starts_with("--")) variable_code(trim(declaration.value));
       else assignments(declaration.name, trim(declaration.value));
-    });
-  for (const auto &error : errors)
+    }, owner);
+  }
+  for (const auto &[error, owners] : errors) {
     std::cerr << path.string() << ": error: " << error << '\n';
+    for (const auto &owner : owners) std::cerr << "  in rule: " << owner << '\n';
+  }
   std::cout << css.rules.size() << " rules, " << css.declarations.size()
             << " declarations, " << errors.size() << " distinct unsupported constructs\n";
   return errors.empty() ? 0 : 1;
