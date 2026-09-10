@@ -1297,3 +1297,11 @@ preview warning. Previously media was ignored and styles became unconditional.
 Compiler fixtures cover both embedded/linked styles and unsupported print media.
 All 72 compiler tests pass. Native resize validation, general media expressions,
 type/disabled/alternate stylesheet behavior remain open.
+
+### HTML media resize and nested-condition evidence (2026-09-10)
+
+A compiled embedded stylesheet with min-width:500px and nested max-width:700px
+now has native geometry coverage. Viewports 400, 500, 700, 701 and 400px verify
+base style, inclusive boundaries, intersection and restoration on shrinking.
+Rebuilt contracts pass. These are layout checks for the supported conditions;
+they do not establish presentation frame rate or general media-query coverage.

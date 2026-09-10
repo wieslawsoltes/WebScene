@@ -107,6 +107,16 @@ int main() {
     check(!add_compiled_lengths({}, {1,length_unit::pixels}),
           "automatic length is not an arithmetic operand");
   }
+  {
+    document media_document;
+    compiled_ui::build(media_document);
+    for (auto [viewport, expected] : {std::pair{400.0f,20.0f}, {500.0f,70.0f},
+                                      {700.0f,70.0f}, {701.0f,50.0f}, {400.0f,20.0f}}) {
+      media_document.render(viewport, 600);
+      check(media_document.bounds(media_document.find("media-attribute")).width == expected,
+            "HTML media attribute intersects nested condition across resize");
+    }
+  }
   document d;
   auto refs = compiled_ui::build(d);
   check(refs.named("html-root") == d.root(), "compiled root ID reference");
