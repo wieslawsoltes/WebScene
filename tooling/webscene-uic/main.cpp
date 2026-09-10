@@ -173,7 +173,7 @@ static std::string variable_code(const std::string &text) {
 static std::string compiled_length_expression(std::string value) {
   value = trim(value);
   for (;;) {
-    size_t opening = value.starts_with("calc(") ? 4 : value.starts_with('(') ? 0 : std::string::npos;
+    size_t opening = ascii_keyword(value.substr(0, 5)) == "calc(" ? 4 : value.starts_with('(') ? 0 : std::string::npos;
     if (opening == std::string::npos) break;
     int nesting = 0;
     size_t closing = std::string::npos;
@@ -367,14 +367,14 @@ static std::string assignments(const std::string &name,
   }
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
-  if (value.starts_with("calc(") && (name == "left" || name == "right" || name == "top" || name == "bottom")) {
+  if (ascii_keyword(value.substr(0, 5)) == "calc(" && (name == "left" || name == "right" || name == "top" || name == "bottom")) {
     return "{auto result=" + compiled_length_expression(value) + ";s.set_" + name +
         "(result.value_or(webscene::native_web::length" + length("auto") + "));}";
   }
   if (name == "inset" && value.find("var(") != std::string::npos) {
     std::string code = "webscene::native_web::variable_result v=webscene::native_web::variable_tokens{};";
     for (const auto &component : component_values(value)) {
-      if (component.starts_with("calc(")) {
+      if (ascii_keyword(component.substr(0, 5)) == "calc(") {
         code += "{auto result=" + compiled_length_expression(component) +
             ";if(!result)v.reset();else if(v)v->emplace_back(\"\",result,std::nullopt);}";
       } else {

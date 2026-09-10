@@ -1148,3 +1148,13 @@ The current SVG style API still stores stroke width as text. Numeric acceptance
 is not evidence of a fully preprocessed SVG pipeline: typed SVG lengths, compiled
 path data, inherited percentage resolution and rendered parity remain open under
 the paint/SVG gate. This work changes compiler validation only.
+
+### Calc function-name casing (2026-09-10)
+
+Inset longhands, nested compiled length expressions and variable inset shorthands
+now recognize calc function names case-insensitively. Only the function prefix
+is compared in normalized form; custom-property names retain their authored case.
+Independent regressions cover uppercase/mixed-case calc, nesting and --Offset
+preservation in both longhand and shorthand output. All 63 compiler tests and
+native contracts pass. Escaped function identifiers and general component-value
+lexing remain open; this does not extend calc to unsupported properties.

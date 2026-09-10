@@ -43,6 +43,19 @@ class CompilerTests(unittest.TestCase):
         result,_=self.compile('<div></div>', 'div { background-color:none; }')
         self.assertNotEqual(result.returncode,0)
 
+    def test_calc_function_case_preserves_custom_names(self):
+        for value in ['CALC(10px + 5%)', 'CaLc(calc(10px + 5%) * 2)',
+                      'CALC(var(--Offset, 10px) + 5%)']:
+            result,out=self.compile('<div></div>', 'div { left:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('add_compiled_lengths',out.read_text())
+            if '--Offset' in value:
+                self.assertIn('--Offset',out.read_text())
+                self.assertNotIn('--offset',out.read_text())
+        result,out=self.compile('<div></div>', 'div { inset:CALC(var(--Offset, 10px) + 5%) 0; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('--Offset',out.read_text())
+
     def test_calc_rejects_invalid_length_products(self):
         for value in ['calc(10px / 0)', 'calc(10px * 2px)', 'calc(2 / 10px)']:
             result,_=self.compile('<div></div>', 'div { left:'+value+'; }')
