@@ -36,6 +36,15 @@ class CompilerTests(unittest.TestCase):
         for tracks in ['-1px 1fr', 'minmax(1px)', 'bogus', '1fr -2px']:
             result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
             self.assertNotEqual(result.returncode,0,tracks)
+    def test_grid_fraction_numeric_forms(self):
+        for tracks in ['.5fr +1fr', '5e-1fr 1E+0fr', 'minmax(0px,.5fr) 1fr']:
+            result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:'+tracks+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('0.5f',out.read_text())
+        for tracks in ['-.5fr', 'minmax(0px,-.5fr)', '1efr', '1.fr']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
+            self.assertNotEqual(result.returncode,0,tracks)
+
     def test_grid_repeat_is_expanded_at_build_time(self):
         result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:repeat(3,1fr); }')
         self.assertEqual(result.returncode,0,result.stderr)

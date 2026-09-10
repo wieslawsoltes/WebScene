@@ -212,3 +212,11 @@ including signed and exponent forms. Regression cases cover 50%, -20%, +2e2%,
 and malformed percentage tokens. All 37 compiler tests pass. This closes direct
 percentage literals only; variable-based opacity and CSS-wide keyword semantics
 remain part of the cascade/value audit.
+
+### Numeric consumers: fractional grid tracks (2026-09-10)
+
+Fractional tracks now accept leading decimals, explicit plus signs and exponent
+notation, both directly and as a minmax maximum. Tests cover `.5fr`, `5e-1fr`,
+`+1fr`, `1E+0fr`, and `minmax(0px,.5fr)`, and reject negative/malformed fractions.
+All 38 compiler tests pass. This closes these literal grammar cases, not grid
+layout semantics or variable substitution within minmax.

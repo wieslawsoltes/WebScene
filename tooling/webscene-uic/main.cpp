@@ -128,7 +128,7 @@ static std::string grid_track_code(std::string value) {
   if (value == "auto" || value == "min-content")
     return "{{}, {}, 0.0f, " + prefix +
            (value == "auto" ? "automatic" : "min_content") + "}";
-  if (std::regex_match(value, std::regex(R"([0-9]+(\.[0-9]+)?fr)")))
+  if (std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?fr)")))
     return "{{}, {}, " + number(std::stof(value)) + ", " + prefix +
            "fractional}";
   if (value.starts_with("minmax(") && value.ends_with(")")) {
@@ -140,7 +140,7 @@ static std::string grid_track_code(std::string value) {
     if (minimum.starts_with("-") || maximum.starts_with("-"))
       throw std::runtime_error("negative grid minmax track: " + value);
     bool fraction =
-        std::regex_match(maximum, std::regex(R"([0-9]+(\.[0-9]+)?fr)"));
+        std::regex_match(maximum, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?fr)"));
     return "{" + length(minimum) + ", " +
            (fraction ? length("auto") : length(maximum)) + ", " +
            number(fraction ? std::stof(maximum) : 0) + ", " + prefix +
