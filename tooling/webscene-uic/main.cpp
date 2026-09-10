@@ -243,6 +243,19 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "font") {
+    if (value == "inherit" || value == "unset")
+      return "s.set_font_size(-1.0f);s.set_font_weight(0);s.set_font_family(\"\");s.set_line_height(-1.0f);";
+    std::smatch match;
+    if (!std::regex_match(value, match,
+        std::regex(R"(([0-9]+(?:\.[0-9]+)?px)(?:\s*/\s*([0-9]+(?:\.[0-9]+)?(?:px)?|normal))?\s+(.+))")))
+      throw std::runtime_error("font shorthand currently requires px-size[/line-height] family or inherit");
+    auto family = trim(match[3]);
+    if (family.empty()) throw std::runtime_error("font shorthand requires a family");
+    return assignments("font-size", match[1]) +
+        assignments("line-height", match[2].matched ? match[2].str() : "normal") +
+        assignments("font-family", family) + "s.set_font_weight(400);";
+  }
   if (name == "flex-wrap") {
     if (value != "wrap" && value != "nowrap") throw std::runtime_error("compiled flex-wrap supports wrap and nowrap");
     return "s.set_flex_wrap(" + std::string(value == "wrap" ? "true" : "false") + ");";

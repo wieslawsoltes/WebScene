@@ -125,6 +125,15 @@ class CompilerTests(unittest.TestCase):
         for value in ['-1','1 -2 0','1 1 -2px','1 2 3 4']:
             result,_=self.compile('<div></div>', 'div { flex:'+value+'; }')
             self.assertNotEqual(result.returncode,0)
+    def test_font_shorthand(self):
+        for value in ['inherit','10px Consolas,"SFMono-Regular",monospace','10px/19px Consolas,monospace','10px/1.5 monospace']:
+            result,out=self.compile('<div></div>', 'div { font:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_font_family',out.read_text())
+            self.assertIn('set_line_height',out.read_text())
+        for value in ['10px','italic 10px monospace','-10px monospace']:
+            result,_=self.compile('<div></div>', 'div { font:'+value+'; }')
+            self.assertNotEqual(result.returncode,0)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

@@ -90,6 +90,18 @@ int main() {
   auto target = refs.named("target"), other = refs.named("other");
   const auto &initial_scene = d.render(800, 600);
   check(d.bounds(d.body()).x == 3, "root style applies to HTML element");
+  bool font_found = false;
+  for (const auto &command : initial_scene.commands) {
+    if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;
+    auto entry = initial_scene.strings[command.flags];
+    std::string payload(initial_scene.bytes.data() + entry.byte_offset, entry.byte_length);
+    if (payload.ends_with("\tFontProbe")) {
+      check(payload.find("Consolas,monospace") != std::string::npos, "font shorthand family reaches scene");
+      check(command.height == 19, "font shorthand line height reaches scene");
+      font_found = true;
+    }
+  }
+  check(font_found, "font shorthand text rendered");
   bool shadow_found = false;
   for (const auto &command : initial_scene.commands)
     if ((command.kind == 17 || command.kind == 18) && command.node_id == d.find("variable-probe"))
