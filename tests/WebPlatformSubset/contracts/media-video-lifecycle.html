@@ -19,9 +19,25 @@ promise_test(async t=>{
  const event=name=>new Promise((resolve,reject)=>{video.addEventListener(name,resolve,{once:true});video.addEventListener('error',()=>reject(Error(video.error.message)),{once:true});});
  let ready=event('canplay');video.src='resources/media/numbered-motion.mp4';await ready;
  assert_true(video instanceof HTMLVideoElement);assert_equals(video.videoWidth,64);assert_equals(video.videoHeight,48);assert_approx_equals(video.duration,2,.05);
+ // Auto height follows decoded aspect ratio at the resolved CSS width.
+ video.style.height='auto';
+ for(const width of [320,160,480]){
+  video.style.width=width+'px';
+  const box=video.getBoundingClientRect();assert_approx_equals(box.width,width,.1);assert_approx_equals(box.height,width*48/64,.1);
+ }
+ const wrapper=document.createElement('div');document.body.appendChild(wrapper);wrapper.appendChild(video);t.add_cleanup(()=>wrapper.remove());
+ video.style.width='100%';video.style.display='block';
+ for(const width of [400,32,200,16,600]){
+  wrapper.style.width=width+'px';
+  const box=video.getBoundingClientRect();assert_approx_equals(box.width,width,.1);assert_approx_equals(box.height,width*48/64,.1);
+  assert_approx_equals(wrapper.getBoundingClientRect().height,box.height,.1);
+  assert_approx_equals(wrapper.scrollHeight,Math.round(box.height),1);
+ }
+ video.style.height='96px';video.style.width='128px';
+ assert_approx_equals(video.getBoundingClientRect().height,96,.1);
  let seek=event('seeked');for(let i=0;i<40;i++)video.currentTime=i%2?.25:1.5;await seek;assert_false(video.seeking);assert_equals(video.currentTime,.25);assert_equals(video.played.length,0);
  seek=event('seeked');video.currentTime=video.duration;await seek;assert_equals(video.currentTime,video.duration);
  video.currentTime=.5;ready=event('canplay');video.src='resources/media/numbered-motion.mp4';await ready;assert_equals(video.currentTime,0);assert_false(video.seeking);
  await video.play();await new Promise(resolve=>setTimeout(resolve,100));video.pause();assert_true(video.currentTime>0);assert_true(video.played.length>0);
-},'Real H.264 dimensions, rapid seek coalescing, end seek, source replacement and playback');
+},'Real H.264 dimensions, responsive aspect ratio, rapid seek coalescing, end seek, source replacement and playback');
 </script>
