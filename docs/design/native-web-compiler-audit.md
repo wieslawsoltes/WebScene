@@ -1352,3 +1352,11 @@ following colspan=2 cell covering their combined width. All 75 compiler tests
 and rebuilt native contracts pass. Rowspan edge cases, caption/column behavior,
 cell header accessibility, border models and browser differential table coverage
 remain open; admission of these elements does not establish full table parity.
+
+### Compiled table colspan mutation (2026-09-10)
+
+Native contracts change the compiled table cell from colspan=2 to colspan=1,
+verify it adopts the first column's width, then restore colspan=2 and verify the
+original width returns. Rebuilt contracts pass. This establishes live span
+mutation for the simple fixture only; complex spans, row groups and browser
+parity remain open.

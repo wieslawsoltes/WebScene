@@ -144,6 +144,15 @@ int main() {
         "compiled table lays out separate columns");
   check(table_span.width >= table_a.width + table_b.width && table_span.y >= table_a.y + table_a.height,
         "compiled table colspan covers columns on following row");
+  auto span_cell = d.find("audit-cell-span");
+  d.attribute(span_cell, "colspan", "1");
+  d.render(800, 600);
+  check(d.bounds(span_cell).width == d.bounds(d.find("audit-cell-a")).width,
+        "native colspan mutation reduces compiled cell to one column");
+  d.attribute(span_cell, "colspan", "2");
+  d.render(800, 600);
+  check(d.bounds(span_cell).width == table_span.width,
+        "native colspan mutation restores compiled span");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
