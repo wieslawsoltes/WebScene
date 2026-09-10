@@ -28,6 +28,8 @@ struct css_syntax_rule final {
     std::string prelude;
     size_t first_declaration{0};
     size_t declaration_count{0};
+    uint32_t source_line{0};
+    uint32_t source_column{0};
 };
 
 struct css_syntax_metrics final {
@@ -65,6 +67,11 @@ public:
         std::string_view name,
         std::string_view prelude,
         size_t& rule_index) = 0;
+    virtual bool located_begin_rule(uint32_t kind, bool has_block, size_t parent_index,
+        std::string_view name, std::string_view prelude, size_t& rule_index,
+        uint32_t line, uint32_t column) {
+        return begin_rule(kind, has_block, parent_index, name, prelude, rule_index);
+    }
     virtual bool declaration(
         std::string_view name,
         std::string_view value,

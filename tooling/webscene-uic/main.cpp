@@ -1179,18 +1179,19 @@ static int check_css(const fs::path &path) {
     }
   };
   for (const auto &rule : css.rules) {
+    auto location = path.string() + ":" + std::to_string(rule.source_line) + ":" + std::to_string(rule.source_column);
     if (rule.kind == css_syntax_at_rule) {
       check("@" + rule.name + " " + rule.prelude, [&] {
         if (rule.name != "media" || !std::regex_match(rule.prelude,
             std::regex(R"(\s*\((min|max)-(width|height)\s*:\s*([0-9]+)px\)\s*)")))
           throw std::runtime_error("unsupported at-rule or condition");
-      });
+      }, location);
     } else {
       check(rule.prelude, [&] {
         auto selectors = parse_selector_syntax(rule.prelude);
         if (!selectors) throw std::runtime_error(selectors.error);
         for (const auto &selector : selectors.selectors) selector_code(selector);
-      });
+      }, location);
     }
   }
   for (size_t index = 0; index < css.declarations.size(); ++index) {

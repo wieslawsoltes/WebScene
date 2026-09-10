@@ -550,3 +550,13 @@ lines 4 and 5, column 5, with one distinct gap. All 42 compiler tests and native
 contracts pass after rebuilding the parser and compiler. Rule/selector locations,
 syntax-error locations and mapping inline-style offsets into the owning HTML
 source remain open; this does not close the diagnostic gate.
+
+### Rule source locations (2026-09-10)
+
+CSS syntax rules now retain parser-provided one-based line/column locations for
+qualified rules and at-rules, including rules without blocks. Unsupported selector
+and at-rule audit diagnostics report those locations. Streaming sinks use a
+default adapter, and the internal Rust/C callback signatures are updated together.
+A multiline regression checks a media rule at 2:1, a nested pseudo-element rule
+at 3:3 and an import rule at 5:1. All 42 compiler tests and native contracts pass.
+Syntax-error locations and mapping embedded CSS back into HTML remain open.

@@ -769,7 +769,7 @@ mod css_syntax {
     }
 
     type CssBeginRuleCallback =
-        unsafe extern "C" fn(*mut c_void, u32, u8, usize, ByteSlice, ByteSlice, *mut usize) -> u8;
+        unsafe extern "C" fn(*mut c_void, u32, u8, usize, ByteSlice, ByteSlice, *mut usize, u32, u32) -> u8;
     type CssDeclarationCallback = unsafe extern "C" fn(*mut c_void, ByteSlice, ByteSlice, u8, u32, u32) -> u8;
     type CssEndRuleCallback = unsafe extern "C" fn(*mut c_void, usize, usize) -> u8;
 
@@ -811,6 +811,7 @@ mod css_syntax {
             parent_index: usize,
             name: &str,
             prelude: &str,
+            location: cssparser::SourceLocation,
         ) -> usize {
             let mut index = usize::MAX;
             let accepted = self.callbacks.begin_rule.is_some_and(|callback| unsafe {
@@ -822,6 +823,8 @@ mod css_syntax {
                     ByteSlice::from_bytes(name.as_bytes()),
                     ByteSlice::from_bytes(prelude.as_bytes()),
                     &mut index,
+                    location.line + 1,
+                    location.column,
                 ) != 0
             });
             if accepted {
@@ -919,6 +922,7 @@ mod css_syntax {
                 self.parent_index,
                 &prelude.name,
                 prelude.prelude,
+                _start.source_location(),
             );
             self.state.end_rule(index, 0);
             Ok(())
@@ -936,6 +940,7 @@ mod css_syntax {
                 self.parent_index,
                 &prelude.name,
                 prelude.prelude,
+                _start.source_location(),
             );
             let mut declarations = 0usize;
             if prelude.name.eq_ignore_ascii_case("font-face")
@@ -996,7 +1001,7 @@ mod css_syntax {
         ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
             let index = self
                 .state
-                .begin_rule(CSS_RULE_STYLE, true, self.parent_index, "", prelude);
+                .begin_rule(CSS_RULE_STYLE, true, self.parent_index, "", prelude, _start.source_location());
             let before = self.state.declaration_count.get();
             parse_css_stream_declaration_list(
                 input,

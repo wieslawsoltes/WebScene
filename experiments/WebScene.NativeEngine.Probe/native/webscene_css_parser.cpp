@@ -44,18 +44,18 @@ uint8_t begin_rule(
     size_t parent_index,
     webscene_css_byte_slice name,
     webscene_css_byte_slice prelude,
-    size_t* rule_index)
+    size_t* rule_index, uint32_t line, uint32_t column)
 {
     if (opaque == nullptr || rule_index == nullptr) return 0U;
     try {
         auto& context = *static_cast<stream_context*>(opaque);
-        const auto accepted = context.sink->begin_rule(
+        const auto accepted = context.sink->located_begin_rule(
             kind,
             has_block != 0U,
             parent_index,
             borrow_slice(name),
             borrow_slice(prelude),
-            *rule_index);
+            *rule_index, line, column);
         if (accepted) ++context.rule_count;
         return accepted ? 1U : 0U;
     } catch (...) {
@@ -164,6 +164,15 @@ public:
             std::string(prelude),
             output_.declarations.size(),
             0U});
+        return true;
+    }
+
+    bool located_begin_rule(uint32_t kind, bool has_block, size_t parent_index,
+        std::string_view name, std::string_view prelude, size_t& rule_index,
+        uint32_t line, uint32_t column) override {
+        begin_rule(kind, has_block, parent_index, name, prelude, rule_index);
+        output_.rules.back().source_line = line;
+        output_.rules.back().source_column = column;
         return true;
     }
 

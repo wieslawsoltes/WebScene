@@ -115,6 +115,12 @@ class CompilerTests(unittest.TestCase):
         self.assertIn(str(source)+':4:5',result.stderr)
         self.assertIn(str(source)+':5:5',result.stderr)
         self.assertIn('1 distinct unsupported constructs',result.stdout)
+        source.write_text('/* header */\n@media print {\n  div::before { color:black; }\n}\n@import "other.css";\n')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,1)
+        for location in [':2:1',':3:3',':5:1']:
+            self.assertIn(str(source)+location,result.stderr)
+        self.assertIn('3 distinct unsupported constructs',result.stdout)
         source.write_text('div { display:grid; grid-template-columns:repeat(3,1fr); }')
         result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
