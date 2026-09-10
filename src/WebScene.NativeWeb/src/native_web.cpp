@@ -167,12 +167,14 @@ subscription document::on(node_id node, std::string type,
   state_->listeners.emplace(id, listener{node, std::move(type), std::move(cb)});
   return subscription(state_, id);
 }
-bool document::dispatch(node_id target, std::string type) {
+bool document::dispatch(node_id target, std::string type, float client_x, float client_y) {
   auto &n = state_->node(target);
   std::vector<node_id> path;
   for (auto *p = &n; p; p = p->parent)
     path.push_back(p->id);
   event e{std::move(type), target};
+  e.client_x = client_x;
+  e.client_y = client_y;
   for (auto id : path) {
     if (!state_->alive)
       return false;
@@ -245,7 +247,7 @@ void document::pointer(std::string type, float x, float y) {
   }
   if (type == "pointerdown")
     state_->pressed = id;
-  const bool default_allowed = !id || dispatch(id, type);
+  const bool default_allowed = !id || dispatch(id, type, x, y);
   if (!state_->alive)
     return;
   if (type == "pointerdown" && default_allowed) {
@@ -259,7 +261,7 @@ void document::pointer(std::string type, float x, float y) {
   if (type == "pointerup") {
     const auto pressed = std::exchange(state_->pressed, 0);
     if (id && id == pressed && state_->dom.find_by_native_id(id))
-      dispatch(id, "click");
+      dispatch(id, "click", x, y);
   }
 }
 void document::key(std::string_view key, bool shift) {

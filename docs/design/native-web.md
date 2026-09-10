@@ -44,3 +44,11 @@ logic together, enabling gradual migration to C++ through generated interop on
 one native document. Pure-native deployment remains runtime-free. Kestrel's
 current target remains entirely C++. See [ADR 0014](../architecture/adr/0014-mixed-language-compiled-applications.md)
 for ownership, identity, deployment and verification requirements.
+
+## Kestrel fidelity and delivery order
+
+Finish the current native POC first. Then extend compiler/engine support so the
+original Kestrel HTML and CSS are consumed unmodified. Only application JS/TS is
+ported to C++; dynamic HTML strings in that logic become predefined compiled
+templates preserving their original structure. The simplified POC markup is not
+the intended final UI and must not become the compatibility target.

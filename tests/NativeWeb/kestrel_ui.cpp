@@ -28,4 +28,14 @@ int main() {
   document.dispatch(document.find("wireframe"), "click");
   if (app.options.style != kestrel::display_style::wireframe)
     throw std::runtime_error("Wireframe command failed");
+  auto viewport=document.find("viewport");
+  auto bounds=document.bounds(viewport);
+  unsigned pointer_events=0;
+  auto pointer=document.on(viewport,"pointerdown",[&](auto &event){
+    if(event.client_x!=bounds.x+10||event.client_y!=bounds.y+20)throw std::runtime_error("Native pointer coordinates lost");
+    ++pointer_events;
+  });
+  document.pointer("pointerdown",bounds.x+10,bounds.y+20);
+  document.pointer("pointerup",bounds.x+10,bounds.y+20);
+  if(pointer_events!=1)throw std::runtime_error("Native viewport pointer event missing");
 }
