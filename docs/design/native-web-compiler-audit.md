@@ -968,3 +968,13 @@ ASCII case-insensitive keyword matching. Overflow shorthand inherits this throug
 axis expansion. Independent tests compare uppercase/lowercase generated rules
 across these families. All 54 compiler tests and native contracts pass. Variable
 keyword values and escaped identifiers remain separate gaps.
+
+### Variable text keyword lowering (2026-09-10)
+
+Text-align, white-space and text-transform now evaluate compiled variable tokens,
+match supported keywords case-insensitively, and reset invalid computed values to
+inheritance. Variable names retain case; normalization occurs only at keyword
+consumption. Native geometry verifies uppercase alignment fallback and inherited
+right alignment after an invalid custom-property mutation. All 54 compiler tests
+and native contracts pass. Whitespace/transformation variable rendering coverage,
+CSS-wide custom-property keywords and escaped identifiers remain open.

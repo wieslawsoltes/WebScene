@@ -552,11 +552,17 @@ static std::string assignments(const std::string &name,
     return "s.set_" + member + "(webscene::native_web::overflow_mode::" + mode->second + ");";
   }
   if (name == "text-align" || name == "white-space" || name == "text-transform") {
-    value = ascii_keyword(value);
     static const std::map<std::string,std::set<std::string>> keywords{
       {"text-align", {"left","right","center","start","end"}},
       {"white-space", {"normal","nowrap","pre","pre-wrap","pre-line","break-spaces"}},
       {"text-transform", {"none","uppercase","lowercase","capitalize"}}};
+    if (value.find("var(") != std::string::npos) {
+      std::string code = "auto v=s.evaluate(" + variable_code(value) + ");std::string keyword;";
+      for (const auto &keyword : keywords.at(name))
+        code += "if(v && v->size()==1 && (*v)[0].is_keyword(" + quote(keyword) + ")) keyword=" + quote(keyword) + ";";
+      return code + "s.set_" + member + "(keyword);";
+    }
+    value = ascii_keyword(value);
     if (value == "inherit" || value == "unset") return "s.set_" + member + "(\"\");";
     if (!keywords.at(name).contains(value)) throw std::runtime_error("unsupported " + name + ": " + value);
     return "s.set_" + member + "(" + quote(value) + ");";

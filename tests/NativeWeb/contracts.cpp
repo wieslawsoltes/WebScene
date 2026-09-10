@@ -367,6 +367,11 @@ int main() {
   check(d.scroll_offset(scroll_inner).second == 17 && d.scroll_offset(scroll_outer).second == 7,
         "reverse wheel returns to inner container when it can scroll");
   d.render(800, 600);
+  auto align_variable = d.find("align-variable"), align_item = d.find("align-item");
+  check(d.bounds(align_item).x - d.bounds(align_variable).x == 45, "variable text-align fallback centers inline item");
+  d.attribute(align_variable, "class", "invalid");
+  d.render(800, 600);
+  check(d.bounds(align_item).x - d.bounds(align_variable).x == 90, "invalid text-align variable restores inherited alignment");
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");
