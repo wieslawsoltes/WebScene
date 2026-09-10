@@ -55,6 +55,10 @@ static std::string ascii_keyword(std::string value) {
   });
   return value;
 }
+static bool css_number(const std::string &value) {
+  static const std::regex grammar(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)");
+  return std::regex_match(value, grammar);
+}
 static std::vector<std::string> component_values(const std::string &value) {
   std::vector<std::string> result;
   size_t start = 0;
@@ -519,20 +523,18 @@ static std::string assignments(const std::string &name,
       std::vector<std::string> parts;
       std::string part;
       while (input >> part) parts.push_back(part);
-      auto numeric = [](const std::string &s) { return std::regex_match(s, std::regex(R"([0-9]+(?:\.[0-9]+)?)")); };
       if (parts.empty() || parts.size() > 3) throw std::runtime_error("invalid flex shorthand");
-      if (parts.size() == 1 && !numeric(parts[0])) basis = parts[0];
+      if (parts.size() == 1 && !css_number(parts[0])) basis = parts[0];
       else {
-        if (!numeric(parts[0])) throw std::runtime_error("flex grow requires a nonnegative number");
+        if (!css_number(parts[0])) throw std::runtime_error("flex grow requires a nonnegative number");
         grow = parts[0];
         if (parts.size() >= 2) {
-          if (numeric(parts[1])) shrink = parts[1];
+          if (css_number(parts[1])) shrink = parts[1];
           else if (parts.size() == 2) basis = parts[1];
           else throw std::runtime_error("flex shrink requires a nonnegative number");
         }
         if (parts.size() == 3) basis = parts[2];
       }
-      if (basis.starts_with("-")) throw std::runtime_error("negative flex basis");
     }
     return assignments("flex-grow", grow) + assignments("flex-shrink", shrink) + assignments("flex-basis", basis);
   }
@@ -803,7 +805,7 @@ static std::string assignments(const std::string &name,
       name == "flex-shrink") {
     const bool percentage = name == "opacity" && value.ends_with('%');
     const auto numeric = percentage ? value.substr(0, value.size() - 1) : value;
-    if (!std::regex_match(numeric, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")))
+    if (!css_number(numeric))
       throw std::runtime_error("invalid numeric value");
     auto v = std::stof(numeric);
     if (!std::isfinite(v) || ((name == "flex-grow" || name == "flex-shrink") && v < 0) ||

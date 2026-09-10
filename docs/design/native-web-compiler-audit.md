@@ -1037,3 +1037,19 @@ This is geometry evidence only, not pixel parity or whitespace-family closure.
 The current whitespace regression is complete; resume the earliest open audit
 gate (source diagnostics and numeric/function grammar) before further layout or
 Kestrel work.
+
+### Flex shorthand numeric grammar (2026-09-10)
+
+The numeric-grammar audit reproduced a compiler-only inconsistency: `flex:.5 +2
+10px` failed although its equivalent longhands compiled. Shorthand factor
+classification and numeric longhand validation now share the CSS number grammar,
+including signs, leading decimals and exponents. Range validation remains in the
+longhand lowering. Removed the shorthand's textual negative-basis check so valid
+negative zero is accepted while negative nonzero bases still fail validation.
+
+The independent compiler regression compares generated grow/shrink/basis setters
+against equivalent longhands, covers single-factor forms and negative zero, and
+rejects negative factors/bases, malformed numbers, excess components and overflow.
+The regression failed before the fix; all 55 compiler tests and native contracts
+pass afterward. This closes this shorthand grammar inconsistency only; broader
+function grammar and source-location gates remain open.

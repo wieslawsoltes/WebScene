@@ -313,6 +313,24 @@ class CompilerTests(unittest.TestCase):
             self.assertIn('.parts.front()',out.read_text())
         result,_=self.compile('<div></div>', 'div:not(section > div) { width:10px; }')
         self.assertNotEqual(result.returncode,0)
+    def test_flex_shorthand_numeric_grammar_matches_longhands(self):
+        for grow,shrink,basis in [('.5','+2','10px'), ('5e-1','2E+0','10px'),
+                                  ('+0.5','2','1e1px'), ('-0','+0','-0px')]:
+            shorthand,out=self.compile('<div></div>', 'div { flex:'+grow+' '+shrink+' '+basis+'; }')
+            self.assertEqual(shorthand.returncode,0,shorthand.stderr)
+            longhands,expanded=self.compile('<div></div>', 'div { flex-grow:'+grow+'; flex-shrink:'+shrink+'; flex-basis:'+basis+'; }')
+            self.assertEqual(longhands.returncode,0,longhands.stderr)
+            import re
+            setters=lambda text: re.findall(r's\.set_flex_(?:grow|shrink|basis)\([^;]+;',text)
+            self.assertEqual(setters(out.read_text()),setters(expanded.read_text()))
+        for value in ['.5', '+.5', '5e-1']:
+            result,out=self.compile('<div></div>', 'div { flex:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_flex_grow(0.5f)',out.read_text())
+        for value in ['-1', '1 -2', '1 1 -2px', '1e', '1.', '1 2 3px 4', '1e999']:
+            result,_=self.compile('<div></div>', 'div { flex:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_flex_shorthand(self):
         for value in ['1','2','auto','none','initial','1 0 20px','1 30%','2 3']:
             result,out=self.compile('<div></div>', 'div { flex:'+value+'; flex-wrap:wrap; }')
