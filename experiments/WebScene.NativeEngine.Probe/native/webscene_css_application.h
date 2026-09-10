@@ -6,6 +6,7 @@
 #include "webscene_css_visibility_values.h"
 #include "webscene_css_text_values.h"
 #include "webscene_css_reset.h"
+#include "webscene_css_variables.h"
 
 namespace webscene_native::css {
 // Apply an already-resolved declaration. The caller owns variable resolution,
@@ -79,5 +80,34 @@ void apply_resolved_declaration(native_document& document,dom_node& node,
         } else if (property_mask == 0U) {
             decision.classification = "unsupported";
         }
+}
+// Complete property application entry point; rule ordering and invalidation
+// remain with the document cascade owner. Custom values stay live on the node.
+template<typename Decision,typename LoadSvg,typename Resolved>
+void apply_declaration(native_document& document,dom_node& node,
+    const css_declaration& authored,const std::unordered_map<std::string,std::string>& variables,
+    bool inline_origin,Decision& decision,LoadSvg&& load_svg,Resolved&& on_resolved)
+{
+    std::optional<css_declaration> normalized;
+    if(authored.name=="-moz-transform" || authored.name=="-webkit-transform") {
+        normalized=authored;normalized->name="transform";
+    } else if(authored.name=="grid-gap" || authored.name=="grid-row-gap" || authored.name=="grid-column-gap") {
+        normalized=authored;normalized->name=canonical_property_name(authored.name);
+    }
+    const auto& declaration=normalized?*normalized:authored;
+    if(declaration.name.starts_with("--")) {
+        apply_custom_property(node,declaration);
+        return;
+    }
+    const auto contains_variable=declaration.value.find("var(")!=std::string::npos;
+    auto resolved=contains_variable?resolve_value(node,declaration.value,variables):std::string{};
+    const auto& value=contains_variable?resolved:declaration.value;
+    if(contains_variable && value.empty()) {
+        decision.classification="invalid-authoring";
+        decision.semantic_slice="unresolved custom property at computed-value time";
+        return;
+    }
+    on_resolved(contains_variable);
+    apply_resolved_declaration(document,node,declaration,value,inline_origin,decision,load_svg);
 }
 } // namespace webscene_native::css

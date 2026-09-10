@@ -454,27 +454,15 @@
             "css",
             "property:" + name,
             "style-application");
-        const auto contains_variable = declaration.value.find("var(") != std::string::npos;
-        auto resolved_value = std::string{};
-        const auto& value = contains_variable
-            ? (resolved_value = resolve_css_value(node, declaration.value))
-            : declaration.value;
-        // An unresolved var() without a fallback invalidates the declaration;
-        // it does not become numeric zero or an empty keyword.
-        if (value.empty() && contains_variable) {
-            decision.classification = "invalid-authoring";
-            decision.semantic_slice = "unresolved custom property at computed-value time";
-            return;
-        }
-        if (contains_variable && is_paint_property(name)) {
-            record_composition("css-custom-property-to-paint", node.id);
-        }
-        css::apply_resolved_declaration(document,node,declaration,value,inline_origin,decision,
+        css::apply_declaration(document,node,declaration,css_variables,inline_origin,decision,
             [this](const std::string& url,std::string& markup,std::string& resolved,std::string& view_box) {
                 if(!load_text_resource(url,current_base_address(),WEBSCENE_RESOURCE_IMAGE,markup,resolved))
                     return false;
                 view_box=svg_view_box(markup);
                 return true;
+            },[&](bool contains_variable) {
+                if(contains_variable && is_paint_property(name))
+                    record_composition("css-custom-property-to-paint",node.id);
             });
     }
 

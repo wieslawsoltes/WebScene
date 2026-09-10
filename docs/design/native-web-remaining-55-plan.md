@@ -632,3 +632,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   cascade regressions pass. Variable substitution, rule ordering, invalidation,
   pseudo routing and resource ownership remain the caller's responsibility; the
   complete native document cascade and Kestrel integration are not finished.
+
+- Native declaration entry point now combines alias normalization, live custom
+  property application/substitution, invalid-variable rejection and resolved style
+  application. Runtime application delegates to it while retaining telemetry and
+  resource callbacks. Native tests verify variable updates, fallbacks, aliases,
+  important protection and resulting geometry. Runtime variable/inheritance,
+  iframe cascade and keyframe regressions pass. The ordinary path borrows authored
+  declarations; only aliases allocate normalized copies. Existing substitution and
+  precedence limitations remain; rule ordering/invalidation are not yet integrated.

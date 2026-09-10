@@ -639,5 +639,22 @@ int main(int argc,char** argv) {
     styled_document.layout(500,200);
     if(std::abs(view.layout.width-300)>.1f || std::abs(child_a.layout.width-150)>.1f ||
        std::abs(child_b.layout.width-150)>.1f) return 121;
+    std::unordered_map<std::string,std::string> variable_root;
+    const auto declare=[&](const std::string& name,const std::string& value,bool important=false) {
+        webscene_native::css::property_result result;
+        webscene_native::css::apply_declaration(styled_document,view,{name,value,important},variable_root,
+            false,result,[](const auto&,auto&,auto&,auto&) { return false; },[](bool) {});
+        return result;
+    };
+    declare("--size","420px");
+    declare("width","var(--size)");
+    if(view.style.width.value!=420) return 122;
+    if(declare("width","var(--missing)").classification!="invalid-authoring" || view.style.width.value!=420) return 123;
+    declare("width","var(--missing, 320px)");
+    declare("grid-gap","8px");
+    declare("height","40px",true);
+    declare("height","90px");
+    styled_document.layout(500,200);
+    if(view.layout.width!=320 || view.style.row_gap.value!=8 || view.style.height.value!=40) return 124;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
