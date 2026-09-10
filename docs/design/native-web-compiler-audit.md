@@ -1466,3 +1466,11 @@ placement. Class mutation switches all roles to block layout and stacks the cell
 removing the class restores the original table geometry. Rebuilt contracts pass.
 This covers explicit CSS table structure; anonymous wrappers, inline-table baseline
 behavior and browser differential comparisons remain open.
+
+### Display contents lowering (2026-09-10)
+
+Compiler display lowering now admits contents through the existing native enum.
+A compiled wrapper fixture verifies its two children participate directly in the
+parent flex row, followed by an outside sibling at the expected position. All 77
+compiler tests and rebuilt contracts pass. Box suppression in paint/hit testing,
+inheritance, dynamic role changes and accessibility remain separate coverage gaps.

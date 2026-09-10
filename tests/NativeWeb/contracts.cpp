@@ -233,6 +233,11 @@ int main() {
   d.render(800, 600);
   check(d.bounds(d.find("css-cell-b")).x == css_cell_b.x,
         "CSS table display roles recover after mutation");
+  auto contents_first = d.bounds(d.find("contents-first"));
+  auto contents_second = d.bounds(d.find("contents-second"));
+  auto contents_last = d.bounds(d.find("contents-last"));
+  check(contents_second.x == contents_first.x + 20 && contents_last.x == contents_second.x + 30,
+        "compiled display contents exposes children to parent flex layout");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
