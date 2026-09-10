@@ -215,6 +215,22 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (value.find("var(") != std::string::npos) {
+    const bool color = name == "color" || name == "background" || name == "background-color";
+    const bool dimension = name == "width" || name == "height" || name == "left" ||
+                           name == "right" || name == "top" || name == "bottom";
+    if (!color && !dimension)
+      throw std::runtime_error("compiled var() not supported for property: " + name);
+    std::string code = "auto v=s.evaluate(" + variable_code(value) + ");";
+    if (color) {
+      auto setter = name == "color" ? "foreground_rgba" : "background_rgba";
+      return code + "s.set_" + setter + "(v && v->size()==1 && (*v)[0].color ? *(*v)[0].color : 0u);";
+    }
+    auto nonnegative = name == "width" || name == "height" ? " && (*v)[0].length->value>=0" : "";
+    return code + "s.set_" + member + "(v && v->size()==1 && (*v)[0].length" + nonnegative +
+        " ? *(*v)[0].length : webscene::native_web::length{});";
+  }
+
   if (name == "grid-template-columns" || name == "grid-template-rows")
     return "s.set_" + member + "(" + grid_tracks_code(value) + ");";
   if (lengths.contains(name)) {

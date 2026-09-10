@@ -25,6 +25,9 @@ class style {
       : value_(value), variables_(variables) {}
 
 public:
+  variable_result evaluate(const std::vector<variable_expression> &expressions) const {
+    return evaluate_variables(expressions, variables_);
+  }
   const variable_result *variable(const std::string &name) const {
     auto found = variables_.find(name);
     return found == variables_.end() ? nullptr : &found->second;

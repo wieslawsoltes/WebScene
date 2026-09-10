@@ -39,6 +39,24 @@ using variable_result = std::optional<variable_tokens>;
 using computed_variables = std::map<std::string, variable_result>;
 using specified_variables = std::map<std::string, std::vector<variable_expression>>;
 
+inline variable_result evaluate_variables(const std::vector<variable_expression> &expressions,
+                                           const computed_variables &variables) {
+  variable_tokens output;
+  for (const auto &expression : expressions) {
+    if (expression.type == variable_expression::kind::token) {
+      output.emplace_back(expression.value, expression.length, expression.color);
+      continue;
+    }
+    auto found = variables.find(expression.value);
+    variable_result value = found == variables.end() ? variable_result{} : found->second;
+    if (!value && expression.has_fallback)
+      value = evaluate_variables(expression.fallback, variables);
+    if (!value) return std::nullopt;
+    output.insert(output.end(), value->begin(), value->end());
+  }
+  return output;
+}
+
 // Inherited entries are already computed at their defining element. A child
 // override must not rebind references inside an inherited value.
 inline computed_variables compute_variables(const specified_variables &local,

@@ -90,8 +90,11 @@ int main() {
   auto target = refs.named("target"), other = refs.named("other");
   const auto &initial_scene = d.render(800, 600);
   check(d.bounds(d.body()).x == 3, "root style applies to HTML element");
+  check(d.bounds(d.find("variable-probe")).width == 222, "compiled var width resolves");
+  check(d.bounds(d.find("variable-probe")).height == 12, "compiled var fallback resolves");
   d.attribute(d.root(), "data-theme", "light");
   d.render(800, 600);
+  check(d.bounds(d.find("variable-probe")).width == 195, "compiled var updates with theme");
   check(d.bounds(d.body()).x == 7,
         "theme attribute mutation updates root style");
   d.attribute(d.root(), "data-theme", "dark");

@@ -66,6 +66,12 @@ class CompilerTests(unittest.TestCase):
         self.assertIn('variable_expression::kind::reference',out.read_text())
         self.assertNotIn('var(',out.read_text())
         self.assertIn('nullptr,"--accent"',out.read_text())
+    def test_variable_property_lowering(self):
+        result,out=self.compile('<div></div>', ':root { --width:222px; --accent:#5ac6d2; } div { width:var(--width); color:var(--accent, #fff); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.evaluate(',out.read_text())
+        self.assertNotIn('parse_',out.read_text())
+        self.assertNotIn('var(',out.read_text())
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

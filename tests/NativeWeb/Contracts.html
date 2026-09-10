@@ -1,6 +1,6 @@
 <!doctype html><html id="html-root" data-theme="dark"><head><style>
-:root { padding: 3px; --accent: #5ac6d2; --border: 1px solid var(--accent); }
-html[data-theme="light"] { padding: 7px; }
+:root { padding: 3px; --accent: #5ac6d2; --panel-width: 222px; --border: 1px solid var(--accent); }
+html[data-theme="light"] { padding: 7px; --panel-width:195px; }
 html[data-theme] > body { padding: 2px; }
 body { margin: 0; }
 .outer { padding: 10px; }
@@ -11,4 +11,5 @@ button { font-family: Arial, sans-serif; width: 20px; height: 20px; }
 .chosen { width: 60px !important; }
 button:focus { height: 30px; }
 @media (max-width: 400px) { #target { height: 40px; } }
-</style></head><body><div class="outer"><button id="target" class="chosen" style="width: 70px">Go</button><button id="other">Other</button><canvas id="canvas" width="80" height="40"></canvas></div></body></html>
+#variable-probe { width:var(--panel-width); color:var(--accent); height:var(--missing, 12px); }
+</style></head><body><div class="outer"><button id="target" class="chosen" style="width: 70px">Go</button><button id="other">Other</button><canvas id="canvas" width="80" height="40"></canvas></div><div id="variable-probe"></div></body></html>
