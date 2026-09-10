@@ -13,3 +13,5 @@ button:focus { background-color: #34526b; }
 .layer-row { display: flex; flex-direction: row; gap: 4px; margin-bottom: 4px; }
 .layer-name { flex-grow: 1; }
 #status { margin: 0; padding: 8px; background-color: #1b2a3b; }
+
+button.selected { background-color: #34526b; color: #63d7eb; }

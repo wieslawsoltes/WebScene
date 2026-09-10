@@ -18,4 +18,14 @@ int main() {
   document.render(1100, 760);
   if (document.bounds(document.find("viewport")).width <= 0)
     throw std::runtime_error("Missing viewport layout");
+  app.model.add("MESH", kestrel::geo::box({100, 200, 0}, 20, 40, 10));
+  document.dispatch(document.find("fit"), "click");
+  if (app.camera.target.x != 110 || app.camera.target.y != 220)
+    throw std::runtime_error("Fit command missed geometry bounds");
+  document.dispatch(document.find("shaded"), "click");
+  if (app.options.style != kestrel::display_style::shaded_edges)
+    throw std::runtime_error("Shaded command failed");
+  document.dispatch(document.find("wireframe"), "click");
+  if (app.options.style != kestrel::display_style::wireframe)
+    throw std::runtime_error("Wireframe command failed");
 }

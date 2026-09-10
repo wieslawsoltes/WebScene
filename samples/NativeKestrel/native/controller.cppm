@@ -5,7 +5,7 @@ module;
 #include <webscene/native_web.hpp>
 export module kestrel.controller;
 import kestrel.ui;
-export import kestrel.drawing;
+export import kestrel.render_data;
 export namespace kestrel {
 class controller {
   webscene::native_web::document &document;
@@ -18,6 +18,9 @@ class controller {
 
 public:
   drawing model;
+  camera camera;
+  render_options options;
+  bool render_dirty = true;
   explicit controller(webscene::native_web::document &document)
       : document(document) {
     auto view = compiled_ui::build(document);
@@ -52,11 +55,40 @@ public:
           model.redo();
           refresh();
         }));
+    subscriptions.push_back(
+        document.on(view.named("fit"), "click", [this](auto &) {
+          std::vector<vec3> bounds;
+          for (auto &entity : model.data["entities"])
+            if (model.visible(entity)) {
+              auto geometry = geo::geometry(entity, 1);
+              bounds.insert(bounds.end(), geometry.points.begin(),
+                            geometry.points.end());
+            }
+          camera.fit(bounds);
+          render_dirty = true;
+        }));
+    subscriptions.push_back(
+        document.on(view.named("wireframe"), "click", [this](auto &) {
+          options.style = display_style::wireframe;
+          refresh();
+        }));
+    subscriptions.push_back(
+        document.on(view.named("shaded"), "click", [this](auto &) {
+          options.style = display_style::shaded_edges;
+          refresh();
+        }));
     refresh();
   }
   controller(const controller &) = delete;
   controller &operator=(const controller &) = delete;
   void refresh() {
+    render_dirty = true;
+    document.attribute(document.find("wireframe"), "class",
+                       options.style == display_style::wireframe ? "selected"
+                                                                 : "");
+    document.attribute(document.find("shaded"), "class",
+                       options.style != display_style::wireframe ? "selected"
+                                                                 : "");
     for (auto &row : rows)
       for (auto &layer : model.data["layers"])
         if (layer["id"] == row.id) {
