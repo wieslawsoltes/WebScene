@@ -283,6 +283,15 @@ int main() {
         "align-self end restores explicit height at cross-axis end");
   d.remove_attribute(d.find("self-child"), "class");
   d.render(800, 600);
+  auto distribution_x = d.bounds(d.find("distribution")).x;
+  check(d.bounds(d.find("distribution-a")).x == distribution_x + 15 &&
+        d.bounds(d.find("distribution-b")).x == distribution_x + 65,
+        "compiled space-around distributes half gaps at edges");
+  d.attribute(d.find("distribution"), "class", "even");
+  d.render(800, 600);
+  check(d.bounds(d.find("distribution-a")).x == distribution_x + 20 &&
+        d.bounds(d.find("distribution-b")).x == distribution_x + 60,
+        "compiled space-evenly distributes equal gaps");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

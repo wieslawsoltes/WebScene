@@ -1513,3 +1513,11 @@ Native contracts switch the flex child to stretch with auto height and verify
 it fills the 40px cross axis. Switching to end restores its explicit 10px height
 and positions it 30px from the parent's top. Rebuilt contracts pass. Baseline,
 column-direction and grid alignment remain separate coverage gaps.
+
+### Flex space-around and space-evenly lowering (2026-09-10)
+
+Compiler justify-content now exposes the native space-around and space-evenly
+modes. A 100px flex fixture containing two 20px items verifies offsets 15/65px
+for around and 20/60px for evenly after class mutation. All 77 compiler tests
+and rebuilt contracts pass. Wrapped lines, overflow and logical-direction cases
+remain outside this evidence.
