@@ -142,18 +142,25 @@ Build `native_web_gpu`, then run `ctest -R '^native_web_gpu$' --output-on-failur
 from that build directory. This target links Dawn and system libraries without V8.
 
 The native headers provide explicit device discovery and Canvas
-configure/current-texture/end-frame/resize/unconfigure APIs. The hardware test
-renders a clear through the native Canvas context and checks 68 pixels using
-diagnostic readback. This is not the production presentation path and does not
-prove Foco compositor integration. The native platform host adapters reuse the
-existing IOSurface/DXGI providers; their end-to-end connection to the Native Web
-Foco carrier remains outstanding. Only macOS Metal has been run for this new test.
+configure/current-texture/end-frame/resize/unconfigure APIs. `native_webgpu_surface`
+uses WebScene's existing IOSurface/DXGI providers and retained image snapshots.
+The hardware tests verify diagnostic pixels and IOSurface lifecycle separately.
 
-`native_webgpu_surface` now combines native device initialization with the
-platform Canvas provider and retained scene-image snapshots. Its Metal test
-(`native_web_gpu_iosurface`) renders eight resized IOSurface frames, retires
-consumers, and separately verifies the combined surface API's snapshot resolution.
-The path does not require V8 or CPU image copying. These tests do not yet draw the
-image through Foco. Foco's current `webscene_scene_v1` command packet and picture
-compiler have no GPU image resource channel; adding lifetime-safe retained image
-transport and Graphite sampling is the next integration requirement.
+The Foco baseline is `codex/webscene-kestrel` (hosting commit `a0e7c0fd`), integrated
+on `codex/native-web-kestrel`. It already supplies Metal import, GPU synchronization,
+retained resource transport and ordered WebScene image composition. The native
+adapter fills that existing `webscene_gpu_frame` interface directly from native
+leases; it does not load a JS runtime or introduce another Metal renderer.
+Earlier experimental duplicate Foco image transport/resolver changes were reverted.
+
+The optional GPU sample submits a first native WebGPU frame and publishes it only
+after producer completion. This initial sample waits during startup; general
+asynchronous redraw and resize scheduling, multi-canvas support and full Kestrel
+porting remain outstanding. The compiled HTML/CSS path still uses the initial
+supported subset plus predefined templates, not general Kestrel CSS coverage.
+
+Reconciled-path validation: the optional GPU app was built and run on macOS Metal.
+`--capture` produced `artifacts/native-web-foco/native-gpu.png`, showing the blue
+WebGPU clear in the compiled Canvas bounds. Cocoa input/template smoke completed
+with `count=1 items=1`. This proves a first native GPU frame through the existing
+Foco importer, not full redraw/resize stress coverage or Kestrel parity.

@@ -1,6 +1,11 @@
 #include "FocoNativeWeb_ui.hpp"
 #include "app.hpp"
 #include "native_web_view.hpp"
+#if defined(NATIVE_WEB_GPU_SAMPLE)
+#include "native_gpu_image.hpp"
+#include "native_webgpu_surface.h"
+#include <thread>
+#endif
 #import <AppKit/AppKit.h>
 #import <dispatch/dispatch.h>
 #include <foco/app_builder.hpp>
@@ -14,6 +19,31 @@ class native_app final : public foco::application {
   foco::ref<foco::window> window_;
   foco::ref<webscene::foco_host::view> view_;
   app_state state_;
+#if defined(NATIVE_WEB_GPU_SAMPLE)
+  std::unique_ptr<webscene::graphics::native_webgpu_surface> gpu_;
+  void initialize_gpu() {
+    auto node=view_->document.find("chart");
+    gpu_=std::make_unique<webscene::graphics::native_webgpu_surface>(node,300,120);
+    auto texture=gpu_->current_texture();
+    if(!texture)throw std::runtime_error("Native GPU Canvas acquisition failed");
+    wgpu::RenderPassColorAttachment color{};
+    color.view=texture.CreateView();color.loadOp=wgpu::LoadOp::Clear;color.storeOp=wgpu::StoreOp::Store;
+    color.clearValue={0.1,0.55,0.85,1};
+    wgpu::RenderPassDescriptor desc{};desc.colorAttachmentCount=1;desc.colorAttachments=&color;
+    auto encoder=gpu_->device().CreateCommandEncoder();auto pass=encoder.BeginRenderPass(&desc);pass.End();
+    auto commands=encoder.Finish();gpu_->device().GetQueue().Submit(1,&commands);
+    auto snapshot=gpu_->present();
+    if(!snapshot)throw std::runtime_error("Native GPU snapshot missing");
+    std::shared_ptr<const webscene_gpu_image_lease_v3> image;
+    auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+    do {
+      gpu_->process_events();image=snapshot->resolve();
+      if(!image)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while(!image && std::chrono::steady_clock::now()<deadline);
+    if(!image||gpu_->failed())throw std::runtime_error("Native GPU first frame failed");
+    view_->set_gpu_image(node,300,120,1,webscene::foco_host::make_gpu_image(node,1,std::move(image)));
+  }
+#endif
 
 public:
   foco::result<void> started(foco::application_lifetime &base) override {
@@ -28,6 +58,9 @@ public:
     view_ = foco::make_ref<webscene::foco_host::view>();
     compiled_ui::build(view_->document);
     state_.attach(view_->document);
+#if defined(NATIVE_WEB_GPU_SAMPLE)
+    initialize_gpu();
+#endif
     auto resource = [NSBundle mainBundle].resourcePath;
     std::ifstream about(std::string([resource UTF8String]) + "/about.txt");
     if (!about)

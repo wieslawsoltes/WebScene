@@ -14,12 +14,20 @@ public:
     set_clip_to_bounds(true);
     set_focusable(true);
   }
+  void set_gpu_image(native_web::node_id node, uint32_t width, uint32_t height,
+                     uint64_t generation,
+                     std::shared_ptr<const foco::composition_resource_attachment> owner) {
+    gpu_node_ = node; gpu_width_ = width; gpu_height_ = height;
+    gpu_generation_ = generation; gpu_owner_ = std::move(owner);
+    gpu_dirty_ = true;
+    refresh();
+  }
   void refresh() {
     auto b = bounds();
     if (b.width <= 0 || b.height <= 0)
       return;
     const auto &scene = document.render(b.width, b.height);
-    if (scene.revision == revision_)
+    if (scene.revision == document_revision_ && !gpu_dirty_)
       return;
     namespace packet = foco::webscene_packet;
     static_assert(sizeof(webscene_scene_command) ==
@@ -33,11 +41,25 @@ public:
                         l.command_count, l.string_offset, l.string_count,
                         l.flags, l.x, l.y, l.width, l.height, l.bitmap_width,
                         l.bitmap_height, l.generation});
+    auto commands = scene.commands;
+    if (gpu_owner_ && gpu_node_) {
+      const auto area = document.bounds(gpu_node_);
+      std::erase_if(layers, [&](const auto& layer){ return layer.node_id == gpu_node_; });
+      for (const auto& layer : layers) {
+        webscene_scene_command placement{};placement.kind=257;placement.node_id=layer.node_id;
+        placement.x=layer.x;placement.y=layer.y;placement.width=layer.width;placement.height=layer.height;
+        commands.push_back(placement);
+      }
+      webscene_scene_command image{};
+      image.kind=256;image.node_id=gpu_node_;image.rgba=0;
+      image.x=area.x;image.y=area.y;image.width=area.width;image.height=area.height;
+      commands.push_back(image);
+    }
     packet::header h{};
     h.magic_value = packet::magic;
     h.version_value = packet::version;
     h.flags = packet::checkpoint | packet::dom_replacement;
-    h.revision = scene.revision;
+    h.revision = ++revision_;
     h.viewport_width = scene.width;
     h.viewport_height = scene.height;
     packet_.assign(sizeof(h), std::byte{});
@@ -51,8 +73,8 @@ public:
                     data.size() * sizeof(T));
       return static_cast<uint32_t>(offset);
     };
-    h.dom_command_count = scene.commands.size();
-    h.dom_command_offset = append(scene.commands);
+    h.dom_command_count = commands.size();
+    h.dom_command_offset = append(commands);
     h.layer_count = layers.size();
     h.layer_offset = append(layers);
     h.canvas_command_count = scene.canvas.size();
@@ -63,7 +85,8 @@ public:
     h.string_byte_offset = append(scene.bytes);
     h.byte_count = packet_.size();
     std::memcpy(packet_.data(), &h, sizeof(h));
-    revision_ = scene.revision;
+    document_revision_ = scene.revision;
+    gpu_dirty_ = false;
     invalidate_render();
   }
   std::optional<foco::composition_command_stream_view>
@@ -74,7 +97,7 @@ public:
         packet_, revision_,
         static_cast<uint32_t>(foco::command_stream_format::webscene_scene_v1),
         static_cast<uint32_t>(std::max(1.f, bounds().width)),
-        static_cast<uint32_t>(std::max(1.f, bounds().height))};
+        static_cast<uint32_t>(std::max(1.f, bounds().height)), gpu_owner_};
   }
   foco::size measure_override(foco::size available) override {
     return {std::isfinite(available.width) ? available.width : 1000.f,
@@ -116,6 +139,9 @@ public:
 
 private:
   std::vector<std::byte> packet_;
-  uint64_t revision_{};
+  uint64_t revision_{}, document_revision_{}, gpu_generation_{};
+  uint32_t gpu_node_{}, gpu_width_{}, gpu_height_{};
+  bool gpu_dirty_{};
+  std::shared_ptr<const foco::composition_resource_attachment> gpu_owner_;
 };
 } // namespace webscene::foco_host
