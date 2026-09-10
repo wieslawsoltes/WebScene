@@ -3101,7 +3101,7 @@ void native_document::layout_children(dom_node& parent)
             const auto intrinsic_width = intrinsic_size(*child, true, content.width);
             const auto intrinsic_height = intrinsic_size(*child, false, content.height);
             auto width = flex_container && is_specified(child->style.flex_basis)
-                ? outer_specified_size(*child, true, child->style.flex_basis, content.width)
+                ? flex_base_main_sizes.at(child)
                     + (grow > 0
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
                         : 0.0F)
@@ -3216,7 +3216,7 @@ void native_document::layout_children(dom_node& parent)
                 && parent.used_height_is_definite;
             const auto intrinsic_height = intrinsic_size(*child, false, content.height);
             auto height = flex_container && is_specified(child->style.flex_basis)
-                ? resolve_length(*child, child->style.flex_basis, content.height, 0)
+                ? flex_base_main_sizes.at(child)
                     + (grow > 0
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
                         : 0.0F)

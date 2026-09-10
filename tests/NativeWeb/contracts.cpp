@@ -95,6 +95,10 @@ int main() {
   std::string scene_bytes(initial_scene.bytes.begin(),initial_scene.bytes.end());
   check(scene_bytes.find("fill=\"#5ac6d2\"") != std::string::npos,
         "compiled theme SVG fill reaches serialized scene");
+  check(d.bounds(d.find("flex-min-height")).height == 400,
+        "column flex basis uses the same constrained base as free-space accounting");
+  check(d.bounds(d.find("flex-min-width")).width == 400,
+        "row flex basis uses the same constrained base as free-space accounting");
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;

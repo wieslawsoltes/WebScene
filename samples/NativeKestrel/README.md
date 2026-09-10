@@ -182,8 +182,8 @@ to print the compiled original shell's major element bounds at 1280×800 and
 1280×1000 without opening a window. This checks the static shell; dynamically
 instantiated ribbon content is not included in this mode.
 
-Current observation: the shell occupies the full viewport, but the status bar
-ends at y=660 and y=860 respectively, leaving 140 pixels unused. The native flex
-layout accounts for the workbench's constrained 140-pixel minimum in its base-size
-sum, then uses its unconstrained zero flex basis during final size assignment.
-The allocation must use consistent bases; this diagnostic does not yet fix it.
+Verified after the flex-basis accounting fix: the status bar spans y=771–800
+and y=971–1000 respectively, reaching the viewport bottom at both sizes. Previously
+140 pixels were left unused because final size assignment discarded the minimum
+already included in free-space accounting. Row and column regression fixtures
+cover an explicit zero flex basis with a nonzero minimum.
