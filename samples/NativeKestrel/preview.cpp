@@ -144,6 +144,24 @@ public:
   }
 };
 int main(int argc, char **argv) {
+  if (argc == 2 && std::string_view(argv[1]) == "--check-input-coalescing") {
+    auto view = foco::make_ref<webscene::foco_host::view>();
+    auto node = view->document.element(view->document.body(), "button");
+    view->document.set_text(node, "Input");
+    view->document.render(800, 600);
+    unsigned delivered = 0;
+    auto handler = view->document.on(node, "pointermove", [&](auto &) { ++delivered; });
+    auto bounds = view->document.bounds(node);
+    foco::pointer_event event;
+    event.kind = foco::pointer_event_kind::moved;
+    event.position = {bounds.x + 1, bounds.y + 1};
+    for (int i = 0; i < 8; ++i) view->pointer_event_received(event);
+    if (delivered != 8 || !view->requires_host_frames()) return 2;
+    view->advance_host_frame(0);
+    if (view->requires_host_frames()) return 3;
+    std::cout << "Input delivered immediately; pending host refresh drained\n";
+    return 0;
+  }
   if (argc == 2 && std::string_view(argv[1]) == "--dump-layout") {
     webscene::native_web::document document;
     compiled_ui::build(document);

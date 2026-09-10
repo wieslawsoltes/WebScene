@@ -241,3 +241,14 @@ regression). These checks pass on Metal. A separate host issue remains:
 rectangle with DOM layout. Until replacement content arrives, this can stretch
 old content. Resolving that presentation policy coherently, without introducing
 blank frames or blocking resize, remains part of the no-elastic-band requirement.
+
+The native host now delivers pointer/key handlers immediately but coalesces their
+scene-packet refresh requests until the next Foco host-frame tick. A completed GPU
+image can also consume a pending refresh when publishing its packet. This avoids
+forcing packet generation per input event; it does not establish presentation
+latency or solve retained-image stretching during resize.
+
+`FocoKestrelPreview --check-input-coalescing` exercises eight pointer moves through
+the Foco adapter, checks immediate native handler delivery, and verifies that a
+host tick drains the pending refresh request. This is a scheduling smoke check,
+not a frame-rate benchmark.

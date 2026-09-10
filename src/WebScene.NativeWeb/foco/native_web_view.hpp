@@ -26,7 +26,15 @@ public:
     gpu_dirty_ = true;
     refresh();
   }
+  bool requires_host_frames() const noexcept override { return input_refresh_pending_; }
+  bool advance_host_frame(double) override {
+    if (!input_refresh_pending_) return false;
+    const auto previous = revision_;
+    refresh();
+    return revision_ != previous;
+  }
   void refresh() {
+    input_refresh_pending_ = false;
     auto b = bounds();
     if (b.width <= 0 || b.height <= 0)
       return;
@@ -113,7 +121,7 @@ public:
     if(e.kind==foco::pointer_event_kind::wheel){
       document.wheel(e.position.x-bounds().x,e.position.y-bounds().y,
                      -e.wheel_delta*(e.wheel_is_precise?1.f:48.f));
-      refresh();e.handled=true;return;
+      request_input_refresh();e.handled=true;return;
     }
     auto type = e.kind == foco::pointer_event_kind::pressed    ? "pointerdown"
                 : e.kind == foco::pointer_event_kind::cancelled ? "pointercancel"
@@ -121,7 +129,7 @@ public:
                                                                : "pointermove";
     document.pointer(type, e.position.x - bounds().x,
                      e.position.y - bounds().y, e.buttons);
-    refresh();
+    request_input_refresh();
     e.handled = true;
   }
   bool try_move_focus_within(bool reverse) override {
@@ -137,7 +145,7 @@ public:
     if (!key.empty()) {
       document.key(key,
                    foco::has_modifier(e.modifiers, foco::key_modifiers::shift));
-      refresh();
+      request_input_refresh();
       e.handled = true;
     }
   }
@@ -146,6 +154,14 @@ public:
   }
 
 private:
+  bool input_refresh_pending_{};
+  void request_input_refresh() {
+    if (input_refresh_pending_) return;
+    input_refresh_pending_ = true;
+    // Wake the existing compositor driver; subsequent input coalesces until
+    // advance_host_frame generates the latest document packet.
+    invalidate_render();
+  }
   std::vector<std::byte> packet_;
   uint64_t revision_{}, document_revision_{}, gpu_generation_{};
   uint32_t gpu_node_{}, gpu_width_{}, gpu_height_{};
