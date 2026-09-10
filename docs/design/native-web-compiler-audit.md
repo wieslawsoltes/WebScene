@@ -1269,3 +1269,12 @@ reference was missing and duplicates on body/descendants escaped validation.
 Native contracts verify named("html-root") equals d.root(); compiler tests reject
 both body and descendant duplicates. All 71 compiler tests and rebuilt native
 contracts pass. Broader root attribute semantics remain open.
+
+### Root inline custom-property cascade (2026-09-10)
+
+Native contracts verify a compiled root inline custom property inherits into a
+child's width and outranks a normal ID-selector declaration (23px versus 41px).
+A class-selected important declaration overrides it to 37px; removing the class
+restores 23px. Rebuilt contracts pass. This provides native cascade/inheritance
+and mutation evidence for the root inline lowering; exact source spans and the
+remaining root attribute inventory are still open.

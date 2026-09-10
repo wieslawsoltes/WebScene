@@ -111,6 +111,13 @@ int main() {
   auto refs = compiled_ui::build(d);
   check(refs.named("html-root") == d.root(), "compiled root ID reference");
   d.render(800, 600);
+  check(d.bounds(d.find("root-inline-child")).width == 23, "root inline custom property inherits and outranks stylesheet");
+  d.attribute(d.root(), "class", "override-inline");
+  d.render(800, 600);
+  check(d.bounds(d.find("root-inline-child")).width == 37, "important rule overrides root inline custom property");
+  d.remove_attribute(d.root(), "class");
+  d.render(800, 600);
+  check(d.bounds(d.find("root-inline-child")).width == 23, "root inline custom property recovers after mutation");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
