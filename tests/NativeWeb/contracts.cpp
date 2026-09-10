@@ -288,6 +288,19 @@ int main() {
   d.scroll_to(scroll_container, 0, 1000);
   d.render(800, 600);
   check(d.scroll_offset(scroll_container).second == 40, "native scroll clamps to content extent");
+  d.attribute(scroll_content, "class", "short");
+  d.render(800, 600);
+  check(d.scroll_offset(scroll_container).second == 10 &&
+        d.bounds(scroll_content).y == d.bounds(scroll_container).y - 10,
+        "content shrink clamps retained scroll and geometry in same render");
+  d.attribute(scroll_container, "class", "expanded");
+  d.render(800, 600);
+  check(d.scroll_offset(scroll_container).second == 0 &&
+        d.bounds(scroll_content).y == d.bounds(scroll_container).y,
+        "viewport expansion clears scroll when content fits");
+  d.remove_attribute(scroll_content, "class");
+  d.remove_attribute(scroll_container, "class");
+  d.render(800, 600);
   d.scroll_to(scroll_container, 0, -10);
   d.render(800, 600);
   check(d.scroll_offset(scroll_container).second == 0, "native scroll clamps negative offset");

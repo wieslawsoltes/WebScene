@@ -944,3 +944,11 @@ clamping. Native regressions switch a previously scrolled compiled container to
 clip and visible and verify both offset and child geometry reset without an
 explicit scroll request. Native contracts pass. Root viewport scrolling, RTL and
 scroll-event scheduling remain open.
+
+### Scroll extent mutation regression (2026-09-10)
+
+Compiled class mutations now exercise shrinking scrolled content and enlarging
+its viewport. Native contracts verify the offset clamps to the new content extent
+and child geometry agrees in the same render, then resets to zero when content
+fits. Contracts pass without engine changes. This is layout correctness coverage,
+not asynchronous scroll-event or frame-presentation timing verification.
