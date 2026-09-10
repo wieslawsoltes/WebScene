@@ -16,6 +16,7 @@
 #include "webscene_css_media.h"
 #include "webscene_css_property_mask.h"
 #include "webscene_css_reset.h"
+#include "webscene_css_box_application.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -470,5 +471,22 @@ int main(int argc,char** argv) {
        reset_node.style.opacity!=1 || reset_node.style.foreground_rgba!=0x123456FF ||
        reset_node.style.custom_properties().values.at("--color")!="red" ||
        reset_node.style.mutable_before_pseudo().content!="retained") return 90;
+    animated_document.append_child(animated_document.body(),reset_node);
+    animated_document.body().style.width={640,webscene_native::length_unit::pixels};
+    const auto apply_box=[&](const std::string& name,const std::string& value,uint64_t protected_mask=0) {
+        return webscene_native::css::apply_box_metrics(reset_node,name,value,
+            [&](uint64_t property) { return (protected_mask&property)!=0; });
+    };
+    apply_box("width","200px",property_mask("width"));
+    if(reset_node.style.width.value!=90) return 91;
+    if(!apply_box("width","inherit") || reset_node.style.width.value!=640) return 92;
+    apply_box("inset","1px 2px 3px 4px",property_mask("left"));
+    apply_box("padding-inline","5px 9px");
+    apply_box("gap","7px 11px");
+    if(reset_node.style.left.value==4 || reset_node.style.top.value!=1 ||
+       reset_node.style.padding_left.value!=5 || reset_node.style.padding_right.value!=9 ||
+       reset_node.style.row_gap.value!=7 || reset_node.style.column_gap.value!=11) return 93;
+    apply_box("width","unset");
+    if(reset_node.style.width.value==640 || apply_box("unknown-property","1px")) return 94;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

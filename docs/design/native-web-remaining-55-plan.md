@@ -570,3 +570,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   ordinary height/opacity reset. The focused runtime all-unset regression passes.
   Existing grouped-property/reset coverage limits remain; other reset keywords,
   full declaration dispatch and application cascade integration are still open.
+
+- Box declaration application extraction: resolved dimension, inset, padding,
+  margin and gap application now uses webscene_css_box_application.h with an
+  owner-supplied precedence predicate. Native tests check inherited dimensions,
+  protected inline values, shorthand sides/gaps and reset behavior. Native service
+  and runtime dimension inheritance/variables, inset transition and iframe cascade
+  regressions pass. Existing parsing, logical-direction and grouped precedence
+  limitations are unchanged. Other declaration families and full cascade remain open.
