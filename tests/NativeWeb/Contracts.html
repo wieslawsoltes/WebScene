@@ -11,7 +11,7 @@ button { font-family: Arial, sans-serif; width: 20px; height: 20px; }
 .chosen { width: 60px !important; }
 button:focus { height: 30px; }
 @media (max-width: 400px) { #target { height: 40px; } }
-#variable-probe { overflow:hidden; text-align:center; white-space:nowrap; box-shadow:var(--shadow); border:0; border-bottom:1px solid color-mix(in srgb,var(--accent) 25%,transparent); border-top:1px solid var(--accent); width:var(--panel-width); color:var(--accent); height:var(--missing, 12px); }
+#variable-probe { overflow:hidden; text-align:center; white-space:nowrap; box-shadow:var(--shadow); border:0; border-bottom:1px solid color-mix(in srgb,var(--accent) 25%,transparent); border-top:1px solid var(--accent); border-width:+1e0px 0; border-style:solid hidden; width:var(--panel-width); color:var(--accent); height:var(--missing, 12px); }
 #variable-grid { display:grid; grid-template-columns:var(--panel-width) minmax(250px,1fr) 252px; }
 @media (max-height:300px) { :root { --panel-width:175px; } }
 #variable-probe:not([data-compact]) { min-width:100px; }

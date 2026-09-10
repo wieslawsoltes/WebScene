@@ -143,6 +143,19 @@ class CompilerTests(unittest.TestCase):
             self.assertIn('set_border_left_width',out.read_text())
         result,_=self.compile('<div></div>', 'div { border:1px dashed red; }')
         self.assertNotEqual(result.returncode,0)
+    def test_border_width_and_style_shorthands(self):
+        result,out=self.compile('<div></div>', 'div { border-width:.5px +2e0px 0 -0px; border-style:solid none hidden solid; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        for side,value in [('top','true'),('right','false'),('bottom','false'),('left','true')]:
+            self.assertIn('set_border_'+side+'_solid('+value+')',generated)
+        for value in ['.5px solid #fff','+2e0px solid black','-0px solid white','+0e0 solid black']:
+            result,_=self.compile('<div></div>', 'div { border:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for name,value in [('border-width','-1px'),('border-width','2'),('border-width','1%'),('border-width','1px 2px 3px 4px 5px'),('border-style','solid dashed'),('border','-1px solid black')]:
+            result,_=self.compile('<div></div>', 'div { '+name+':'+value+'; }')
+            self.assertNotEqual(result.returncode,0,name+':'+value)
+
     def test_outer_shadow(self):
         for value in ['none','0 30px 100px #0007','var(--shadow)','0 4px 10px var(--color)']:
             result,out=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')

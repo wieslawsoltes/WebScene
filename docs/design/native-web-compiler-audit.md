@@ -36,6 +36,25 @@ temporary module and inspect all warnings. Preview is an inventory aid only.
 Extend this audit to template files, inline styles and independent feature fixtures.
 The HTML inventory below is provisional; warning coverage itself must be checked.
 
+## Execution discipline
+
+Complete this audit before resuming Kestrel-driven feature porting. Work through
+feature families in the order above, using independent HTML/CSS fixtures first;
+Kestrel remains an unchanged compatibility corpus. Within each family:
+
+1. Inventory accepted and rejected syntax, including inline styles and templates.
+2. Separate missing compiler lowering from missing engine or host semantics.
+3. Implement coherent grammar/behavior groups and test invalid inputs as well as
+   successful compilation, mutation, layout and paint where applicable.
+4. Record remaining exclusions and evidence here. A family remains open until its
+   closure gate is met; fewer preview warnings alone do not close it.
+
+Next audit work should return to the earliest open gates: source locations and
+numeric/function grammar, followed by the HTML element/attribute/template
+inventory. Paint investigations below identify later engine work rather than
+changing this order. Browser differential and packaged-resource verification
+remain required before overall closure.
+
 ## CSS baseline diagnostics
 
 ```text
@@ -496,3 +515,22 @@ Declaration ownership now includes the parent-rule chain, distinguishing e.g.
 `@media (max-width:400px) > div` from unconditional `div`. A regression verifies
 both contexts still deduplicate to one unsupported construct. All 41 compiler
 tests pass. Exact line/column source spans remain open.
+
+### Border shorthand family and engine ownership (2026-09-10)
+
+Compiler lowering now expands one-to-four `border-width` and `border-style`
+values into the existing side setters. Pixel widths accept signed zero, leading
+fractional digits and exponent notation in both side declarations and the
+supported width/solid/color shorthand. Negative widths, nonzero unitless widths,
+percentages, excess components and unsupported styles remain errors.
+
+All 42 compiler tests and native contracts pass. The native fixture uses the new
+width/style shorthands and retains its verified 14px border-inclusive height.
+This verifies lowering and geometry, not a complete rendered border comparison.
+
+Dashed borders are an engine/API gap: the compiled style facade exposes only a
+boolean solid/hidden distinction, with no dash pattern state. Do not lower dashed
+to solid. Outline fields and scene drawing exist internally but still need a
+semantic/API audit before compiler exposure. Relative/keyword widths, arbitrary
+border shorthand ordering, variable-bearing width/style shorthands, CSS-wide
+keywords and the remaining border styles are still open.

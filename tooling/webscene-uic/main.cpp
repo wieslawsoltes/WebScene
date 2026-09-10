@@ -497,7 +497,7 @@ static std::string assignments(const std::string &name,
     if (value == "0") width = "0";
     else if (value != "none") {
       std::smatch match;
-      if (!std::regex_match(value, match, std::regex(R"(([0-9]+(?:\.[0-9]+)?px|0)\s+(solid)\s+(.+))")))
+      if (!std::regex_match(value, match, std::regex(R"(([^\s]+)\s+(solid)\s+(.+))")))
         throw std::runtime_error("border shorthand currently requires width solid color, 0 or none");
       width = match[1]; style = match[2]; color = match[3];
     }
@@ -512,7 +512,8 @@ static std::string assignments(const std::string &name,
   }
   for (const std::string side : {"left", "top", "right", "bottom"}) {
     if (name == "border-" + side + "-width") {
-      if (value != "0" && (!value.ends_with("px") || value.starts_with("-")))
+      if (!std::regex_match(value, std::regex(R"([+-]?(?:[0-9]*\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?(?:px)?)")) ||
+          std::stof(value) < 0 || (!value.ends_with("px") && std::stof(value) != 0))
         throw std::runtime_error("border width currently requires nonnegative px");
       return "s.set_border_" + side + "_width(" + length(value) + ");";
     }
@@ -572,7 +573,7 @@ static std::string assignments(const std::string &name,
           "s." + member + "_auto = " + (value == "auto" ? "true;" : "false;");
     return result;
   }
-  if (name == "padding" || name == "margin" || name == "border-radius" || name == "inset") {
+  if (name == "padding" || name == "margin" || name == "border-radius" || name == "inset" || name == "border-width" || name == "border-style") {
     auto values = component_values(value);
     if (values.empty() || values.size() > 4)
       throw std::runtime_error("invalid box shorthand");
@@ -580,7 +581,10 @@ static std::string assignments(const std::string &name,
                 c = values.size() > 2 ? values[2] : a,
                 d = values.size() > 3 ? values[3] : b;
     std::vector<std::string> names =
-        name == "inset"
+        (name == "border-width" || name == "border-style")
+            ? std::vector<std::string>{"border-top-" + name.substr(7), "border-right-" + name.substr(7),
+                                       "border-bottom-" + name.substr(7), "border-left-" + name.substr(7)}
+            : name == "inset"
             ? std::vector<std::string>{"top", "right", "bottom", "left"}
             : name == "border-radius"
             ? std::vector<std::string>{"border-top-left-radius",
