@@ -67,7 +67,7 @@ static bool css_number(const std::string &value) {
   static const std::regex grammar(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)");
   return std::regex_match(value, grammar);
 }
-static std::vector<std::string> component_values(const std::string &value) {
+static std::vector<std::string> component_values(const std::string &value, char separator = 0) {
   std::vector<std::string> result;
   size_t start = 0;
   int depth = 0;
@@ -77,9 +77,9 @@ static std::vector<std::string> component_values(const std::string &value) {
       if (value[i] == '(') ++depth;
       if (value[i] == ')' && --depth < 0) throw std::runtime_error("unbalanced CSS function");
     }
-    if (i == value.size() || (depth == 0 && std::isspace(static_cast<unsigned char>(value[i])))) {
+    if (i == value.size() || (depth == 0 && (separator ? value[i] == separator : std::isspace(static_cast<unsigned char>(value[i]))))) {
       auto part = trim(value.substr(start, i-start));
-      if (!part.empty()) result.push_back(std::move(part));
+      if (!part.empty() || separator) result.push_back(std::move(part));
       start = i + 1;
     }
   }
@@ -515,13 +515,21 @@ static std::string assignments(const std::string &name,
     if (value != "none" && value != "currentColor" && value != "currentcolor") assignments("color",value);
     return std::string("s.") + setter + "(" + quote(value) + ");";
   }
-  if (value.starts_with("color-mix(")) {
-    std::smatch mix;
-    if (!std::regex_match(value,mix,std::regex(R"(color-mix\(\s*in\s+srgb\s*,\s*(var\(--[A-Za-z0-9_-]+\)|#[A-Fa-f0-9]+)\s+([0-9]+(?:\.[0-9]+)?)%\s*,\s*transparent\s*\))")))
-      throw std::runtime_error("compiled color-mix currently supports an sRGB color percentage mixed with transparent");
-    const float fraction = std::stof(mix[2]) / 100.f;
-    if (fraction > 1) throw std::runtime_error("color-mix percentage exceeds 100%");
-    std::string code = "auto mixed=s.color_with_opacity(" + variable_code(mix[1]) + "," + number(fraction) + ");";
+  if (ascii_keyword(value.substr(0, 10)) == "color-mix(") {
+    const auto unsupported = [] { return std::runtime_error(
+        "compiled color-mix currently supports an sRGB color percentage mixed with transparent"); };
+    if (!value.ends_with(')')) throw unsupported();
+    const auto arguments = component_values(value.substr(10, value.size() - 11), ',');
+    if (arguments.size() != 3 || ascii_keyword(arguments[0]) != "in srgb" ||
+        ascii_keyword(arguments[2]) != "transparent") throw unsupported();
+    const auto stop = component_values(arguments[1]);
+    if (stop.size() != 2 || !stop[1].ends_with('%') ||
+        !css_number(stop[1].substr(0, stop[1].size() - 1))) throw unsupported();
+    if (ascii_keyword(stop[0].substr(0, 4)) != "var(") assignments("color", ascii_keyword(stop[0]));
+    const float fraction = std::stof(stop[1]) / 100.f;
+    if (!std::isfinite(fraction) || fraction < 0 || fraction > 1)
+      throw std::runtime_error("color-mix percentage outside 0-100% range");
+    std::string code = "auto mixed=s.color_with_opacity(" + variable_code(stop[0]) + "," + number(fraction) + ");";
     if (name == "color" || name == "background" || name == "background-color")
       return code + "s.set_" + (name == "color" ? "foreground_rgba" : "background_rgba") + "(mixed.value_or(0u));";
     if (name == "border-color" || name == "border-left-color" || name == "border-top-color" || name == "border-right-color" || name == "border-bottom-color") {

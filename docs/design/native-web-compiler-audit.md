@@ -1723,3 +1723,15 @@ failed before the fix. All 87 compiler tests pass; native contracts verify an
 inherited escaped name inside a calc shorthand resolves 38px + 2px to 40px.
 General token-tree lowering remains open; this repairs the existing typed calc
 path without adding runtime parsing or claiming unrestricted CSS math support.
+
+### Color-mix component grammar (2026-09-10)
+
+Replaced the specialized ASCII-name regex with nested component splitting for the
+existing sRGB color-percentage-to-transparent profile. It now accepts nested var
+fallbacks, Unicode/escaped names, case-insensitive function/keywords, and signed,
+decimal or exponent percentage forms. Empty comma arguments, invalid literal
+colors and out-of-range/nonfinite percentages fail compilation. Variable colors
+retain existing computed-time validity handling. All 89 compiler tests pass;
+rebuilt native contracts passed after component lowering changes. New grammar
+cases do not yet have dedicated rendered comparisons. General two-color mixing,
+other color spaces and complete color syntax remain open.

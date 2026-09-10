@@ -73,6 +73,22 @@ class CompilerTests(unittest.TestCase):
             rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
             self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
 
+    def test_color_mix_nested_reference_grammar(self):
+        for color in ['var(--尺寸, #fff)', r'var(--a\)b, var(--fallback, #fff))', 'WHITE']:
+            for percent in ['50%', '+5e1%', '.5%']:
+                result,out=self.compile('<div></div>', 'div { color:COLOR-MIX(in srgb, '+color+' '+percent+', TRANSPARENT); }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn('color_with_opacity',out.read_text())
+        for percent in ['-1%', '101%', '1e999%', '5 %']:
+            result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb, #fff '+percent+', transparent); }')
+            self.assertNotEqual(result.returncode,0,percent)
+
+    def test_color_mix_rejects_empty_arguments_and_invalid_colors(self):
+        for value in ['in srgb,, #fff 50%, transparent', 'in srgb, #fff 50%, transparent,',
+                      'in srgb, 12px 50%, transparent', 'in srgb, unknown 50%, transparent']:
+            result,_=self.compile('<div></div>', 'div { color:color-mix('+value+'); }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_calc_preserves_escaped_custom_names(self):
         for name in [r'--a\)b', r'--a\(b', r'--a\*b', r'--a\/b']:
             for value in ['calc(var('+name+', 3px) + 2px)', 'calc(2 * (var('+name+', 3px) - 1px))']:
