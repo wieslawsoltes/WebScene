@@ -174,4 +174,46 @@ inline camera_uniforms make_camera_uniforms(const camera &camera, vec3 origin,
                   options.light_theme ? 1.f : 0.f};
   return out;
 }
+
+inline double grid_spacing(double zoom) {
+  auto spacing =
+      std::pow(10., std::floor(std::log10(28 / std::max(zoom, 1e-9))));
+  if (spacing * zoom < 14)
+    spacing *= 2;
+  if (spacing * zoom < 14)
+    spacing *= 2.5;
+  return spacing;
+}
+inline render_data build_grid(const camera &camera, vec3 origin,
+                              bool light = false, bool enabled = true) {
+  render_data data;
+  data.origin = origin;
+  if (!enabled)
+    return data;
+  auto spacing = grid_spacing(camera.zoom), cx = camera.target.x,
+       cy = camera.target.y;
+  auto range = std::min(
+      std::max(camera.width, camera.height) / camera.zoom * .95, spacing * 90);
+  auto n = static_cast<int>(std::ceil(range / spacing));
+  auto x0 = std::floor(cx / spacing) * spacing,
+       y0 = std::floor(cy / spacing) * spacing;
+  auto minor = render_color(light ? "#d9e0e7" : "#253446", false, .7f),
+       major = render_color(light ? "#c7d1db" : "#34485c", false, .8f);
+  for (int i = -n; i <= n; ++i) {
+    auto x = x0 + i * spacing, y = y0 + i * spacing;
+    auto major_x = std::fmod(std::floor(x / spacing + .5), 5) == 0;
+    auto major_y = std::fmod(std::floor(y / spacing + .5), 5) == 0;
+    data.add_line({vec3{x, y0 - range, -.02}, vec3{x, y0 + range, -.02}},
+                  major_x ? major : minor, .55f, 0);
+    data.add_line({vec3{x0 - range, y, -.02}, vec3{x0 + range, y, -.02}},
+                  major_y ? major : minor, .55f, 0);
+  }
+  if (std::abs(cx) < range)
+    data.add_line({vec3{0, y0 - range, 0}, vec3{0, y0 + range, 0}},
+                  render_color("#52947d", false, .55f), .9f, 0);
+  if (std::abs(cy) < range)
+    data.add_line({vec3{x0 - range, 0, 0}, vec3{x0 + range, 0, 0}},
+                  render_color("#a16169", false, .55f), .9f, 0);
+  return data;
+}
 } // namespace kestrel

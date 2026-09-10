@@ -16,7 +16,7 @@ class gpu_renderer {
     wgpu::Buffer buffer;
     uint64_t capacity{};
   };
-  vertex_buffer lines, triangles;
+  vertex_buffer lines, triangles, grid_lines;
   uint32_t width{}, height{};
   void upload(vertex_buffer &entry, const void *data, uint64_t bytes) {
     if (!bytes)
@@ -51,10 +51,13 @@ public:
     height = h;
   }
   uint32_t render(const wgpu::TextureView &target, const render_data &data,
-                  const camera_uniforms &uniforms,
-                  render_options options = {}) {
+                  const camera_uniforms &uniforms, render_options options = {},
+                  const render_data *grid = nullptr) {
     if (!width || !height)
       throw std::logic_error("Resize viewport before rendering");
+    if (grid)
+      upload(grid_lines, grid->lines.data(),
+             grid->lines.size() * sizeof(line_instance));
     upload(lines, data.lines.data(), data.lines.size() * sizeof(line_instance));
     upload(triangles, data.triangles.data(),
            data.triangles.size() * sizeof(triangle_vertex));
@@ -80,6 +83,12 @@ public:
     auto pass = encoder.BeginRenderPass(&descriptor);
     pass.SetBindGroup(0, pipelines.bind);
     uint32_t calls = 0;
+    if (grid && !grid->lines.empty()) {
+      pass.SetPipeline(pipelines.lines);
+      pass.SetVertexBuffer(0, grid_lines.buffer);
+      pass.Draw(6, static_cast<uint32_t>(grid->lines.size()));
+      ++calls;
+    }
     if (!data.triangles.empty()) {
       pass.SetPipeline(options.style == display_style::xray ? pipelines.xray
                                                             : pipelines.mesh);

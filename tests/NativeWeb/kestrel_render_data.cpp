@@ -54,4 +54,11 @@ int main() {
   for (size_t i = 0; i < 16; ++i)
     if (uniforms.mvp[i] != static_cast<float>(expected[i]))
       throw std::runtime_error("Camera relative matrix mismatch");
+  kestrel::camera grid_camera;
+  grid_camera.resize(800, 600);
+  auto grid = kestrel::build_grid(grid_camera, {});
+  if (kestrel::grid_spacing(1) != 20 || grid.lines.size() != 156)
+    throw std::runtime_error("Grid spacing or count mismatch");
+  if (!kestrel::build_grid(grid_camera, {}, false, false).lines.empty())
+    throw std::runtime_error("Disabled grid has lines");
 }

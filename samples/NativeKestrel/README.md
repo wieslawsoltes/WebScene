@@ -115,3 +115,8 @@ view. A Metal readback test verifies red triangle pixels, green line pixels and
 background pixels from a real submitted frame. Readback is diagnostic only.
 This test does not yet exercise Foco presentation, Kestrel UI, resize sequences,
 grid rendering or annotations; those remain required integration work.
+
+Adaptive grid generation now follows upstream zoom spacing, major/minor lines
+and colored axes. The renderer accepts a separate grid buffer and draws it
+before scene triangles and lines. CPU spacing/count and existing GPU regression
+tests pass; a visible integrated viewport remains outstanding.
