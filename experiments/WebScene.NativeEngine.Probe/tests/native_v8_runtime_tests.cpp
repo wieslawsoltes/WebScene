@@ -125,6 +125,13 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "all-unset") {
+            auto* focused_engine=webscene_engine_create(0);
+            require(focused_engine != nullptr,"reset test engine creation failed");
+            test_all_unset_resets_modeled_control_properties(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "relative-stylesheet-resource") {
             test_relative_stylesheet_background_uses_stylesheet_address();
             return 0;

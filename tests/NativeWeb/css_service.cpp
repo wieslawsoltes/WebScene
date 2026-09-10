@@ -15,6 +15,7 @@
 #include "webscene_css_stylesheet.h"
 #include "webscene_css_media.h"
 #include "webscene_css_property_mask.h"
+#include "webscene_css_reset.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -455,5 +456,19 @@ int main(int argc,char** argv) {
        property_mask("inset-inline-start")!=property_mask("left") ||
        property_mask("borderTopColor")!=property_mask("border") ||
        property_mask("--custom")!=0 || property_mask("text-anchor")<=0xFFFFFFFFULL) return 89;
+    auto& reset_node=animated_document.create_element("button");
+    reset_node.style.width={90,webscene_native::length_unit::pixels};
+    reset_node.style.height={70,webscene_native::length_unit::pixels};
+    reset_node.style.inline_property_mask=property_mask("width");
+    reset_node.style.important_property_mask=property_mask("color");
+    reset_node.style.foreground_rgba=0x123456FF;
+    reset_node.style.opacity=.4f;
+    reset_node.style.mutable_custom_properties().values["--color"]="red";
+    reset_node.style.mutable_before_pseudo().content="retained";
+    webscene_native::css::apply_all_unset(reset_node);
+    if(reset_node.style.width.value!=90 || reset_node.style.height.value==70 ||
+       reset_node.style.opacity!=1 || reset_node.style.foreground_rgba!=0x123456FF ||
+       reset_node.style.custom_properties().values.at("--color")!="red" ||
+       reset_node.style.mutable_before_pseudo().content!="retained") return 90;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

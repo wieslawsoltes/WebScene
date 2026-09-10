@@ -562,3 +562,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   inheritance, animation and iframe cascade regressions pass. Grouped-field
   precedence limitations remain unchanged. This is a dependency for sharing the
   full declaration dispatcher, not new property coverage or completed cascade.
+
+- Reset application extraction: existing non-important all:unset behavior now
+  lives in webscene_css_reset.h, including native defaults and preservation of
+  modeled inline/important values, custom properties and pseudo-element state.
+  Native tests verify protected width/color and custom/pseudo data survive while
+  ordinary height/opacity reset. The focused runtime all-unset regression passes.
+  Existing grouped-property/reset coverage limits remain; other reset keywords,
+  full declaration dispatch and application cascade integration are still open.
