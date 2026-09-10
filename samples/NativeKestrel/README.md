@@ -79,3 +79,9 @@ Mesh edge extraction now preserves upstream boundary/crease semantics, including
 coincident edges with separate vertex indices. Reference tests compare both
 feature-only and all-edge output for boxes, extrusions and split coplanar faces.
 The renderer-facing aggregate geometry output still needs integration.
+
+The native `geometry` API now assembles segments, wire edges, triangles, text,
+snap points and bounds points. Complete output is compared against upstream for
+curves, hatches, dimensions, a mesh, Unicode multiline text and point entities.
+This provides renderer input; GPU rendering and command/UI integration remain
+outstanding. Numeric dimension-label formatting retains the limitation above.

@@ -131,5 +131,29 @@ int main(int argc, char **argv) {
     compare_json(kestrel::geo::transform_entity(
                      f["entity"], f["matrix"].get<kestrel::matrix>()),
                  f["result"]);
+  for (auto &f : fixtures["geometry"]) {
+    auto g = kestrel::geo::geometry(f["entity"]);
+    kestrel::json actual;
+    for (auto key :
+         {"segments", "wireSegments", "triangles", "texts", "snaps", "points"})
+      actual[key] = kestrel::json::array();
+    auto encode = kestrel::geo::encode;
+    for (auto v : g.segments)
+      actual["segments"].push_back({encode(v[0]), encode(v[1])});
+    for (auto v : g.wire_segments)
+      actual["wireSegments"].push_back({encode(v[0]), encode(v[1])});
+    for (auto v : g.triangles)
+      actual["triangles"].push_back(
+          {{"points",
+            {encode(v.points[0]), encode(v.points[1]), encode(v.points[2])}},
+           {"normal", encode(v.normal)}});
+    for (auto &v : g.texts)
+      actual["texts"].push_back(v);
+    for (auto &v : g.snaps)
+      actual["snaps"].push_back({{"point", encode(v.point)}, {"type", v.type}});
+    for (auto v : g.points)
+      actual["points"].push_back(encode(v));
+    compare_json(actual, f["result"]);
+  }
   std::cout << "Kestrel curves: " << compared << " upstream vertices matched\n";
 }

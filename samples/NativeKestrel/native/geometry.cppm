@@ -831,4 +831,135 @@ inline std::vector<segment> feature_edges(std::span<const vec3> vertices,
   }
   return result;
 }
+
+struct triangle {
+  std::array<vec3, 3> points;
+  vec3 normal;
+};
+struct snap_point {
+  vec3 point;
+  std::string type;
+};
+struct entity_geometry {
+  std::vector<segment> segments, wire_segments;
+  std::vector<triangle> triangles;
+  std::vector<json> texts;
+  std::vector<snap_point> snaps;
+  std::vector<vec3> points;
+};
+inline entity_geometry geometry(const json &e, double tolerance = .5) {
+  entity_geometry out;
+  auto type = e.at("type").get<std::string>();
+  auto triangulate_into = [&](const std::vector<vec3> &p) {
+    auto normal = face_normal(p);
+    for (auto t : triangulate(p))
+      out.triangles.push_back({{p[t[0]], p[t[1]], p[t[2]]}, normal});
+  };
+  if (type == "MESH") {
+    auto vertices = points(e.at("vertices"));
+    auto edges = mesh_edges(e);
+    for (auto &face : e.at("faces")) {
+      std::vector<vec3> p;
+      for (auto &i : face)
+        p.push_back(vertices.at(i.get<size_t>()));
+      if (p.size() >= 3)
+        triangulate_into(p);
+    }
+    for (auto &edge : edges)
+      out.wire_segments.push_back({vertices[edge.a], vertices[edge.b]});
+    out.segments =
+        feature_edges(vertices, edges, e.value("showAllEdges", false));
+    for (auto p : vertices)
+      out.snaps.push_back({p, "endpoint"});
+  } else if (type == "DIMENSION") {
+    auto d = dimension(e);
+    out.segments = std::move(d.segments);
+    out.texts.push_back(std::move(d.text));
+    for (auto p : points(e.at("points")))
+      out.snaps.push_back({p, "endpoint"});
+  } else if (type == "TEXT") {
+    out.texts.push_back(e);
+    out.snaps.push_back({point(e.at("position")), "insertion"});
+  } else if (type == "POINT") {
+    auto p = point(e.at("position"));
+    auto size = number(e, "size", 2);
+    if (size == 0)
+      size = 2;
+    out.snaps.push_back({p, "node"});
+    out.segments = {{p + vec3{-size, 0, 0}, p + vec3{size, 0, 0}},
+                    {p + vec3{0, -size, 0}, p + vec3{0, size, 0}}};
+  } else {
+    auto p = path(e, tolerance);
+    auto is_closed = closed(e);
+    for (size_t i = 1; i < p.size(); ++i)
+      out.segments.push_back({p[i - 1], p[i]});
+    if (is_closed && p.size() > 2)
+      out.segments.push_back({p.back(), p.front()});
+    if (type == "HATCH") {
+      if (e.value("pattern", std::string{}) == "solid")
+        triangulate_into(p);
+      else {
+        auto hatch = hatch_segments(e);
+        out.segments.insert(out.segments.end(), hatch.begin(), hatch.end());
+      }
+    }
+    if (e.contains("center")) {
+      out.snaps.push_back({point(e["center"]), "center"});
+      for (int i = 0; i < 4; ++i) {
+        auto t = i * std::numbers::pi / 2;
+        if (type != "ARC" ||
+            angle(t - number(e, "startAngle", 0)) <=
+                sweep(number(e, "startAngle", 0), number(e, "endAngle", 0)))
+          out.snaps.push_back({conic_point(e, t), "quadrant"});
+      }
+      if (type == "ARC" && !p.empty()) {
+        out.snaps.push_back({p.front(), "endpoint"});
+        out.snaps.push_back({p.back(), "endpoint"});
+      }
+    } else if (type == "SPLINE") {
+      if (!p.empty()) {
+        out.snaps.push_back({p.front(), "endpoint"});
+        out.snaps.push_back({p.back(), "endpoint"});
+      }
+    } else {
+      auto control = e.contains("points") ? points(e["points"]) : p;
+      for (size_t i = 0; i < control.size(); ++i) {
+        out.snaps.push_back({control[i], "endpoint"});
+        if (i + 1 < control.size() || is_closed)
+          out.snaps.push_back(
+              {lerp(control[i], control[(i + 1) % control.size()], .5),
+               "midpoint"});
+      }
+    }
+  }
+  for (auto s : out.segments)
+    out.points.insert(out.points.end(), s.begin(), s.end());
+  for (auto t : out.triangles)
+    out.points.insert(out.points.end(), t.points.begin(), t.points.end());
+  for (auto &t : out.texts) {
+    auto axes = axes_for_text(t);
+    auto h = number(t, "height", 10);
+    if (h == 0)
+      h = 10;
+    auto text = t.value("text", std::string{});
+    size_t lines = 1, length = 0, max_length = 0;
+    // Count UTF-16 code units to preserve browser string-length semantics.
+    for (unsigned char c : text) {
+      if (c == '\n') {
+        max_length = std::max(max_length, length);
+        length = 0;
+        ++lines;
+      } else if ((c & 0xc0) != 0x80)
+        length += (c >= 0xf0 ? 2 : 1);
+    }
+    max_length = std::max(max_length, length);
+    auto w = max_length * h * .66;
+    auto align = t.value("align", std::string{});
+    auto left = align == "center" ? -w / 2 : align == "right" ? -w : 0.;
+    for (auto x : {left, left + w})
+      for (auto y : {-h * .25 - (lines - 1) * h * 1.35, h * .85})
+        out.points.push_back(point(t.at("position")) + axes.x * x + axes.y * y);
+  }
+  return out;
+}
 } // namespace kestrel::geo
