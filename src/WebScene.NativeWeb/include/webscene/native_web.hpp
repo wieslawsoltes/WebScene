@@ -14,6 +14,7 @@ using flex_direction = webscene_native::flex_direction;
 using align_mode = webscene_native::align_mode;
 using justify_mode = webscene_native::justify_mode;
 using position_mode = webscene_native::position_mode;
+using overflow_mode = webscene_native::overflow_mode;
 using grid_track = webscene_native::node_style::grid_data::track;
 // Supported compiled-style writer. Generated code never accesses engine fields.
 // A writer is borrowed only for the duration of declaration application.
@@ -47,6 +48,11 @@ public:
       grid.fractional_rows |= track.fraction > 0;
     grid.template_rows = std::move(tracks);
   }
+  void set_overflow_x(overflow_mode value) { value_.overflow_x = value; }
+  void set_overflow_y(overflow_mode value) { value_.overflow_y = value; }
+  void set_text_align(std::string value) { value_.mutable_textual().text_align = std::move(value); }
+  void set_white_space(std::string value) { value_.mutable_textual().white_space = std::move(value); }
+  void set_text_transform(std::string value) { value_.mutable_textual().text_transform = std::move(value); }
   void set_width(length value) { value_.width = value; }
   void set_height(length value) { value_.height = value; }
   void set_min_width(length value) { value_.min_width = value; }

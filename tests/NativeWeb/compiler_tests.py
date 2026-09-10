@@ -98,6 +98,14 @@ class CompilerTests(unittest.TestCase):
             self.assertIn('set_box_shadow',out.read_text())
         result,_=self.compile('<div></div>', 'div { box-shadow:inset 0 0 1px #fff; }')
         self.assertNotEqual(result.returncode,0)
+    def test_overflow_and_text_layout(self):
+        result,out=self.compile('<div>Text</div>', 'div { overflow:hidden auto; text-align:center; white-space:nowrap; text-transform:uppercase; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('set_overflow_x(webscene::native_web::overflow_mode::hidden)',out.read_text())
+        self.assertIn('set_overflow_y(webscene::native_web::overflow_mode::automatic)',out.read_text())
+        for declaration in ['overflow:bogus','overflow:hidden auto scroll','text-align:bogus','white-space:bogus']:
+            result,_=self.compile('<div></div>', 'div {'+declaration+';}')
+            self.assertNotEqual(result.returncode,0)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

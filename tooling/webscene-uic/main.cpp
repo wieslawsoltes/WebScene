@@ -242,6 +242,30 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "overflow") {
+    std::istringstream tokens(value);
+    std::string x, y, extra;
+    tokens >> x;
+    if (!(tokens >> y)) y = x;
+    if (tokens >> extra) throw std::runtime_error("overflow requires one or two values");
+    return assignments("overflow-x", x) + assignments("overflow-y", y);
+  }
+  if (name == "overflow-x" || name == "overflow-y") {
+    static const std::map<std::string,std::string> modes{{"visible","visible"},{"hidden","hidden"},
+      {"clip","clip"},{"auto","automatic"},{"scroll","scroll"}};
+    auto mode = modes.find(value);
+    if (mode == modes.end()) throw std::runtime_error("unsupported overflow: " + value);
+    return "s.set_" + member + "(webscene::native_web::overflow_mode::" + mode->second + ");";
+  }
+  if (name == "text-align" || name == "white-space" || name == "text-transform") {
+    static const std::map<std::string,std::set<std::string>> keywords{
+      {"text-align", {"left","right","center","start","end"}},
+      {"white-space", {"normal","nowrap","pre","pre-wrap","pre-line","break-spaces"}},
+      {"text-transform", {"none","uppercase","lowercase","capitalize"}}};
+    if (value == "inherit" || value == "unset") return "s.set_" + member + "(\"\");";
+    if (!keywords.at(name).contains(value)) throw std::runtime_error("unsupported " + name + ": " + value);
+    return "s.set_" + member + "(" + quote(value) + ");";
+  }
   if (name == "box-shadow") {
     if (value == "none") return "s.set_box_shadow(std::nullopt);";
     if (value.find("inset") != std::string::npos)
