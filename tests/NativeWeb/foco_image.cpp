@@ -1,4 +1,6 @@
 #include "rendering/webscene_graphite.hpp"
+#include <foco/platform.hpp>
+#include <foco/composition.hpp>
 #include <foco/webscene_packet.hpp>
 #include "include/core/SkSurface.h"
 #include "include/core/SkCanvas.h"
@@ -6,6 +8,16 @@
 #include <cstring>
 #include <stdexcept>
 #include <vector>
+struct image_attachment final : foco::composition_resource_attachment {};
+struct image_control final : foco::control {
+    std::vector<std::byte> packet;
+    std::shared_ptr<const foco::composition_resource_attachment> owner;
+    uint64_t generation=1;
+    std::optional<foco::composition_command_stream_view> composition_command_stream() const noexcept override {
+        return foco::composition_command_stream_view{packet,generation,
+            static_cast<uint32_t>(foco::command_stream_format::webscene_scene_v1),16,16,owner};
+    }
+};
 int main() {
     namespace p=foco::webscene_packet;
     p::header header{};
@@ -18,6 +30,22 @@ int main() {
     layer.x=4;layer.y=4;layer.width=8;layer.height=8;layer.bitmap_width=4;layer.bitmap_height=4;
     std::vector<std::byte> bytes(header.byte_count);
     std::memcpy(bytes.data(),&header,sizeof(header));std::memcpy(bytes.data()+sizeof(header),&layer,sizeof(layer));
+    auto control=foco::make_ref<image_control>();
+    control->packet=bytes;control->owner=std::make_shared<image_attachment>();
+    std::weak_ptr<const foco::composition_resource_attachment> weak=control->owner;
+    control->measure({16,16});control->arrange({0,0,16,16});
+    foco::scene_publisher publisher;foco::headless_renderer renderer;
+    foco::compositor compositor(*publisher.mailbox(),renderer);
+    publisher.commit(*control,foco::theme_variant::dark);
+    control->owner.reset();
+    if(weak.expired())throw std::runtime_error("publication dropped image owner");
+    compositor.tick();
+    bool retained=false;
+    for(const auto& [id, resource]:compositor.scene().resources()) retained|=bool(resource.attachment);
+    if(!retained)throw std::runtime_error("retained scene lost image attachment");
+    ++control->generation;control->invalidate_render();
+    publisher.commit(*control,foco::theme_variant::dark);compositor.tick();
+    if(!weak.expired())throw std::runtime_error("replaced image attachment leaked");
     auto source=SkSurfaces::Raster(SkImageInfo::MakeN32Premul(4,4));
     source->getCanvas()->clear(SK_ColorRED);
     if(foco::rendering::compile_webscene_picture(bytes))
