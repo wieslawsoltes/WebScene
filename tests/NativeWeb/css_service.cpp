@@ -11,6 +11,7 @@
 #include "webscene_css_stylesheet_sink.h"
 #include "webscene_css_rule_payload.h"
 #include "webscene_css_resources.h"
+#include "webscene_css_rule_preparation.h"
 #include <iostream>
 
 struct stylesheet_test_host {
@@ -30,7 +31,11 @@ struct stylesheet_test_host {
     void append_parsed_css_style_rule(std::string selector,
         std::vector<webscene_native::css::css_declaration> declarations,
         const std::vector<std::string>& media,const std::string& address) {
-        rules.push_back({std::move(selector),std::move(declarations),media,address});
+        webscene_native::css::prepare_style_rule(selector,std::move(declarations),media,address,
+            [](const auto&) {},
+            [&](const auto& prepared_selector,const auto& values,const auto& conditions) {
+                rules.push_back({prepared_selector,values,conditions,address});
+            });
     }
 
 };
@@ -371,5 +376,12 @@ int main() {
        webscene_native::resources::resolve_url("//cdn.test/a.png","https://example.test/css/main.css")!="https://cdn.test/a.png") return 75;
     if(webscene_native::css::resolve_resource_urls("url('unterminated",css_base)!="url('unterminated" ||
        webscene_native::css::resolve_resource_urls("url(icon.png)","")!="url(icon.png)") return 76;
+    const auto old_rule_count=stylesheet_host.rules.size();
+    stylesheet_host.append_parsed_css_style_rule(".one, :is(.two, .three)",
+        {{"background-image","url(../../images/grid.png)",false}}, {},css_base);
+    if(stylesheet_host.rules.size()!=old_rule_count+2 ||
+       stylesheet_host.rules.back().declarations[0].value!="url(\"asset://kestrel/images/grid.png\")") return 77;
+    stylesheet_host.append_parsed_css_style_rule("div > > span",{{"color","red",false}}, {},css_base);
+    if(stylesheet_host.rules.size()!=old_rule_count+2) return 78;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

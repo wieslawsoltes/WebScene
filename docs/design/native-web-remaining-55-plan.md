@@ -514,3 +514,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   regression passes. This preserves existing URL/tokenization limitations and
   supplies resolution only; embedding bytes, loading fonts/images, and complete
   native stylesheet integration still require their own implementation/validation.
+
+- Rule preparation integration: the Servo runtime path and native stylesheet
+  ingestion test now share declaration URL resolution and selector-list expansion
+  through webscene_css_rule_preparation.h. Hosts retain diagnostics, resource
+  prefetch and rule ownership. Tests cover nested selector-list commas, resolved
+  URLs and invalid combinator rejection; parser error recovery remains intact.
+  Native service and runtime relative-resource, iframe cascade and positional
+  selector regressions pass. Whole-document native cascade remains unfinished.

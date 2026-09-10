@@ -1240,6 +1240,21 @@
         const std::vector<std::string>& inherited_media,
         const std::string& stylesheet_address)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        css::prepare_style_rule(prelude,std::move(declarations),inherited_media,stylesheet_address,
+            [this](const css_declaration& declaration) {
+                inventory_css_value_functions(declaration.value);
+                if(declaration.name == "background-image") {
+                    if(const auto url=first_css_url(declaration.value);url.has_value())
+                        start_resource_prefetch(*url,{},WEBSCENE_RESOURCE_IMAGE);
+                }
+            },
+            [this](const std::string& selector,const std::vector<css_declaration>& values,
+                   const std::vector<std::string>& media) {
+                inventory_css_selector(selector);
+                append_css_rule(selector,values,media);
+            });
+#else
         for (auto& declaration : declarations) {
             declaration.value = resolve_css_resource_urls(
                 std::move(declaration.value),
@@ -1261,18 +1276,6 @@
             append_css_rule(":host", declarations, inherited_media);
             return;
         }
-#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
-        const auto parsed_selectors = parse_selector_syntax(prelude);
-        if (!parsed_selectors) return;
-        for (const auto& parsed_selector : parsed_selectors.selectors) {
-            inventory_css_selector(parsed_selector.serialized);
-            append_css_rule(
-                parsed_selector.serialized,
-                declarations,
-                inherited_media,
-                &parsed_selector);
-        }
-#else
         size_t selector_cursor = 0U;
         int bracket_depth = 0;
         int parenthesis_depth = 0;
@@ -1303,6 +1306,7 @@
                 selector_cursor = index + 1U;
             }
         }
+
 #endif
     }
 
