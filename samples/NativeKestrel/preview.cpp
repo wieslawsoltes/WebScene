@@ -34,7 +34,8 @@ class preview_app final : public foco::application {
   std::unique_ptr<kestrel::viewport> viewport;
   uint32_t gpu_width{}, gpu_height{};
   uint64_t gpu_serial{};
-  bool gpu_dirty{true};
+  bool gpu_dirty{true}, panning{};
+  float pan_x{}, pan_y{};
   void tick() {
     auto node = view->document.find("scene");
     auto bounds = view->document.bounds(node);
@@ -104,6 +105,23 @@ public:
     }
     view->refresh();
     model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
+    handlers.push_back(view->document.on(view->document.find("viewport"), "pointerdown",
+        [this](auto &event) {
+          if (!viewport || !(event.buttons & 4u)) return;
+          panning = true; pan_x = event.client_x; pan_y = event.client_y;
+          event.prevent_default();
+        }));
+    handlers.push_back(view->document.on(view->document.root(), "pointermove",
+        [this](auto &event) {
+          if (!panning || !viewport) return;
+          if (!(event.buttons & 4u)) { panning = false; return; }
+          viewport->camera.pan(event.client_x - pan_x, event.client_y - pan_y);
+          pan_x = event.client_x; pan_y = event.client_y;
+          gpu_dirty = true;
+        }));
+    for (auto type : {"pointerup", "pointercancel"})
+      handlers.push_back(view->document.on(view->document.root(), type,
+          [this](auto &) { panning = false; }));
     handlers.push_back(view->document.on(view->document.find("viewport"), "wheel",
         [this](auto &event) {
           if (!viewport) return;

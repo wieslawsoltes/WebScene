@@ -116,10 +116,11 @@ public:
       refresh();e.handled=true;return;
     }
     auto type = e.kind == foco::pointer_event_kind::pressed    ? "pointerdown"
+                : e.kind == foco::pointer_event_kind::cancelled ? "pointercancel"
                 : e.kind == foco::pointer_event_kind::released ? "pointerup"
                                                                : "pointermove";
     document.pointer(type, e.position.x - bounds().x,
-                     e.position.y - bounds().y);
+                     e.position.y - bounds().y, e.buttons);
     refresh();
     e.handled = true;
   }

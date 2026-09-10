@@ -118,6 +118,17 @@ int main() {
         "column flex basis uses the same constrained base as free-space accounting");
   check(d.bounds(d.find("flex-min-width")).width == 400,
         "row flex basis uses the same constrained base as free-space accounting");
+  {
+    bool middle_seen = false;
+    auto handler = d.on(target, "pointerdown", [&](auto &event) {
+      middle_seen = event.buttons == 4;
+      event.prevent_default();
+    });
+    auto bounds = d.bounds(target);
+    d.pointer("pointerdown", bounds.x + 1, bounds.y + 1, 4);
+    check(middle_seen, "native pointer preserves middle-button mask");
+    d.pointer("pointercancel", bounds.x + 1, bounds.y + 1, 0);
+  }
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;

@@ -177,7 +177,7 @@ subscription document::on(node_id node, std::string type,
   state_->listeners.emplace(id, listener{node, std::move(type), std::move(cb)});
   return subscription(state_, id);
 }
-bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y) {
+bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y, uint32_t buttons) {
   auto &n = state_->node(target);
   std::vector<node_id> path;
   for (auto *p = &n; p; p = p->parent)
@@ -186,6 +186,7 @@ bool document::dispatch(node_id target, std::string type, float client_x, float 
   e.client_x = client_x;
   e.client_y = client_y;
   e.delta_y = delta_y;
+  e.buttons = buttons;
   for (auto id : path) {
     if (!state_->alive)
       return false;
@@ -246,7 +247,7 @@ void document::wheel(float x, float y, float delta_y) {
   auto *node = state_->dom.hit_test(state_->dom.body(), x, y);
   if (node) dispatch(node->id, "wheel", x, y, delta_y);
 }
-void document::pointer(std::string type, float x, float y) {
+void document::pointer(std::string type, float x, float y, uint32_t buttons) {
   state_->check();
   auto *n = state_->dom.hit_test(state_->dom.body(), x, y);
   auto id = n ? n->id : 0;
@@ -270,7 +271,7 @@ void document::pointer(std::string type, float x, float y) {
     state_->pressed = 0;
     state_->dom.mark_dirty();
   }
-  const bool default_allowed = !id || dispatch(id, type, x, y);
+  const bool default_allowed = !id || dispatch(id, type, x, y, 0, buttons);
   if (!state_->alive)
     return;
   if (type == "pointerdown" && default_allowed) {

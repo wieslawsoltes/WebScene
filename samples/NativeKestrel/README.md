@@ -205,3 +205,9 @@ Visual check: native grid/mesh output fills the original viewport after sizing.
 The GPU attachment now occupies the canvas's DOM paint-order position; the
 original viewport controls, view cube and footer render above the grid and mesh.
 Native contract tests cover placement ordering and external-canvas detachment.
+
+Middle-button dragging now drives the preview's native camera using Foco's
+pressed-button mask. Release/cancellation stops the drag; movement without the
+middle button also clears the drag state. Native event contracts verify that the
+mask reaches handlers. Sustained 60 fps panning, resize coherence and pointer
+capture outside the host window still require dedicated verification.

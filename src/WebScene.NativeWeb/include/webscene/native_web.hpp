@@ -237,6 +237,7 @@ struct event {
   node_id target{}, current_target{};
   bool propagation_stopped{}, default_prevented{};
   float client_x{}, client_y{}, delta_y{};
+  uint32_t buttons{};
   void stop_propagation() { propagation_stopped = true; }
   void prevent_default() { default_prevented = true; }
 };
@@ -288,8 +289,8 @@ public:
   // Returns false when a listener prevents the default action or disposes the
   // document.
   bool dispatch(node_id, std::string type, float client_x = 0,
-                float client_y = 0, float delta_y = 0);
-  void pointer(std::string type, float x, float y);
+                float client_y = 0, float delta_y = 0, uint32_t buttons = 0);
+  void pointer(std::string type, float x, float y, uint32_t buttons = 1);
   void wheel(float x, float y, float delta_y);
   void focus(node_id);
   void key(std::string_view key, bool shift = false);
