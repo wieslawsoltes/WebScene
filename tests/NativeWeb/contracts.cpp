@@ -195,6 +195,8 @@ int main() {
         d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 130,
         "compiled calc re-resolves its percentage basis after viewport resize");
   d.render(800, 600);
+  check(d.bounds(d.find("zero-variable")).width == 0,
+        "unitless exponent zero retains length semantics after variable substitution");
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;

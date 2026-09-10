@@ -130,7 +130,8 @@ static std::string variable_code(const std::string &text) {
     if (token == "initial" || token == "inherit" || token == "unset" || token == "revert" || token == "revert-layer")
       throw std::runtime_error("custom-property CSS-wide keywords are not supported yet");
     std::string typed_length = "std::nullopt", typed_color = "std::nullopt";
-    if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh))")) || token == "0")
+    const bool zero = std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")) && std::stof(token) == 0;
+    if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh))")) || zero)
       typed_length = "webscene::native_web::length" + length(token);
     if (std::regex_match(token, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) ||
         token == "transparent" || token == "black" || token == "white")

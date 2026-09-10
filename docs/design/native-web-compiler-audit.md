@@ -473,3 +473,11 @@ calc, a two-value auto fallback, and percentage arithmetic. Existing resize,
 invalid-value and theme checks pass, along with the compiler suite. This closes
 the previously noted combination gap for the supported expression grammar, not
 all custom-property function values or CSS-wide keywords.
+
+### Zero token normalization through variables (2026-09-10)
+
+Custom-property tokens now recognize signed, decimal and exponent spellings of
+unitless zero as typed zero lengths, matching direct length consumption rather
+than recognizing only the exact string `0`. A native regression verifies
+`--zero:+0e0; width:var(--zero)` produces zero width. Compiler and native contract
+suites pass. Nonzero unitless numbers remain distinct from lengths.
