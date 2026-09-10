@@ -36,6 +36,18 @@ class CompilerTests(unittest.TestCase):
         for tracks in ['-1px 1fr', 'minmax(1px)', 'bogus', '1fr -2px']:
             result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
             self.assertNotEqual(result.returncode,0,tracks)
+    def test_inset_shorthand(self):
+        for value,expected in [('1px',[1,1,1,1]),('1px 2px',[1,2,1,2]),
+                               ('1px 2px 3px',[1,2,3,2]),('1px 2px 3px 4px',[1,2,3,4])]:
+            result,out=self.compile('<div></div>', 'div { position:absolute; inset:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            for side,number in zip(['top','right','bottom','left'],expected):
+                self.assertIn('set_'+side+'({'+str(number)+'.0f',out.read_text())
+        result,_=self.compile('<div></div>', 'div { inset:auto -2px 10% 0; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        result,_=self.compile('<div></div>', 'div { inset:1px 2px 3px 4px 5px; }')
+        self.assertNotEqual(result.returncode,0)
+
     def test_grid_fraction_numeric_forms(self):
         for tracks in ['.5fr +1fr', '5e-1fr 1E+0fr', 'minmax(0px,.5fr) 1fr']:
             result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:'+tracks+'; }')

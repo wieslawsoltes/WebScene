@@ -220,3 +220,11 @@ notation, both directly and as a minmax maximum. Tests cover `.5fr`, `5e-1fr`,
 `+1fr`, `1E+0fr`, and `minmax(0px,.5fr)`, and reject negative/malformed fractions.
 All 38 compiler tests pass. This closes these literal grammar cases, not grid
 layout semantics or variable substitution within minmax.
+
+### Layout shorthand: inset literals (2026-09-10)
+
+Implemented one-to-four-value inset expansion into supported native top/right/
+bottom/left setters. Regression cases cover every expansion arity, auto, negative
+lengths, percentages and rejection of five values. All 39 compiler tests pass.
+Variable-bearing inset and calc expressions remain open; literal support does not
+close the positioning/layout family.

@@ -454,7 +454,7 @@ static std::string assignments(const std::string &name,
           "s." + member + "_auto = " + (value == "auto" ? "true;" : "false;");
     return result;
   }
-  if (name == "padding" || name == "margin" || name == "border-radius") {
+  if (name == "padding" || name == "margin" || name == "border-radius" || name == "inset") {
     std::istringstream in(value);
     std::vector<std::string> values;
     std::string v;
@@ -466,7 +466,9 @@ static std::string assignments(const std::string &name,
                 c = values.size() > 2 ? values[2] : a,
                 d = values.size() > 3 ? values[3] : b;
     std::vector<std::string> names =
-        name == "border-radius"
+        name == "inset"
+            ? std::vector<std::string>{"top", "right", "bottom", "left"}
+            : name == "border-radius"
             ? std::vector<std::string>{"border-top-left-radius",
                                        "border-top-right-radius",
                                        "border-bottom-right-radius",
