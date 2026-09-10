@@ -228,3 +228,12 @@ bottom/left setters. Regression cases cover every expansion arity, auto, negativ
 lengths, percentages and rejection of five values. All 39 compiler tests pass.
 Variable-bearing inset and calc expressions remain open; literal support does not
 close the positioning/layout family.
+
+### Layout shorthand: variable inset and native geometry (2026-09-10)
+
+Inset now evaluates compiled variable token lists and expands one-to-four typed
+length/auto values at runtime without CSS parsing. Invalid computed lists reset
+the four sides to auto. Native layout checks verify a four-value fallback places
+and sizes the child correctly, then a theme change to a single 5px inset produces
+190×90 content inside a 200×100 parent. Compiler and native contract suites pass.
+Calc expressions and explicit CSS-wide keywords remain open.

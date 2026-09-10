@@ -152,6 +152,13 @@ int main() {
   check(d.bounds(d.find("numeric-length")).width == 5.f &&
         d.bounds(d.find("numeric-length")).height == .75f,
         "compiled leading-decimal lengths preserve their numeric values");
+  {
+    auto parent = d.bounds(d.find("inset-parent"));
+    auto child = d.bounds(d.find("inset-child"));
+    check(child.x == parent.x + 40 && child.y == parent.y + 10 &&
+          child.width == 140 && child.height == 60,
+          "compiled four-sided inset constrains native position and size");
+  }
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;
@@ -178,6 +185,9 @@ int main() {
   check(std::string(light_scene.bytes.begin(), light_scene.bytes.end())
                 .find("fill=\"#112233\"") != std::string::npos,
         "native theme mutation updates compiled SVG paint");
+  check(d.bounds(d.find("inset-child")).width == 190 &&
+        d.bounds(d.find("inset-child")).height == 90,
+        "theme mutation recomputes compiled variable inset");
   check(d.bounds(d.find("grid-left")).width == 195, "compiled grid variable updates with theme");
   check(d.bounds(d.find("variable-probe")).width == 195, "compiled var updates with theme");
   check(d.bounds(d.body()).x == 7,

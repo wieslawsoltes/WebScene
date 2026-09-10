@@ -256,6 +256,15 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "inset" && value.find("var(") != std::string::npos) {
+    return "auto v=s.evaluate(" + variable_code(value) + ");"
+        "bool valid=v && !v->empty() && v->size()<=4;"
+        "if(valid) for(const auto& t:*v) valid=valid && (t.length.has_value() || t.text==\"auto\");"
+        "auto side=[&](size_t i){return valid ? ((*v)[i].length.value_or(webscene::native_web::length" + length("auto") + ")) : webscene::native_web::length" + length("auto") + ";};"
+        "s.set_top(side(0));s.set_right(side(valid && v->size()>1?1:0));"
+        "s.set_bottom(side(valid && v->size()>2?2:0));"
+        "s.set_left(side(valid && v->size()>3?3:valid && v->size()>1?1:0));";
+  }
   if (name == "fill" || name == "stroke") {
     auto setter = name == "fill" ? "set_svg_fill" : "set_svg_stroke";
     if (value.find("var(") != std::string::npos)

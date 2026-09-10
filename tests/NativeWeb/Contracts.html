@@ -1,6 +1,6 @@
 <!doctype html><html id="html-root" data-theme="dark"><head><style>
 :root { padding: 3px; --accent: #5ac6d2; --panel-width: 222px; --shadow:0 15px 40px #0005; --border: 1px solid var(--accent); }
-html[data-theme="light"] { padding: 7px; --panel-width:195px; --svg-paint:#112233; }
+html[data-theme="light"] { padding: 7px; --panel-width:195px; --svg-paint:#112233; --insets:5px; }
 html[data-theme] > body { padding: 2px; }
 body { margin: 0; }
 .outer { padding: 10px; }
@@ -26,4 +26,6 @@ button:focus { height: 30px; }
 #flex-min-column > div { flex:1; min-height:140px; }
 #flex-min-row > div { flex:1; min-width:140px; }
 #numeric-length { width:+.5e1px; height:7.5e-1px; margin-left:-.25px; opacity:8e-1; }
-</style></head><body><div class="outer"><button id="target" class="chosen" style="width: 70px">Go</button><button id="other">Other</button><canvas id="canvas" width="80" height="40"></canvas></div><div id="variable-probe"></div><div id="variable-grid"><div id="grid-left"></div><div id="grid-middle"></div><div id="grid-right"></div></div><div id="negation"></div><div id="flex-test"><div id="flex-a"></div><div id="flex-b"></div></div><div id="font-probe">FontProbe</div><div id="dynamic-viewport"></div><div id="hit-stack"><button id="hit-back">Back</button><button id="hit-front">Front</button></div><svg id="svg-paint" width="30" height="30" viewBox="0 0 30 30"><polygon points="0,0 30,0 15,30"></polygon></svg><section id="flex-min-column"><div id="flex-min-height"></div></section><section id="flex-min-row"><div id="flex-min-width"></div></section><div id="numeric-length"></div></body></html>
+#inset-parent { position:relative; width:200px; height:100px; }
+#inset-child { position:absolute; inset:var(--insets, 10px 20px 30px 40px); }
+</style></head><body><div class="outer"><button id="target" class="chosen" style="width: 70px">Go</button><button id="other">Other</button><canvas id="canvas" width="80" height="40"></canvas></div><div id="variable-probe"></div><div id="variable-grid"><div id="grid-left"></div><div id="grid-middle"></div><div id="grid-right"></div></div><div id="negation"></div><div id="flex-test"><div id="flex-a"></div><div id="flex-b"></div></div><div id="font-probe">FontProbe</div><div id="dynamic-viewport"></div><div id="hit-stack"><button id="hit-back">Back</button><button id="hit-front">Front</button></div><svg id="svg-paint" width="30" height="30" viewBox="0 0 30 30"><polygon points="0,0 30,0 15,30"></polygon></svg><section id="flex-min-column"><div id="flex-min-height"></div></section><section id="flex-min-row"><div id="flex-min-width"></div></section><div id="numeric-length"></div><div id="inset-parent"><div id="inset-child"></div></div></body></html>
