@@ -745,7 +745,7 @@
         }
     }
 
-#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+    // Navigation task cleanup is required even when Inspector is omitted.
     void cancel_detached_frame_context_tasks(
         v8::Local<v8::Context> local_context)
     {
@@ -755,7 +755,9 @@
             [&](const auto& timer) {
                 if (timer.context.Get(isolate) != local_context) return false;
                 if (timer.animation_frame) ++cancelled_animation_frames;
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                 inspector_async_task_canceled(timer.id);
+#endif
                 return true;
             });
         if (work_metrics_enabled.load(std::memory_order_relaxed)) {
@@ -812,6 +814,7 @@
         }
     }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
     void destroy_detached_frame_contexts(dom_node& root)
     {
         std::unordered_set<uint32_t> node_ids;

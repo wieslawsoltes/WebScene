@@ -280,3 +280,10 @@ because evaluate alone does not activate native scene publication. Inline recasc
 now preserves inset/currentColor flags, and shadow resets clear all shared fields.
 The runtime test build used Inspector enabled; the Inspector-disabled build exposed
 an existing unguarded call to cancel_detached_frame_context_tasks, still unresolved.
+
+- Reference-runtime build repair: navigation task cancellation is now compiled
+  regardless of Inspector support; only its Inspector notification is conditional.
+  The Inspector-disabled runtime and test executable build successfully. Focused
+  shared-shadow-values and iframe-replacement-layout tests both pass. This resolves
+  the build failure noted above and preserves a usable ordinary-runtime reference
+  for shared CSS extraction. It does not change the delivery profile decision.
