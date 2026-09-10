@@ -1397,3 +1397,11 @@ width (so zero is distinguishable from auto), protects them from single-column
 cell sizing, and excludes them from unspecified-track excess distribution.
 The 60px regression and native contracts pass. Spanning cells crossing authored
 columns, percentage-column distribution and column-group widths remain open.
+
+### Explicit zero-width column mutation (2026-09-10)
+
+Native contracts mutate the authored priority column from 60px to 0 with an
+important class rule and verify the cell remains zero-width despite its own
+120px declaration. Removing the class restores 60px. Rebuilt contracts pass,
+confirming explicit zero is preserved independently of automatic sizing.
+Spanning-cell and percentage-column interactions remain open.

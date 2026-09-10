@@ -165,6 +165,14 @@ int main() {
         "specified width restores fixed first-row sizing");
   check(d.bounds(d.find("col-priority")).width == 60,
         "fixed table column width takes priority over first-row cell");
+  d.attribute(d.find("priority-column"), "class", "zero");
+  d.render(800, 600);
+  check(d.bounds(d.find("col-priority")).width == 0,
+        "explicit zero column is not treated as automatic");
+  d.remove_attribute(d.find("priority-column"), "class");
+  d.render(800, 600);
+  check(d.bounds(d.find("col-priority")).width == 60,
+        "column width recovers after zero-width mutation");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
