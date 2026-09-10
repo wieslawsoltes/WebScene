@@ -72,6 +72,8 @@ button:focus { height: 30px; }
 #whitespace-variable.invalid { --White:bogus; }
 #whitespace-variable.preline { --White:pre-line; }
 #whitespace-variable.narrow { width:15px; }
+html[data-fractions="on"] { --InheritedTracks:3fr 1fr; }
+#fraction-grid.inherited { --Tracks:var(--InheritedTracks, 1fr 1fr); }
 #fraction-grid.reverse { --Tracks:2fr 1fr; }
 #fraction-grid.invalid { --Tracks:-1fr 2fr; }
 #fraction-grid { display:grid; width:300px; grid-template-columns:var(--Tracks, 1FR 2fr); }

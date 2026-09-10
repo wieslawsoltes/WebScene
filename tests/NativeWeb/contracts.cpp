@@ -575,6 +575,17 @@ int main() {
   d.render(800, 600);
   check(d.bounds(d.find("fraction-a")).width == 100, "fraction fallback recovers after invalid value");
   check(d.bounds(d.find("fraction-b")).width == 200, "fraction fallback second track recovers");
+  d.attribute(fraction_grid, "class", "inherited");
+  d.attribute(d.root(), "data-fractions", "on");
+  d.render(800, 600);
+  check(d.bounds(d.find("fraction-a")).width == 225, "nested inherited fractional reference");
+  check(d.bounds(d.find("fraction-b")).width == 75, "nested inherited fractional second track");
+  d.remove_attribute(d.root(), "data-fractions");
+  d.render(800, 600);
+  check(d.bounds(d.find("fraction-a")).width == 150, "nested fractional fallback after ancestor mutation");
+  check(d.bounds(d.find("fraction-b")).width == 150, "nested fractional fallback second track");
+  d.remove_attribute(fraction_grid, "class");
+  d.render(800, 600);
   d.attribute(d.root(), "data-theme", "light");
   const auto &light_scene = d.render(800, 600);
   check(std::string(light_scene.bytes.begin(), light_scene.bytes.end())

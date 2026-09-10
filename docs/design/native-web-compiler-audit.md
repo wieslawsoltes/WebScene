@@ -1230,3 +1230,12 @@ the complete declaration: both children use the implicit full-width column.
 Removing the class restores the original fallback ratio with no stale tracks.
 Rebuilt native contracts pass. This adds dynamic geometry evidence; nested
 minmax token expressions, raster parity and broader grid behavior remain open.
+
+### Inherited fractional references (2026-09-10)
+
+Native geometry now verifies a child custom property referencing inherited
+3fr/1fr tokens produces 225px/75px columns in a 300px grid. Removing the ancestor
+attribute removes that declaration and activates the nested 1fr/1fr fallback,
+producing 150px/150px columns. Rebuilt contracts pass, confirming fractional
+metadata survives reference evaluation, inheritance and ancestor mutation.
+Full variable token grammar and browser differential closure remain open.
