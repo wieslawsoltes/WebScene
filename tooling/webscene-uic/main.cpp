@@ -338,7 +338,17 @@ static std::string assignments(const std::string &name,
         "(result.value_or(webscene::native_web::length" + length("auto") + "));}";
   }
   if (name == "inset" && value.find("var(") != std::string::npos) {
-    return "auto v=s.evaluate(" + variable_code(value) + ");"
+    std::string code = "webscene::native_web::variable_result v=webscene::native_web::variable_tokens{};";
+    for (const auto &component : component_values(value)) {
+      if (component.starts_with("calc(")) {
+        code += "{auto result=" + compiled_length_expression(component) +
+            ";if(!result)v.reset();else if(v)v->emplace_back(\"\",result,std::nullopt);}";
+      } else {
+        code += "{auto part=s.evaluate(" + variable_code(component) +
+            ");if(!part)v.reset();else if(v)v->insert(v->end(),part->begin(),part->end());}";
+      }
+    }
+    return code +
         "bool valid=v && !v->empty() && v->size()<=4;"
         "if(valid) for(const auto& t:*v) valid=valid && (t.length.has_value() || t.text==\"auto\");"
         "auto side=[&](size_t i){return valid ? ((*v)[i].length.value_or(webscene::native_web::length" + length("auto") + ")) : webscene::native_web::length" + length("auto") + ";};"

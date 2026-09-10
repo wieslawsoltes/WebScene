@@ -462,3 +462,14 @@ The native geometry fixture exercises this combination; compiler and native
 contract suites pass. This splitter is for the supported length shorthand grammar,
 not a general CSS string/token parser. Variable-containing calc inside an inset
 still requires integration with the variable-shorthand evaluator.
+
+### Combined inset variables and calc (2026-09-10)
+
+Variable-bearing inset now gathers complete shorthand components before expansion.
+Calc components produce typed lengths, while variable components may expand into
+multiple typed tokens; the final list receives one arity/type validation before
+all four sides are assigned. The native fixture combines variable fallback inside
+calc, a two-value auto fallback, and percentage arithmetic. Existing resize,
+invalid-value and theme checks pass, along with the compiler suite. This closes
+the previously noted combination gap for the supported expression grammar, not
+all custom-property function values or CSS-wide keywords.
