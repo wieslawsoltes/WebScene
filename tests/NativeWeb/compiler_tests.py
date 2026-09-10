@@ -167,6 +167,20 @@ class CompilerTests(unittest.TestCase):
         for line in [2,3,4,5]:
             self.assertIn('#line '+str(line)+' "'+str(source)+'"',generated)
 
+    def test_element_rejections_use_current_parser_line(self):
+        for element,message in [('<input>', 'unsupported Native Web element'),
+                                ('<script></script>', 'excludes scripts'),
+                                ('<template></template>', 'requires a nonempty id'),
+                                ('<link>', 'only local stylesheet links')]:
+            folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+            root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+            source.write_text('<html><body>\n<div>first</div>\n<div>second</div>\n'+element+'\n</body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn(str(source)+':4:1: error:',result.stderr)
+            self.assertIn(message,result.stderr)
+            self.assertFalse(output.exists())
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'

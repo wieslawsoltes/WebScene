@@ -1102,3 +1102,13 @@ tree-builder position at creation, not exact opening-token spans: multiline tags
 implicit/reconstructed elements, attribute columns, entity decoding and inline
 CSS offsets still require richer provenance. This is a foundation for source
 mapping, not closure of the precise HTML diagnostics gate.
+
+### Element validation diagnostic provenance (2026-09-10)
+
+Compiler traversal now selects the current node's parser line before validating
+it, including the metadata pass. Previously unsupported elements could report a
+previous sibling's location, while scripts/templates/links rejected in the
+metadata pass could retain unrelated locations. One regression checks all four
+rejection paths after repeated valid siblings and verifies no output is emitted.
+All 59 compiler tests and native contracts pass. The column remains an element
+line anchor; exact authored spans and attribute diagnostics remain open.

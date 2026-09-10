@@ -971,6 +971,10 @@ struct compiler {
             ? 1
             : 1 + std::count(content.begin(), content.begin() + at, '\n');
   }
+  void locate_node(const dom_node &node) {
+    if (node.parser_line) { location = node.parser_line; column = 1; }
+    else if (!node.tag.starts_with("#")) locate("<" + node.tag);
+  }
   void declarations(const css_syntax_output &css, const css_syntax_rule &r) {
     out << "{";
     bool emitted = false;
@@ -1041,6 +1045,7 @@ struct compiler {
     stylesheet_locations = saved_locations;
   }
   void node(const dom_node &n, const std::string &parent) {
+    locate_node(n);
     if (n.tag == "template") {
       if (in_template)
         throw std::runtime_error("nested compiled templates are not supported");
@@ -1063,8 +1068,6 @@ struct compiler {
       warning("generic native element: " + n.tag);
     }
     auto local = "n" + std::to_string(++count);
-    if (n.parser_line) { location = n.parser_line; column = 1; }
-    else locate("<" + n.tag);
     out << "#line " << location << " " << quote(source.string()) << "\n";
     if (n.tag == "body")
       out << "auto " << local << " = d.body();\n";
@@ -1141,6 +1144,7 @@ struct compiler {
     prefix.swap(out);
     const dom_node *body = nullptr;
     const auto walk = [&](auto &&self, const dom_node &n) -> void {
+      locate_node(n);
       if (n.tag == "template") {
         auto id = n.attributes.find("id");
         if (id == n.attributes.end() || id->second.empty())
