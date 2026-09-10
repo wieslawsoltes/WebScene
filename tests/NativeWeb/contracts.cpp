@@ -159,6 +159,16 @@ int main() {
           child.width == 140 && child.height == 60,
           "compiled four-sided inset constrains native position and size");
   }
+  d.attribute(d.find("inset-child"), "data-invalid", "true");
+  d.render(800, 600);
+  check(d.bounds(d.find("inset-child")).width == 12 &&
+        d.bounds(d.find("inset-child")).height == 13,
+        "invalid inset variable preserves independently authored dimensions");
+  check(d.bounds(d.find("inset-child")).x == d.bounds(d.find("inset-parent")).x &&
+        d.bounds(d.find("inset-child")).y == d.bounds(d.find("inset-parent")).y,
+        "invalid inset variable clears previous positional offsets");
+  d.attribute(d.find("inset-child"), "data-invalid", "false");
+  d.render(800, 600);
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;

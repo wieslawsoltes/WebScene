@@ -237,3 +237,11 @@ the four sides to auto. Native layout checks verify a four-value fallback places
 and sizes the child correctly, then a theme change to a single 5px inset produces
 190×90 content inside a 200×100 parent. Compiler and native contract suites pass.
 Calc expressions and explicit CSS-wide keywords remain open.
+
+### Invalid computed inset regression (2026-09-10)
+
+Native layout regression switches a valid four-sided inset to a variable containing
+an invalid identifier, verifies old offsets are cleared while independent width/
+height survive, and restores the valid cascade before the theme-update checks.
+The native contract suite passes. This validates the invalid-computed-value path
+for this case; explicit inherit/revert semantics are still open.
