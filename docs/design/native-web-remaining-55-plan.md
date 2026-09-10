@@ -426,3 +426,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   runtime dimension-variable/inheritance/iframe regressions pass. This preserves
   current parser/length/logical-side limitations; it does not claim full box-property
   compliance. Other property families and full cascade orchestration remain open.
+
+- Inset/border application extraction: existing inset shorthand, reset-value
+  handling, border width/color/shorthand application and explicit-color recognition
+  now live in the shared box-value helpers. Native tests verify inset expansion,
+  automatic sides, border widths/colors, currentColor flags and removal. Service
+  and runtime tradingview-opacity-border, active-chart-pseudo-border and
+  logical-inset-transition tests pass. Existing border-style/logical-direction and
+  parsing limitations remain; this is shared behavior, not full border compliance.
+  Full declaration dispatch and cascade orchestration are still unfinished.

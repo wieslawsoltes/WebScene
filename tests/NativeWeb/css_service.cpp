@@ -196,5 +196,16 @@ int main() {
     webscene_native::css::apply_margin(exempt,{"margin","9px",true},"9px");
     webscene_native::css::apply_margin(exempt,{"margin-right","1px",false},"1px");
     if(exempt.style.margin_left.value!=9 || exempt.style.margin_right.value!=9) return 46;
+    webscene_native::css::apply_inset_declaration(box,"inset","1px 2px auto 4px");
+    if(box.top.value!=1 || box.right.value!=2 || box.left.value!=4 ||
+       box.bottom.unit!=webscene_native::length_unit::automatic) return 47;
+    webscene_native::css::apply_border_declaration(box,"border","2px solid #123456");
+    if(box.border_left_width.value!=2 || box.border_top_rgba!=0x123456ffu || box.border_top_current_color) return 48;
+    webscene_native::css::apply_border_declaration(box,"border-left-color","currentColor");
+    if(!box.border_left_current_color || box.border_top_current_color) return 49;
+    webscene_native::css::apply_border_declaration(box,"border-width","1px 2px 3px 4px");
+    if(box.border_top_width.value!=1 || box.border_left_width.value!=4) return 50;
+    webscene_native::css::apply_border_declaration(box,"border","none");
+    if(box.border_top_width.value!=0 || box.border_left_width.value!=0) return 51;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
