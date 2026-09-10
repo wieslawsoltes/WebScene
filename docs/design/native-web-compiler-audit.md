@@ -451,3 +451,14 @@ The parent grows from 200px to 300px, and its child's percentage-minus-pixel off
 changes from 80px to 130px without rebuilding the generated document. The native
 contract suite passes. This verifies dynamic percentage resolution, not host
 window-resize frame pacing.
+
+### Function-preserving box shorthand splitting (2026-09-10)
+
+Box shorthand splitting now preserves parenthesized function values rather than
+splitting their internal whitespace. Inset can therefore contain multiple literal
+calc functions alongside auto values. Generated positional calc locals are scoped
+per assignment so shorthand expansion compiles without duplicate declarations.
+The native geometry fixture exercises this combination; compiler and native
+contract suites pass. This splitter is for the supported length shorthand grammar,
+not a general CSS string/token parser. Variable-containing calc inside an inset
+still requires integration with the variable-shorthand evaluator.

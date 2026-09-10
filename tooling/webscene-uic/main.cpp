@@ -49,6 +49,25 @@ static std::string trim(std::string value) {
     return {};
   return value.substr(b, value.find_last_not_of(" \t\r\n\f") - b + 1);
 }
+static std::vector<std::string> component_values(const std::string &value) {
+  std::vector<std::string> result;
+  size_t start = 0;
+  int depth = 0;
+  for (size_t i = 0; i <= value.size(); ++i) {
+    if (i < value.size()) {
+      if (value[i] == '(') ++depth;
+      if (value[i] == ')' && --depth < 0) throw std::runtime_error("unbalanced CSS function");
+    }
+    if (i == value.size() || (depth == 0 && std::isspace(static_cast<unsigned char>(value[i])))) {
+      auto part = trim(value.substr(start, i-start));
+      if (!part.empty()) result.push_back(std::move(part));
+      start = i + 1;
+    }
+  }
+  if (depth) throw std::runtime_error("unclosed CSS function");
+  return result;
+}
+
 static std::string length(const std::string &value) {
   static const std::regex valid(
       R"(^([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh)?|auto)$)");
@@ -315,8 +334,8 @@ static std::string assignments(const std::string &name,
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
   if (value.starts_with("calc(") && (name == "left" || name == "right" || name == "top" || name == "bottom")) {
-    return "auto result=" + compiled_length_expression(value) + ";s.set_" + name +
-        "(result.value_or(webscene::native_web::length" + length("auto") + "));";
+    return "{auto result=" + compiled_length_expression(value) + ";s.set_" + name +
+        "(result.value_or(webscene::native_web::length" + length("auto") + "));}";
   }
   if (name == "inset" && value.find("var(") != std::string::npos) {
     return "auto v=s.evaluate(" + variable_code(value) + ");"
@@ -543,11 +562,7 @@ static std::string assignments(const std::string &name,
     return result;
   }
   if (name == "padding" || name == "margin" || name == "border-radius" || name == "inset") {
-    std::istringstream in(value);
-    std::vector<std::string> values;
-    std::string v;
-    while (in >> v)
-      values.push_back(v);
+    auto values = component_values(value);
     if (values.empty() || values.size() > 4)
       throw std::runtime_error("invalid box shorthand");
     std::string a = values[0], b = values.size() > 1 ? values[1] : a,
