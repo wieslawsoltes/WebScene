@@ -515,6 +515,18 @@ int main()
             test_mouse_moves_are_raf_aligned_at_compositor_cadence();
             return 0;
         }
+        if (selected == "host-clock-keyframes") {
+            auto* focused_engine = webscene_engine_create(64);
+            require(focused_engine != nullptr, "keyframe test engine creation failed");
+            // These regressions share a host-clock timeline starting with transitions.
+            test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(focused_engine);
+            test_inline_transition_longhands_survive_dynamic_parse_and_recascade(focused_engine);
+            test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(focused_engine);
+            test_rotation_keyframes_use_host_clock_and_wrap_continuously(focused_engine);
+            test_clipped_offscreen_keyframes_do_not_keep_host_frame_clock_alive(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "logical-inset-transition") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");

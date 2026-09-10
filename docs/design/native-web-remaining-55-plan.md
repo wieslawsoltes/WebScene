@@ -461,3 +461,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   exponent times and malformed tokens. Native service and runtime compact grid,
   symbol-search grid and logical-inset-transition tests pass. Full animation
   playback and grid layout parity in the standalone app remain unverified.
+
+- Keyframe configuration extraction: runtime CSS now delegates opacity/rotation
+  stop selection, timing and animation signatures to the shared native helper.
+  The V8-free service test exercises actual native-document interpolation at
+  500ms and cancellation after animation:none. The focused host-clock-keyframes
+  runtime regression passes, covering transitions, staggered opacity animation,
+  continuous rotation and offscreen frame-demand suppression. Its prerequisite
+  transition tests are retained because the existing tests share a clock timeline.
+  This preserves existing first-animation/property coverage limits; it does not
+  establish full animation compliance or Kestrel application parity.

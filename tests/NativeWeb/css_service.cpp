@@ -246,5 +246,25 @@ int main() {
     if(webscene_native::css::is_css_time("progress") || webscene_native::css::is_css_time("NaNs") ||
        webscene_native::css::is_css_time("1junkms") || !webscene_native::css::is_css_time("+.15s") ||
        webscene_native::css::parse_css_time_ms("1e-1s")!=100) return 62;
+    webscene_native::native_document animated_document;
+    auto& animated=animated_document.create_element("div");
+    animated_document.append_child(animated_document.body(),animated);
+    animated.style.width={20,webscene_native::length_unit::pixels};
+    animated.style.height={20,webscene_native::length_unit::pixels};
+    std::unordered_map<std::string,webscene_native::css::css_opacity_keyframes> definitions;
+    definitions["progress"].opacity_stops={{0,0},{1,1}};
+    webscene_native::css::apply_animation_shorthand(animated.style,"progress 1s linear infinite");
+    webscene_native::css::configure_keyframes(animated.style,definitions);
+    animated_document.layout(100,100);
+    animated_document.signal_animation_frame(0);
+    animated_document.update_style_animations(animated);
+    animated_document.advance_animations();
+    animated_document.signal_animation_frame(500);
+    animated_document.advance_animations();
+    if(std::abs(animated.painted_opacity_value()-.5f)>.02f) return 63;
+    webscene_native::css::apply_animation_shorthand(animated.style,"none");
+    webscene_native::css::configure_keyframes(animated.style,definitions);
+    animated_document.update_style_animations(animated);
+    if(animated.animation_runtime() && animated.animation_runtime()->opacity_keyframe_animation_active) return 64;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

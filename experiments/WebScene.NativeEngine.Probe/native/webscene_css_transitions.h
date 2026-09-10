@@ -179,4 +179,71 @@ inline void apply_animation_shorthand(node_style& style, const std::string& valu
         animations.animation_iteration_count_value = iterations;
     }
 
+inline void configure_keyframes(node_style& style,
+    const std::unordered_map<std::string,css_opacity_keyframes>& definitions)
+    {
+        if (!style.has_animation_data()) return;
+        auto& animations = style.mutable_animations();
+        animations.opacity_keyframes.clear();
+        animations.opacity_keyframe_animation_signature.clear();
+        animations.rotation_keyframes.clear();
+        animations.rotation_keyframe_animation_signature.clear();
+        if (animations.animation_name_value == "none") return;
+        const auto names = split_css_component_list(animations.animation_name_value, ',');
+        if (names.empty()) return;
+        const auto name = ascii_lower(trim_value(names.front()));
+        const auto definition = definitions.find(name);
+        if (name == "none" || definition == definitions.end()) return;
+        const auto durations = split_css_component_list(animations.animation_duration_value, ',');
+        const auto delays = split_css_component_list(animations.animation_delay_value, ',');
+        const auto timings = split_css_component_list(
+            animations.animation_timing_function_value, ',');
+        const auto iteration_counts = split_css_component_list(
+            animations.animation_iteration_count_value, ',');
+        animations.opacity_keyframe_duration_ms = durations.empty()
+            ? 0 : std::max(0.0F, parse_css_time_ms(durations.front()));
+        animations.opacity_keyframe_delay_ms = delays.empty()
+            ? 0 : parse_css_time_ms(delays.front());
+        const auto iteration = iteration_counts.empty()
+            ? std::string("1") : ascii_lower(trim_value(iteration_counts.front()));
+        animations.opacity_keyframe_iterations = iteration == "infinite"
+            ? std::numeric_limits<float>::infinity()
+            : std::max(0.0F, std::strtof(iteration.c_str(), nullptr));
+        node_style::transition_timing animation_timing;
+        if (!timings.empty()) parse_transition_timing(timings.front(), animation_timing);
+        animations.opacity_keyframe_x1 = animation_timing.x1;
+        animations.opacity_keyframe_y1 = animation_timing.y1;
+        animations.opacity_keyframe_x2 = animation_timing.x2;
+        animations.opacity_keyframe_y2 = animation_timing.y2;
+        animations.opacity_keyframes = definition->second.opacity_stops;
+        animations.rotation_keyframes = definition->second.rotation_stops;
+        if (animations.opacity_keyframe_duration_ms <= 0
+            || animations.opacity_keyframe_iterations == 0
+            || (animations.opacity_keyframes.size() < 2U
+                && animations.rotation_keyframes.size() < 2U)) return;
+        std::ostringstream signature;
+        signature << name << '|' << animations.opacity_keyframe_duration_ms << '|'
+            << animations.opacity_keyframe_delay_ms << '|'
+            << animations.opacity_keyframe_iterations << '|'
+            << animations.opacity_keyframe_x1 << ',' << animations.opacity_keyframe_y1 << ','
+            << animations.opacity_keyframe_x2 << ',' << animations.opacity_keyframe_y2;
+        const auto base_signature = signature.str();
+        if (animations.opacity_keyframes.size() >= 2U) {
+            signature.str(base_signature);
+            signature.clear();
+            for (const auto& stop : animations.opacity_keyframes) {
+                signature << '|' << stop.offset << ':' << stop.opacity;
+            }
+            animations.opacity_keyframe_animation_signature = signature.str();
+        }
+        if (animations.rotation_keyframes.size() >= 2U) {
+            signature.str(base_signature);
+            signature.clear();
+            for (const auto& stop : animations.rotation_keyframes) {
+                signature << '|' << stop.offset << ':' << stop.degrees;
+            }
+            animations.rotation_keyframe_animation_signature = signature.str();
+        }
+    }
+
 } // namespace webscene_native::css
