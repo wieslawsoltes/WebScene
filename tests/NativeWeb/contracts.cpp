@@ -1,5 +1,6 @@
 #include "native_web_contracts_ui.hpp"
 #include <atomic>
+#include <webscene/compiled_variables.hpp>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -9,6 +10,29 @@ static void check(bool value, const char *label) {
 }
 int main() {
   using namespace webscene::native_web;
+  {
+    using expression = variable_expression;
+    auto token = [](std::string value) { return expression{expression::kind::token, value}; };
+    auto ref = [](std::string name) { return expression{expression::kind::reference, name}; };
+    specified_variables variables;
+    variables["--accent"] = {token("#5ac6d2")};
+    variables["--border"] = {token("1px"), token("solid"), ref("--accent")};
+    auto parent = compute_variables(variables);
+    check(parent.at("--border") == variable_tokens({"1px", "solid", "#5ac6d2"}), "compiled variable substitution");
+    auto child = compute_variables({{"--accent", {token("#157a8b")}}}, parent);
+    check(child.at("--border") == parent.at("--border"), "inherited variable references stay computed");
+    expression fallback{expression::kind::reference, "--missing", {token("fallback")}, true};
+    variables["--fallback"] = {fallback};
+    variables["--a"] = {ref("--b")};
+    variables["--b"] = {ref("--a")};
+    variables["--rescue"] = {{expression::kind::reference, "--a", {token("safe")}, true}};
+    variables["--hidden-cycle"] = {{expression::kind::reference, "--accent", {ref("--hidden-cycle")}, true}};
+    auto result = compute_variables(variables);
+    check(!result.at("--a") && !result.at("--b"), "cycles invalidate variables");
+    check(!result.at("--hidden-cycle"), "unused fallback participates in cycles");
+    check(result.at("--rescue") == variable_tokens({"safe"}), "invalid variable uses fallback");
+    check(result.at("--fallback") == variable_tokens({"fallback"}), "missing variable uses fallback");
+  }
   document d;
   auto refs = compiled_ui::build(d);
   check(d.root() != d.body(), "HTML root differs from body");
