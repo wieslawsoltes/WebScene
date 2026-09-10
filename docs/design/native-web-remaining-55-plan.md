@@ -506,3 +506,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   selector preparation, specificity, identity reuse, declaration isolation and
   releasing/recreating unused payloads. Cache ownership and rule indexing remain
   with their host; this does not yet supply the complete native stylesheet owner.
+
+- Resource resolution extraction: shared native URL and CSS url() rewriting
+  helpers now serve the existing runtime as well as native callers. Native tests
+  cover stylesheet-relative package-style URLs, root-relative resources, fragments,
+  data URLs and malformed input preservation. The runtime relative-stylesheet-resource
+  regression passes. This preserves existing URL/tokenization limitations and
+  supplies resolution only; embedding bytes, loading fonts/images, and complete
+  native stylesheet integration still require their own implementation/validation.

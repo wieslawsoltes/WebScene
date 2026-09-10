@@ -10,6 +10,7 @@
 #include "webscene_css_pseudo_values.h"
 #include "webscene_css_stylesheet_sink.h"
 #include "webscene_css_rule_payload.h"
+#include "webscene_css_resources.h"
 #include <iostream>
 
 struct stylesheet_test_host {
@@ -361,5 +362,14 @@ int main() {
     if(!released.expired()) return 72;
     red_payload=payload_for(".base","red");
     if(!red_payload || red_payload->declarations[0].value!="red") return 73;
+    const std::string css_base="asset://kestrel/css/theme/main.css";
+    const auto resolved_css=webscene_native::css::resolve_resource_urls(
+        R"CSS(url('../../images/grid.png?v=2'), url("../fonts/ui.woff2"), url(#mask))CSS",css_base);
+    if(resolved_css!=R"CSS(url("asset://kestrel/images/grid.png?v=2"), url("asset://kestrel/css/fonts/ui.woff2"), url(#mask))CSS") return 74;
+    if(webscene_native::resources::resolve_url("data:image/png;base64,AA",css_base)!="data:image/png;base64,AA" ||
+       webscene_native::resources::resolve_url("/icons/tool.svg",css_base)!="asset://kestrel/icons/tool.svg" ||
+       webscene_native::resources::resolve_url("//cdn.test/a.png","https://example.test/css/main.css")!="https://cdn.test/a.png") return 75;
+    if(webscene_native::css::resolve_resource_urls("url('unterminated",css_base)!="url('unterminated" ||
+       webscene_native::css::resolve_resource_urls("url(icon.png)","")!="url(icon.png)") return 76;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

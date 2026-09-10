@@ -125,6 +125,10 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "relative-stylesheet-resource") {
+            test_relative_stylesheet_background_uses_stylesheet_address();
+            return 0;
+        }
         if (selected == "shared-shadow-values") {
             auto* focused_engine=webscene_engine_create(0);
             require(focused_engine != nullptr,"shadow test engine creation failed");
