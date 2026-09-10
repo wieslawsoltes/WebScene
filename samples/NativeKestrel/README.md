@@ -39,3 +39,7 @@ Shared UI markup must use standard HTML `<template>` elements. Browser code can
 clone their content; native code instantiates compiler-generated construction
 functions. Dynamic content must not introduce runtime HTML parsing in the native
 application. Browser JavaScript and native C++ application logic remain separate.
+
+Native hatch-line generation now covers cross patterns, concave boundaries and
+non-XY planes, with endpoint comparisons against upstream geometry output.
+Solid hatch triangulation still needs wiring into the entity geometry output.

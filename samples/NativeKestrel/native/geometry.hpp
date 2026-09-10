@@ -64,6 +64,34 @@ inline std::vector<vec3> path(const json& e,double tolerance=.5){
 inline bool closed(const json& e){auto t=e.at("type");return t=="CIRCLE"||t=="HATCH"||(t=="POLYLINE"&&e.value("closed",false))||
     (t=="ELLIPSE"&&(!e.contains("endAngle")||e["endAngle"].is_null()||sweep(number(e,"startAngle",0),e["endAngle"].get<double>())>tau-epsilon));}
 
+using segment = std::array<vec3,2>;
+inline std::vector<segment> hatch_segments(const json& e){
+    auto p=e.contains("points")?points(e["points"]):std::vector<vec3>{};
+    if(p.size()<3)return {};
+    auto b=basis(vector_property(e,"normal",face_normal(p)));auto origin=p.front();
+    std::vector<vec3> flat;for(auto v:p){auto d=v-origin;flat.push_back({d.dot(b.x),d.dot(b.y),0});}
+    auto spacing=number(e,"spacing",10);if(spacing==0)spacing=10;spacing=std::max(spacing,.001);
+    std::vector<double> angles{number(e,"angle",std::numbers::pi/4)};
+    if(e.value("pattern",std::string{})=="cross")angles.push_back(angles.front()+std::numbers::pi/2);
+    std::vector<segment> result;
+    for(auto a:angles){
+        auto c=std::cos(a),s=std::sin(a);std::vector<vec3> q;
+        double low=std::numeric_limits<double>::infinity(),high=-low;
+        for(auto v:flat){vec3 t{v.x*c+v.y*s,-v.x*s+v.y*c,0};q.push_back(t);low=std::min(low,t.y);high=std::max(high,t.y);}
+        auto step=spacing;if((high-low)/step>3000)step=(high-low)/3000;
+        for(double y=std::ceil(low/step)*step;y<high;y+=step){
+            std::vector<double> xs;
+            for(size_t i=0,j=q.size()-1;i<q.size();j=i++){
+                auto v=q[i],w=q[j];if((v.y<=y&&w.y>y)||(w.y<=y&&v.y>y))xs.push_back(v.x+(y-v.y)*(w.x-v.x)/(w.y-v.y));
+            }
+            std::sort(xs.begin(),xs.end());
+            auto world=[&](double x){return origin+b.x*(x*c-y*s)+b.y*(x*s+y*c);};
+            for(size_t k=0;k+1<xs.size();k+=2)result.push_back({world(xs[k]),world(xs[k+1])});
+        }
+    }
+    return result;
+}
+
 inline json encode(vec3 p){return {p.x,p.y,p.z};}
 inline json box(vec3 p,double w,double d,double h){
     json v=json::array();for(auto q:{vec3{0,0,0},vec3{w,0,0},vec3{w,d,0},vec3{0,d,0},vec3{0,0,h},vec3{w,0,h},vec3{w,d,h},vec3{0,d,h}})v.push_back(encode(p+q));
