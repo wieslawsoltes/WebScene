@@ -83,6 +83,14 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb, #fff '+percent+', transparent); }')
             self.assertNotEqual(result.returncode,0,percent)
 
+    def test_component_comments_do_not_change_function_boundaries(self):
+        for value in ['color-mix(in /* , ) ( */ srgb, #fff 50%, transparent)',
+                      'color-mix(in srgb, var(--Color, #fff) /* , ) */ 50%, transparent)']:
+            result,_=self.compile('<div></div>', 'div { color:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        result,_=self.compile('<div></div>', 'div { inset:var(--Inset, 3px) /* ) , ( */ 2px; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+
     def test_color_mix_interpolation_whitespace(self):
         for space in ['  ', '\t', '\n', ' /* separator */ ']:
             result,_=self.compile('<div></div>', 'div { color:color-mix(IN'+space+'SRGB, #fff 50%, transparent); }')

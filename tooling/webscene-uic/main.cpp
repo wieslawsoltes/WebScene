@@ -69,21 +69,39 @@ static bool css_number(const std::string &value) {
 }
 static std::vector<std::string> component_values(const std::string &value, char separator = 0) {
   std::vector<std::string> result;
-  size_t start = 0;
+  std::string token;
   int depth = 0;
-  for (size_t i = 0; i <= value.size(); ++i) {
-    if (i < value.size()) {
-      if (value[i] == '\\' && i + 1 < value.size()) { ++i; continue; }
-      if (value[i] == '(') ++depth;
-      if (value[i] == ')' && --depth < 0) throw std::runtime_error("unbalanced CSS function");
+  char quote = 0;
+  const auto flush = [&] {
+    auto part = trim(token);
+    if (!part.empty() || separator) result.push_back(std::move(part));
+    token.clear();
+  };
+  for (size_t i = 0; i < value.size(); ++i) {
+    const auto c = value[i];
+    if (c == '\\' && i + 1 < value.size()) {
+      token += c; token += value[++i]; continue;
     }
-    if (i == value.size() || (depth == 0 && (separator ? value[i] == separator : std::isspace(static_cast<unsigned char>(value[i]))))) {
-      auto part = trim(value.substr(start, i-start));
-      if (!part.empty() || separator) result.push_back(std::move(part));
-      start = i + 1;
+    if (quote) {
+      token += c;
+      if (c == quote) quote = 0;
+      continue;
     }
+    if (c == '"' || c == '\'') { quote = c; token += c; continue; }
+    if (c == '/' && i + 1 < value.size() && value[i + 1] == '*') {
+      const auto end = value.find("*/", i + 2);
+      if (end == std::string::npos) throw std::runtime_error("unclosed CSS comment");
+      if (!separator && depth == 0) flush(); else token += ' ';
+      i = end + 1;
+      continue;
+    }
+    if (c == '(') ++depth;
+    if (c == ')' && --depth < 0) throw std::runtime_error("unbalanced CSS function");
+    if (depth == 0 && (separator ? c == separator : std::isspace(static_cast<unsigned char>(c)))) flush();
+    else token += c;
   }
-  if (depth) throw std::runtime_error("unclosed CSS function");
+  if (depth || quote) throw std::runtime_error("unclosed CSS function or string");
+  flush();
   return result;
 }
 
@@ -521,8 +539,7 @@ static std::string assignments(const std::string &name,
     if (!value.ends_with(')')) throw unsupported();
     const auto arguments = component_values(value.substr(10, value.size() - 11), ',');
     if (arguments.size() != 3 || ascii_keyword(arguments[2]) != "transparent") throw unsupported();
-    const auto interpolation = component_values(std::regex_replace(
-        arguments[0], std::regex(R"(/\*[\s\S]*?\*/)"), " "));
+    const auto interpolation = component_values(arguments[0]);
     if (interpolation.size() != 2 || ascii_keyword(interpolation[0]) != "in" ||
         ascii_keyword(interpolation[1]) != "srgb") throw unsupported();
     const auto stop = component_values(arguments[1]);

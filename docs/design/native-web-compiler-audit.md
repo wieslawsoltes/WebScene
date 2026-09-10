@@ -1745,3 +1745,15 @@ contracts pass. These inspect submitted paint colors, not browser pixel parity.
 Interpolation keywords now split on CSS whitespace and accept intervening comments
 in the supported `in srgb` prelude. All 90 compiler tests pass. General comment
 handling across component scans and rendered differential comparisons remain open.
+
+### Shared component scanner comments and strings (2026-09-10)
+
+Replaced substring-only splitting with a component accumulator that tracks quotes,
+escapes, nesting and comments. Comment punctuation no longer changes grouping or
+comma separation, and quoted text remains intact. Removed the interpolation-only
+comment regex. A regression with commas and parentheses inside comments failed
+before the fix; coverage includes color-mix and inset components. The native mix
+fixture now includes those comments and retains its expected paint/mutation results.
+All 91 compiler tests pass, as do rebuilt smoke, template, module-template and
+native contract suites. This improves callers of component_values; direct var/calc
+scanners and other ad hoc grammars still require comment/token-tree auditing.

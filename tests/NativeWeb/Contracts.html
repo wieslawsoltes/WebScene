@@ -37,7 +37,7 @@ button:focus { height: 30px; }
 #calc-parent.unicode-offset #calc-child { left:var(--caf\e9); }
 #calc-parent.named-offset { --1:30px; ---:var(--1); }
 #calc-parent.named-offset #calc-child { left:var(---); }
-#mix-audit { width:20px; height:20px; background:COLOR-MIX(in srgb, var(--色, var(--fallback, #123456)) +5e1%, TRANSPARENT); }
+#mix-audit { width:20px; height:20px; background:COLOR-MIX(in /* , ) ( */ srgb, var(--色, var(--fallback, #123456)) /* , ) */ +5e1%, TRANSPARENT); }
 #mix-audit.changed { --色:#abcdef80; }
 #calc-parent { position:relative; width:25vw; height:100px; }
 #calc-child { position:absolute; inset:calc(var(--missing-offset, 5px) * 2 + 10px / 2) var(--auto-sides, auto auto) calc(2 * (50% - (15px + 5px)) / 2); width:10px; height:10px; }
