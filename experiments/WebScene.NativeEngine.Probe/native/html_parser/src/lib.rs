@@ -739,6 +739,17 @@ mod css_syntax {
                     break;
                 }
             };
+            // Consume blocks now: next() otherwise skips their contents on its
+            // next call, leaving the saved state before an adjacent !important
+            // at the opening function token rather than after its closing ')'.
+            if matches!(token, Token::Function(_) | Token::ParenthesisBlock
+                | Token::SquareBracketBlock | Token::CurlyBracketBlock) {
+                let _: Result<(), ParseError<'i, ()>> = input.parse_nested_block(|nested| {
+                    consume_raw(nested);
+                    Ok(())
+                });
+                continue;
+            }
             if token == Token::Delim('!') {
                 input.reset(&state);
                 if input.try_parse(parse_important).is_ok() && input.is_exhausted() {

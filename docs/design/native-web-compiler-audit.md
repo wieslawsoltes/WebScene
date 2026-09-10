@@ -169,3 +169,18 @@ not closed: exponent notation and property-specific range/normalization behavior
 still require review. The `color:var(` diagnostic also remains open; a scan of the
 original source found no unclosed `color:var(...)` declaration, so declaration
 extraction/serialization needs investigation before classifying it as bad input.
+
+### Nested function followed by !important (2026-09-10)
+
+Resolved the apparent `color:var(` truncation in the shared Rust CSS declaration
+parser. Reproduced with `.history-error{color:var(--danger)!important}` and two
+other original declarations. cssparser deferred skipping the function body until
+its next token read, but the declaration reader saved the end-state beforehand.
+It consequently sliced the value at the opening function rather than before `!`.
+The reader now consumes nested blocks before recording the next token state.
+
+Regression: the compiled SVG fixture now uses nested variable fallbacks directly
+adjacent to `!important`; existing scene assertions verify both initial paint and
+native theme mutation. Compiler and native contract tests pass. Fresh corpus:
+397 rules, 1475 declarations, **68 distinct unsupported constructs**. This closes
+this extraction defect only; the grammar/diagnostic audit remains open.
