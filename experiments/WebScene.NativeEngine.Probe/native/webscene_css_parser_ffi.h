@@ -14,7 +14,7 @@ using webscene_css_begin_rule_callback = uint8_t(*)(
     void*, uint32_t, uint8_t, size_t,
     webscene_css_byte_slice, webscene_css_byte_slice, size_t*);
 using webscene_css_declaration_callback = uint8_t(*)(
-    void*, webscene_css_byte_slice, webscene_css_byte_slice, uint8_t);
+    void*, webscene_css_byte_slice, webscene_css_byte_slice, uint8_t, uint32_t, uint32_t);
 using webscene_css_end_rule_callback = uint8_t(*)(void*, size_t, size_t);
 
 struct webscene_css_sink_vtable final {

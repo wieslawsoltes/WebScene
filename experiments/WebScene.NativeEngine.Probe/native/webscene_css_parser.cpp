@@ -67,15 +67,15 @@ uint8_t declaration(
     void* opaque,
     webscene_css_byte_slice name,
     webscene_css_byte_slice value,
-    uint8_t important)
+    uint8_t important, uint32_t line, uint32_t column)
 {
     if (opaque == nullptr) return 0U;
     try {
         auto& context = *static_cast<stream_context*>(opaque);
-        const auto accepted = context.sink->declaration(
+        const auto accepted = context.sink->located_declaration(
             borrow_slice(name),
             borrow_slice(value),
-            important != 0U);
+            important != 0U, line, column);
         if (accepted) ++context.declaration_count;
         return accepted ? 1U : 0U;
     } catch (...) {
@@ -176,6 +176,14 @@ public:
         if (!copied_name.starts_with("--")) ascii_lower(copied_name);
         output_.declarations.push_back({
             std::move(copied_name), std::string(value), important});
+        return true;
+    }
+
+    bool located_declaration(std::string_view name, std::string_view value,
+        bool important, uint32_t line, uint32_t column) override {
+        declaration(name, value, important);
+        output_.declarations.back().source_line = line;
+        output_.declarations.back().source_column = column;
         return true;
     }
 

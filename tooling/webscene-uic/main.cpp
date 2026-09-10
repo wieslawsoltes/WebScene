@@ -1211,7 +1211,7 @@ static int check_css(const fs::path &path) {
     check(declaration.name + ":" + declaration.value, [&] {
       if (declaration.name.starts_with("--")) variable_code(trim(declaration.value));
       else assignments(declaration.name, trim(declaration.value));
-    }, owner);
+    }, owner + " at " + path.string() + ":" + std::to_string(declaration.source_line) + ":" + std::to_string(declaration.source_column));
   }
   for (const auto &[error, owners] : errors) {
     std::cerr << path.string() << ": error: " << error << '\n';

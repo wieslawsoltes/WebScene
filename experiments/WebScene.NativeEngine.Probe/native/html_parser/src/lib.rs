@@ -770,7 +770,7 @@ mod css_syntax {
 
     type CssBeginRuleCallback =
         unsafe extern "C" fn(*mut c_void, u32, u8, usize, ByteSlice, ByteSlice, *mut usize) -> u8;
-    type CssDeclarationCallback = unsafe extern "C" fn(*mut c_void, ByteSlice, ByteSlice, u8) -> u8;
+    type CssDeclarationCallback = unsafe extern "C" fn(*mut c_void, ByteSlice, ByteSlice, u8, u32, u32) -> u8;
     type CssEndRuleCallback = unsafe extern "C" fn(*mut c_void, usize, usize) -> u8;
 
     #[repr(C)]
@@ -832,13 +832,15 @@ mod css_syntax {
             index
         }
 
-        fn declaration(&self, name: &str, value: &str, important: bool) {
+        fn declaration(&self, name: &str, value: &str, important: bool, location: cssparser::SourceLocation) {
             let accepted = self.callbacks.declaration.is_some_and(|callback| unsafe {
                 callback(
                     self.context,
                     ByteSlice::from_bytes(name.as_bytes()),
                     ByteSlice::from_bytes(value.as_bytes()),
                     u8::from(important),
+                    location.line + 1,
+                    location.column,
                 ) != 0
             });
             if accepted {
@@ -882,10 +884,10 @@ mod css_syntax {
             &mut self,
             name: CowRcStr<'i>,
             input: &mut Parser<'i, 't>,
-            _declaration_start: &ParserState,
+            declaration_start: &ParserState,
         ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
             let (value, important) = consume_declaration_value(input);
-            self.state.declaration(&name, value, important);
+            self.state.declaration(&name, value, important, declaration_start.source_location());
             Ok(CssStreamingBodyItem::Declaration)
         }
     }

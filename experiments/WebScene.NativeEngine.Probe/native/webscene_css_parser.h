@@ -16,6 +16,8 @@ struct css_syntax_declaration final {
     std::string name;
     std::string value;
     bool important{false};
+    uint32_t source_line{0};
+    uint32_t source_column{0};
 };
 
 struct css_syntax_rule final {
@@ -67,6 +69,10 @@ public:
         std::string_view name,
         std::string_view value,
         bool important) = 0;
+    virtual bool located_declaration(std::string_view name, std::string_view value,
+        bool important, uint32_t line, uint32_t column) {
+        return declaration(name, value, important);
+    }
     virtual bool end_rule(size_t rule_index, size_t declaration_count) = 0;
 };
 

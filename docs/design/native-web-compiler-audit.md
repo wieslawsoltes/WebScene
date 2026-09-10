@@ -534,3 +534,19 @@ to solid. Outline fields and scene drawing exist internally but still need a
 semantic/API audit before compiler exposure. Relative/keyword widths, arbitrary
 border shorthand ordering, variable-bearing width/style shorthands, CSS-wide
 keywords and the remaining border styles are still open.
+
+### Declaration source locations (2026-09-10)
+
+The Rust CSS parser now carries each declaration's one-based line and column
+through its native callback and collected syntax model. The C++ streaming sink
+has a default located-declaration adapter so existing sink implementations retain
+their behavior. The internal Rust/C callback signature changes together and must
+be rebuilt together.
+
+CSS audit declaration errors retain each source occurrence alongside conditional
+ancestry while still counting distinct unsupported constructs only once. A
+multiline nested-media regression verifies two identical declarations report
+lines 4 and 5, column 5, with one distinct gap. All 42 compiler tests and native
+contracts pass after rebuilding the parser and compiler. Rule/selector locations,
+syntax-error locations and mapping inline-style offsets into the owning HTML
+source remain open; this does not close the diagnostic gate.
