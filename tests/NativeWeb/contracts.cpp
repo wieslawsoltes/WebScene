@@ -92,6 +92,9 @@ int main() {
   auto target = refs.named("target"), other = refs.named("other");
   const auto &initial_scene = d.render(800, 600);
   check(d.bounds(d.body()).x == 3, "root style applies to HTML element");
+  std::string scene_bytes(initial_scene.bytes.begin(),initial_scene.bytes.end());
+  check(scene_bytes.find("fill=\"#5ac6d2\"") != std::string::npos,
+        "compiled theme SVG fill reaches serialized scene");
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;
@@ -114,7 +117,10 @@ int main() {
   check(d.bounds(d.find("variable-probe")).width == 222, "compiled var width resolves");
   check(d.bounds(d.find("variable-probe")).height == 14, "compiled var fallback plus borders resolves");
   d.attribute(d.root(), "data-theme", "light");
-  d.render(800, 600);
+  const auto &light_scene = d.render(800, 600);
+  check(std::string(light_scene.bytes.begin(), light_scene.bytes.end())
+                .find("fill=\"#112233\"") != std::string::npos,
+        "native theme mutation updates compiled SVG paint");
   check(d.bounds(d.find("grid-left")).width == 195, "compiled grid variable updates with theme");
   check(d.bounds(d.find("variable-probe")).width == 195, "compiled var updates with theme");
   check(d.bounds(d.body()).x == 7,

@@ -248,6 +248,15 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "fill" || name == "stroke") {
+    auto setter = name == "fill" ? "set_svg_fill" : "set_svg_stroke";
+    if (value.find("var(") != std::string::npos)
+      return "auto v=s.evaluate(" + variable_code(value) + ");s." + setter +
+          "(v && v->size()==1 && ((*v)[0].color || (*v)[0].text==\"none\" || (*v)[0].text==\"currentColor\") ? (*v)[0].text : \"\");";
+    if (value == "inherit" || value == "unset") return std::string("s.") + setter + "(\"\");";
+    if (value != "none" && value != "currentColor" && value != "currentcolor") assignments("color",value);
+    return std::string("s.") + setter + "(" + quote(value) + ");";
+  }
   if (value.starts_with("color-mix(")) {
     std::smatch mix;
     if (!std::regex_match(value,mix,std::regex(R"(color-mix\(\s*in\s+srgb\s*,\s*(var\(--[A-Za-z_][A-Za-z0-9_-]*\)|#[A-Fa-f0-9]+)\s+([0-9]+(?:\.[0-9]+)?)%\s*,\s*transparent\s*\))")))
@@ -805,7 +814,7 @@ struct compiler {
     }
     static const std::set<std::string> tags = {
         "body", "main",   "section", "div", "span", "p",      "h1",     "h2",
-        "h3",   "button", "canvas",  "ul",  "li",   "header", "footer", "nav"};
+        "svg", "g", "path", "polygon", "rect", "circle", "ellipse", "line", "polyline", "h3",   "button", "canvas",  "ul",  "li",   "header", "footer", "nav"};
     if (preview && (n.tag == "script" || n.tag == "noscript")) { warning("skipped " + n.tag); return; }
     if (!tags.contains(n.tag)) {
       if (!preview) throw std::runtime_error("unsupported Native Web element: " + n.tag);
@@ -841,7 +850,8 @@ struct compiler {
       }
       if (k != "id" && k != "class" && k != "width" && k != "height" &&
           k != "tabindex" && k != "disabled" && k != "type" && k != "role" &&
-          !k.starts_with("aria-") && !k.starts_with("data-"))
+          !k.starts_with("aria-") && !k.starts_with("data-") &&
+          !(std::set<std::string>{"viewBox","viewbox","xmlns","d","points","fill","stroke","stroke-width","stroke-linecap","stroke-linejoin","x","y","x1","x2","y1","y2","cx","cy","r","rx","ry"}.contains(k)))
         { if (!preview) throw std::runtime_error("unsupported attribute: " + k); warning("generic native attribute: " + k); }
       if (in_template && k == "id")
         throw std::runtime_error(
