@@ -25,8 +25,8 @@ public:
   camera camera;
   render_options options;
   bool render_dirty = true;
-  explicit controller(webscene::native_web::document &document)
-      : document(document) {
+  explicit controller(webscene::native_web::document &target_document)
+      : document(target_document) {
     auto view = compiled_ui::build(document);
     for (auto &layer : model.data["layers"]) {
       auto row =

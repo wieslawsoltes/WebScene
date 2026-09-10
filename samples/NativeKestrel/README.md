@@ -154,3 +154,9 @@ creates consecutive native LINE entities in undoable transactions. Cancel ends
 the operation. Tests exercise creation, undo and redo through DOM events. Snaps,
 preview geometry, numeric command entry and original command semantics are still
 pending; the POC is not yet a full replacement for upstream's Line tool.
+
+The Foco capture runner accepts `--exercise-commands` alongside `--capture`.
+It hit-tests compiled controls, creates a line through native DOM pointer events,
+checks undo/redo entity counts and requires a subsequent GPU frame. The resulting
+capture visibly contains the line. This tests the hosted DOM/controller/render
+path; it does not inject operating-system mouse events.

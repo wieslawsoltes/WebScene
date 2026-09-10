@@ -12,6 +12,7 @@ import kestrel.controller;
 import kestrel.viewport;
 
 static std::string capture_path;
+static bool exercise_commands = false;
 class kestrel_app final : public foco::application {
   foco::ref<foco::window> window;
   foco::ref<webscene::foco_host::view> view;
@@ -40,12 +41,14 @@ class kestrel_app final : public foco::application {
                          task->app->schedule();
                        } catch (const std::exception &e) {
                          std::cerr << "Kestrel viewport: " << e.what() << '\n';
+                         if (!capture_path.empty())
+                           task->app->lifetime->shutdown(5);
                        }
                      });
   }
   void tick() {
     if (!capture_path.empty() && ++ticks == 120) {
-      if (!serial) {
+      if (!serial || (exercise_commands && serial < 2)) {
         lifetime->shutdown(3);
         return;
       }
@@ -67,6 +70,32 @@ class kestrel_app final : public foco::application {
     auto bounds = view->document.bounds(node);
     if (bounds.width < 1 || bounds.height < 1)
       return;
+    if (exercise_commands && ticks == 40) {
+      auto &document = view->document;
+      auto count = controller->model.data["entities"].size();
+      auto click = [&](const char *id) {
+        auto area = document.bounds(document.find(id));
+        document.pointer("pointerdown", area.x + 5, area.y + 5);
+        document.pointer("pointerup", area.x + 5, area.y + 5);
+      };
+      click("line");
+      for (auto point : {std::pair{100.f, 100.f}, std::pair{300.f, 200.f}}) {
+        document.pointer("pointerdown", bounds.x + point.first,
+                         bounds.y + point.second);
+        document.pointer("pointerup", bounds.x + point.first,
+                         bounds.y + point.second);
+      }
+      if (controller->model.data["entities"].size() != count + 1)
+        throw std::runtime_error("Hosted line creation failed");
+      click("cancel");
+      click("undo");
+      if (controller->model.data["entities"].size() != count)
+        throw std::runtime_error("Hosted undo failed");
+      click("redo");
+      if (controller->model.data["entities"].size() != count + 1)
+        throw std::runtime_error("Hosted redo failed");
+      view->refresh();
+    }
     auto w = static_cast<uint32_t>(bounds.width),
          h = static_cast<uint32_t>(bounds.height);
     if (!viewport)
@@ -117,6 +146,9 @@ public:
   }
 };
 int main(int argc, char **argv) {
+  for (int i = 1; i < argc; ++i)
+    if (std::string_view(argv[i]) == "--exercise-commands")
+      exercise_commands = true;
   for (int i = 1; i + 1 < argc; ++i)
     if (std::string_view(argv[i]) == "--capture")
       capture_path = argv[++i];
