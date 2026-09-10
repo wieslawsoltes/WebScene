@@ -350,6 +350,23 @@ int main() {
         "wheel default safely skips scroll subtree removed by handler");
 
   d.render(800, 600);
+  d.render(800, 10000);
+  auto scroll_outer = d.find("scroll-outer"), scroll_inner = d.find("scroll-inner");
+  auto nested_area = d.bounds(scroll_inner);
+  d.wheel(nested_area.x + 1, nested_area.y + 1, 5);
+  check(d.scroll_offset(scroll_inner).second == 5 && d.scroll_offset(scroll_outer).second == 0,
+        "nested wheel prefers inner scroll container");
+  d.scroll_to(scroll_inner, 0, 20);
+  d.render(800, 10000);
+  d.wheel(nested_area.x + 1, nested_area.y + 1, 7);
+  check(d.scroll_offset(scroll_inner).second == 20 && d.scroll_offset(scroll_outer).second == 7,
+        "wheel at inner boundary reaches scrollable ancestor");
+  d.render(800, 10000);
+  nested_area = d.bounds(scroll_outer);
+  d.wheel(nested_area.x + 1, nested_area.y + 1, -3);
+  check(d.scroll_offset(scroll_inner).second == 17 && d.scroll_offset(scroll_outer).second == 7,
+        "reverse wheel returns to inner container when it can scroll");
+  d.render(800, 600);
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");

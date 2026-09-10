@@ -952,3 +952,11 @@ its viewport. Native contracts verify the offset clamps to the new content exten
 and child geometry agrees in the same render, then resets to zero when content
 fits. Contracts pass without engine changes. This is layout correctness coverage,
 not asynchronous scroll-event or frame-presentation timing verification.
+
+### Nested wheel container regression (2026-09-10)
+
+A compiled nested-scroller fixture verifies inner-container preference, ancestor
+scrolling when the inner container is already at its boundary, and return to inner
+scrolling when direction reverses. Native contracts pass. This tests discrete
+pixel wheel events; residual deltas within one event, overscroll-behavior, gesture
+latching and momentum remain open and must not be inferred from this regression.
