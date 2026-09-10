@@ -126,6 +126,16 @@ int main() {
   d.remove_attribute(padding_longhand, "class");
   d.render(800, 600);
   check(d.bounds(padding_longhand).width == 30, "padding longhand fallback recovers");
+  auto variable_gap = d.find("variable-gap");
+  auto gap_first = d.find("gap-first"), gap_second = d.find("gap-second"), gap_third = d.find("gap-third");
+  check(d.bounds(gap_second).x - d.bounds(gap_first).x == 17 &&
+        d.bounds(gap_third).y - d.bounds(gap_first).y == 13, "variable gap expands distinct row and column values");
+  d.attribute(variable_gap, "class", "invalid");
+  d.render(800, 600);
+  check(d.bounds(gap_second).x - d.bounds(gap_first).x == 10 &&
+        d.bounds(gap_third).y - d.bounds(gap_first).y == 10, "invalid variable gap resets both axes");
+  d.remove_attribute(variable_gap, "class");
+  d.render(800, 600);
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");

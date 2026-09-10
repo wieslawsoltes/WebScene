@@ -741,3 +741,13 @@ a negative custom-property mutation resets only that side (rather than restoring
 the earlier declaration), and removing the mutation restores the fallback.
 All 50 compiler tests and native contracts pass. Calc, CSS-wide keywords and
 broader computed-value range handling remain open.
+
+### Typed variable gaps (2026-09-10)
+
+Gap shorthand now evaluates one or two nonnegative typed lengths and validates
+both before assignment. Invalid values reset both axes to zero for the current
+flex/grid profile. Row-gap and column-gap reuse typed single-value lowering.
+A compiled fixed-track grid regression verifies distinct row/column spacing and
+whole-shorthand reset after a negative custom-property mutation. All 50 compiler
+tests and native contracts pass. Longhand interaction coverage, normal keyword,
+calc and multicolumn initial-gap semantics remain open.

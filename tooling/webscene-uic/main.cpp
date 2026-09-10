@@ -373,9 +373,16 @@ static std::string assignments(const std::string &name,
         "s.set_bottom(side(valid && v->size()>2?2:0));"
         "s.set_left(side(valid && v->size()>3?3:valid && v->size()>1?1:0));";
   }
-  if (name.starts_with("padding-") && lengths.contains(name) && value.find("var(") != std::string::npos) {
+  if (((name.starts_with("padding-") && lengths.contains(name)) || name == "row-gap" || name == "column-gap") && value.find("var(") != std::string::npos) {
     return "auto v=s.evaluate(" + variable_code(value) + ");s.set_" + member +
         "(v && v->size()==1 && (*v)[0].length && (*v)[0].length->value>=0 ? *(*v)[0].length : webscene::native_web::length" + length("0") + ");";
+  }
+  if (name == "gap" && value.find("var(") != std::string::npos) {
+    return "auto v=s.evaluate(" + variable_code(value) + ");"
+        "bool valid=v && !v->empty() && v->size()<=2;"
+        "if(valid) for(const auto& t:*v) valid=valid && t.length && t.length->value>=0;"
+        "auto side=[&](size_t i){return valid ? *(*v)[i].length : webscene::native_web::length" + length("0") + ";};"
+        "s.set_row_gap(side(0));s.set_column_gap(side(valid && v->size()>1?1:0));";
   }
   if (name == "padding" && value.find("var(") != std::string::npos) {
     return "auto v=s.evaluate(" + variable_code(value) + ");"
