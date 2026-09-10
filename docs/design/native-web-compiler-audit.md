@@ -1780,3 +1780,18 @@ background and borders. All 93 compiler tests pass. Native contracts verify
 ORANGE in a custom property produces ffa50080 through the compiled 50% mix and
 restores the fallback after mutation. The complete CSS named-color set and
 functional color grammar remain open; this does not claim full color support.
+
+### Complete named-color table shared with native parsing (2026-09-10)
+
+Added all 148 named-color entries from CSS Color 4 section 6.1 to one internal
+native table. Both native parse_color and compiler literal/custom-value validation
+use it; transparent remains a separate keyword. Source:
+https://www.w3.org/TR/css-color-4/#named-colors (retrieved 2026-09-10).
+The checked-in named-colors.json fixture records the corresponding specification
+values for offline compiler tests. All names compile in uppercase literal form
+and lowercase variable fallback form, with expected RGBA constants (94 compiler
+tests pass). Native paint/mutation coverage now exercises REBECCAPURPLE through
+the 50% mix, expecting 66339980. Rebuilt smoke, templates, module templates and
+contracts pass. Functional colors, system colors, currentcolor semantics and
+browser rendering comparisons remain open; only the named-color inventory is
+completed here. The shared parser change has not been tested in V8 hosts.

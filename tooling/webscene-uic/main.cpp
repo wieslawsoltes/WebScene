@@ -68,11 +68,7 @@ static bool css_number(const std::string &value) {
   return std::regex_match(value, grammar);
 }
 static bool supported_literal_color(const std::string &value) {
-  static const std::set<std::string> names = {
-      "transparent", "black", "white", "red", "green", "lime", "blue", "yellow",
-      "cyan", "aqua", "magenta", "fuchsia", "gray", "grey", "silver", "maroon",
-      "purple", "olive", "navy", "teal", "orange"};
-  return names.contains(ascii_keyword(value)) || std::regex_match(value,
+  return named_color_rgba(ascii_keyword(value)).has_value() || std::regex_match(value,
       std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})"));
 }
 static std::vector<std::string> component_values(const std::string &value, char separator = 0, bool split = true) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "webscene_native_engine.h"
+#include "webscene_named_colors.h"
 #include "graphics/canvas_backing.h"
 #include "graphics/image_lease_abi.h"
 

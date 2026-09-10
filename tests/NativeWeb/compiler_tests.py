@@ -1,3 +1,4 @@
+import json
 import pathlib
 import subprocess
 import sys
@@ -82,6 +83,15 @@ class CompilerTests(unittest.TestCase):
         for percent in ['-1%', '101%', '1e999%', '5 %']:
             result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb, #fff '+percent+', transparent); }')
             self.assertNotEqual(result.returncode,0,percent)
+
+    def test_complete_named_color_table(self):
+        colors=json.loads(pathlib.Path(__file__).with_name('named-colors.json').read_text())
+        css=''.join('.c'+str(i)+' { color:'+name.upper()+'; background:var(--Paint,'+name+'); }' for i,name in enumerate(colors))
+        result,out=self.compile('<div></div>',css)
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        for hex_rgb in colors.values():
+            self.assertIn(str(int(hex_rgb+'ff',16))+'u',generated)
 
     def test_supported_named_colors_share_literal_and_variable_lowering(self):
         for name,rgba in [('ReD',0xff0000ff),('GREEN',0x008000ff),('lime',0x00ff00ff),
