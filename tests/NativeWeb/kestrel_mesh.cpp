@@ -19,5 +19,16 @@ int main(int argc,char** argv){
         bool rejected=false;try{extrude({{0,0,0},{1,0,0},{0,1,0}},height);}catch(const std::invalid_argument&){rejected=true;}
         if(!rejected)throw std::runtime_error("Invalid extrusion accepted");
     }
+    for(auto& sample:fixture["revolutions"]){
+        auto profile=points(sample["points"]);
+        auto a=revolve(profile,point(sample["origin"]),point(sample["axis"]),sample["degrees"],sample["segments"]);auto& b=sample["mesh"];
+        if(a["faces"]!=b["faces"]||a["vertices"].size()!=b["vertices"].size())throw std::runtime_error("Revolution topology mismatch");
+        for(size_t j=0;j<a["vertices"].size();++j)if((point(a["vertices"][j])-point(b["vertices"][j])).length()>1e-10)throw std::runtime_error("Revolution vertex mismatch");
+        if(std::abs(volume(a)-sample["volume"].get<double>())>1e-8)throw std::runtime_error("Revolution volume mismatch");
+    }
+    for(auto& sample:fixture["invalidRevolutions"]){
+        bool rejected=false;try{auto profile=points(sample["points"]);revolve(profile,point(sample["origin"]),point(sample["axis"]),sample["degrees"],sample["segments"]);}catch(const std::invalid_argument&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Invalid revolution accepted");
+    }
     std::cout<<"Kestrel: five upstream mesh primitives matched\n";
 }

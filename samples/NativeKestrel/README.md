@@ -54,5 +54,7 @@ with the renderer are still outstanding.
 
 Native extrusion and signed mesh volume are implemented. Reference comparisons
 cover boundary cleanup, concave profiles, negative heights and non-XY profiles,
-including exact cap/side topology and volume. Revolution and other solid
-operations remain outstanding.
+including exact cap/side topology and volume. Revolution is also implemented, with full, partial, negative and translated-axis
+reference cases. Seven invalid-profile/sweep/axis cases are rejected by both
+upstream and native implementations. Other solid operations and renderer
+integration remain outstanding.

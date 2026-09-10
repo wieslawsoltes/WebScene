@@ -182,4 +182,23 @@ inline json extrude(std::vector<vec3> p,double height,std::optional<vec3> normal
     return {{"type","MESH"},{"primitive","Extrusion"},{"vertices",vertices},{"faces",faces}};
 }
 
+inline json revolve(std::span<const vec3> p,vec3 origin,vec3 axis,double degrees=360,int segments=64){
+    auto a=axis.normalized();if(a.length()<epsilon)throw std::invalid_argument("Revolution axis cannot have zero length");
+    if(p.size()<3)throw std::invalid_argument("Revolution requires a closed profile");
+    auto normal=face_normal(p);if(normal.length()<epsilon)throw std::invalid_argument("Degenerate revolution profile");
+    double extent=1;for(auto q:p)extent=std::max(extent,(q-p.front()).length());auto tol=extent*1e-7;
+    if(std::abs(a.dot(normal))>1e-6||std::abs((origin-p.front()).dot(normal))>tol)throw std::invalid_argument("Revolution axis must lie in profile plane");
+    for(auto q:p)if(std::abs((q-p.front()).dot(normal))>tol)throw std::invalid_argument("Revolution profile must be planar");
+    auto radial=normal.cross(a);double low=std::numeric_limits<double>::infinity(),high=-low;
+    for(auto q:p){auto d=(q-origin).dot(radial);low=std::min(low,d);high=std::max(high,d);}
+    if(low < -tol&&high>tol)throw std::invalid_argument("Revolution profile must not cross axis");
+    if(!std::isfinite(degrees)||std::abs(degrees)<1e-7||std::abs(degrees)>360||segments<3||segments>512)throw std::invalid_argument("Invalid revolution sweep or segment count");
+    bool full=std::abs(degrees)>=359.999;size_t n=segments,count=p.size();json vertices=json::array(),faces=json::array();
+    for(size_t j=0;j<=(full?n-1:n);++j){auto m=around(origin,rotation(degrees*std::numbers::pi/180*j/n,a));for(auto q:p)vertices.push_back(encode(transform(m,q)));}
+    for(size_t j=0;j<n;++j)for(size_t i=0;i<count;++i){auto k=(i+1)%count,next=(j+1)%(full?n:n+1);faces.push_back({j*count+i,j*count+k,next*count+k,next*count+i});}
+    if(!full){json start=json::array(),end=json::array();for(size_t i=0;i<count;++i){start.push_back(count-1-i);end.push_back(n*count+i);}faces.push_back(start);faces.push_back(end);}
+    json result={{"type","MESH"},{"primitive","Revolution"},{"vertices",vertices},{"faces",faces}};
+    if(volume(result)<0)for(auto& face:result["faces"])std::reverse(face.begin(),face.end());return result;
+}
+
 }
