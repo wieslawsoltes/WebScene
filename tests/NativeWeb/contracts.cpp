@@ -266,6 +266,12 @@ int main() {
           "removing block override restores contents flex participation");
     d.render(800, 600);
   }
+  check(d.bounds(d.find("self-child")).y == d.bounds(d.find("self-parent")).y + 15,
+        "compiled align-self overrides parent cross-axis alignment");
+  d.attribute(d.find("self-child"), "class", "auto");
+  d.render(800, 600);
+  check(d.bounds(d.find("self-child")).y == d.bounds(d.find("self-parent")).y,
+        "align-self auto returns to parent alignment");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

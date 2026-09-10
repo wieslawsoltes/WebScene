@@ -537,6 +537,15 @@ static std::string assignments(const std::string &name,
         assignments("line-height", match[2].matched ? match[2].str() : "normal") +
         assignments("font-family", family) + "s.set_font_weight(400);";
   }
+  if (name == "align-self") {
+    const auto keyword = ascii_keyword(value);
+    if (keyword == "auto") return "s.set_align_self(webscene::native_web::align_mode::stretch,false);";
+    static const std::map<std::string,std::string> modes{{"start","start"},{"flex-start","start"},
+      {"end","end"},{"flex-end","end"},{"center","center"},{"stretch","stretch"},{"baseline","baseline"}};
+    auto mode = modes.find(keyword);
+    if (mode == modes.end()) throw std::runtime_error("unsupported align-self value: " + value);
+    return "s.set_align_self(webscene::native_web::align_mode::" + mode->second + ");";
+  }
   if (name == "table-layout") {
     const auto keyword = ascii_keyword(value);
     if (keyword != "auto" && keyword != "fixed") throw std::runtime_error("table-layout requires auto or fixed");

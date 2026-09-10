@@ -1497,3 +1497,12 @@ rule. Its background/border paint returns and its children resume vertical block
 flow. Removing the class restores direct child participation in the outer flex
 row. Rebuilt contracts pass. This adds live role-change evidence; effects,
 accessibility and browser pixel comparisons remain open.
+
+### Align-self compiler/native bridge (2026-09-10)
+
+Added align-self lowering through a supported native writer, including auto's
+unspecified state and native start/end/center/stretch/baseline modes. A native flex
+fixture verifies center overrides parent start alignment and changing to auto
+restores parent alignment. All 77 compiler tests and rebuilt contracts pass.
+Baseline, stretch, grid alignment, logical directions and CSS-wide values still
+need dedicated semantic coverage; this closes the basic flex override path.
