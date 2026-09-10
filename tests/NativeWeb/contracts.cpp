@@ -116,6 +116,16 @@ int main() {
   d.render(800, 600);
   check(std::abs(d.bounds(d.find("after-break")).y - d.bounds(d.find("before-break")).y) < 0.01f,
         "removing compiled br restores a shared inline line");
+  auto padding_longhand = d.find("padding-longhand");
+  check(d.bounds(padding_longhand).width == 30 && d.bounds(padding_longhand).height == 16,
+        "variable longhand fallback overrides one shorthand side");
+  d.attribute(padding_longhand, "class", "invalid");
+  d.render(800, 600);
+  check(d.bounds(padding_longhand).width == 23 && d.bounds(padding_longhand).height == 16,
+        "invalid padding longhand resets only its side without restoring earlier declaration");
+  d.remove_attribute(padding_longhand, "class");
+  d.render(800, 600);
+  check(d.bounds(padding_longhand).width == 30, "padding longhand fallback recovers");
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");

@@ -731,3 +731,13 @@ Native geometry checks verify two-axis padding, a class mutation introducing a
 negative component, all-side reset, and recovery after class removal. All 50
 compiler tests and native contracts pass. Padding longhand variables, calc values
 and remaining box shorthand families still require coverage.
+
+### Variable padding longhands (2026-09-10)
+
+All four padding longhands now lower variable expressions into one nonnegative
+typed length, resetting to initial zero for missing, multi-token or invalid
+values. A native regression verifies fallback overrides an earlier shorthand,
+a negative custom-property mutation resets only that side (rather than restoring
+the earlier declaration), and removing the mutation restores the fallback.
+All 50 compiler tests and native contracts pass. Calc, CSS-wide keywords and
+broader computed-value range handling remain open.
