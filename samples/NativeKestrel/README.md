@@ -211,3 +211,24 @@ pressed-button mask. Release/cancellation stops the drag; movement without the
 middle button also clears the drag state. Native event contracts verify that the
 mask reaches handlers. Sustained 60 fps panning, resize coherence and pointer
 capture outside the host window still require dedicated verification.
+
+### GPU-path latency probe
+
+Run `artifacts/native-web-modules/kestrel_native_gpu --benchmark` from the
+WebScene root. After the normal GPU correctness checks, this measures 140 frames
+per workload, discarding 20 warmup frames. The workloads pan a single mesh at
+1280×720, then pan while resizing between 1280×720 and 1436×798. Timing includes
+resize when applicable, CPU render preparation, submission and polling until a
+shared image resolves. It excludes Foco, DOM rendering and physical presentation.
+
+Observed on the development Mac on 2026-09-10:
+
+| Workload | Median ms | p95 ms | Max ms | Above 16.67 ms |
+| --- | ---: | ---: | ---: | ---: |
+| Pan | 0.614 | 1.776 | 3.074 | 0/120 |
+| Resize + pan | 1.552 | 3.436 | 3.833 | 0/120 |
+
+These are a small-scene GPU-path baseline, not proof of 60 fps application
+panning or window resizing. The probe uses active polling rather than the host's
+vsync cadence. Full acceptance still requires a representative CAD document,
+input-to-presentation timing, frame pacing, and coherent live window resizing.

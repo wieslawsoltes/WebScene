@@ -2,13 +2,17 @@
 #include "native_webgpu_device.h"
 #include "native_webgpu_surface.h"
 #include <chrono>
+#include <algorithm>
+#include <iostream>
+#include <vector>
+#include <string_view>
 #include <stdexcept>
 #include <thread>
 import kestrel.gpu_pipelines;
 import kestrel.viewport;
 import kestrel.gpu_renderer;
 import kestrel.render_data;
-int main() {
+int main(int argc, char **argv) {
   auto gpu = webscene::graphics::native_webgpu_device::create(
       wgpu::BackendType::Metal);
   kestrel::gpu_pipelines pipelines(gpu.device, wgpu::TextureFormat::BGRA8Unorm);
@@ -106,4 +110,33 @@ int main() {
     if (!image)
       throw std::runtime_error("Viewport shared image timed out");
   }
+  if (argc == 2 && std::string_view(argv[1]) == "--benchmark") {
+    for (bool resizing : {false, true}) {
+      std::vector<double> timings;
+      viewport.resize(1280, 720);
+      for (int frame = 0; frame < 140; ++frame) {
+        auto started = std::chrono::steady_clock::now();
+        if (resizing) viewport.resize(1280 + (frame % 40) * 4, 720 + (frame % 40) * 2);
+        viewport.camera.pan(3, 1);
+        if (!viewport.submit(drawing)) throw std::runtime_error("Benchmark submission rejected");
+        auto deadline = started + std::chrono::seconds(10);
+        while (!viewport.poll()) {
+          if (std::chrono::steady_clock::now() >= deadline)
+            throw std::runtime_error("Benchmark GPU completion timed out");
+          std::this_thread::yield();
+        }
+        if (frame >= 20) timings.push_back(std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - started).count());
+      }
+      std::sort(timings.begin(), timings.end());
+      std::cout << (resizing ? "resize+pan" : "pan")
+                << " submit-to-image ms: median=" << timings[timings.size()/2]
+                << " p95=" << timings[timings.size()*95/100]
+                << " max=" << timings.back()
+                << " over16.67=" << std::count_if(timings.begin(), timings.end(),
+                    [](double ms) { return ms > 1000.0/60; })
+                << "/" << timings.size() << '\n';
+    }
+  }
+
 }
