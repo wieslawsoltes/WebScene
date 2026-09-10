@@ -1450,3 +1450,11 @@ in the preceding group. Inserting a row through native construction expands the
 zero-span cell and reserves its column; removing that row restores its original
 height. Rebuilt native contracts pass. No runtime HTML parsing is used. Complex
 span overlaps, row-group reordering and browser differential coverage remain open.
+
+### CSS table display roles (2026-09-10)
+
+Compiler display lowering now exposes table, inline-table and the eight internal
+table roles already represented by native display_mode. Independent compiler
+coverage verifies case-insensitive syntax and each emitted enum. All 77 compiler
+tests pass. CSS-generated table structure, anonymous table boxes and dynamic role
+changes still need native geometry coverage; this records lowering support only.

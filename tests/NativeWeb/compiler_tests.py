@@ -374,6 +374,14 @@ class CompilerTests(unittest.TestCase):
         result,_=self.compile('<table></table>', 'table { table-layout:bogus; }')
         self.assertNotEqual(result.returncode,0)
 
+    def test_table_display_roles_lower_to_native_enums(self):
+        for value in ['table','inline-table','table-row-group','table-header-group',
+                      'table-footer-group','table-row','table-cell','table-column-group',
+                      'table-column','table-caption']:
+            result,out=self.compile('<div></div>', 'div { display:'+value.upper()+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('display_mode::'+value.replace('-','_'),out.read_text())
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'
