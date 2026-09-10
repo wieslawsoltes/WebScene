@@ -133,3 +133,11 @@ viewport and status. Layer rows are standard HTML templates compiled into the
 visibility handlers and lays out the viewport without runtime HTML parsing.
 This is an initial scaffold, not the complete upstream UI; toolbar commands,
 remaining panels, full CSS coverage and window integration remain outstanding.
+
+First Foco window proof: build `FocoKestrel` in the Foco-enabled configuration and
+run `FocoKestrel.app/Contents/MacOS/FocoKestrel --capture /absolute/path.png`.
+The app imports the native controller/viewport modules and presents shared GPU
+images with the existing Foco adapter. The first capture shows compiled layers,
+toolbar, grid and a box. This remains an incomplete application: the initial
+layout leaves a blank lower region, most CAD commands/panels are absent, and
+interactive lifecycle/resource packaging acceptance is not complete.
