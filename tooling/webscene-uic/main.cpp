@@ -1215,9 +1215,25 @@ struct compiler {
     walk(walk, root);
     if (!body)
       throw std::runtime_error("document has no body");
-    for (const auto &[key, value] : body->parent->attributes)
+    for (const auto &[key, value] : body->parent->attributes) {
+      locate_node(*body->parent);
+      if (key.starts_with("on")) {
+        if (!preview) throw std::runtime_error("JavaScript attributes are not supported in Native Web");
+        warning("skipped JavaScript attribute " + key); continue;
+      }
+      if (key == "style") {
+        auto css = parse_css_syntax_declarations(value);
+        if (!css || css.metrics.parse_error_count) throw std::runtime_error("invalid inline style");
+        css_syntax_rule rule{};
+        rule.declaration_count = css.declarations.size();
+        out << "d.add_rule({{},";
+        declarations(css, rule, body->parent);
+        out << ",0,1e9f,d.root()});\n";
+        continue;
+      }
       out << "d.attribute(d.root()," << quote(key) << "," << quote(value)
           << ");\n";
+    }
     node(*body, "d.body()");
     for (size_t i = 0; i < names.size(); ++i)
       prefix << "webscene::native_web::node_id element_" << i << "{};\n";

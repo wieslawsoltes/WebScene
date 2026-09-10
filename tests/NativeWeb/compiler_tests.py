@@ -281,6 +281,22 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(retry.returncode,0,retry.stderr)
         self.assertIn(str(source),dependency.read_text())
 
+    def test_root_inline_style_and_script_attribute(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        source.write_text('<html style="width:123px"><body></body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.set_width({123.0f',output.read_text())
+        self.assertIn(',0,1e9f,d.root()}',output.read_text())
+        source.write_text('<html onclick="run()"><body></body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('JavaScript attributes',result.stderr)
+        preview=subprocess.run([UIC,source,output,'--preview'],capture_output=True,text=True)
+        self.assertEqual(preview.returncode,0,preview.stderr)
+        self.assertNotIn('onclick',output.read_text())
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'

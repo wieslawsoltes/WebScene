@@ -1249,3 +1249,14 @@ then removes the obstruction and verifies successful retry and source dependency
 All 69 compiler tests pass. Generated source may already exist when depfile output
 fails; callers must honor the nonzero exit. Atomic source/depfile publication is
 not established by this change.
+
+### HTML root attribute bypass (2026-09-10)
+
+The html root previously copied every attribute directly, bypassing both script
+attribute rejection and inline CSS compilation. Root event attributes now fail
+strict compilation and are omitted with a preview warning. Root inline styles
+now use typed declaration lowering targeted at d.root(), including diagnostics.
+Compiler regressions verify typed width output, root targeting and event rejection
+/preview omission. All 70 compiler tests pass. Other root attributes still retain
+the existing generic-copy behavior; the complete root attribute inventory, named
+root references and native geometry coverage remain open.
