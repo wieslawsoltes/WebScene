@@ -2326,32 +2326,9 @@
                     && option_is_selected(const_cast<dom_node&>(node));
                 if (!checked_input
                     && !selected_option) return false;
-            } else if (name == "hover") {
-                auto* hovered = hover_target;
-                bool matches_hover = false;
-                for (; hovered != nullptr; hovered = hovered->parent) {
-                    if (hovered == &node) {
-                        matches_hover = true;
-                        break;
-                    }
-                }
-                if (!matches_hover) return false;
-            } else if (name == "focus") {
-                if (active_element != &node) return false;
-            } else if (name == "focus-visible") {
-                if (active_element != &node || (!focus_visible && !is_text_control(&node))) {
-                    return false;
-                }
-            } else if (name == "focus-within") {
-                auto matches_focus_within = false;
-                for (auto* focused = active_element; focused != nullptr;
-                    focused = document.event_parent(*focused)) {
-                    if (focused == &node) {
-                        matches_focus_within = true;
-                        break;
-                    }
-                }
-                if (!matches_focus_within) return false;
+            } else if (name == "hover" || name == "focus" || name == "focus-visible" || name == "focus-within") {
+                if (!css::interaction_matches(document,node,name,
+                    {hover_target,active_element,focus_visible},is_text_control(&node))) return false;
             } else if (name == "not") {
                 size_t start = 0;
                 while (start <= argument.size()) {

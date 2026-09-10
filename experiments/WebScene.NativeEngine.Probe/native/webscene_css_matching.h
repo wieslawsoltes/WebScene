@@ -144,4 +144,26 @@ inline bool is_actually_disabled(const native_document& document,const dom_node&
         return false;
     }
 
+// Host-independent interaction state. The host supplies focus modality; the
+// document defines ancestry (including event ancestry for focus-within).
+struct interaction_state final {
+    const dom_node* hovered{};
+    const dom_node* focused{};
+    bool focus_visible{};
+};
+inline bool interaction_matches(const native_document& document,const dom_node& node,
+    std::string_view pseudo,const interaction_state& state,bool text_control) {
+    if(pseudo=="hover") {
+        for(auto* current=state.hovered;current;current=current->parent)
+            if(current==&node) return true;
+        return false;
+    }
+    if(pseudo=="focus") return state.focused==&node;
+    if(pseudo=="focus-visible") return state.focused==&node && (state.focus_visible || text_control);
+    if(pseudo=="focus-within") {
+        for(auto* current=state.focused;current;current=document.event_parent(*current))
+            if(current==&node) return true;
+    }
+    return false;
+}
 } // namespace webscene_native::css

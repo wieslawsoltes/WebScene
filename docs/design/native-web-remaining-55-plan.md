@@ -335,3 +335,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   the native DOM library without V8. Service and runtime positional/iframe cascade
   regressions pass. This preserves existing disabled semantics; full compound
   matching and interaction-state dependencies are still not extracted.
+
+- Interaction selector boundary: hover/focus/focus-visible/focus-within now use a
+  native interaction_state record and shared document-aware matching. The runtime
+  passes its existing hovered/focused nodes and focus modality; no JS handle crosses
+  the matching interface. Native tests cover ancestor hover/focus-within, direct
+  focus, modality changes, text-control focus visibility and hover removal. Service
+  and runtime host-pointer-exit/positional/iframe cascade regressions pass. This
+  establishes an input-state boundary but does not yet provide full standalone
+  compound matching, a CSS cascade, or native-app interaction integration.

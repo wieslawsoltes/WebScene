@@ -59,5 +59,17 @@ int main() {
     document.append_child(document.body(),select); document.append_child(select,option);
     select.attributes["disabled"]="";
     if(!is_actually_disabled(document,option)) return 13;
+    webscene_native::css::interaction_state interaction{&exempt,&exempt,false};
+    using webscene_native::css::interaction_matches;
+    if(!interaction_matches(document,fieldset,"hover",interaction,false) ||
+       !interaction_matches(document,fieldset,"focus-within",interaction,false) ||
+       interaction_matches(document,fieldset,"focus",interaction,false) ||
+       interaction_matches(document,exempt,"focus-visible",interaction,false)) return 14;
+    interaction.focus_visible=true;
+    if(!interaction_matches(document,exempt,"focus-visible",interaction,false)) return 15;
+    interaction={nullptr,&blocked,false};
+    if(interaction_matches(document,fieldset,"hover",interaction,false) ||
+       interaction_matches(document,exempt,"focus",interaction,false) ||
+       !interaction_matches(document,blocked,"focus-visible",interaction,true)) return 16;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
