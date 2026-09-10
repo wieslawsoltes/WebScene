@@ -143,3 +143,8 @@ interactive lifecycle/resource packaging acceptance is not complete.
 
 The initial truncated capture was fixed by closing the PNG stream before host
 shutdown. A subsequent capture verifies the full viewport and status bar.
+
+The POC Pan tool now moves the native camera through DOM pointer events and stops
+on release within the application. Native tests cover movement and release.
+Platform pointer capture/cancellation outside the window, wheel zoom and original
+Kestrel gesture mappings remain outstanding; this is not full input parity.

@@ -13,6 +13,8 @@ class controller {
     std::string id;
     webscene::native_web::node_id name, visibility;
   };
+  bool pan_enabled{}, dragging{};
+  float pointer_x{}, pointer_y{};
   std::vector<layer_row> rows;
   std::vector<webscene::native_web::subscription> subscriptions;
 
@@ -77,6 +79,33 @@ public:
           options.style = display_style::shaded_edges;
           refresh();
         }));
+    subscriptions.push_back(
+        document.on(view.named("pan"), "click", [this](auto &) {
+          pan_enabled = !pan_enabled;
+          dragging = false;
+          document.attribute(document.find("pan"), "class",
+                             pan_enabled ? "selected" : "");
+        }));
+    subscriptions.push_back(
+        document.on(view.named("viewport"), "pointerdown", [this](auto &event) {
+          if (!pan_enabled)
+            return;
+          dragging = true;
+          pointer_x = event.client_x;
+          pointer_y = event.client_y;
+          event.prevent_default();
+        }));
+    subscriptions.push_back(
+        document.on(view.named("app"), "pointermove", [this](auto &event) {
+          if (!dragging)
+            return;
+          camera.pan(event.client_x - pointer_x, event.client_y - pointer_y);
+          pointer_x = event.client_x;
+          pointer_y = event.client_y;
+          render_dirty = true;
+        }));
+    subscriptions.push_back(document.on(view.named("app"), "pointerup",
+                                        [this](auto &) { dragging = false; }));
     refresh();
   }
   controller(const controller &) = delete;
