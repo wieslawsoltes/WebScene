@@ -179,8 +179,13 @@ if(FOCO_SOURCE_DIR)
    COMMAND webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonTabs.html" "${PREVIEW_TABS}" --module kestrel.preview.tabs --namespace kestrel_tabs
    DEPENDS webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonTabs.html"
    DEPFILE "${PREVIEW_TABS}.d" VERBATIM)
+ set(PREVIEW_GROUPS "${CMAKE_CURRENT_BINARY_DIR}/KestrelPreviewGroups.cppm")
+ add_custom_command(OUTPUT "${PREVIEW_GROUPS}"
+   COMMAND webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonGroups.html" "${PREVIEW_GROUPS}" --module kestrel.preview.groups --namespace kestrel_groups --preview
+   DEPENDS webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonGroups.html"
+   DEPFILE "${PREVIEW_GROUPS}.d" VERBATIM)
  add_executable(FocoKestrelPreview MACOSX_BUNDLE "${WEBSCENE_ROOT}/samples/NativeKestrel/preview.cpp")
- target_sources(FocoKestrelPreview PRIVATE FILE_SET CXX_MODULES BASE_DIRS "${CMAKE_CURRENT_BINARY_DIR}" FILES "${PREVIEW_UI}" "${PREVIEW_TABS}")
+ target_sources(FocoKestrelPreview PRIVATE FILE_SET CXX_MODULES BASE_DIRS "${CMAKE_CURRENT_BINARY_DIR}" FILES "${PREVIEW_UI}" "${PREVIEW_TABS}" "${PREVIEW_GROUPS}")
  set_target_properties(FocoKestrelPreview PROPERTIES CXX_SCAN_FOR_MODULES ON)
  target_include_directories(FocoKestrelPreview PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/foco")
  target_link_libraries(FocoKestrelPreview PRIVATE webscene_native_web FocoUI::PlatformCocoa)

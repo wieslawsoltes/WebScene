@@ -60,3 +60,12 @@ The preview's six ribbon tabs are instantiated from `templates/RibbonTabs.html`
 with native C++ selection handlers. Their groups and CAD commands are not yet
 connected. The reusable template module uses `--namespace kestrel_tabs` so its
 API can coexist with the original document module in one translation unit.
+
+Ribbon groups are predefined snapshots of all six original `UI.ribbon(tab)`
+results, stored in `templates/RibbonGroups.html`. The development-only helper
+`tooling/kestrel/snapshot-ribbon.cjs` captures them from the pinned upstream
+checkout. It is not part of application compilation, packaging or runtime.
+Original dynamic IDs are instance references in the templates and are restored
+by C++ when the active ribbon mounts. Switching tabs disposes the previous
+ribbon roots before mounting the next template. Command behavior remains to be
+ported; diagnostic SVG/form styling still depends on compiler coverage.

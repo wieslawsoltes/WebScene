@@ -4,12 +4,19 @@
 #include <array>
 import kestrel.original.preview;
 import kestrel.preview.tabs;
+import kestrel.preview.groups;
 class preview_app final : public foco::application {
   foco::ref<foco::window> window;
   foco::ref<webscene::foco_host::view> view;
   std::array<webscene::native_web::node_id,6> tabs{};
   std::vector<webscene::native_web::subscription> handlers;
+  std::vector<webscene::native_web::node_id> ribbon_roots;
   void select_tab(size_t selected) {
+    for (auto root : ribbon_roots) view->document.remove(root);
+    const std::array<const char*,6> names{"Home","Insert","Annotate","Model","View","Manage"};
+    auto group = kestrel_groups::instantiate(view->document, view->document.find("ribbon"), std::string("ribbon-") + names[selected]);
+    ribbon_roots = std::move(group.roots);
+    for (auto [name, id] : group.references) view->document.attribute(id,"id",std::string(name));
     for (size_t i=0;i<tabs.size();++i) {
       view->document.attribute(tabs[i], "class", i==selected ? "active" : "");
       view->document.attribute(tabs[i], "aria-selected", i==selected ? "true" : "false");
