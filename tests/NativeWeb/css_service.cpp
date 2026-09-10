@@ -20,6 +20,8 @@
 #include "webscene_css_paint_values.h"
 #include "webscene_css_visibility_values.h"
 #include "webscene_css_text_values.h"
+#include "webscene_css_decoration_values.h"
+#include "webscene_css_application.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -597,5 +599,45 @@ int main(int argc,char** argv) {
     text_value("font","700 16px/1.5 sans-serif");
     if(hit_node.style.font_size!=16 || hit_node.style.font_weight!=700 ||
        hit_node.style.textual().font_family!="sans-serif") return 114;
+    const auto decoration=[&](const std::string& name,const std::string& value) {
+        return webscene_native::css::apply_decoration_value(hit_node,name,value,grid_result,unprotected);
+    };
+    decoration("border","3px solid currentColor");
+    if(hit_node.style.border_left_width.value!=3 || !hit_node.style.border_left_current_color) return 115;
+    decoration("border-color","red");
+    if(hit_node.style.border_left_rgba!=0xFF0000FF || hit_node.style.border_left_current_color) return 116;
+    decoration("transform","translateX(10px)");
+    if(!hit_node.style.transform_specified || hit_node.style.transform_translate_x.value!=10) return 117;
+    decoration("transform","none");
+    decoration("transition","opacity 500ms linear");
+    decoration("border-style","none");
+    if(hit_node.style.transform_stacking_context || hit_node.style.border_left_width.value!=0 ||
+       hit_node.style.animations().transition_duration_value!="500ms") return 118;
+    webscene_native::native_document styled_document;
+    auto& view=styled_document.create_element("div");view.class_name="view";
+    auto& child_a=styled_document.create_element("div");child_a.class_name="child";
+    auto& child_b=styled_document.create_element("div");child_b.class_name="child";
+    styled_document.append_child(styled_document.body(),view);
+    styled_document.append_child(view,child_a);styled_document.append_child(view,child_b);
+    const auto sheet=webscene_native::css::prepare_stylesheet(
+        ".view {display:flex;width:300px;height:100px} .child {flex:1}","",
+        [](const auto&) { return true; });
+    if(!sheet) return 119;
+    webscene_native::css::query_host styled_query(styled_document);
+    for(auto* node:{&view,&child_a,&child_b}) {
+        for(const auto& rule:sheet->rules) {
+            if(!styled_query.matches_prepared(*node,rule->compiled_selector)) continue;
+            for(const auto& declaration:rule->declarations) {
+                webscene_native::css::property_result result;
+                webscene_native::css::apply_resolved_declaration(styled_document,*node,
+                    declaration,declaration.value,false,result,
+                    [](const auto&,auto&,auto&,auto&) { return false; });
+                if(result.classification=="unsupported") return 120;
+            }
+        }
+    }
+    styled_document.layout(500,200);
+    if(std::abs(view.layout.width-300)>.1f || std::abs(child_a.layout.width-150)>.1f ||
+       std::abs(child_b.layout.width-150)>.1f) return 121;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

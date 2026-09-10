@@ -622,3 +622,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   runtime dimension/font-relative, SVG typography and reset regressions pass.
   Variable weights, additional font axes, shaping and other existing grammar limits
   remain; this does not establish font-resource packaging or full app parity.
+
+- Unified resolved declaration application: borders/outlines, transforms and
+  animation declarations are shared, and webscene_css_application.h now composes
+  the native property handlers behind one resolved-declaration entry point used
+  by the runtime. A V8-free integration test prepares CSS, matches its selectors
+  against a C++-constructed document, applies declarations and verifies flex layout.
+  Native decoration/reset tests and runtime keyframes, border, dimension and iframe
+  cascade regressions pass. Variable substitution, rule ordering, invalidation,
+  pseudo routing and resource ownership remain the caller's responsibility; the
+  complete native document cascade and Kestrel integration are not finished.
