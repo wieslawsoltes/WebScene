@@ -242,7 +242,10 @@ int main() {
     int child_hits = 0, wrapper_hits = 0;
     auto child_listener = d.on(d.find("contents-first"), "pointerdown", [&](event&) { ++child_hits; });
     auto wrapper_listener = d.on(d.find("contents-wrapper"), "pointerdown", [&](event&) { ++wrapper_hits; });
-    d.render(800, 10000);
+    const auto &contents_scene = d.render(800, 10000);
+    for (const auto &command : contents_scene.commands)
+      check(command.node_id != d.find("contents-wrapper") || command.rgba != 0x123456ffu,
+            "display contents suppresses wrapper background and border paint");
     auto target_box = d.bounds(d.find("contents-first"));
     d.pointer("pointerdown", target_box.x + 1, target_box.y + 1);
     d.pointer("pointerup", target_box.x + 1, target_box.y + 1);

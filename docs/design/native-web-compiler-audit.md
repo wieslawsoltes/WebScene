@@ -1481,3 +1481,11 @@ Native contracts hit a visible child of the compiled display:contents wrapper
 using pointer coordinates and verify both child targeting and bubbling through
 the DOM wrapper. Rebuilt contracts pass. This verifies event ancestry survives
 layout flattening; wrapper paint suppression and accessibility remain open.
+
+### Display contents box paint evidence (2026-09-10)
+
+The contents fixture now authors a colored background and border on its wrapper.
+Native scene commands contain no wrapper paint with that color, while the existing
+child layout and pointer propagation checks still pass. Rebuilt contracts pass.
+This verifies background/border suppression in scene output, not raster pixels or
+all effects such as shadows, transforms and filters. Accessibility remains open.
