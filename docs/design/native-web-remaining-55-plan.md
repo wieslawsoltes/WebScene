@@ -536,3 +536,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Unsupported animation properties, font registration, property application and
   complete native document cascade remain open. This does not change the
   compiled application's runtime parsing dependencies.
+
+- Media evaluation extraction: shared native environment-based media matching and
+  capability inventory now serve the runtime and native preparation diagnostic
+  command. Tests verify inclusive Kestrel width/height breakpoints, color scheme,
+  screen/print and comma alternatives; runtime media-query-list, reentrant query
+  and iframe cascade regressions pass. Original Kestrel CSS still prepares 407
+  rules/1520 declarations; all five media conditions are recognized, leaving two
+  partial keyframe diagnostics in this preparation stage. Existing numeric-unit,
+  grammar and hard-coded input/reduced-motion preference limits are unchanged.
+  Prepared rules still need document ownership and resize-triggered cascade.

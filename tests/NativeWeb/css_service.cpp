@@ -13,6 +13,7 @@
 #include "webscene_css_resources.h"
 #include "webscene_css_rule_preparation.h"
 #include "webscene_css_stylesheet.h"
+#include "webscene_css_media.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -48,7 +49,10 @@ int main(int argc,char** argv) {
         if(!input) return 82;
         const std::string source((std::istreambuf_iterator<char>(input)),{});
         const auto sheet=webscene_native::css::prepare_stylesheet(source,argv[1],
-            [](const auto&) { return false; });
+            [](const auto& query) {
+                return webscene_native::css::inventory_media(query,
+                    [](std::string_view,std::string_view,std::string_view,const std::string&,std::string_view) {});
+            });
         if(!sheet || sheet->rules.empty()) return 83;
         size_t declarations=0;
         for(const auto& rule:sheet->rules) declarations+=rule->declarations.size();
@@ -420,5 +424,13 @@ int main(int argc,char** argv) {
         "div > > span {color:red} @font-face {font-family: Test;src:url(test.woff2)}",
         css_base,[](const auto&) { return true; });
     if(!rejected || !rejected->rules.empty() || rejected->diagnostics.size()!=2) return 81;
+    using webscene_native::css::media_matches;
+    if(!media_matches("(max-width:1250px)",{1250,800}) ||
+       media_matches("(max-width:1250px)",{1251,800}) ||
+       !media_matches("(max-height:700px)",{1400,700}) ||
+       media_matches("(max-height:700px)",{1400,701}) ||
+       !media_matches("(prefers-color-scheme:dark)",{1400,800,true}) ||
+       media_matches("print",{1400,800}) ||
+       !media_matches("print, (min-width:1000px)",{1400,800})) return 84;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

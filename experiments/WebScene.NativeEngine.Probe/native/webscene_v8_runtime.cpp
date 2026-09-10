@@ -37,6 +37,7 @@
 #include "webscene_css_rule_payload.h"
 #include "webscene_css_resources.h"
 #include "webscene_css_rule_preparation.h"
+#include "webscene_css_media.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"
