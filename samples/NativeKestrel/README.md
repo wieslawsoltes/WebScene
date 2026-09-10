@@ -102,3 +102,9 @@ The original WGSL line/mesh shader source is embedded in `kestrel.shaders`, with
 no JavaScript dependency. Camera uniforms now match its 96-byte layout and use
 the origin-relative MVP and eye position. Native packing tests pass; creating
 and validating GPU pipelines with these shaders is still pending.
+
+`kestrel.gpu_pipelines` now constructs the native camera bindings and three
+upstream pipelines (instanced AA lines, lit meshes and xray meshes), including
+4x MSAA, blending and depth states. Creation succeeds on Metal through WebScene's
+native device helper without V8. Frame submission/readback and visible Kestrel
+rendering remain unverified; pipeline creation alone is not an end-to-end test.
