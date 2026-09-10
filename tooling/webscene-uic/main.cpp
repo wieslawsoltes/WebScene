@@ -708,14 +708,56 @@ struct compiler {
     dep << "\n";
   }
 };
+// Read-only compatibility audit using exactly the compiler's lowering paths.
+// Success checks CSS support only; it does not certify HTML or runtime parity.
+static int check_css(const fs::path &path) {
+  auto css = parse_css_syntax_stylesheet(read(path));
+  if (!css || css.metrics.parse_error_count)
+    throw std::runtime_error("invalid CSS stylesheet: " + css.error);
+  std::set<std::string> errors;
+  auto check = [&](const std::string &context, auto action) {
+    try { action(); }
+    catch (const std::exception &e) {
+      errors.insert(context + ": " + e.what());
+    }
+  };
+  for (const auto &rule : css.rules) {
+    if (rule.kind == css_syntax_at_rule) {
+      check("@" + rule.name + " " + rule.prelude, [&] {
+        if (rule.name != "media" || !std::regex_match(rule.prelude,
+            std::regex(R"(\s*\((min|max)-width\s*:\s*([0-9]+)px\)\s*)")))
+          throw std::runtime_error("unsupported at-rule or condition");
+      });
+    } else {
+      check(rule.prelude, [&] {
+        auto selectors = parse_selector_syntax(rule.prelude);
+        if (!selectors) throw std::runtime_error(selectors.error);
+        for (const auto &selector : selectors.selectors) selector_code(selector);
+      });
+    }
+  }
+  for (const auto &declaration : css.declarations)
+    check(declaration.name + ":" + declaration.value, [&] {
+      assignments(declaration.name, trim(declaration.value));
+    });
+  for (const auto &error : errors)
+    std::cerr << path.string() << ": error: " << error << '\n';
+  std::cout << css.rules.size() << " rules, " << css.declarations.size()
+            << " declarations, " << errors.size() << " distinct unsupported constructs\n";
+  return errors.empty() ? 0 : 1;
+}
 int main(int argc, char **argv) {
   if (argc != 3 && argc != 5) {
     std::cerr
-        << "usage: webscene-uic input.html output [--module module.name]\n";
+        << "usage: webscene-uic input.html output [--module module.name]\n       webscene-uic --check-css input.css\n";
     return 2;
   }
   compiler c;
   try {
+    if (argc == 3 && std::string_view(argv[1]) == "--check-css") {
+      c.source = argv[2];
+      return check_css(argv[2]);
+    }
     std::string module_name;
     if (argc == 5) {
       if (std::string(argv[3]) != "--module")

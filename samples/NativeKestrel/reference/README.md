@@ -24,3 +24,20 @@ currently rejects `:root` in style.css. Fixing this requires preserving the HTML
 root and its `data-theme` attributes in compiled documents, not aliasing `:root`
 to body. Root custom properties and attribute-based theme rules are the next
 connected compatibility work. This probe is not a claim that later rules compile.
+
+Compiler compatibility audit:
+
+```sh
+artifacts/native-web-modules/webscene-uic --check-css samples/NativeKestrel/reference/src/style.css
+```
+
+This read-only check reports all distinct unsupported declarations and selector
+constructs instead of stopping at the first compilation error. It uses compiler
+lowering validation and creates no generated output. A successful audit only
+establishes CSS syntax coverage, not HTML coverage or visual parity.
+
+At introduction, the original stylesheet contains 397 rules and 1,475
+declarations, with 241 distinct unsupported constructs. Prioritize custom
+properties and live variable evaluation next; they must retain cascade,
+inheritance, theme changes and responsive overrides without runtime CSS parsing.
+The original stylesheet must not be rewritten to remove these requirements.

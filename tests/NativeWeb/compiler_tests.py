@@ -46,6 +46,20 @@ class CompilerTests(unittest.TestCase):
         for value in ['-1px','-1','bogus']:
             result,_=self.compile('<p>Text</p>', 'p { line-height:'+value+'; }')
             self.assertNotEqual(result.returncode,0)
+    def test_css_audit_reports_multiple_gaps_without_output(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        source=pathlib.Path(folder.name)/'audit.css'
+        source.write_text('div { filter:blur(2px); cursor:pointer; } p:has(a) { width:20px; }')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,1)
+        self.assertIn('filter',result.stderr)
+        self.assertIn('cursor',result.stderr)
+        self.assertIn('has',result.stderr)
+        self.assertIn('3 distinct unsupported constructs',result.stdout)
+        self.assertEqual(list(source.parent.iterdir()),[source])
+        source.write_text('div { display:grid; grid-template-columns:repeat(3,1fr); }')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)
