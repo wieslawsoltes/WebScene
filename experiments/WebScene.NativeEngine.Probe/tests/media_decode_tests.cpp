@@ -63,8 +63,49 @@ std::shared_ptr<encoded_source> load(const char *path, const char *extension) {
     source->bytes.assign(std::istreambuf_iterator<char>(file), {});
     return source;
 }
+void cadence_tests() {
+    playback_control clock;
+    clock.set(0, 1, true, 1, false);
+    clock.observe_output(clock.sequence.load(), 2., 100.);
+    check(std::abs(clock.time_at(100.01) - 2.01) < 1e-6, "Video did not follow rendered audio clock");
+    clock.set(5, 1, false, 1, false);
+    check(clock.time_at(100.02) == 5, "Stale audio feedback survived pause/seek");
+    for (const double fps : {24., 30., 60., 24000./1001., 60000./1001.}) {
+        for (const double hz : {60., 120., 60000./1001.}) {
+            std::deque<video_frame> queue;
+            video_frame current;
+            size_t next = 1;
+            // Ten minutes with bounded decode ahead. Selection must remain
+            // timestamp-correct without accumulated rounding error.
+            for (size_t refresh = 0; refresh < size_t(hz * 600); ++refresh) {
+                const auto time = double(refresh) / hz;
+                while (queue.size() < 4) {
+                    video_frame frame;
+                    frame.timestamp = double(next++) / fps;
+                    queue.push_back(std::move(frame));
+                }
+                select_video_frame(queue, time, current);
+                const auto expected = std::floor((time + 1e-7) * fps) / fps;
+                check(std::abs(current.timestamp - expected) < 1e-6, "Video cadence drift/skipped frame");
+            }
+        }
+    }
+    std::deque<video_frame> queue;
+    video_frame current;
+    for (double pts : {.01, .05, .12}) {
+        video_frame frame; frame.timestamp = pts; queue.push_back(frame);
+    }
+    check(select_video_frame(queue, .009, current) == 0, "Future VFR frame displayed early");
+    check(select_video_frame(queue, .08, current) == 2 && current.timestamp == .05,
+          "Late deadline did not discard obsolete frames");
+    check(select_video_frame(queue, .10, current) == 0 && current.timestamp == .05,
+          "Decode stall must retain complete frame");
+    check(select_video_frame(queue, .12, current) == 1 && current.timestamp == .12,
+          "VFR next interval not selected");
+}
 int main(int argc, char **argv) {
     try {
+        cadence_tests();
         auto bytes = wav();
         auto result = decode_audio(bytes);
         check(result.channels == 2 && result.sample_rate == 48000 && result.frames() == 480,
@@ -149,6 +190,36 @@ int main(int argc, char **argv) {
 #if defined(__APPLE__)
         if (argc > 2) {
             auto source = load(argv[2], ".mp4");
+            // Decode-ahead must remain bounded and must not advance the public
+            // frame until a presentation opportunity selects it.
+            {
+                media_session session;
+                session.load(source, true);
+                auto buffered = [&] {
+                    for (int retry = 0; retry < 1000; ++retry) {
+                        const auto state = session.read();
+                        if (!state.error.empty()) throw std::runtime_error(state.error);
+                        if (state.ready && state.buffered_frames >= 2) return state;
+                        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                    }
+                    throw std::runtime_error("Video decode-ahead timeout");
+                };
+                auto initial = buffered();
+                check(initial.buffered_frames <= 4, "Unbounded video queue");
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                check(session.read().video.timestamp == initial.video.timestamp,
+                      "Decoder completion advanced presentation");
+                for (int tick = 0; tick < 60; ++tick) {
+                    buffered();
+                    const auto target = double(tick) / 120.;
+                    const auto state = session.present(target);
+                    check(state.video.timestamp <= target + 1e-7, "Video frame selected early");
+                    check(target - state.video.timestamp < .05, "Queued video did not advance");
+                }
+                session.seek(.1);
+                buffered();
+                check(session.read().video.timestamp < .15, "Seek retained stale queued video");
+            }
             video_frame first, later;
             {
                 decode_service service;

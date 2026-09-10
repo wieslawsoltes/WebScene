@@ -29,11 +29,43 @@ std::unordered_map<uint64_t, std::unique_ptr<media_binding>> media_bindings;
 v8::Global<v8::Private> media_initializer_key;
 uint64_t media_dom_generation = UINT64_MAX;
 std::atomic<bool> media_work_ready{false};
+bool media_presentation_ready{};
+double media_host_offset{}, media_last_host_timestamp{-1}, media_presentation_time{};
+std::array<double, 8> media_refresh_intervals{};
+size_t media_refresh_count{}, media_refresh_index{};
+void signal_media_presentation(double timestamp_ms) {
+    if (media_bindings.empty()) return;
+    const auto now = std::chrono::duration<double>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    const auto host = timestamp_ms / 1000.0;
+    if (media_last_host_timestamp < 0 || host < media_last_host_timestamp ||
+        host - media_last_host_timestamp > .25)
+        media_host_offset = now - host;
+    const auto interval = host - media_last_host_timestamp;
+    if (interval >= .004 && interval <= .05) {
+        media_refresh_intervals[media_refresh_index++ % media_refresh_intervals.size()] = interval;
+        media_refresh_count = std::min(media_refresh_count + 1, media_refresh_intervals.size());
+    }
+    media_last_host_timestamp = host;
+    auto intervals = media_refresh_intervals;
+    std::sort(intervals.begin(), intervals.begin() + media_refresh_count);
+    const auto refresh = media_refresh_count ? intervals[(media_refresh_count - 1) / 2] : 1. / 60.;
+    // Map the host clock once, rather than incorporating JS/task latency into
+    // every sample. The host currently supplies a vsync timestamp, not verified
+    // physical scanout feedback; retain that distinction in qualification.
+    // Select by coverage of the upcoming refresh interval. Its midpoint
+    // avoids unstable boundary decisions when source/display rates match.
+    media_presentation_time = host + media_host_offset + refresh * .5;
+    media_presentation_ready = true;
+}
 void clear_media_bindings() {
     clear_audio_bindings();
     media_dom_generation = UINT64_MAX;
     media_bindings.clear();
     media_work_ready = false;
+    media_presentation_ready = false;
+    media_last_host_timestamp = -1;
+    media_refresh_count = media_refresh_index = 0;
 #if defined(__APPLE__)
     media_images_ready.reset();
 #endif
@@ -160,7 +192,8 @@ void synchronize_media_elements() {
     }
 }
 bool drain_media() {
-    bool ready = media_work_ready.exchange(false, std::memory_order_acq_rel);
+    const bool presentation = std::exchange(media_presentation_ready, false);
+    bool ready = media_work_ready.exchange(false, std::memory_order_acq_rel) || presentation;
 #if defined(__APPLE__)
     if (media_images_ready)
         ready = media_images_ready->ready.exchange(false, std::memory_order_acq_rel) || ready;
@@ -178,7 +211,9 @@ bool drain_media() {
         if (found == media_bindings.end())
             continue;
         auto &b = *found->second;
-        auto frame = b.session->read();
+        auto frame = presentation && b.control->playing.load()
+            ? b.session->present(b.control->time_at(media_presentation_time))
+            : b.session->read();
         if (!frame.version)
             continue;
         const bool changed = frame.generation != b.generation || frame.version != b.version;
@@ -189,6 +224,12 @@ bool drain_media() {
         if (!changed)
             continue;
 #endif
+        if (presentation && std::getenv("WEBSCENE_MEDIA_TRACE")) {
+            std::fprintf(stderr, "media_present host=%.6f media=%.6f pts=%.6f selected=%llu dropped=%llu repeated=%llu changed=%d\n",
+                media_presentation_time, b.control->time_at(media_presentation_time), frame.video.timestamp,
+                static_cast<unsigned long long>(frame.selected), static_cast<unsigned long long>(frame.dropped),
+                static_cast<unsigned long long>(frame.repeated), changed ? 1 : 0);
+        }
         if (changed) {
             b.generation = frame.generation;
             b.version = frame.version;

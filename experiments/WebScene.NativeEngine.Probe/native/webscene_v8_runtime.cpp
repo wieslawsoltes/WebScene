@@ -4636,6 +4636,9 @@ void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
         ? timestamp_ms
         : std::chrono::duration<double, std::milli>(now.time_since_epoch()).count();
     impl_->last_animation_frame_timestamp_ms = timestamp;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    impl_->signal_media_presentation(timestamp);
+#endif
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     // Admit a new RAF batch only when configured canvases can obtain storage.
     // Existing current textures still need their rendering opportunity to end.
@@ -4678,6 +4681,9 @@ bool v8_dom_runtime::pump_animation_frame_task()
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(local_context);
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    impl_->drain_media();
+#endif
     const bool result=impl_->drain_animation_frame_task()&&impl_->promote_pending_promise_error();
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     impl_->finish_gpu_rendering_opportunity(result);
@@ -4700,6 +4706,12 @@ uint8_t v8_dom_runtime::host_animation_frame_demand() const noexcept
         : uint8_t{0U};
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     for(const auto& [key,canvas]:impl_->gpu_canvases)if(canvas.context->has_current_texture()){demand|=1U;break;}
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    // Media requires continuous host opportunities even while its JS RAF is
+    // already admitted/running. Otherwise that brief gap suppresses a refresh.
+    for (const auto& [key, binding] : impl_->media_bindings)
+        if (binding->control->playing.load()) { demand |= 1U; break; }
 #endif
     if (impl_->is_text_control(impl_->active_element)
         && impl_->active_element->mutable_form_control().input_focused) {

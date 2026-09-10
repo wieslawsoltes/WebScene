@@ -65,7 +65,7 @@ internal sealed class NativeMetalRetainedGpuImage : INativeRetainedGpuImage
     {
         Check(lease);
         if(_retiring) throw new InvalidOperationException("Retiring image cannot be drawn");
-        lease.SkCanvas.DrawImage(_image!,destination,paint);
+        NativeGpuImageSampling.Draw(lease.SkCanvas, _image!, destination, paint);
     }
     public void Retire(ISkiaSharpApiLease lease)
     {

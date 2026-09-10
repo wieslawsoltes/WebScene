@@ -33,7 +33,6 @@ function tick(el,s){
  s.frame=requestAnimationFrame(now=>{
   s.frame=0;if(s.paused)return;
   s.time=Math.min(s.duration,native('time',el)??s.time);
-  if(el.tagName==='VIDEO')native('seek',el,s.time);
   if(now-(s.lastEvent||0)>250){s.lastEvent=now;emit(el,'timeupdate');}
   recordPlayed(s,s.time);
   if(s.time>=s.duration){if(el.loop){s.time=0;s.playStart=0;sync(el,s);native('seek',el,0);}else{s.paused=true;s.ended=true;sync(el,s);emit(el,'timeupdate');emit(el,'pause');emit(el,'ended');return;}}

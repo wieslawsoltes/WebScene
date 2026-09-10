@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <stdexcept>
 #include <unistd.h>
 
@@ -194,8 +196,11 @@ class apple_video_decoder final : public video_decoder {
             // discontinuities reopen a reader. Keep at most the current lease.
             seconds = std::min(
                 seconds, std::max(0.0, duration_ - 1.0 / std::max(1.0, double(track_.nominalFrameRate))));
-            if (!reader_ || seconds < requested_ || seconds - requested_ > .5)
+            if (!reader_ || seconds < requested_ || seconds - requested_ > .5) {
+                if (std::getenv("WEBSCENE_MEDIA_TRACE"))
+                    std::fprintf(stderr, "media_restart requested=%.6f previous=%.6f\n", seconds, requested_);
                 restart(seconds);
+            }
             requested_ = seconds;
             AVAssetReader *active_reader = reader_;
             std::stop_callback cancel(stop, [active_reader] { [active_reader cancelReading]; });
@@ -230,6 +235,9 @@ class apple_video_decoder final : public video_decoder {
                 frame.pixel_format = CVPixelBufferGetPixelFormatType(pixel);
                 frame.timestamp = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample));
                 frame.duration = duration_;
+                frame.sample_duration = CMTimeGetSeconds(CMSampleBufferGetDuration(sample));
+                if (!std::isfinite(frame.sample_duration) || frame.sample_duration <= 0)
+                    frame.sample_duration = 1.0 / std::max(1.0, double(track_.nominalFrameRate));
                 last_ = std::move(frame);
             }
             if (stop.stop_requested())

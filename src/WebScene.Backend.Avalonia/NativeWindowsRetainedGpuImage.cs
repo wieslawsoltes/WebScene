@@ -86,7 +86,7 @@ internal sealed class NativeWindowsRetainedGpuImage : INativeRetainedGpuImage
     {
         Check(lease);
         if (_retiring) throw new InvalidOperationException("Retiring DXGI image cannot be drawn.");
-        lease.SkCanvas.DrawImage(_image!, destination, paint);
+        NativeGpuImageSampling.Draw(lease.SkCanvas, _image!, destination, paint);
     }
     private void ReleaseHostObjects()
     {

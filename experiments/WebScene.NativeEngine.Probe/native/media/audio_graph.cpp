@@ -31,8 +31,29 @@ void playback_control::set(double time, double speed, bool play, double gain, bo
     sequence.fetch_add(1, std::memory_order_release);
 }
 double playback_control::time() const noexcept {
+    return time_at(now());
+}
+double playback_control::time_at(double steady_seconds) const noexcept {
     const double p = position.load();
-    return playing.load() ? p + (now() - epoch.load()) * rate.load() : p;
+    if (!playing.load()) return p;
+    const auto revision = sequence.load(std::memory_order_acquire);
+    const auto sample = output_sequence.load(std::memory_order_acquire);
+    const auto sample_revision = output_revision.load(std::memory_order_relaxed);
+    const auto sample_position = output_position.load(std::memory_order_relaxed);
+    const auto sample_epoch = output_epoch.load(std::memory_order_relaxed);
+    if (!(sample & 1) && sample_revision == revision &&
+        sample == output_sequence.load(std::memory_order_acquire) &&
+        std::abs(steady_seconds - sample_epoch) < .25) {
+        return sample_position + (steady_seconds - sample_epoch) * rate.load();
+    }
+    return p + (steady_seconds - epoch.load()) * rate.load();
+}
+void playback_control::observe_output(uint64_t revision, double media_seconds, double host_seconds) noexcept {
+    output_sequence.fetch_add(1, std::memory_order_acq_rel);
+    output_position.store(media_seconds, std::memory_order_relaxed);
+    output_epoch.store(host_seconds, std::memory_order_relaxed);
+    output_revision.store(revision, std::memory_order_relaxed);
+    output_sequence.fetch_add(1, std::memory_order_release);
 }
 struct audio_graph::implementation {
     struct node {
@@ -143,6 +164,11 @@ struct audio_graph::implementation {
                     n.control_version = version;
                 }
                 double start = n.cursor;
+                // Anchor video to the device-rendered sample cursor instead of
+                // an independently advancing wall clock. This is callback-time
+                // feedback; backend DAC latency is not yet measured here.
+                if (use_device)
+                    c.observe_output(version, start / p.sample_rate, wall);
                 for (uint32_t i = 0; i < size; ++i) {
                     double source = start + double(i) * speed * p.sample_rate / rate;
                     if (source < 0 || source >= p.frames())

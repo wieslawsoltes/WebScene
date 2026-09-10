@@ -9,8 +9,12 @@ struct playback_control {
     std::atomic<uint64_t> sequence{};
     std::atomic<double> position{}, epoch{}, rate{1}, volume{1};
     std::atomic<bool> playing{}, muted{};
+    std::atomic<uint64_t> output_sequence{}, output_revision{UINT64_MAX};
+    std::atomic<double> output_position{}, output_epoch{};
+    void observe_output(uint64_t revision, double media_seconds, double host_seconds) noexcept;
     void set(double time, double speed, bool play, double gain, bool mute);
     double time() const noexcept;
+    double time_at(double steady_seconds) const noexcept;
 };
 class audio_graph {
   public:

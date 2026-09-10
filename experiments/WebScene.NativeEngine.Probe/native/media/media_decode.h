@@ -32,7 +32,7 @@ struct video_frame {
     std::array<double, 6> display_transform{1, 0, 0, 1, 0, 0};
     std::shared_ptr<void> native_surface;
     uint32_t width{}, height{}, pixel_format{};
-    double timestamp{}, duration{};
+    double timestamp{}, duration{}, sample_duration{};
 };
 class video_decoder {
 public:
