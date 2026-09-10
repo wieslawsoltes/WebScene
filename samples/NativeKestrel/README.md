@@ -138,6 +138,8 @@ First Foco window proof: build `FocoKestrel` in the Foco-enabled configuration a
 run `FocoKestrel.app/Contents/MacOS/FocoKestrel --capture /absolute/path.png`.
 The app imports the native controller/viewport modules and presents shared GPU
 images with the existing Foco adapter. The first capture shows compiled layers,
-toolbar, grid and a box. This remains an incomplete application: the initial
-layout leaves a blank lower region, most CAD commands/panels are absent, and
+toolbar, grid and a box. This remains an incomplete application: most CAD commands/panels are absent, and
 interactive lifecycle/resource packaging acceptance is not complete.
+
+The initial truncated capture was fixed by closing the PNG stream before host
+shutdown. A subsequent capture verifies the full viewport and status bar.

@@ -4,8 +4,8 @@
 #include "third_party/nlohmann/json.hpp"
 #include <dispatch/dispatch.h>
 #include <foco/app_builder.hpp>
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <webscene/native_web.hpp>
 import kestrel.controller;
@@ -44,14 +44,24 @@ class kestrel_app final : public foco::application {
                      });
   }
   void tick() {
-    if(!capture_path.empty() && ++ticks==120){
-      if(!serial){lifetime->shutdown(3);return;}
-      auto png=foco::capture_platform_compositor_png(*window,1.f);
-      if(!png){std::cerr<<png.failure().message; lifetime->shutdown(2);return;}
-      std::ofstream file(capture_path,std::ios::binary);
-      file.write(reinterpret_cast<const char*>(png.value().data()),png.value().size());
-      std::cout<<"Kestrel native frame captured; serial="<<serial<<'\n';
-      lifetime->shutdown(file?0:4);return;
+    if (!capture_path.empty() && ++ticks == 120) {
+      if (!serial) {
+        lifetime->shutdown(3);
+        return;
+      }
+      auto png = foco::capture_platform_compositor_png(*window, 1.f);
+      if (!png) {
+        std::cerr << png.failure().message;
+        lifetime->shutdown(2);
+        return;
+      }
+      std::ofstream file(capture_path, std::ios::binary);
+      file.write(reinterpret_cast<const char *>(png.value().data()),
+                 png.value().size());
+      std::cout << "Kestrel native frame captured; serial=" << serial << '\n';
+      file.close();
+      lifetime->shutdown(file ? 0 : 4);
+      return;
     }
     auto node = view->document.find("viewport");
     auto bounds = view->document.bounds(node);
@@ -107,7 +117,9 @@ public:
   }
 };
 int main(int argc, char **argv) {
-  for(int i=1;i+1<argc;++i)if(std::string_view(argv[i])=="--capture")capture_path=argv[++i];
+  for (int i = 1; i + 1 < argc; ++i)
+    if (std::string_view(argv[i]) == "--capture")
+      capture_path = argv[++i];
   auto result = foco::AppBuilder::Configure<kestrel_app>()
                     .WithSkia()
                     .WithCocoa()
