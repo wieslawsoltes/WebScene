@@ -107,4 +107,41 @@ inline bool nth_matches(
     }
 
 
+inline bool is_actually_disabled(const native_document& document,const dom_node& node)
+    {
+        if (node.attributes.contains("disabled")) return true;
+        if (node.tag == "option") {
+            for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
+                ancestor = document.dom_parent(*ancestor)) {
+                if ((ancestor->tag == "optgroup" || ancestor->tag == "select")
+                    && ancestor->attributes.contains("disabled")) return true;
+                if (ancestor->tag == "select") break;
+            }
+        }
+        if (node.tag != "button" && node.tag != "input"
+            && node.tag != "select" && node.tag != "textarea") return false;
+        for (auto* fieldset = document.dom_parent(node); fieldset != nullptr;
+            fieldset = document.dom_parent(*fieldset)) {
+            if (fieldset->tag != "fieldset"
+                || !fieldset->attributes.contains("disabled")) continue;
+            const dom_node* first_legend = nullptr;
+            for (const auto* child : fieldset->children) {
+                if (child != nullptr && child->tag == "legend") {
+                    first_legend = child;
+                    break;
+                }
+            }
+            auto inside_first_legend = false;
+            for (auto* ancestor = &node; ancestor != fieldset;
+                ancestor = document.dom_parent(*ancestor)) {
+                if (ancestor == first_legend) {
+                    inside_first_legend = true;
+                    break;
+                }
+            }
+            if (!inside_first_legend) return true;
+        }
+        return false;
+    }
+
 } // namespace webscene_native::css

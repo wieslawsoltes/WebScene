@@ -1985,41 +1985,7 @@
     { return css::nth_matches(argument,position); }
 
     bool is_actually_disabled(const dom_node& node) const
-    {
-        if (node.attributes.contains("disabled")) return true;
-        if (node.tag == "option") {
-            for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
-                ancestor = document.dom_parent(*ancestor)) {
-                if ((ancestor->tag == "optgroup" || ancestor->tag == "select")
-                    && ancestor->attributes.contains("disabled")) return true;
-                if (ancestor->tag == "select") break;
-            }
-        }
-        if (node.tag != "button" && node.tag != "input"
-            && node.tag != "select" && node.tag != "textarea") return false;
-        for (auto* fieldset = document.dom_parent(node); fieldset != nullptr;
-            fieldset = document.dom_parent(*fieldset)) {
-            if (fieldset->tag != "fieldset"
-                || !fieldset->attributes.contains("disabled")) continue;
-            const dom_node* first_legend = nullptr;
-            for (const auto* child : fieldset->children) {
-                if (child != nullptr && child->tag == "legend") {
-                    first_legend = child;
-                    break;
-                }
-            }
-            auto inside_first_legend = false;
-            for (auto* ancestor = &node; ancestor != fieldset;
-                ancestor = document.dom_parent(*ancestor)) {
-                if (ancestor == first_legend) {
-                    inside_first_legend = true;
-                    break;
-                }
-            }
-            if (!inside_first_legend) return true;
-        }
-        return false;
-    }
+    { return css::is_actually_disabled(document,node); }
 
     static compiled_css_compound compile_css_compound_selector(std::string_view selector)
     { return css::compile_css_compound_selector(selector); }

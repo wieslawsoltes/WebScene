@@ -38,5 +38,26 @@ int main() {
     if(!nth_matches("2n+1",3) || nth_matches("2n+1",2) ||
        !nth_matches("-n+3",2) || nth_matches("-n+3",4) ||
        !nth_matches("n-2147483648",1) || nth_matches("n+oops",1)) return 9;
+    webscene_native::native_document document;
+    auto& fieldset=document.create_element("fieldset");
+    auto& legend=document.create_element("legend");
+    auto& exempt=document.create_element("button");
+    auto& blocked=document.create_element("input");
+    document.append_child(document.body(),fieldset);
+    document.append_child(fieldset,legend);
+    document.append_child(legend,exempt);
+    document.append_child(fieldset,blocked);
+    fieldset.attributes["disabled"]="";
+    using webscene_native::css::is_actually_disabled;
+    if(!is_actually_disabled(document,blocked) || is_actually_disabled(document,exempt)) return 10;
+    fieldset.attributes.erase("disabled");
+    if(is_actually_disabled(document,blocked)) return 11;
+    blocked.attributes["disabled"]="";
+    if(!is_actually_disabled(document,blocked)) return 12;
+    auto& select=document.create_element("select");
+    auto& option=document.create_element("option");
+    document.append_child(document.body(),select); document.append_child(select,option);
+    select.attributes["disabled"]="";
+    if(!is_actually_disabled(document,option)) return 13;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

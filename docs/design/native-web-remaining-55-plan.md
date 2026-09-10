@@ -326,3 +326,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   and runtime positional-selector-siblings/iframe-dynamic-recascade tests pass.
   Full compound matching, document state, combinators and cascade execution still
   require extraction; this does not claim new overall selector compliance.
+
+- Disabled-state selector extraction: the shared matcher now accepts a native
+  document to resolve disabled form controls through parent relationships. The
+  ordinary runtime delegates to the same function. V8-free service tests use native
+  DOM construction to check direct attributes, fieldset inheritance, first-legend
+  exemption, attribute removal and select/option inheritance. The service links
+  the native DOM library without V8. Service and runtime positional/iframe cascade
+  regressions pass. This preserves existing disabled semantics; full compound
+  matching and interaction-state dependencies are still not extracted.
