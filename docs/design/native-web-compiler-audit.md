@@ -1278,3 +1278,12 @@ A class-selected important declaration overrides it to 37px; removing the class
 restores 23px. Rebuilt contracts pass. This provides native cascade/inheritance
 and mutation evidence for the root inline lowering; exact source spans and the
 remaining root attribute inventory are still open.
+
+### Semantic block containers (2026-09-10)
+
+Strict HTML compilation now permits article, aside, hgroup and search. The shared
+native UA display defaults already classify all four as blocks. A compiled native
+fixture verifies full containing width, explicit heights and vertical source-order
+stacking. All 71 compiler tests and rebuilt native contracts pass. This closes
+construction/basic layout for these containers only; accessibility landmarks,
+complete UA styles and full HTML coverage are not established by these checks.

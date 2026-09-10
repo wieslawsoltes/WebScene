@@ -118,6 +118,15 @@ int main() {
   d.remove_attribute(d.root(), "class");
   d.render(800, 600);
   check(d.bounds(d.find("root-inline-child")).width == 23, "root inline custom property recovers after mutation");
+  auto semantic_parent = d.bounds(d.find("semantic-containers"));
+  float semantic_offset = 0;
+  for (auto [name, height] : {std::pair{"semantic-article", 10.0f}, {"semantic-aside", 11.0f},
+                             {"semantic-hgroup", 12.0f}, {"semantic-search", 13.0f}}) {
+    auto box = d.bounds(d.find(name));
+    check(box.width == 80 && box.height == height, "semantic container block dimensions");
+    check(box.y == semantic_parent.y + semantic_offset, "semantic containers stack in source order");
+    semantic_offset += height;
+  }
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
