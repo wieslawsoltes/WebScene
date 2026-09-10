@@ -285,7 +285,7 @@ inline bool compound_matches(const Host& host,const dom_node& node,
                 if (!css::checked_matches(node)) return false;
             } else if (name == "hover" || name == "focus" || name == "focus-visible" || name == "focus-within") {
                 if (!css::interaction_matches(document,node,name,
-                    {host.hover_target,host.active_element,host.focus_visible},host.is_text_control(&node))) return false;
+                    host.selector_interaction_state(),host.is_text_control(&node))) return false;
             } else if (name == "not") {
                 size_t start = 0;
                 while (start <= argument.size()) {

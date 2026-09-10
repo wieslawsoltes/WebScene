@@ -53,4 +53,20 @@ inline bool option_is_selected(dom_node& option)
         return !options.empty() && options.front() == &option;
     }
 
+inline bool is_text_control(const dom_node* node)
+    {
+        if (node == nullptr || (node->tag != "input" && node->tag != "textarea")
+            || node->attributes.contains("disabled")) {
+            return false;
+        }
+        if (node->tag == "textarea") return true;
+        const auto type = node->attributes.find("type");
+        if (type == node->attributes.end()) return true;
+        return type->second != "checkbox" && type->second != "radio"
+            && type->second != "button" && type->second != "submit"
+            && type->second != "reset" && type->second != "file"
+            && type->second != "image" && type->second != "range"
+            && type->second != "color";
+    }
+
 }

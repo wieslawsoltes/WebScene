@@ -381,3 +381,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   positional/iframe/pointer/shadow checks pass. This preserves existing selector
   limitations and is not full standards compliance. A production native query host
   and cascade execution are still required before styling the compiled application.
+
+- Native query host: webscene_css_query.h supplies the shared compound/traversal
+  engine with native DOM, input IDs, URL hash and class lookup. It preserves query
+  scope through descendant traversal and caches prepared syntax, not match results.
+  Shared ownership pins syntax during recursive matching even if bounded-cache
+  eviction occurs. The service test now uses this host instead of its test adapter,
+  including a one-entry cache, scoped queries and class/focus mutation checks.
+  Text-control classification is shared with the runtime form helpers. Service and
+  runtime pointer/positional/iframe regressions pass. The host borrows its document
+  and is intended for its owning thread; its state must be updated by the app/host.
+  Stylesheet cascade/style application and app integration remain unfinished.

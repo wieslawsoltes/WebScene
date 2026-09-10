@@ -1990,6 +1990,8 @@
     static compiled_css_compound compile_css_compound_selector(std::string_view selector)
     { return css::compile_css_compound_selector(selector); }
 
+    css::interaction_state selector_interaction_state() const
+    { return {hover_target,active_element,focus_visible}; }
     std::optional<std::string> selector_target_hash() const
     {
                 const auto local_context = isolate->GetCurrentContext();
