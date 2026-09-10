@@ -1636,3 +1636,13 @@ and diagnostic lookup, matching HTML input preprocessing without changing source
 files. Both newline forms report the tested declaration at line 4, column 3.
 All 80 compiler tests pass. This closes the newline mismatch for the exercised
 embedded block; source-text ambiguity and token-origin spans remain open.
+
+### Embedded CSS lookup bounded by owner line (2026-09-10)
+
+An independent fixture reproduced a diagnostic pointing into an earlier HTML
+comment containing identical CSS. Lookup now starts no earlier than the parser's
+style-element creation line and the preceding matched block's end. The regression
+reports the actual style declaration at line 3, column 14 rather than the comment
+at line 2, column 12. All 81 compiler tests pass. Same-line comment/attribute
+ambiguity is explicitly unresolved; full token-origin offsets remain the required
+closure mechanism, not additional substring heuristics.

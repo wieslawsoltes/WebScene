@@ -219,6 +219,15 @@ class CompilerTests(unittest.TestCase):
             audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
             self.assertNotEqual(audit.returncode,0,value)
 
+    def test_embedded_css_ignores_earlier_comment_text(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html'
+        source.write_text('<html><head>\n<!-- div { cursor:pointer; } -->\n<style>div { cursor:pointer; }</style>\n</head><body></body></html>')
+        result=subprocess.run([UIC,source,root/'view.hpp','--preview'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn(str(source)+':3:14: warning:',result.stderr)
+        self.assertNotIn(str(source)+':2:',result.stderr)
+
     def test_embedded_css_normalized_line_endings(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         root=pathlib.Path(folder.name);source=root/'view.html'

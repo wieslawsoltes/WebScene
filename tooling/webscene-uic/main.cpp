@@ -1270,10 +1270,17 @@ struct compiler {
         std::string css;
         for (auto *c : n.children)
           css += c->text_content;
-        // Raw style text is preserved by the HTML parser. Match successive
-        // blocks independently so repeated declarations keep their own spans.
+        // Bound lookup by the parser's element-creation line, so preceding
+        // lines containing the same CSS cannot capture it. Same-line ambiguity
+        // still requires token-origin offsets from the HTML parser.
+        size_t owner_line_start = 0;
+        for (size_t line = 1; line < n.parser_line; ++line) {
+          const auto next = content.find('\n', owner_line_start);
+          if (next == std::string::npos) break;
+          owner_line_start = next + 1;
+        }
         const auto at = css.empty() ? std::string::npos
-            : content.find(css, embedded_stylesheet_cursor);
+            : content.find(css, std::max(embedded_stylesheet_cursor, owner_line_start));
         if (at != std::string::npos) {
           embedded_stylesheet_cursor = at + css.size();
           stylesheet_line_offset = std::count(content.begin(), content.begin() + at, '\n');
