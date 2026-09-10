@@ -424,3 +424,12 @@ open. Unrepresentable evaluated sums currently become auto through the positiona
 consumer; strict compilation must eventually diagnose statically unsupported unit
 combinations rather than treating them as implemented CSS. Do not close the
 expression family based on the two removed corpus diagnostics.
+
+### Grouped additive calc (2026-09-10)
+
+The compiler now strips only parentheses enclosing the entire operand, accepts
+ordinary nested arithmetic groups, and retains left associativity for chained
+addition/subtraction. Native geometry tests use `calc(50% - (15px + 5px))` and
+`calc(var(--missing-offset, 5px) + 20px - 10px)`; expected positions remain 80px
+and 15px. Compiler and native contract tests pass. Product/division and richer
+mixed-unit representation remain open.

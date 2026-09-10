@@ -126,8 +126,19 @@ static std::string variable_code(const std::string &text) {
 // confined to this compiler; generated code evaluates values, not CSS strings.
 static std::string compiled_length_expression(std::string value) {
   value = trim(value);
-  if (value.starts_with("calc(") && value.ends_with(')'))
-    value = trim(value.substr(5, value.size() - 6));
+  for (;;) {
+    size_t opening = value.starts_with("calc(") ? 4 : value.starts_with('(') ? 0 : std::string::npos;
+    if (opening == std::string::npos) break;
+    int nesting = 0;
+    size_t closing = std::string::npos;
+    for (size_t i = opening; i < value.size(); ++i) {
+      if (value[i] == '(') ++nesting;
+      else if (value[i] == ')' && --nesting == 0) { closing = i; break; }
+    }
+    if (closing == std::string::npos) throw std::runtime_error("unclosed calc group");
+    if (closing + 1 != value.size()) break;
+    value = trim(value.substr(opening + 1, closing - opening - 1));
+  }
   int depth = 0;
   for (size_t i = value.size(); i-- > 0;) {
     if (value[i] == ')') ++depth;
