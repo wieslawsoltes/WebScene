@@ -92,6 +92,15 @@ class CompilerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode,0)
             self.assertIn(message,result.stderr)
 
+    def test_shadow_color_mix_component(self):
+        for value in ['0 0 0 1px color-mix(in srgb,var(--Accent) 25%,transparent)',
+                      'inset color-mix(in srgb,red,blue) 2px 0 3px']:
+            result,out=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_box_shadow(shadow)',out.read_text())
+        result,_=self.compile('<div></div>', 'div { box-shadow:0 0 color-mix(in srgb,red 0%,blue 0%); }')
+        self.assertNotEqual(result.returncode,0)
+
     def test_dashed_border_compilation(self):
         for css in ['border:1px dashed #65c5a4;', 'border:2px dashed var(--Accent,red);', 'border-style:solid dashed;']:
             result,out=self.compile('<div></div>', 'div {'+css+'}')

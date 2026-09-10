@@ -419,6 +419,11 @@ int main() {
     check(std::any_of(current.commands.begin(), current.commands.end(), [&](const auto &c) {
       return c.node_id == shadowed && (c.kind == 17 || c.kind == 18) && c.flags == 1 && c.rgba == 0x0000ffffu;
     }), "reordered inset shadow uses live default currentColor");
+    d.attribute(shadowed, "class", "mixed");
+    const auto &mixed = d.render(800, 10000);
+    check(std::any_of(mixed.commands.begin(),mixed.commands.end(),[&](const auto &c) {
+      return c.node_id == shadowed && (c.kind == 17 || c.kind == 18) && c.flags == 1 && c.rgba == 0xff000040u;
+    }), "color-mix shadow evaluates variable color into typed paint");
     d.remove_attribute(shadowed, "class");
     d.render(800, 600);
   }

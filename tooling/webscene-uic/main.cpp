@@ -468,6 +468,41 @@ static std::string variable_grid_code(const std::string &member, const std::stri
   flush();
   return code + "if(!valid) tracks.clear();s.set_" + member + "(std::move(tracks));";
 }
+static std::string compiled_mix_code(const std::string &value) {
+    const auto unsupported = [] { return std::runtime_error(
+        "compiled color-mix requires two sRGB colors with optional percentages"); };
+    if (!value.ends_with(')')) throw unsupported();
+    const auto arguments = component_values(value.substr(10, value.size() - 11), ',');
+    if (arguments.size() != 3) throw unsupported();
+    const auto interpolation = component_values(arguments[0]);
+    if (interpolation.size() != 2 || ascii_keyword(interpolation[0]) != "in" ||
+        ascii_keyword(interpolation[1]) != "srgb") throw unsupported();
+    std::array<std::string, 2> colors;
+    std::array<std::optional<float>, 2> weights;
+    for (size_t i = 0; i < 2; ++i) {
+      const auto stop = component_values(arguments[i + 1]);
+      if (stop.empty() || stop.size() > 2) throw unsupported();
+      colors[i] = stop[0];
+      if (ascii_keyword(colors[i].substr(0, 4)) != "var(" && !compiled_color(colors[i])) throw unsupported();
+      if (stop.size() == 2) {
+        if (!stop[1].ends_with('%') || !css_number(stop[1].substr(0, stop[1].size() - 1))) throw unsupported();
+        const float fraction = std::stof(stop[1]) / 100.f;
+        if (!std::isfinite(fraction) || fraction < 0 || fraction > 1)
+          throw std::runtime_error("color-mix percentage outside 0-100% range");
+        weights[i] = fraction;
+      }
+    }
+    const float first = weights[0].value_or(weights[1] ? 1 - *weights[1] : .5f);
+    const float second = weights[1].value_or(weights[0] ? 1 - *weights[0] : .5f);
+    if (first + second == 0) throw std::runtime_error("color-mix weights cannot both be zero");
+    std::string code;
+    if (ascii_keyword(colors[1]) == "transparent" && !weights[1])
+      code = "auto mixed=s.color_with_opacity(" + variable_code(colors[0]) + "," + number(first) + ");";
+    else
+      code = "auto mixed=s.mix_colors(" + variable_code(colors[0]) + "," + variable_code(colors[1]) +
+          "," + number(first) + "," + number(second) + ");";
+    return code;
+}
 static std::string assignments(const std::string &name,
                                std::string value) {
   if (name == "outline-offset") {
@@ -638,38 +673,7 @@ static std::string assignments(const std::string &name,
     return std::string("s.") + setter + "(" + quote(value) + ");";
   }
   if (ascii_keyword(value.substr(0, 10)) == "color-mix(") {
-    const auto unsupported = [] { return std::runtime_error(
-        "compiled color-mix requires two sRGB colors with optional percentages"); };
-    if (!value.ends_with(')')) throw unsupported();
-    const auto arguments = component_values(value.substr(10, value.size() - 11), ',');
-    if (arguments.size() != 3) throw unsupported();
-    const auto interpolation = component_values(arguments[0]);
-    if (interpolation.size() != 2 || ascii_keyword(interpolation[0]) != "in" ||
-        ascii_keyword(interpolation[1]) != "srgb") throw unsupported();
-    std::array<std::string, 2> colors;
-    std::array<std::optional<float>, 2> weights;
-    for (size_t i = 0; i < 2; ++i) {
-      const auto stop = component_values(arguments[i + 1]);
-      if (stop.empty() || stop.size() > 2) throw unsupported();
-      colors[i] = stop[0];
-      if (ascii_keyword(colors[i].substr(0, 4)) != "var(") assignments("color", ascii_keyword(colors[i]));
-      if (stop.size() == 2) {
-        if (!stop[1].ends_with('%') || !css_number(stop[1].substr(0, stop[1].size() - 1))) throw unsupported();
-        const float fraction = std::stof(stop[1]) / 100.f;
-        if (!std::isfinite(fraction) || fraction < 0 || fraction > 1)
-          throw std::runtime_error("color-mix percentage outside 0-100% range");
-        weights[i] = fraction;
-      }
-    }
-    const float first = weights[0].value_or(weights[1] ? 1 - *weights[1] : .5f);
-    const float second = weights[1].value_or(weights[0] ? 1 - *weights[0] : .5f);
-    if (first + second == 0) throw std::runtime_error("color-mix weights cannot both be zero");
-    std::string code;
-    if (ascii_keyword(colors[1]) == "transparent" && !weights[1])
-      code = "auto mixed=s.color_with_opacity(" + variable_code(colors[0]) + "," + number(first) + ");";
-    else
-      code = "auto mixed=s.mix_colors(" + variable_code(colors[0]) + "," + variable_code(colors[1]) +
-          "," + number(first) + "," + number(second) + ");";
+    std::string code = compiled_mix_code(value);
     if (name == "color" || name == "background" || name == "background-color")
       return code + "s.set_" + (name == "color" ? "foreground_rgba" : "background_rgba") + "(mixed.value_or(0u));";
     if (name == "border-color" || name == "border-left-color" || name == "border-top-color" || name == "border-right-color" || name == "border-bottom-color") {
@@ -793,7 +797,7 @@ static std::string assignments(const std::string &name,
         if (keyword == "inset") {
           if (inset) throw std::runtime_error("duplicate shadow inset");
           inset = true; if (count) closed_lengths = true;
-        } else if (keyword == "currentcolor" || compiled_color(part)) {
+        } else if (keyword == "currentcolor" || compiled_color(part) || keyword.starts_with("color-mix(")) {
           if (color) throw std::runtime_error("duplicate shadow color");
           color = true; if (count) closed_lengths = true;
         } else {
@@ -803,7 +807,17 @@ static std::string assignments(const std::string &name,
       }
       if (count < 2) throw std::runtime_error("shadow requires two to four lengths");
     }
-    return "s.set_box_shadow(s.evaluate(" + variable_code(value) + "));";
+    std::string code = "webscene::native_web::variable_result shadow=webscene::native_web::variable_tokens{};";
+    for (const auto &part : components) {
+      if (ascii_keyword(part).starts_with("color-mix(")) {
+        code += "{" + compiled_mix_code(part) +
+            "if(!mixed)shadow.reset();else if(shadow)shadow->emplace_back(\"\",std::nullopt,mixed);}";
+      } else {
+        code += "{auto part=s.evaluate(" + variable_code(part) +
+            ");if(!part)shadow.reset();else if(shadow)shadow->insert(shadow->end(),part->begin(),part->end());}";
+      }
+    }
+    return code + "s.set_box_shadow(shadow);";
   }
   if (name == "border" || name == "border-left" || name == "border-top" || name == "border-right" || name == "border-bottom") {
     std::string width = "3px", style = "none", color = "currentColor";
