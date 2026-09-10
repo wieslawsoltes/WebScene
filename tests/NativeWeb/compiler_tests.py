@@ -11,6 +11,16 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_opacity_clamps_but_negative_flex_factors_fail(self):
+        for value,expected in [('-0.5','0.0f'),('2','1.0f'),('5e-1','0.5f')]:
+            result,out=self.compile('<div></div>', 'div { opacity:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_opacity('+expected+')',out.read_text())
+        for name in ['flex-grow','flex-shrink']:
+            result,_=self.compile('<div></div>', 'div { '+name+':-0.5; }')
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('numeric value out of range',result.stderr)
+
     def test_grid_tracks_compile_without_runtime_parsing(self):
         result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:222px minmax(250px, 1fr) 252px; grid-template-rows:auto 1fr; }')
         self.assertEqual(result.returncode,0,result.stderr)

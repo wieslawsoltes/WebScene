@@ -590,12 +590,13 @@ static std::string assignments(const std::string &name,
     return "s.set_font_weight(0);";
   if (name == "font-weight" || name == "opacity" || name == "flex-grow" ||
       name == "flex-shrink") {
-    if (!std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")))
+    if (!std::regex_match(value, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")))
       throw std::runtime_error("invalid numeric value");
     auto v = std::stof(value);
-    if ((name == "opacity" && v > 1) ||
+    if (!std::isfinite(v) || ((name == "flex-grow" || name == "flex-shrink") && v < 0) ||
         (name == "font-weight" && (v < 1 || v > 1000 || v != int(v))))
       throw std::runtime_error("numeric value out of range");
+    if (name == "opacity") v = std::clamp(v, 0.0f, 1.0f);
     return "s." + member + " = " + number(v) + ";";
   }
   throw std::runtime_error("unsupported Native Web CSS property: " + name);

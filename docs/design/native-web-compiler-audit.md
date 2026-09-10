@@ -195,3 +195,12 @@ The native fixture verifies `+.5e1px` becomes 5px and `7.5e-1px` becomes .75px;
 `opacity:8e-1` compiles. Compiler and native contract tests pass. Numeric grammar
 remains open for property-specific ranges and other numeric consumers such as
 fractional grid tracks, shorthand parsers and function arguments.
+
+### Numeric ranges: opacity and flex (2026-09-10)
+
+Opacity now accepts signed finite numbers and clamps generated values to [0,1].
+Negative flex-grow/flex-shrink values remain errors; line-height retains its
+nonnegative constraint. Compiler regressions cover negative and over-one opacity,
+exponent notation, negative flex factors and negative line height. All 37 compiler
+tests pass. Percentage opacity, fractional font weights and range behavior in
+other property families still require review; this does not close numeric ranges.
