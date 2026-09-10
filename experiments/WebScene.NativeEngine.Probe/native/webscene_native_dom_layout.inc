@@ -2365,6 +2365,36 @@ void native_document::layout_children(dom_node& parent)
                 } else {
                     child->clear_grid_layout();
                 }
+                const auto constrain_grid_size = [&](bool horizontal, float size) {
+                    const auto available = horizontal ? available_width : available_height;
+                    const auto& minimum = horizontal
+                        ? child->style.min_width : child->style.min_height;
+                    const auto& maximum = horizontal
+                        ? child->style.max_width : child->style.max_height;
+                    const auto box_adjustment = child->style.border_box ? 0.0F
+                        : horizontal
+                            ? resolve_length(*child, child->style.padding_left, available, 0)
+                                + resolve_length(*child, child->style.padding_right, available, 0)
+                                + resolve_length(*child, child->style.border_left_width, available, 0)
+                                + resolve_length(*child, child->style.border_right_width, available, 0)
+                            : resolve_vertical_padding(*child, child->style.padding_top, available, 0)
+                                + resolve_vertical_padding(*child, child->style.padding_bottom, available, 0)
+                                + resolve_length(*child, child->style.border_top_width, available, 0)
+                                + resolve_length(*child, child->style.border_bottom_width, available, 0);
+                    if (is_specified(maximum)) {
+                        size = std::min(
+                            size,
+                            resolve_length(*child, maximum, available, size) + box_adjustment);
+                    }
+                    if (is_specified(minimum)) {
+                        size = std::max(
+                            size,
+                            resolve_length(*child, minimum, available, 0) + box_adjustment);
+                    }
+                    return std::max(0.0F, size);
+                };
+                width = constrain_grid_size(true, width);
+                height = constrain_grid_size(false, height);
                 const auto remaining_height = available_height - margin_top - margin_bottom - height;
                 const auto alignment_offset = auto_vertical_margin
                     ? (child->style.margin_top_auto ? std::max(0.0F, remaining_height) /

@@ -1579,3 +1579,20 @@ auto margins and uses intrinsic width instead of stretch for auto-width items
 with horizontal auto margins. A native fixture verifies a 20px item with auto left
 margin moves to x+80 in its 100px track. Rebuilt contracts pass. Both-auto margins,
 intrinsic shrink-to-fit details and min/max constraints remain open coverage gaps.
+
+### Grid alignment after size constraints (2026-09-10)
+
+Work order reaffirmed: complete the structured HTML/CSS compiler audit before
+resuming Kestrel-driven implementation. Use independent fixtures to establish
+support, record unsupported behavior explicitly, and close gaps with regression
+coverage rather than treating preview output as parity.
+
+A new compiled fixture reproduced incorrect centering and auto-margin placement
+when min-width/min-height enlarged an explicitly sized grid item. Explicit-track
+arrangement now applies min/max constraints before calculating alignment offsets,
+including content-box padding/borders and minimum-over-maximum precedence.
+The regression verifies a 40x20 constrained item at offset (60,10) in a 100x40
+track. It failed before the change and passes afterward; compiler and native
+contract suites pass. Maximum-size, percentage and box-sizing combinations still
+need dedicated coverage. Alternate grid paths and broader layout parity remain
+open; this does not close the layout audit family.

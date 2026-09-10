@@ -328,6 +328,15 @@ int main() {
         "grid auto left margin absorbs horizontal free space");
   d.remove_attribute(d.find("self-grid-child"), "class");
   d.render(800, 600);
+  d.attribute(d.find("self-grid-child"), "class", "constrained");
+  d.render(800, 600);
+  check(d.bounds(d.find("self-grid-child")).width == 40 &&
+        d.bounds(d.find("self-grid-child")).height == 20 &&
+        d.bounds(d.find("self-grid-child")).x == d.bounds(d.find("self-grid")).x + 60 &&
+        d.bounds(d.find("self-grid-child")).y == d.bounds(d.find("self-grid")).y + 10,
+        "grid alignment and auto margins use constrained dimensions");
+  d.remove_attribute(d.find("self-grid-child"), "class");
+  d.render(800, 600);
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
