@@ -876,25 +876,7 @@ std::string serialize_css_number(double value)
 }
 
 std::string canonical_css_property_name(std::string_view name)
-{
-    if (name.starts_with("--")) return std::string(name);
-    if (name == "cssFloat") return "float";
-    std::string result;
-    result.reserve(name.size() + 4U);
-    for (const auto character : name) {
-        if (std::isupper(static_cast<unsigned char>(character))) {
-            result.push_back('-');
-            result.push_back(static_cast<char>(std::tolower(
-                static_cast<unsigned char>(character))));
-        } else {
-            result.push_back(character);
-        }
-    }
-    if (result == "grid-gap") return "gap";
-    if (result == "grid-row-gap") return "row-gap";
-    if (result == "grid-column-gap") return "column-gap";
-    return result;
-}
+{ return css::canonical_property_name(name); }
 
 bool is_css_color_value_property(std::string_view name)
 {

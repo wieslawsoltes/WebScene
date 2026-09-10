@@ -4,6 +4,7 @@
 #include "webscene_css_query.h"
 #include "webscene_css_rule_operations.h"
 #include "webscene_css_variables.h"
+#include "webscene_css_box_values.h"
 #include <iostream>
 int main() {
     using webscene_native::css::parse_declarations;
@@ -183,5 +184,17 @@ int main() {
     seed_inline_custom_properties(exempt);
     if(!apply_custom_property(exempt,{"--size","33px",false}) ||
        resolve_value(exempt,"var(--size)",variables)!="33px") return 42;
+    webscene_native::node_style box;
+    webscene_native::css::apply_margin_declaration(box,"margin","1px 2px 3px auto");
+    if(box.margin_top.value!=1 || box.margin_right.value!=2 || box.margin_bottom.value!=3 || !box.margin_left_auto) return 43;
+    webscene_native::css::apply_padding_declaration(box,"padding","2px 4px");
+    if(box.padding_top.value!=2 || box.padding_left.value!=4 || box.padding_bottom.value!=2) return 44;
+    exempt.mutable_authored_style().declarations["margin-left"]="7px";
+    webscene_native::css::apply_margin_declaration(exempt.style,"margin-left","7px");
+    webscene_native::css::apply_margin(exempt,{"margin","3px",false},"3px");
+    if(exempt.style.margin_left.value!=7 || exempt.style.margin_right.value!=3) return 45;
+    webscene_native::css::apply_margin(exempt,{"margin","9px",true},"9px");
+    webscene_native::css::apply_margin(exempt,{"margin-right","1px",false},"1px");
+    if(exempt.style.margin_left.value!=9 || exempt.style.margin_right.value!=9) return 46;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

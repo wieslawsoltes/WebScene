@@ -417,3 +417,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   remains protected, and removing inline state allows later stylesheet values.
   Service and runtime dimension-variable/inheritance/iframe regressions pass.
   Ordinary style properties, whole-document cascade and app integration remain open.
+
+- Box-property application extraction: canonical property naming, existing value
+  component splitting, margin/padding application and per-side margin precedence
+  now live in webscene_css_box_values.h. All existing runtime callers delegate to
+  the shared implementation. Native tests cover shorthand expansion, automatic
+  margin flags, inline-side protection and important-side protection. Service and
+  runtime dimension-variable/inheritance/iframe regressions pass. This preserves
+  current parser/length/logical-side limitations; it does not claim full box-property
+  compliance. Other property families and full cascade orchestration remain open.
