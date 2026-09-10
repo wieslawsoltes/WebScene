@@ -978,3 +978,16 @@ consumption. Native geometry verifies uppercase alignment fallback and inherited
 right alignment after an invalid custom-property mutation. All 54 compiler tests
 and native contracts pass. Whitespace/transformation variable rendering coverage,
 CSS-wide custom-property keywords and escaped identifiers remain open.
+
+### Variable text transformation and discovered newline gap (2026-09-10)
+
+Native scene regressions verify uppercase transformation through variable fallback,
+invalid-value inheritance to lowercase, recovery after mutation, and unchanged
+DOM text. Native contracts pass.
+
+A separate attempted preformatted-newline regression failed: with font-size 10px,
+line-height 20px and white-space:var(--White, PRE), A/newline/B measured 20px high
+instead of the expected 40px. Retained standalone reproduction in
+`tests/NativeWeb/audit/Whitespace.html`; it is not registered as a passing test.
+Next investigate literal-versus-variable behavior and native text measurement;
+do not claim whitespace variable rendering closure from successful compilation.

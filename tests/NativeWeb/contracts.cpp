@@ -372,6 +372,21 @@ int main() {
   d.attribute(align_variable, "class", "invalid");
   d.render(800, 600);
   check(d.bounds(align_item).x - d.bounds(align_variable).x == 90, "invalid text-align variable restores inherited alignment");
+  auto transform_text = d.find("transform-text");
+  const auto &text_scene = d.render(800, 10000);
+  const auto contains_painted_text = [&](std::string_view expected) {
+    return std::string_view(text_scene.bytes.data(), text_scene.bytes.size()).find(expected) != std::string_view::npos;
+  };
+  check(contains_painted_text("CASEAUDITPROBE"), "variable text transform reaches native paint text");
+  check(d.text_content(transform_text) == "CaseAuditProbe", "text transform preserves DOM source text");
+  d.attribute(transform_text, "class", "invalid");
+  d.render(800, 10000);
+  check(contains_painted_text("caseauditprobe") && !contains_painted_text("CASEAUDITPROBE"),
+        "invalid variable text transform inherits parent lowercase");
+  d.remove_attribute(transform_text, "class");
+  d.render(800, 10000);
+  check(contains_painted_text("CASEAUDITPROBE"), "variable text transform fallback recovers after mutation");
+  d.render(800, 600);
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");
