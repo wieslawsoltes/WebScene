@@ -92,6 +92,14 @@ class CompilerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode,0)
             self.assertIn(message,result.stderr)
 
+    def test_compiled_outline_and_offset(self):
+        for css in ['outline:2px solid var(--Accent,red); outline-offset:-2px;', 'outline:none;', 'outline:0;']:
+            result,_=self.compile('<div></div>', 'div {'+css+'}')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for css in ['outline:-1px solid red;', 'outline:10% solid red;', 'outline-offset:10%;', 'outline-offset:auto;']:
+            result,_=self.compile('<div></div>', 'div {'+css+'}')
+            self.assertNotEqual(result.returncode,0,css)
+
     def test_two_color_mix_weights(self):
         for value in ['var(--First, red) 63%, var(--Second, blue)', 'red, blue',
                       'red 25%, blue 25%', 'red, blue 75%']:

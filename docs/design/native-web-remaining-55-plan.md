@@ -113,9 +113,9 @@ regression and integrated evidence; update this ledger with evidence as work lan
 | 39 | `filter:brightness(1.1)` | P | Open |
 | 40 | `font-synthesis:none` | L | Open |
 | 41 | `grid-column:1/-1` | L | Open |
-| 42 | `outline-offset:-2px` | P | Open |
-| 43 | `outline:2px solid var(--accent)` | P | Open |
-| 44 | `outline:none` | P | Open |
+| 42 | `outline-offset:-2px` | P | Implemented for source form; native geometry tests pass; full semantics/integration pending |
+| 43 | `outline:2px solid var(--accent)` | P | Implemented for source form; native geometry tests pass; full semantics/integration pending |
+| 44 | `outline:none` | P | Implemented for source form; native geometry tests pass; full semantics/integration pending |
 | 45 | `overflow-wrap:anywhere` | L | Open |
 | 46 | `resize:vertical` | I | Open |
 | 47 | `scrollbar-color:var(--line) transparent` | I | Open |
@@ -152,3 +152,9 @@ full Kestrel parity from this CSS inventory or a static diagnostic preview.
   as closure of additional baseline rows.
 - The complete 55-row batch is not finished. Keep all subsequent batch gates
   active; do not present these first changes as completion of the request.
+
+- Outline batch: supported source forms lower to typed native outline style;
+  signed offsets adjust painted bounds without changing layout. Native contracts
+  verify outside/inset geometry, none, and restoration. Rounded outline radii
+  incorporate signed offset; rounded pixel comparison, currentColor/default width,
+  broader shorthand ordering and pseudo-element outline propagation remain pending.

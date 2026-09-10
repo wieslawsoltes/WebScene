@@ -484,6 +484,7 @@ struct node_style final {
     css_length border_right_width{};
     css_length border_bottom_width{};
     css_length outline_width{};
+    css_length outline_offset{};
     css_length border_top_left_radius{};
     css_length border_top_right_radius{};
     css_length border_bottom_right_radius{};

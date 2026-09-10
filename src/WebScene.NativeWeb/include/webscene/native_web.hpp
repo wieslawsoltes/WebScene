@@ -201,6 +201,18 @@ public:
     value_.border_bottom_rgba = color;
     value_.border_bottom_current_color = current;
   }
+  void set_outline_offset(length value) { value_.outline_offset = value; }
+  void set_outline(const variable_result &tokens) {
+    value_.outline_width = {};
+    value_.outline_rgba = 0;
+    if (!tokens || tokens->size() != 3) return;
+    const auto &width = (*tokens)[0].length;
+    const auto &color = (*tokens)[2].color;
+    if (!width || width->unit == length_unit::automatic || width->unit == length_unit::percent || width->value < 0 ||
+        !(*tokens)[1].is_keyword("solid") || !color) return;
+    value_.outline_width = *width;
+    value_.outline_rgba = *color;
+  }
   void set_box_shadow(const variable_result &tokens) {
     value_.box_shadow_present = false;
     if (!tokens || tokens->size() < 3 || tokens->size() > 5) return;

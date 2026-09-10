@@ -378,6 +378,27 @@ int main() {
     check_mix_paint(0x12345680u);
     d.render(800, 600);
   }
+  {
+    const auto outlined = d.find("outline-audit");
+    const auto check_outline = [&](float offset) {
+      const auto &paint = d.render(800, 10000);
+      const auto box = d.bounds(outlined);
+      check(box.width == 20 && box.height == 20, "outline does not alter layout dimensions");
+      check(std::any_of(paint.commands.begin(), paint.commands.end(), [&](const auto &c) {
+        return c.node_id == outlined && c.rgba == 0x2468acffu &&
+            c.x == box.x - offset - 2 && c.y == box.y - offset - 2;
+      }), "outline paint follows signed offset");
+    };
+    check_outline(0);
+    d.attribute(outlined, "class", "inset"); check_outline(-2);
+    d.attribute(outlined, "class", "off");
+    const auto &paint = d.render(800, 10000);
+    check(std::none_of(paint.commands.begin(), paint.commands.end(), [&](const auto &c) {
+      return c.node_id == outlined && c.rgba == 0x2468acffu;
+    }), "outline none removes painted outline");
+    d.remove_attribute(outlined, "class"); check_outline(0);
+    d.render(800, 600);
+  }
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

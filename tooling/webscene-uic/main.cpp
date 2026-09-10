@@ -470,6 +470,25 @@ static std::string variable_grid_code(const std::string &member, const std::stri
 }
 static std::string assignments(const std::string &name,
                                std::string value) {
+  if (name == "outline-offset") {
+    const auto compiled = length(value);
+    if (value == "auto" || value.ends_with('%')) throw std::runtime_error("outline-offset requires a length");
+    return "s.set_outline_offset(" + compiled + ");";
+  }
+  if (name == "outline") {
+    if (ascii_keyword(value) == "none" || value == "0") return "s.set_outline(std::nullopt);";
+    const auto parts = component_values(value);
+    if (parts.size() != 3 || ascii_keyword(parts[1]) != "solid")
+      throw std::runtime_error("compiled outline requires width solid color or none");
+    if (ascii_keyword(parts[0].substr(0,4)) != "var(") {
+      length(parts[0]);
+      if (parts[0] == "auto" || parts[0].ends_with('%') || std::stof(parts[0]) < 0)
+        throw std::runtime_error("outline width must be a nonnegative length");
+    }
+    if (ascii_keyword(parts[2].substr(0,4)) != "var(" && !compiled_color(parts[2]))
+      throw std::runtime_error("unsupported outline color");
+    return "s.set_outline(s.evaluate(" + variable_code(parts[0] + " solid " + parts[2]) + "));";
+  }
   static const std::set<std::string> lengths = {"width",
                                                 "height",
                                                 "min-width",

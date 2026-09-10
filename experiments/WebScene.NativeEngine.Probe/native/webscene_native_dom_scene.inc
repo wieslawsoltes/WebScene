@@ -1182,21 +1182,26 @@ void native_document::append_scene(
         const auto outline = std::max(
             0.0F,
             resolve_length(node, node.style.outline_width, node.layout.width, 0));
+        const auto offset = std::max(-std::min(node.layout.width, node.layout.height) * .5F,
+            resolve_length(node, node.style.outline_offset, node.layout.width, 0));
+        const layout_rect outline_box{node.layout.x - offset, node.layout.y - offset,
+            std::max(0.0F, node.layout.width + 2 * offset),
+            std::max(0.0F, node.layout.height + 2 * offset)};
         if (outline > 0 && radii.any()) {
             const auto half_outline = outline * 0.5F;
-            const auto outline_x = node.layout.x - half_outline;
-            const auto outline_y = node.layout.y - half_outline;
-            const auto outline_width = node.layout.width + outline;
-            const auto outline_height = node.layout.height + outline;
+            const auto outline_x = outline_box.x - half_outline;
+            const auto outline_y = outline_box.y - half_outline;
+            const auto outline_width = outline_box.width + outline;
+            const auto outline_height = outline_box.height + outline;
             const auto outline_radii = resolved_radii{
-                radii.top_left + half_outline,
-                radii.top_right + half_outline,
-                radii.bottom_right + half_outline,
-                radii.bottom_left + half_outline,
-                radii.top_left_y + half_outline,
-                radii.top_right_y + half_outline,
-                radii.bottom_right_y + half_outline,
-                radii.bottom_left_y + half_outline};
+                std::max(0.0F, radii.top_left + offset + half_outline),
+                std::max(0.0F, radii.top_right + offset + half_outline),
+                std::max(0.0F, radii.bottom_right + offset + half_outline),
+                std::max(0.0F, radii.bottom_left + offset + half_outline),
+                std::max(0.0F, radii.top_left_y + offset + half_outline),
+                std::max(0.0F, radii.top_right_y + offset + half_outline),
+                std::max(0.0F, radii.bottom_right_y + offset + half_outline),
+                std::max(0.0F, radii.bottom_left_y + offset + half_outline)};
             append_ellipse_metadata(
                 outline_radii,
                 outline_x,
@@ -1219,28 +1224,28 @@ void native_document::append_scene(
                 outline});
         } else {
             append_border_rect(
-                node.layout.x - outline,
-                node.layout.y - outline,
-                node.layout.width + outline * 2.0F,
+                outline_box.x - outline,
+                outline_box.y - outline,
+                outline_box.width + outline * 2.0F,
                 outline,
                 node.style.outline_rgba);
             append_border_rect(
-                node.layout.x + node.layout.width,
-                node.layout.y,
+                outline_box.x + outline_box.width,
+                outline_box.y,
                 outline,
-                node.layout.height,
+                outline_box.height,
                 node.style.outline_rgba);
             append_border_rect(
-                node.layout.x - outline,
-                node.layout.y + node.layout.height,
-                node.layout.width + outline * 2.0F,
+                outline_box.x - outline,
+                outline_box.y + outline_box.height,
+                outline_box.width + outline * 2.0F,
                 outline,
                 node.style.outline_rgba);
             append_border_rect(
-                node.layout.x - outline,
-                node.layout.y,
+                outline_box.x - outline,
+                outline_box.y,
                 outline,
-                node.layout.height,
+                outline_box.height,
                 node.style.outline_rgba);
         }
     }
