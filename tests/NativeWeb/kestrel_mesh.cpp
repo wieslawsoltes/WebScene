@@ -9,5 +9,15 @@ int main(int argc,char** argv){
         if(a["faces"]!=b["faces"]||a["primitive"]!=b["primitive"]||a["vertices"].size()!=b["vertices"].size())throw std::runtime_error("Mesh topology mismatch");
         for(size_t j=0;j<a["vertices"].size();++j)if((point(a["vertices"][j])-point(b["vertices"][j])).length()>1e-10)throw std::runtime_error("Mesh vertex mismatch");
     }
+    for(auto& sample:fixture["extrusions"]){
+        auto a=extrude(points(sample["points"]),sample["height"]);auto& b=sample["mesh"];
+        if(a["faces"]!=b["faces"]||a["vertices"].size()!=b["vertices"].size())throw std::runtime_error("Extrusion topology mismatch");
+        for(size_t j=0;j<a["vertices"].size();++j)if((point(a["vertices"][j])-point(b["vertices"][j])).length()>1e-10)throw std::runtime_error("Extrusion vertex mismatch");
+        if(std::abs(volume(a)-sample["volume"].get<double>())>1e-8)throw std::runtime_error("Extrusion volume mismatch");
+    }
+    for(auto height:{0.,std::numeric_limits<double>::infinity()}){
+        bool rejected=false;try{extrude({{0,0,0},{1,0,0},{0,1,0}},height);}catch(const std::invalid_argument&){rejected=true;}
+        if(!rejected)throw std::runtime_error("Invalid extrusion accepted");
+    }
     std::cout<<"Kestrel: five upstream mesh primitives matched\n";
 }

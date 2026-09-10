@@ -51,3 +51,8 @@ Numeric labels currently use C++ fixed formatting; exact JavaScript `toFixed`
 rounding at decimal ties and scientific formatting for very large values remain
 to be matched before claiming full label parity. Text rasterization and integration
 with the renderer are still outstanding.
+
+Native extrusion and signed mesh volume are implemented. Reference comparisons
+cover boundary cleanup, concave profiles, negative heights and non-XY profiles,
+including exact cap/side topology and volume. Revolution and other solid
+operations remain outstanding.

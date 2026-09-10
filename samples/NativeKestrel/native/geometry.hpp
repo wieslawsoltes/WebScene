@@ -153,4 +153,33 @@ inline json torus(vec3 p,double major,double minor,int n=64,int m=20){
     for(int i=0;i<n;++i)for(int j=0;j<m;++j)faces.push_back({i*m+j,((i+1)%n)*m+j,((i+1)%n)*m+(j+1)%m,i*m+(j+1)%m});
     return {{"type","MESH"},{"primitive","Torus"},{"vertices",vertices},{"faces",faces},{"smooth",true}};
 }
+inline double volume(const json& e){
+    if(e.at("type")!="MESH")return 0;
+    double result=0;for(auto& face:e.at("faces")){
+        std::vector<vec3> p;for(auto& i:face)p.push_back(point(e.at("vertices").at(i.get<size_t>())));
+        for(auto t:triangulate(p))result+=p[t[0]].dot(p[t[1]].cross(p[t[2]]))/6;
+    }return result;
+}
+inline json extrude(std::vector<vec3> p,double height,std::optional<vec3> normal={}){
+    if(!std::isfinite(height)||std::abs(height)<epsilon)throw std::invalid_argument("Extrusion height cannot be zero");
+    if(p.size()>2&&(p.front()-p.back()).length()<epsilon)p.pop_back();
+    std::vector<vec3> distinct;for(size_t i=0;i<p.size();++i)if(!i||(p[i]-p[i-1]).length()>=epsilon)distinct.push_back(p[i]);p=std::move(distinct);
+    bool changed=true;while(changed&&p.size()>3){changed=false;
+        for(size_t i=0;i<p.size();++i){auto a=p[i]-p[(i+p.size()-1)%p.size()],b=p[(i+1)%p.size()]-p[i];
+            if(a.cross(b).length()<epsilon*std::max(1.,a.length()*b.length())&&a.dot(b)>=0){p.erase(p.begin()+i);changed=true;break;}}
+    }
+    if(p.size()<3)throw std::invalid_argument("Extrusion needs three distinct boundary points");
+    auto n=normal?normal->normalized():face_normal(p);if(n.length()<epsilon)throw std::invalid_argument("Degenerate extrusion profile");
+    double extent=1;for(auto q:p)extent=std::max(extent,(q-p.front()).length());
+    for(auto q:p)if(std::abs((q-p.front()).dot(n))>extent*1e-7)throw std::invalid_argument("Extrusion requires a planar profile");
+    if(height<0)n=n*-1;auto h=std::abs(height);json vertices=json::array(),faces=json::array();
+    for(auto q:p)vertices.push_back(encode(q));for(auto q:p)vertices.push_back(encode(q+n*h));
+    auto cap=triangulate(p);if(cap.size()<p.size()-2)throw std::invalid_argument("Extrusion requires a simple polygon");
+    bool same=face_normal(p).dot(n)>0;
+    for(auto t:cap){auto bottom=t,top=t;if(same)std::reverse(bottom.begin(),bottom.end());else std::reverse(top.begin(),top.end());
+        for(auto& i:top)i+=p.size();faces.push_back(bottom);faces.push_back(top);}
+    for(size_t i=0;i<p.size();++i){auto j=(i+1)%p.size();std::array<size_t,4> f{i,j,j+p.size(),i+p.size()};if(!same)std::reverse(f.begin(),f.end());faces.push_back(f);}
+    return {{"type","MESH"},{"primitive","Extrusion"},{"vertices",vertices},{"faces",faces}};
+}
+
 }
