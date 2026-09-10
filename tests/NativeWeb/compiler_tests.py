@@ -92,6 +92,28 @@ class CompilerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode,0)
             self.assertIn(message,result.stderr)
 
+    def test_two_color_mix_weights(self):
+        for value in ['var(--First, red) 63%, var(--Second, blue)', 'red, blue',
+                      'red 25%, blue 25%', 'red, blue 75%']:
+            result,out=self.compile('<div></div>', 'div { background:color-mix(in srgb,'+value+'); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('mix_colors',out.read_text())
+        result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb,red 0%,blue 0%); }')
+        self.assertNotEqual(result.returncode,0)
+
+    def test_hsl_literals_and_variable_tokens(self):
+        for value,rgba in [('hsl(0,100%,50%)',0xff0000ff),('HSLA(.5turn 100% 50% / .5)',0x00ffff80),
+                           ('hsl(-120deg 100% 50%)',0x0000ffff),('hsl(200grad 100% 50%)',0x00ffffff),
+                           ('hsl(3.141592653589793rad 100% 50%)',0x00ffffff),
+                           ('hsl(120 200% 50% / -1)',0x00ff0000),('hsl(0 0% 50%)',0x808080ff)]:
+            for authored in [value, 'var(--Paint, '+value+')']:
+                result,out=self.compile('<div></div>', 'div { color:'+authored+'; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn(str(rgba)+'u',out.read_text())
+        for value in ['hsl(0 1 50%)','hsl(0 100% 50)','hsl(1px 100% 50%)','hsl(0,100%,50% / .5)', 'hsl(1e999 100% 50%)']:
+            result,_=self.compile('<div></div>', 'div { color:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_rgb_literals_and_variable_tokens(self):
         for value,rgba in [('rgb(255,0,128)',0xff0080ff),('RGBA(100%, 0%, 50%, .5)',0xff008080),
                            ('rgb(255 0 50% / 25%)',0xff008040),('rgb(-10 300 0 / 2)',0x00ff00ff),

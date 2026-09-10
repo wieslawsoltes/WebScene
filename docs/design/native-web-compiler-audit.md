@@ -25,6 +25,11 @@ animation, gradients/two-color mixing/shadows, grid placement, overflow typograp
 and platform/control presentation. Continue independent compiler audit fixtures;
 this corpus does not change the work order below.
 
+The user has now requested one integrated implementation pass for all 55 remaining
+constructs. The complete per-construct ledger, dependency order and acceptance gates
+are in [the remaining-55 plan](native-web-remaining-55-plan.md). That plan controls
+this batch; it does not replace the broader compiler and Kestrel acceptance gates.
+
 ## Work order and closure gates
 
 | Order | Feature family | Required closure evidence | Status |

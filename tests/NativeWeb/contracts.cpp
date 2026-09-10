@@ -368,6 +368,12 @@ int main() {
     check_mix_paint(0x66339980u);
     d.attribute(mixed, "class", "rgb");
     check_mix_paint(0x0a141e40u);
+    d.attribute(mixed, "class", "hsl");
+    check_mix_paint(0x00ffff40u);
+    d.attribute(mixed, "class", "pair");
+    check_mix_paint(0x4000bfffu);
+    d.attribute(mixed, "class", "short-weights");
+    check_mix_paint(0x80008080u);
     d.remove_attribute(mixed, "class");
     check_mix_paint(0x12345680u);
     d.render(800, 600);

@@ -38,6 +38,9 @@ button:focus { height: 30px; }
 #calc-parent.named-offset { --1:30px; ---:var(--1); }
 #calc-parent.named-offset #calc-child { left:var(---); }
 #mix-audit { width:20px; height:20px; background:COLOR-MIX(in /* , ) ( */ srgb, var(--色, var(--fallback, #123456)) /* , ) */ +5e1%, TRANSPARENT); }
+#mix-audit.pair { background:color-mix(in srgb,var(--First,red) 25%,var(--Second,blue)); }
+#mix-audit.short-weights { background:color-mix(in srgb,red 25%,blue 25%); }
+#mix-audit.hsl { --色:hsl(.5turn 100% 50% / 50%); }
 #mix-audit.rgb { --色:rgb(10 20 30 / 50%); }
 #mix-audit.named { --色:REBECCAPURPLE; }
 #mix-audit.changed { --色:#abcdef80; }

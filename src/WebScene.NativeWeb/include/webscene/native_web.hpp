@@ -38,6 +38,26 @@ public:
     auto alpha = static_cast<uint32_t>((color & 255u) * fraction + .5f);
     return (color & 0xffffff00u) | std::min(alpha,255u);
   }
+  std::optional<uint32_t> mix_colors(const std::vector<variable_expression> &first,
+      const std::vector<variable_expression> &second, float first_weight, float second_weight) const {
+    auto a = evaluate(first), b = evaluate(second);
+    if (!a || !b || a->size() != 1 || b->size() != 1 ||
+        !a->front().color || !b->front().color) return std::nullopt;
+    const auto ca = *a->front().color, cb = *b->front().color;
+    const double total = first_weight + second_weight;
+    if (total <= 0) return std::nullopt;
+    const double wa = first_weight / total, wb = second_weight / total;
+    const double aa = (ca & 255u) / 255.0, ab = (cb & 255u) / 255.0;
+    const double alpha = aa * wa + ab * wb;
+    const auto channel = [&](unsigned shift) -> uint32_t {
+      if (alpha == 0) return 0;
+      const double value = (((ca >> shift) & 255u) * aa * wa +
+          ((cb >> shift) & 255u) * ab * wb) / alpha;
+      return static_cast<uint32_t>(std::clamp(value + .5, 0.0, 255.0));
+    };
+    return (channel(24) << 24) | (channel(16) << 16) | (channel(8) << 8) |
+        static_cast<uint32_t>(std::clamp(alpha * std::min(total, 1.0) * 255 + .5, 0.0, 255.0));
+  }
   const variable_result *variable(const std::string &name) const {
     auto found = variables_.find(name);
     return found == variables_.end() ? nullptr : &found->second;
