@@ -432,5 +432,19 @@ int main(int argc,char** argv) {
        !media_matches("(prefers-color-scheme:dark)",{1400,800,true}) ||
        media_matches("print",{1400,800}) ||
        !media_matches("print, (min-width:1000px)",{1400,800})) return 84;
+    const auto live_sheet=webscene_native::css::prepare_stylesheet(
+        ".panel {opacity:1} .panel:hover {opacity:.5} .panel::before {content:'x'}",
+        "",[](const auto&) { return true; });
+    if(!live_sheet || live_sheet->rules.size()!=3) return 85;
+    webscene_native::css::query_host live_query(animated_document,0);
+    animated.class_name="panel";
+    if(!live_query.matches_prepared(animated,live_sheet->rules[0]->compiled_selector) ||
+       live_query.matches_prepared(animated,live_sheet->rules[1]->compiled_selector) ||
+       live_query.matches_prepared(animated,live_sheet->rules[2]->compiled_selector)) return 86;
+    live_query.set_interaction(&animated,nullptr,false);
+    if(!live_query.matches_prepared(animated,live_sheet->rules[1]->compiled_selector)) return 87;
+    animated.class_name="other";
+    if(live_query.matches_prepared(animated,live_sheet->rules[0]->compiled_selector) ||
+       live_query.matches_prepared(animated,live_sheet->rules[1]->compiled_selector)) return 88;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

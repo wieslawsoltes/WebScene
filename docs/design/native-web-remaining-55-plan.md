@@ -546,3 +546,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   partial keyframe diagnostics in this preparation stage. Existing numeric-unit,
   grammar and hard-coded input/reduced-motion preference limits are unchanged.
   Prepared rules still need document ownership and resize-triggered cascade.
+
+- Prepared selector consumption: native document queries can match the immutable
+  selectors already stored in a prepared stylesheet, avoiding outer-selector
+  reparsing. The shared query implementation delegates to this path. Native tests
+  exercise authored stylesheet selectors against live class and hover changes and
+  verify pseudo-element rules do not accidentally match their originating DOM box.
+  The service test passes. Candidate indexing, pseudo rule routing and complete
+  document cascade application remain separate unfinished work.

@@ -20,10 +20,7 @@ class query_host final {
     }
     bool matches(const dom_node& node,const compiled_css_selector_list& list,const dom_node* scope) const {
         for(const auto& selector:list.selectors)
-            if(!selector.compounds.empty() && selector_matches(document,node,selector,
-                selector.compounds.size()-1,scope,[&](const auto& n,const auto& c,const auto* root) {
-                    return compound_matches(*this,n,c,root);
-                })) return true;
+            if(matches_prepared(node,selector,scope)) return true;
         return false;
     }
     dom_node* find(dom_node& node,const compiled_css_selector_list& list,bool include,
@@ -62,6 +59,15 @@ public:
         // Pin syntax across recursive :is/:not/:has calls that can evict the cache.
         const auto prepared=prepare(text);
         return matches(node,*prepared,scope);
+    }
+    // Reuse the stylesheet's prepared selector without reparsing its outer syntax.
+    // Nested functional selectors retain the same bounded cache as DOM queries.
+    bool matches_prepared(const dom_node& node,const compiled_css_selector& selector,
+        const dom_node* scope=nullptr) const {
+        return !selector.compounds.empty() && selector_matches(document,node,selector,
+            selector.compounds.size()-1,scope,[&](const auto& n,const auto& c,const auto* root) {
+                return compound_matches(*this,n,c,root);
+            });
     }
     dom_node* query_selector_node(dom_node& root,std::string_view text,bool include_root=false) const {
         const auto prepared=prepare(text);
