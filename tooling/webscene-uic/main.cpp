@@ -1096,6 +1096,7 @@ struct compiler {
       return;
     }
     static const std::set<std::string> tags = {
+        "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup", "col",
         "body", "main", "article", "aside", "hgroup", "search", "section", "div", "span", "br", "p",      "h1",     "h2",
         "svg", "g", "text", "tspan", "path", "polygon", "rect", "circle", "ellipse", "line", "polyline", "h3",   "button", "canvas",  "ul",  "li",   "header", "footer", "nav"};
     if (preview && (n.tag == "script" || n.tag == "noscript")) { warning("skipped " + n.tag); return; }
@@ -1138,6 +1139,7 @@ struct compiler {
       if (k != "hidden" && k != "id" && k != "class" && k != "width" && k != "height" &&
           k != "tabindex" && k != "disabled" && k != "type" && k != "role" &&
           !k.starts_with("aria-") && !k.starts_with("data-") &&
+          !((n.tag == "td" || n.tag == "th") && (k == "colspan" || k == "rowspan")) &&
           !(std::set<std::string>{"viewBox","viewbox","xmlns","d","points","fill","stroke","stroke-width","stroke-linecap","stroke-linejoin","x","y","x1","x2","y1","y2","cx","cy","r","rx","ry"}.contains(k)))
         { if (!preview) throw std::runtime_error("unsupported attribute: " + k); warning("generic native attribute: " + k); }
       if (in_template && k == "id")

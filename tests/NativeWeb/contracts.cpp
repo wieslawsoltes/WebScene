@@ -137,6 +137,13 @@ int main() {
     check(box.y == semantic_parent.y + semantic_offset, "semantic containers stack in source order");
     semantic_offset += height;
   }
+  auto table_a = d.bounds(d.find("audit-cell-a"));
+  auto table_b = d.bounds(d.find("audit-cell-b"));
+  auto table_span = d.bounds(d.find("audit-cell-span"));
+  check(table_a.width > 0 && table_b.x >= table_a.x + table_a.width,
+        "compiled table lays out separate columns");
+  check(table_span.width >= table_a.width + table_b.width && table_span.y >= table_a.y + table_a.height,
+        "compiled table colspan covers columns on following row");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

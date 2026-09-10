@@ -1342,3 +1342,13 @@ removal, mixed text roots and cleanup. This confirms current generated headers
 and C++ modules integrate with the native API; it is not SDK packaging, V8 linkage,
 GPU presentation or browser parity evidence. The unbuilt native_web_gpu target
 observed in the test inventory remains outside this compiler checkpoint.
+
+### HTML table construction (2026-09-10)
+
+Strict compilation now admits the native table element family and cell-specific
+colspan/rowspan attributes. Existing native defaults/layout provide table roles
+and span processing. A compiled fixture verifies two separate columns and a
+following colspan=2 cell covering their combined width. All 75 compiler tests
+and rebuilt native contracts pass. Rowspan edge cases, caption/column behavior,
+cell header accessibility, border models and browser differential table coverage
+remain open; admission of these elements does not establish full table parity.
