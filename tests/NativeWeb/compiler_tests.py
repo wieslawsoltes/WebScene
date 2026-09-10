@@ -203,6 +203,19 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div {'+name+':-2px;}')
             self.assertEqual(result.returncode,0,result.stderr)
 
+    def test_literal_auto_case(self):
+        for name in ['width','height','left','margin','inset','flex-basis']:
+            result,out=self.compile('<div></div>', 'div {'+name+':AuTo;}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            if name == 'margin':
+                self.assertIn('set_margin_left_auto(true)',out.read_text())
+        for name in ['padding','gap','border-radius']:
+            result,_=self.compile('<div></div>', 'div {'+name+':AUTO;}')
+            self.assertNotEqual(result.returncode,0,name)
+        result,out=self.compile('<div></div>', 'div {font-family:AUTO;}')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('set_font_family("AUTO")',out.read_text())
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)

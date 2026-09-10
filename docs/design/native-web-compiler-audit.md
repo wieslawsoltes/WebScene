@@ -790,3 +790,13 @@ track auto consumers use it. Existing margin centering/cascade regressions now
 exercise uppercase AUTO and mixed-case AuTo. All 50 compiler tests and native
 contracts pass. Escaped identifiers and other keyword consumers remain open;
 this helper compares already compiled tokens and does not parse CSS at runtime.
+
+### Literal auto case handling (2026-09-10)
+
+Supported length-property consumers normalize the auto keyword before lowering,
+so margin auto flags agree with the emitted lengths for mixed-case spellings.
+Shorthands inherit this through side expansion. Tests cover dimensions, offsets,
+margin/inset/flex basis, continued rejection for padding/gaps/radii, and preservation
+of an unrelated font-family value named AUTO. All 51 compiler tests and native
+contracts pass. This is scoped keyword normalization, not general CSS token
+normalization; other keyword families and escaped forms remain open.

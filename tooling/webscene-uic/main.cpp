@@ -322,7 +322,7 @@ static std::string variable_grid_code(const std::string &member, const std::stri
   return code + "if(!valid) tracks.clear();s.set_" + member + "(std::move(tracks));";
 }
 static std::string assignments(const std::string &name,
-                               const std::string &value) {
+                               std::string value) {
   static const std::set<std::string> lengths = {"width",
                                                 "height",
                                                 "min-width",
@@ -348,6 +348,13 @@ static std::string assignments(const std::string &name,
                                                 "border-top-right-radius",
                                                 "border-bottom-left-radius",
                                                 "border-bottom-right-radius"};
+  if (lengths.contains(name) && value.size() == 4) {
+    auto keyword = value;
+    std::ranges::transform(keyword, keyword.begin(), [](unsigned char c) {
+      return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : static_cast<char>(c);
+    });
+    if (keyword == "auto") value = keyword;
+  }
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
   if (value.starts_with("calc(") && (name == "left" || name == "right" || name == "top" || name == "bottom")) {
