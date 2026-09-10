@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <limits>
 #include <mutex>
 #include <stdexcept>
 #include <tuple>
@@ -236,8 +237,25 @@ bool document::dispatch(node_id target, std::string type, float client_x, float 
   return !e.default_prevented;
 }
 
+static std::optional<int> tab_index(const dom_node &n) {
+  const auto found = n.attributes.find("tabindex");
+  if (found == n.attributes.end()) return std::nullopt;
+  const auto &value = found->second;
+  size_t at = value.find_first_not_of(" \t\n\r\f");
+  if (at == std::string::npos) return std::nullopt;
+  bool negative = value[at] == '-';
+  if (value[at] == '+' || negative) ++at;
+  if (at == value.size() || value[at] < '0' || value[at] > '9') return std::nullopt;
+  int result = 0;
+  while (at < value.size() && value[at] >= '0' && value[at] <= '9') {
+    int digit = value[at++] - '0';
+    result = result > (std::numeric_limits<int>::max() - digit) / 10
+        ? std::numeric_limits<int>::max() : result * 10 + digit;
+  }
+  return negative ? -result : result;
+}
 static bool focusable(const dom_node &n) {
-  return (n.tag == "button" || n.attributes.contains("tabindex")) &&
+  return (n.tag == "button" || tab_index(n).has_value()) &&
          !n.attributes.contains("disabled") &&
          n.style.display != display_mode::none;
 }
@@ -319,13 +337,18 @@ void document::key(std::string_view key, bool shift) {
     const auto visit = [&](auto &&self, dom_node &n) -> void {
       if (n.style.display == display_mode::none)
         return;
-      if (focusable(n) && (!n.attributes.contains("tabindex") ||
-                           n.attributes.at("tabindex") != "-1"))
+      if (focusable(n) && tab_index(n).value_or(0) >= 0)
         nodes.push_back(n.id);
       for (auto *c : n.children)
         self(self, *c);
     };
     visit(visit, state_->dom.body());
+    std::stable_sort(nodes.begin(), nodes.end(), [&](node_id a, node_id b) {
+      const auto left = tab_index(state_->node(a)).value_or(0);
+      const auto right = tab_index(state_->node(b)).value_or(0);
+      if ((left > 0) != (right > 0)) return left > 0;
+      return left > 0 && left < right;
+    });
     if (nodes.empty())
       return;
     auto it = std::ranges::find(nodes, state_->focus);

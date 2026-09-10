@@ -432,6 +432,35 @@ int main() {
     states.remove_attribute(button, "missing");
   }
   {
+    document tabs;
+    auto ordinary = tabs.element(tabs.body(), "button");
+    auto second = tabs.element(tabs.body(), "div");
+    auto first = tabs.element(tabs.body(), "div");
+    auto tied = tabs.element(tabs.body(), "div");
+    auto negative = tabs.element(tabs.body(), "div");
+    auto invalid = tabs.element(tabs.body(), "div");
+    tabs.attribute(second, "tabindex", "2");
+    tabs.attribute(first, "tabindex", " +1");
+    tabs.attribute(tied, "tabindex", "1");
+    tabs.attribute(negative, "tabindex", " -2");
+    tabs.attribute(invalid, "tabindex", "bogus");
+    tabs.render(400, 300);
+    for (auto expected : {first, tied, second, ordinary, first}) {
+      tabs.key("Tab");
+      check(tabs.focused() == expected, "positive tabindex precedes ordinary order with stable ties");
+    }
+    tabs.key("Tab", true);
+    check(tabs.focused() == ordinary, "reverse tab order wraps");
+    tabs.focus(negative);
+    check(tabs.focused() == negative, "negative tabindex remains programmatically focusable");
+    tabs.focus(invalid);
+    check(tabs.focused() == negative, "invalid tabindex does not make generic element focusable");
+    tabs.remove_attribute(first, "tabindex");
+    tabs.focus(0);
+    tabs.key("Tab");
+    check(tabs.focused() == tied, "tab order reflects removed tabindex");
+  }
+  {
     document responsive;
     auto references = compiled_ui::build(responsive);
     responsive.render(1000, 301);

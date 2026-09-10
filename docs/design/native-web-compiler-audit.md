@@ -609,3 +609,17 @@ eligibility and removes the disabled selector's width, and removing id clears
 lookup state. All 45 compiler tests and native contracts pass. General HTML form
 semantics, tabindex ordering and focus cleanup on disabling an already-focused
 control still require audit; this closes only the missing mutation operation.
+
+### Native tabindex ordering (2026-09-10)
+
+Sequential focus previously excluded only the literal `-1` and ignored positive
+priorities. Native focus now parses signed HTML integer prefixes, excludes all
+negative values from sequential navigation, and stably orders positive values
+before zero/default values. Invalid tabindex does not make a generic element
+focusable. Large numeric values saturate safely to the native integer range.
+
+Native regressions verify priority ordering, document-order ties, reverse wrap,
+programmatic negative focus, invalid input and dynamic tabindex removal. All 45
+compiler tests and native contracts pass. Shadow-tree focus scopes, full form
+control coverage, hidden-ancestor programmatic focus and focused-control disabling
+remain open; this is not complete browser focus parity.
