@@ -1231,6 +1231,10 @@ struct compiler {
         out << ",0,1e9f,d.root()});\n";
         continue;
       }
+      if (key == "id") {
+        if (!ids.insert(value).second) throw std::runtime_error("duplicate id: " + value);
+        names.emplace_back(value, "d.root()");
+      }
       out << "d.attribute(d.root()," << quote(key) << "," << quote(value)
           << ");\n";
     }

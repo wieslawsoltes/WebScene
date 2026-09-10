@@ -109,6 +109,7 @@ int main() {
   }
   document d;
   auto refs = compiled_ui::build(d);
+  check(refs.named("html-root") == d.root(), "compiled root ID reference");
   d.render(800, 600);
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");

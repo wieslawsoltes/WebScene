@@ -1260,3 +1260,12 @@ Compiler regressions verify typed width output, root targeting and event rejecti
 /preview omission. All 70 compiler tests pass. Other root attributes still retain
 the existing generic-copy behavior; the complete root attribute inventory, named
 root references and native geometry coverage remain open.
+
+### Root IDs and named references (2026-09-10)
+
+HTML root IDs now enter the generated view's named references and the shared
+ID uniqueness set. Previously the attribute existed on the native root but its
+reference was missing and duplicates on body/descendants escaped validation.
+Native contracts verify named("html-root") equals d.root(); compiler tests reject
+both body and descendant duplicates. All 71 compiler tests and rebuilt native
+contracts pass. Broader root attribute semantics remain open.

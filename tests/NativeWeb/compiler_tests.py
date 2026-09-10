@@ -297,6 +297,16 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(preview.returncode,0,preview.stderr)
         self.assertNotIn('onclick',output.read_text())
 
+    def test_root_id_participates_in_duplicate_validation(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        for body in ['<body id="root"></body>', '<body><div id="root"></div></body>']:
+            source.write_text('<html id="root">'+body+'</html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('duplicate id: root',result.stderr)
+            self.assertFalse(output.exists())
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'
