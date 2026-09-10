@@ -186,6 +186,33 @@ static std::string grid_tracks_code(const std::string &value, bool in_repeat = f
     throw std::runtime_error("empty grid track list");
   return result + "}";
 }
+static std::string variable_grid_code(const std::string &member, const std::string &value) {
+  std::string code = "std::vector<webscene::native_web::grid_track> tracks;bool valid=true;";
+  std::string token;
+  int depth = 0;
+  auto flush = [&] {
+    if (token.empty()) return;
+    if (token.starts_with("var(")) {
+      code += "{auto values=s.evaluate(" + variable_code(token) + ");";
+      code += "if(!values || values->empty()) valid=false;else for(const auto& value:*values){";
+      code += "if(value.length && value.length->value>=0) tracks.push_back({*value.length,*value.length,0.0f,webscene::native_web::grid_track::sizing::fixed});";
+      code += "else if(value.text==\"auto\") tracks.push_back({});else valid=false;}}";
+    } else {
+      auto static_tracks = grid_tracks_code(token);
+      code += "{std::vector<webscene::native_web::grid_track> fixed=" + static_tracks + ";tracks.insert(tracks.end(),fixed.begin(),fixed.end());}";
+    }
+    token.clear();
+  };
+  for (char c : value) {
+    if (c == '(') ++depth;
+    if (c == ')' && --depth < 0) throw std::runtime_error("unbalanced variable grid");
+    if (std::isspace(static_cast<unsigned char>(c)) && !depth) flush();
+    else token += c;
+  }
+  if (depth) throw std::runtime_error("unbalanced variable grid");
+  flush();
+  return code + "if(!valid) tracks.clear();s.set_" + member + "(std::move(tracks));";
+}
 static std::string assignments(const std::string &name,
                                const std::string &value) {
   static const std::set<std::string> lengths = {"width",
@@ -216,6 +243,8 @@ static std::string assignments(const std::string &name,
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
   if (value.find("var(") != std::string::npos) {
+    if (name == "grid-template-columns" || name == "grid-template-rows")
+      return variable_grid_code(member, value);
     const bool color = name == "color" || name == "background" || name == "background-color";
     const bool dimension = name == "width" || name == "height" || name == "left" ||
                            name == "right" || name == "top" || name == "bottom";

@@ -12,4 +12,5 @@ button { font-family: Arial, sans-serif; width: 20px; height: 20px; }
 button:focus { height: 30px; }
 @media (max-width: 400px) { #target { height: 40px; } }
 #variable-probe { width:var(--panel-width); color:var(--accent); height:var(--missing, 12px); }
-</style></head><body><div class="outer"><button id="target" class="chosen" style="width: 70px">Go</button><button id="other">Other</button><canvas id="canvas" width="80" height="40"></canvas></div><div id="variable-probe"></div></body></html>
+#variable-grid { display:grid; grid-template-columns:var(--panel-width) minmax(250px,1fr) 252px; }
+</style></head><body><div class="outer"><button id="target" class="chosen" style="width: 70px">Go</button><button id="other">Other</button><canvas id="canvas" width="80" height="40"></canvas></div><div id="variable-probe"></div><div id="variable-grid"><div id="grid-left"></div><div id="grid-middle"></div><div id="grid-right"></div></div></body></html>

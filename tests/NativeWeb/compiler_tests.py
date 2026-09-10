@@ -72,6 +72,11 @@ class CompilerTests(unittest.TestCase):
         self.assertIn('s.evaluate(',out.read_text())
         self.assertNotIn('parse_',out.read_text())
         self.assertNotIn('var(',out.read_text())
+    def test_grid_variable_lowering(self):
+        result,out=self.compile('<div></div>', ':root { --left-width:222px; --right-width:252px; } div { display:grid; grid-template-columns:var(--left-width) minmax(250px,1fr) var(--right-width); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.evaluate(',out.read_text())
+        self.assertNotIn('parse_',out.read_text())
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)
