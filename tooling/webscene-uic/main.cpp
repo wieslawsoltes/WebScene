@@ -221,10 +221,25 @@ static std::string selector_code(const selector_syntax_selector &sel) {
   for (size_t i = 0; i < sel.compounds.size(); ++i) {
     std::string tag, id;
     std::vector<std::string> classes;
+    std::vector<std::string> attributes;
     bool focus = false, hover = false, root = false;
     auto input = sel.compounds[i];
     size_t p = 0;
     while (p < input.size()) {
+      if (input[p] == '[') {
+        // The selector parser validates CSS syntax first. This profile supports
+        // presence and exact equality, retaining explicit diagnostics for others.
+        std::smatch match;
+        auto remaining = input.substr(p);
+        static const std::regex attribute(R"attr(^\[([a-zA-Z_][a-zA-Z0-9_-]*)(?:\s*=\s*(?:"([^"\\]*)"|'([^'\\]*)'|([a-zA-Z0-9_-]+)))?\s*\])attr");
+        if (!std::regex_search(remaining, match, attribute))
+          throw std::runtime_error("unsupported attribute selector: " + sel.serialized);
+        bool equals = match[2].matched || match[3].matched || match[4].matched;
+        auto value = match[2].matched ? match[2].str() : match[3].matched ? match[3].str() : match[4].str();
+        attributes.push_back("{" + quote(match[1].str()) + "," + quote(value) + "," + (equals ? "true" : "false") + "}");
+        p += match.length();
+        continue;
+      }
       char prefix = input[p];
       if (prefix == '.' || prefix == '#' || prefix == ':')
         ++p;
@@ -267,7 +282,12 @@ static std::string selector_code(const selector_syntax_selector &sel) {
     }
     result += "}," + std::string(focus ? "true" : "false") + "," +
               (hover ? "true" : "false") + "," + std::to_string(int(relation)) + "," + (root ? "true" : "false") +
-              "}";
+              ",{";
+    for (size_t j = 0; j < attributes.size(); ++j) {
+      if (j) result += ",";
+      result += attributes[j];
+    }
+    result += "}}";
   }
   return result + "}," + std::to_string(sel.specificity) + "}";
 }

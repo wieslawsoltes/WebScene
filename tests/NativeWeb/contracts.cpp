@@ -16,6 +16,11 @@ int main() {
   auto target = refs.named("target"), other = refs.named("other");
   const auto &initial_scene = d.render(800, 600);
   check(d.bounds(d.body()).x == 3, "root style applies to HTML element");
+  d.attribute(d.root(), "data-theme", "light");
+  d.render(800,600);
+  check(d.bounds(d.body()).x == 7, "theme attribute mutation updates root style");
+  d.attribute(d.root(), "data-theme", "dark");
+  d.render(800,600);
   check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end()).find("Arial, sans-serif") != std::string::npos, "compiled font family reaches renderer");
   check(d.bounds(target).width == 60, "important beats inline");
   check(d.bounds(other).width == 30, "child selector");

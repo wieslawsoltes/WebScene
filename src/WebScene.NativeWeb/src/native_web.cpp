@@ -356,6 +356,10 @@ static bool class_has(const std::string &list, const std::string &name) {
 }
 static bool matches_part(const dom_node &n, const selector_part &p,
                          document_state &s) {
+  for (const auto &attribute : p.attributes) {
+    auto found = n.attributes.find(attribute.name);
+    if (found == n.attributes.end() || (attribute.equals && found->second != attribute.value)) return false;
+  }
   if (p.root && n.id != s.dom.body().id) return false;
   if (!p.tag.empty() && p.tag != "*" && n.tag != p.tag)
     return false;

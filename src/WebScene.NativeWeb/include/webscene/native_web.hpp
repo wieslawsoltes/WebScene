@@ -75,12 +75,17 @@ public:
   }
   void set_position(position_mode value) { value_.position = value; }
 };
+struct attribute_selector {
+  std::string name, value;
+  bool equals{};
+};
 struct selector_part {
   std::string tag, id;
   std::vector<std::string> classes;
   bool focus{}, hover{};
   char relation{}; // relationship to the preceding (ancestor) part: ' ' or '>'
   bool root{};
+  std::vector<attribute_selector> attributes;
 };
 struct selector {
   std::vector<selector_part> parts;
