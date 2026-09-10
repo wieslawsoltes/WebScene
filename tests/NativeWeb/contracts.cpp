@@ -149,7 +149,7 @@ int main() {
     d.pointer("pointerup", bounds.x + 1, bounds.y + 1, 0);
     check(clicks == 1, "primary button still activates after cancellation");
   }
-  check(d.bounds(d.find("numeric-length")).width == .5f &&
+  check(d.bounds(d.find("numeric-length")).width == 5.f &&
         d.bounds(d.find("numeric-length")).height == .75f,
         "compiled leading-decimal lengths preserve their numeric values");
   bool font_found = false;

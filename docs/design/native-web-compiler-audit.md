@@ -184,3 +184,14 @@ adjacent to `!important`; existing scene assertions verify both initial paint an
 native theme mutation. Compiler and native contract tests pass. Fresh corpus:
 397 rules, 1475 declarations, **68 distinct unsupported constructs**. This closes
 this extraction defect only; the grammar/diagnostic audit remains open.
+
+### Numeric grammar: exponent notation (2026-09-10)
+
+Added exponent forms to direct lengths, typed custom-property length tokens and
+scalar numeric properties. Build-time length conversion separates the numeric
+prefix from the unit before producing the native length, avoiding confusion
+between an exponent's `e` and a CSS unit. Non-finite length results are rejected.
+The native fixture verifies `+.5e1px` becomes 5px and `7.5e-1px` becomes .75px;
+`opacity:8e-1` compiles. Compiler and native contract tests pass. Numeric grammar
+remains open for property-specific ranges and other numeric consumers such as
+fractional grid tracks, shorthand parsers and function arguments.

@@ -51,7 +51,7 @@ static std::string trim(std::string value) {
 }
 static std::string length(const std::string &value) {
   static const std::regex valid(
-      R"(^([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)(px|%|em|rem|vw|vh|dvw|dvh)?|auto)$)");
+      R"(^([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh)?|auto)$)");
   if (!std::regex_match(value, valid) ||
       (value != "auto" && value.back() >= '0' && value.back() <= '9' &&
        std::stof(value) != 0))
@@ -62,6 +62,14 @@ static std::string length(const std::string &value) {
   if (value.ends_with("dvh") || value.ends_with("dvw"))
     normalized.erase(normalized.size() - 3, 1);
   auto v = native_document::parse_length(normalized);
+  if (normalized != "auto") {
+    size_t consumed = 0;
+    auto numeric = std::stof(normalized, &consumed);
+    if (!std::isfinite(numeric)) throw std::runtime_error("non-finite length");
+    const auto unit = normalized.substr(consumed);
+    v = native_document::parse_length(unit.empty() ? "0" : "1" + unit);
+    v.value = numeric;
+  }
   return "{" + number(v.value) +
          ", static_cast<webscene::native_web::length_unit>(" +
          std::to_string(int(v.unit)) + "), " + number(v.pixel_offset) + "}";
@@ -98,12 +106,12 @@ static std::string variable_code(const std::string &text) {
     size_t end = cursor;
     while (end < text.size() && !std::isspace(static_cast<unsigned char>(text[end]))) ++end;
     auto token = text.substr(cursor, end - cursor);
-    if (!std::regex_match(token, std::regex(R"((#[A-Za-z0-9]+|[A-Za-z_-][A-Za-z0-9_-]*|[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([A-Za-z]+|%)?))")))
+    if (!std::regex_match(token, std::regex(R"((#[A-Za-z0-9]+|[A-Za-z_-][A-Za-z0-9_-]*|[+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?([A-Za-z]+|%)?))")))
       throw std::runtime_error("unsupported custom-value token: " + token);
     if (token == "initial" || token == "inherit" || token == "unset" || token == "revert" || token == "revert-layer")
       throw std::runtime_error("custom-property CSS-wide keywords are not supported yet");
     std::string typed_length = "std::nullopt", typed_color = "std::nullopt";
-    if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)(px|%|em|rem|vw|vh|dvw|dvh))")) || token == "0")
+    if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh))")) || token == "0")
       typed_length = "webscene::native_web::length" + length(token);
     if (std::regex_match(token, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) ||
         token == "transparent" || token == "black" || token == "white")
@@ -549,7 +557,7 @@ static std::string assignments(const std::string &name,
   if (name == "line-height") {
     if (value == "inherit" || value == "unset") return "s.set_line_height(-1.0f);";
     if (value == "normal") return "s.set_line_height(-2.0f);";
-    if (std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+))")))
+    if (std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")))
       return "s.set_line_height(" + number(-3 - std::stof(value)) + ");";
     if (!value.ends_with("px") || value.starts_with("-"))
       throw std::runtime_error("line-height requires normal, nonnegative px or multiplier");
@@ -582,7 +590,7 @@ static std::string assignments(const std::string &name,
     return "s.set_font_weight(0);";
   if (name == "font-weight" || name == "opacity" || name == "flex-grow" ||
       name == "flex-shrink") {
-    if (!std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+))")))
+    if (!std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")))
       throw std::runtime_error("invalid numeric value");
     auto v = std::stof(value);
     if ((name == "opacity" && v > 1) ||
