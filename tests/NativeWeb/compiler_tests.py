@@ -219,6 +219,15 @@ class CompilerTests(unittest.TestCase):
             audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
             self.assertNotEqual(audit.returncode,0,value)
 
+    def test_embedded_css_normalized_line_endings(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html'
+        for newline in ['\r\n', '\r']:
+            source.write_bytes(newline.join(['<html><head>', '<style>', 'div {', '  cursor:pointer;', '}', '</style></head><body></body></html>']).encode())
+            result=subprocess.run([UIC,source,root/'view.hpp','--preview'],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn(str(source)+':4:3: warning:',result.stderr)
+
     def test_embedded_css_repeated_declaration_locations(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         root=pathlib.Path(folder.name);source=root/'view.html'

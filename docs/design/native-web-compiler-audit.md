@@ -1627,3 +1627,12 @@ normalization (such as CRLF), matching text in other HTML contexts, inline attri
 entities and multiline start tags require parser-origin offsets. When an embedded
 block cannot be matched, the existing approximate location fallback remains.
 The source-location closure gate stays open pending those cases.
+
+### HTML newline normalization for diagnostics (2026-09-10)
+
+A regression with CRLF embedded CSS reproduced fallback to column 1 instead of
+column 3. The compiler now normalizes CRLF and lone CR to LF before HTML parsing
+and diagnostic lookup, matching HTML input preprocessing without changing source
+files. Both newline forms report the tested declaration at line 4, column 3.
+All 80 compiler tests pass. This closes the newline mismatch for the exercised
+embedded block; source-text ambiguity and token-origin spans remain open.

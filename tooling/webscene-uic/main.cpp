@@ -1196,6 +1196,17 @@ struct compiler {
                const std::string &module_name = {}) {
     source = fs::absolute(input);
     content = read(source);
+    // Use the HTML input preprocessing line endings for both parsing and
+    // diagnostic lookup. CRLF and lone CR each represent one source newline.
+    std::string normalized;
+    normalized.reserve(content.size());
+    for (size_t i = 0; i < content.size(); ++i) {
+      if (content[i] == '\r') {
+        normalized += '\n';
+        if (i + 1 < content.size() && content[i + 1] == '\n') ++i;
+      } else normalized += content[i];
+    }
+    content = std::move(normalized);
     dependencies.push_back(source);
     native_document dom;
     auto &root = dom.create_element("html");
