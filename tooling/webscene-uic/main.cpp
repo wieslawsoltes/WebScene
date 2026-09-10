@@ -854,6 +854,8 @@ struct compiler {
   fs::path source;
   std::string content;
   size_t location{1};
+  size_t column{1};
+  bool stylesheet_locations{false};
   std::set<std::string> ids;
   std::vector<std::pair<std::string, std::string>> names;
   std::vector<fs::path> dependencies;
@@ -861,6 +863,7 @@ struct compiler {
   bool in_template{};
   std::vector<std::pair<std::string, const dom_node *>> templates;
   void locate(std::string_view text) {
+    column = 1;
     auto at = content.find(text);
     location =
         at == std::string::npos
@@ -872,7 +875,8 @@ struct compiler {
     bool emitted = false;
     for (size_t j = 0; j < r.declaration_count; ++j) {
       const auto &d = css.declarations.at(r.first_declaration + j);
-      locate(d.name);
+      if (stylesheet_locations) { location = d.source_line; column = d.source_column; }
+      else locate(d.name);
       try {
         std::string code;
         if (d.name.starts_with("--"))
@@ -889,13 +893,19 @@ struct compiler {
     }
     out << "}";
   }
-  void stylesheet(const std::string &text) {
+  void stylesheet(const std::string &text, bool exact_locations = false) {
+    const auto saved_locations = stylesheet_locations;
+    stylesheet_locations = exact_locations;
     auto css = parse_css_syntax_stylesheet(text);
-    if (!css || css.metrics.parse_error_count)
-      throw std::runtime_error("invalid CSS stylesheet: " + css.error);
+    if (!css) throw std::runtime_error("invalid CSS stylesheet: " + css.error);
+    if (css.metrics.parse_error_count) {
+      if (exact_locations) { location = css.metrics.first_error_line; column = css.metrics.first_error_column; }
+      throw std::runtime_error("invalid CSS syntax (" + std::to_string(css.metrics.parse_error_count) + " parse errors)");
+    }
     std::vector<std::array<float, 4>> bounds(css.rules.size(), {0, 1e9f, 0, 1e9f});
     for (size_t i = 0; i < css.rules.size(); ++i) {
       const auto &r = css.rules[i];
+      if (exact_locations) { location = r.source_line; column = r.source_column; }
       auto &range = bounds[i];
       if (r.parent_index != css_syntax_no_parent)
         range = bounds.at(r.parent_index);
@@ -929,6 +939,7 @@ struct compiler {
             << ",0," << number(range[2]) << "," << number(range[3]) << "});\n";
       }
     }
+    stylesheet_locations = saved_locations;
   }
   void node(const dom_node &n, const std::string &parent) {
     if (n.tag == "template") {
@@ -1058,7 +1069,7 @@ struct compiler {
         auto saved_path = source;
         content = read(p);
         source = p;
-        stylesheet(content);
+        stylesheet(content, true);
         content = saved;
         source = saved_path;
       }
@@ -1269,7 +1280,7 @@ int main(int argc, char **argv) {
     return 0;
   } catch (const std::exception &e) {
     std::cerr << c.source.string() << ":" << c.location
-              << ":1: error: " << e.what() << "\n";
+              << ":" << c.column << ": error: " << e.what() << "\n";
     return 1;
   }
 }

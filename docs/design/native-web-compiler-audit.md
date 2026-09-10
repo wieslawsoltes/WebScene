@@ -572,3 +572,13 @@ The internal CSS streaming ABI is now version 2, covering the located callbacks
 and extended result structure; the C++ wrapper rejects stale version-1 libraries.
 This reports parser-detected syntax errors only. Full error lists, semantic source
 locations during normal compilation, and inline CSS-to-HTML mapping remain open.
+
+### Linked stylesheet build diagnostics (2026-09-10)
+
+Normal compilation now uses parser line/column locations for linked stylesheet
+rules, declarations and syntax errors. This replaces the first-substring search
+for external CSS diagnostics; locations point into the actual linked file.
+A build-path regression covers an unsupported declaration, pseudo-element selector
+and malformed declaration. All 44 compiler tests and native contracts pass.
+Embedded style blocks and style attributes retain their previous approximate
+mapping and require HTML parser source spans before claiming exact locations.

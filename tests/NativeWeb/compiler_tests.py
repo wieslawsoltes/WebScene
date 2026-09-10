@@ -133,6 +133,16 @@ class CompilerTests(unittest.TestCase):
         self.assertIn(str(source)+':2:9: error: invalid CSS syntax',result.stderr)
         self.assertIn('2 parse errors',result.stderr)
 
+    def test_external_stylesheet_build_locations(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';css=root/'style.css'
+        source.write_text('<link rel="stylesheet" href="style.css"><div></div>')
+        for text,location in [('div {\n  cursor:pointer;\n}',':2:3'),('\n  div::before { color:black; }',':2:3'),('div {\n  broken;\n}',':2:9')]:
+            css.write_text(text)
+            result=subprocess.run([UIC,source,root/'view.hpp'],capture_output=True,text=True)
+            self.assertEqual(result.returncode,1)
+            self.assertIn(str(css.resolve())+location+': error:',result.stderr)
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)
