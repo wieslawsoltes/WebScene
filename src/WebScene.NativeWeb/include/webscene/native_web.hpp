@@ -80,6 +80,7 @@ struct selector_part {
   std::vector<std::string> classes;
   bool focus{}, hover{};
   char relation{}; // relationship to the preceding (ancestor) part: ' ' or '>'
+  bool root{};
 };
 struct selector {
   std::vector<selector_part> parts;
@@ -139,6 +140,7 @@ public:
   document(const document &) = delete;
   document &operator=(const document &) = delete;
   node_id body() const;
+  node_id root() const;
   node_id element(node_id parent, std::string tag);
   node_id text(node_id parent, std::string value);
   void set_text(node_id, std::string);

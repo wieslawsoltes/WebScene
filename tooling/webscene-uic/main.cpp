@@ -221,7 +221,7 @@ static std::string selector_code(const selector_syntax_selector &sel) {
   for (size_t i = 0; i < sel.compounds.size(); ++i) {
     std::string tag, id;
     std::vector<std::string> classes;
-    bool focus = false, hover = false;
+    bool focus = false, hover = false, root = false;
     auto input = sel.compounds[i];
     size_t p = 0;
     while (p < input.size()) {
@@ -245,6 +245,8 @@ static std::string selector_code(const selector_syntax_selector &sel) {
       else if (prefix == ':') {
         if (name == "focus")
           focus = true;
+        else if (name == "root")
+          root = true;
         else if (name == "hover")
           hover = true;
         else
@@ -264,7 +266,7 @@ static std::string selector_code(const selector_syntax_selector &sel) {
       result += quote(classes[j]);
     }
     result += "}," + std::string(focus ? "true" : "false") + "," +
-              (hover ? "true" : "false") + "," + std::to_string(int(relation)) +
+              (hover ? "true" : "false") + "," + std::to_string(int(relation)) + "," + (root ? "true" : "false") +
               "}";
   }
   return result + "}," + std::to_string(sel.specificity) + "}";
@@ -467,6 +469,8 @@ struct compiler {
     walk(walk, root);
     if (!body)
       throw std::runtime_error("document has no body");
+    for (const auto &[key, value] : body->parent->attributes)
+      out << "d.attribute(d.root()," << quote(key) << "," << quote(value) << ");\n";
     node(*body, "d.body()");
     for (size_t i = 0; i < names.size(); ++i)
       prefix << "webscene::native_web::node_id element_" << i << "{};\n";

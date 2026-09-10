@@ -20,14 +20,19 @@ struct document_state {
   native_document dom;
   std::thread::id owner{std::this_thread::get_id()};
   bool alive{true};
-  node_id focus{}, hover{}, pressed{};
+  node_id focus{}, hover{}, pressed{}, body_id{};
   uint64_t next_listener{1};
   std::mutex listener_mutex;
   std::map<uint64_t, listener> listeners;
   std::vector<rule> rules;
   scene output;
   document_state(webscene_text_measure_callback cb, void *data)
-      : dom(cb, data) {}
+      : dom(cb, data) {
+    dom.body().tag = "html";
+    auto &body = dom.create_element("body");
+    dom.append_child(dom.body(), body);
+    body_id = body.id;
+  }
   void check() const {
     if (owner != std::this_thread::get_id())
       throw std::logic_error("document accessed off its owner thread");
@@ -79,9 +84,13 @@ void document::dispose() {
   state_->rules.clear();
   state_->dom.clear();
 }
-node_id document::body() const {
+node_id document::root() const {
   state_->check();
   return state_->dom.body().id;
+}
+node_id document::body() const {
+  state_->check();
+  return state_->body_id;
 }
 node_id document::element(node_id parent, std::string tag) {
   auto &p = state_->node(parent);
@@ -120,7 +129,7 @@ void document::attribute(node_id id, std::string name, std::string value) {
 }
 void document::remove(node_id id) {
   auto &n = state_->node(id);
-  if (id == body())
+  if (id == body() || id == root())
     throw std::invalid_argument("cannot remove document body");
   std::vector<node_id> removed;
   const auto collect = [&](auto &&self, dom_node &node) -> void {
@@ -347,6 +356,7 @@ static bool class_has(const std::string &list, const std::string &name) {
 }
 static bool matches_part(const dom_node &n, const selector_part &p,
                          document_state &s) {
+  if (p.root && n.id != s.dom.body().id) return false;
   if (!p.tag.empty() && p.tag != "*" && n.tag != p.tag)
     return false;
   if (!p.id.empty() &&

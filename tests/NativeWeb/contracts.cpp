@@ -11,8 +11,11 @@ int main() {
   using namespace webscene::native_web;
   document d;
   auto refs = compiled_ui::build(d);
+  check(d.root() != d.body(), "HTML root differs from body");
+  check(d.find("html-root") == d.root(), "compiled HTML root attributes preserved");
   auto target = refs.named("target"), other = refs.named("other");
   const auto &initial_scene = d.render(800, 600);
+  check(d.bounds(d.body()).x == 3, "root style applies to HTML element");
   check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end()).find("Arial, sans-serif") != std::string::npos, "compiled font family reaches renderer");
   check(d.bounds(target).width == 60, "important beats inline");
   check(d.bounds(other).width == 30, "child selector");
