@@ -84,6 +84,19 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb, #fff '+percent+', transparent); }')
             self.assertNotEqual(result.returncode,0,percent)
 
+    def test_rgb_literals_and_variable_tokens(self):
+        for value,rgba in [('rgb(255,0,128)',0xff0080ff),('RGBA(100%, 0%, 50%, .5)',0xff008080),
+                           ('rgb(255 0 50% / 25%)',0xff008040),('rgb(-10 300 0 / 2)',0x00ff00ff),
+                           ('rgb(1e2 0 +2e2)',0x6400c8ff)]:
+            for authored in [value, 'var(--Color, '+value+')']:
+                result,out=self.compile('<div></div>', 'div { background-color:'+authored+'; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn(str(rgba)+'u',out.read_text())
+        for value in ['rgb(1,2)', 'rgb(1,2,3,4,5)', 'rgb(1 2 3 /)', 'rgb(1%,2,3)',
+                      'rgb(1 2 3, .5)', 'rgb(1px 2 3)', 'rgb(1e999 2 3)']:
+            result,_=self.compile('<div></div>', 'div { color:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_complete_named_color_table(self):
         colors=json.loads(pathlib.Path(__file__).with_name('named-colors.json').read_text())
         css=''.join('.c'+str(i)+' { color:'+name.upper()+'; background:var(--Paint,'+name+'); }' for i,name in enumerate(colors))

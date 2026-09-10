@@ -109,6 +109,45 @@ static std::vector<std::string> component_values(const std::string &value, char 
   return result;
 }
 
+// Literal functional colors are reduced here, never parsed by generated code.
+static std::optional<uint32_t> compiled_color(std::string value) {
+  value = ascii_keyword(trim(value));
+  if (supported_literal_color(value)) return native_document::parse_color(value);
+  if (!value.starts_with("rgb(") && !value.starts_with("rgba(")) return std::nullopt;
+  const auto invalid = [] { return std::runtime_error("invalid compiled rgb color"); };
+  if (!value.ends_with(')')) throw invalid();
+  const auto opening = value.find('(');
+  const auto body = value.substr(opening + 1, value.size() - opening - 2);
+  const bool legacy = body.find(',') != std::string::npos;
+  std::vector<std::string> channels;
+  std::string alpha = "1";
+  if (legacy) {
+    channels = component_values(body, ',');
+    if (channels.size() == 4) { alpha = channels.back(); channels.pop_back(); }
+    if (channels.size() != 3) throw invalid();
+    if (channels[0].ends_with('%') != channels[1].ends_with('%') ||
+        channels[0].ends_with('%') != channels[2].ends_with('%')) throw invalid();
+  } else {
+    const auto parts = component_values(body, '/');
+    if (parts.empty() || parts.size() > 2) throw invalid();
+    channels = component_values(parts[0]);
+    if (parts.size() == 2) alpha = parts[1];
+    if (channels.size() != 3) throw invalid();
+  }
+  const auto byte = [&](std::string token, bool is_alpha) -> uint32_t {
+    token = trim(token);
+    const bool percent = token.ends_with('%');
+    if (percent) token.pop_back();
+    if (!css_number(token)) throw invalid();
+    const double numeric = std::stod(token);
+    if (!std::isfinite(numeric)) throw invalid();
+    const double maximum = percent ? 100.0 : is_alpha ? 1.0 : 255.0;
+    return static_cast<uint32_t>(std::floor(std::clamp(numeric, 0.0, maximum) / maximum * 255.0 + 0.5));
+  };
+  return (byte(channels[0], false) << 24) | (byte(channels[1], false) << 16) |
+      (byte(channels[2], false) << 8) | byte(alpha, true);
+}
+
 static std::string length(std::string value) {
   if (!value.empty() && (std::isdigit(static_cast<unsigned char>(value[0])) ||
       value[0] == '+' || value[0] == '-' || value[0] == '.')) {
@@ -193,10 +232,11 @@ static std::string variable_code(const std::string &input) {
       cursor = end + 1;
       continue;
     }
-    size_t end = cursor;
-    while (end < text.size() && !std::isspace(static_cast<unsigned char>(text[end]))) ++end;
-    auto token = text.substr(cursor, end - cursor);
-    if (!std::regex_match(token, std::regex(R"((#[A-Za-z0-9]+|[A-Za-z_-][A-Za-z0-9_-]*|[+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?([A-Za-z]+|%)?))")))
+    const auto parts = component_values(text.substr(cursor));
+    auto token = parts.front();
+    const auto end = cursor + token.size();
+    const auto color_value = compiled_color(token);
+    if (!color_value && !std::regex_match(token, std::regex(R"((#[A-Za-z0-9]+|[A-Za-z_-][A-Za-z0-9_-]*|[+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?([A-Za-z]+|%)?))")))
       throw std::runtime_error("unsupported custom-value token: " + token);
     const auto keyword = ascii_keyword(token);
     if (keyword == "initial" || keyword == "inherit" || keyword == "unset" || keyword == "revert" || keyword == "revert-layer")
@@ -205,8 +245,7 @@ static std::string variable_code(const std::string &input) {
     const bool zero = std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")) && std::stof(token) == 0;
     if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh))", std::regex::icase)) || zero)
       typed_length = "webscene::native_web::length" + length(token);
-    if (supported_literal_color(token))
-      typed_color = std::to_string(native_document::parse_color(keyword)) + "u";
+    if (color_value) typed_color = std::to_string(*color_value) + "u";
     std::string typed_fraction = "std::nullopt";
     if (keyword.ends_with("fr") && css_number(keyword.substr(0, keyword.size() - 2))) {
       const auto fraction = std::stof(keyword);
@@ -721,7 +760,7 @@ static std::string assignments(const std::string &name,
       if (value == "inherit") throw std::runtime_error("inherited border color is not supported yet");
       // Reuse strict color validation, but retain currentColor as a dependency.
       assignments("color", value);
-      color = std::to_string(native_document::parse_color(value)) + "u";
+      color = std::to_string(*compiled_color(value)) + "u";
       current = "false";
     }
     for (const std::string side : {"left", "top", "right", "bottom"})
@@ -801,11 +840,11 @@ static std::string assignments(const std::string &name,
     return "s.set_foreground_rgba(0u);";
   if (name == "background" && value == "none") return "s.reset_background();";
   if (name == "background" || name == "background-color" || name == "color") {
-    if (!supported_literal_color(value))
+    if (!compiled_color(value))
       throw std::runtime_error("color profile requires a supported named color or hex color");
     return std::string("s.") +
            (name == "color" ? "foreground_rgba" : "background_rgba") + " = " +
-           std::to_string(native_document::parse_color(value)) + "u;";
+           std::to_string(*compiled_color(value)) + "u;";
   }
   static const std::map<
       std::string, std::pair<std::string, std::map<std::string, std::string>>>

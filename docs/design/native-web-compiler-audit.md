@@ -1795,3 +1795,20 @@ the 50% mix, expecting 66339980. Rebuilt smoke, templates, module templates and
 contracts pass. Functional colors, system colors, currentcolor semantics and
 browser rendering comparisons remain open; only the named-color inventory is
 completed here. The shared parser change has not been tested in V8 hosts.
+
+### Typed RGB/RGBA literal lowering (2026-09-10)
+
+Added strict build-time lowering of numeric rgb()/rgba() values: legacy comma
+channels (uniform number or percentage units), modern space channels with optional
+slash alpha, numeric/percentage alpha, case-insensitive names, signed/exponent
+numbers and range clamping. Constants are emitted directly for foreground,
+background and borders; custom properties/fallbacks retain typed color metadata.
+Component extraction now retains whole literal functions in custom-value lists.
+
+All 95 compiler tests pass, including malformed channel counts, mixed legacy
+units, invalid units, missing alpha and nonfinite numbers. Native paint/mutation
+coverage verifies rgb(10 20 30 / 50%) through a 50% mix emits 0a141e40.
+Rebuilt smoke, template, module-template and contract suites pass. Relative colors,
+none channels, channel variables/math, HSL/HWB and other color spaces remain open.
+This is literal RGB lowering, not completion of functional-color semantics or
+browser differential validation. No runtime CSS parser is introduced.

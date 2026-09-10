@@ -38,6 +38,7 @@ button:focus { height: 30px; }
 #calc-parent.named-offset { --1:30px; ---:var(--1); }
 #calc-parent.named-offset #calc-child { left:var(---); }
 #mix-audit { width:20px; height:20px; background:COLOR-MIX(in /* , ) ( */ srgb, var(--色, var(--fallback, #123456)) /* , ) */ +5e1%, TRANSPARENT); }
+#mix-audit.rgb { --色:rgb(10 20 30 / 50%); }
 #mix-audit.named { --色:REBECCAPURPLE; }
 #mix-audit.changed { --色:#abcdef80; }
 #calc-parent { position:relative; width:25vw; height:100px; }
