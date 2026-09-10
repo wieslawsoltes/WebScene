@@ -149,7 +149,7 @@ static std::string variable_code(const std::string &text) {
       }
       if (end == text.size()) throw std::runtime_error("unclosed variable reference");
       auto name = trim(text.substr(start, (comma == std::string::npos ? end : comma) - start));
-      if (!std::regex_match(name, std::regex("--[A-Za-z_][A-Za-z0-9_-]*")))
+      if (!std::regex_match(name, std::regex("--[A-Za-z0-9_-]+")))
         throw std::runtime_error("unsupported custom property name: " + name);
       auto fallback = comma == std::string::npos ? "{}" : variable_code(text.substr(comma + 1, end - comma - 1));
       append("{" + kind + "reference," + quote(name) + "," + fallback + "," + (comma == std::string::npos ? "false" : "true") + "}");
@@ -496,7 +496,7 @@ static std::string assignments(const std::string &name,
   }
   if (value.starts_with("color-mix(")) {
     std::smatch mix;
-    if (!std::regex_match(value,mix,std::regex(R"(color-mix\(\s*in\s+srgb\s*,\s*(var\(--[A-Za-z_][A-Za-z0-9_-]*\)|#[A-Fa-f0-9]+)\s+([0-9]+(?:\.[0-9]+)?)%\s*,\s*transparent\s*\))")))
+    if (!std::regex_match(value,mix,std::regex(R"(color-mix\(\s*in\s+srgb\s*,\s*(var\(--[A-Za-z0-9_-]+\)|#[A-Fa-f0-9]+)\s+([0-9]+(?:\.[0-9]+)?)%\s*,\s*transparent\s*\))")))
       throw std::runtime_error("compiled color-mix currently supports an sRGB color percentage mixed with transparent");
     const float fraction = std::stof(mix[2]) / 100.f;
     if (fraction > 1) throw std::runtime_error("color-mix percentage exceeds 100%");

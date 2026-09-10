@@ -1660,3 +1660,17 @@ variable expression. Compiler (82 tests) and native contracts pass. No productio
 change was needed. This establishes the exercised nested extraction/precedence
 cases; general custom-value function trees and nonliteral scalar expressions
 remain open and are not implied supported by this result.
+
+### ASCII custom-property name grammar (2026-09-10)
+
+The variable-reference regex incorrectly required a letter or underscore after
+`--`, rejecting valid dashed identifiers such as `--1` and `---`. Updated the
+reference and supported color-mix paths to accept nonempty ASCII name suffixes
+including digits and hyphens. The reserved `--` and malformed references remain
+rejected. The grammar decision follows CSS Variables Level 1:
+https://www.w3.org/TR/css-variables-1/ .
+
+A compiler regression failed on `--1` before the change. All 83 compiler tests now
+pass, as do native contracts covering an inherited `---:var(--1)` reference and
+class removal restoring the original inset. Escaped and non-ASCII identifiers
+remain open; this is not a claim of complete CSS identifier support.

@@ -31,6 +31,8 @@ button:focus { height: 30px; }
 #inset-child[data-invalid="true"] { --insets:bogus; width:12px; height:13px; }
 #svg-paint text { text-anchor:middle; }
 #calc-child.literal { inset:calc(2 * (5px + 2px)) auto auto calc((50% - 20px) / 2); }
+#calc-parent.named-offset { --1:30px; ---:var(--1); }
+#calc-parent.named-offset #calc-child { left:var(---); }
 #calc-parent { position:relative; width:25vw; height:100px; }
 #calc-child { position:absolute; inset:calc(var(--missing-offset, 5px) * 2 + 10px / 2) var(--auto-sides, auto auto) calc(2 * (50% - (15px + 5px)) / 2); width:10px; height:10px; }
 #zero-variable { --zero:+0e0; width:var(--zero); height:12px; }

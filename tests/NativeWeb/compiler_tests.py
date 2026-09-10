@@ -73,6 +73,16 @@ class CompilerTests(unittest.TestCase):
             rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
             self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
 
+    def test_custom_names_allow_digit_and_hyphen_suffixes(self):
+        for name in ['--1', '---', '--9-grid', '--_']:
+            for declaration in ['width:var('+name+');', 'color:color-mix(in srgb,var('+name+') 50%,transparent);']:
+                result,out=self.compile('<div></div>', 'div { '+name+':10px; '+declaration+' }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn('"'+name+'"',out.read_text())
+        for name in ['--', '--a b', '--a!']:
+            result,_=self.compile('<div></div>', 'div { width:var('+name+', 1px); }')
+            self.assertNotEqual(result.returncode,0,name)
+
     def test_custom_keyword_casing_and_color_typing(self):
         for keyword in ['INITIAL','InHerit','UNSET','REVERT','REVERT-LAYER']:
             result,_=self.compile('<div></div>', 'div { --Token:'+keyword+'; }')

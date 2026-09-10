@@ -792,6 +792,14 @@ int main() {
   d.render(800, 600);
   check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 80,
         "removing nested calc override restores the variable expression");
+  d.attribute(d.find("calc-parent"), "class", "named-offset");
+  d.render(800, 600);
+  check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 30,
+        "digit and hyphen custom names resolve through inherited references");
+  d.remove_attribute(d.find("calc-parent"), "class");
+  d.render(800, 600);
+  check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 80,
+        "removing inherited custom names restores the original inset");
   check(d.bounds(d.find("zero-variable")).width == 0,
         "unitless exponent zero retains length semantics after variable substitution");
   bool font_found = false;
