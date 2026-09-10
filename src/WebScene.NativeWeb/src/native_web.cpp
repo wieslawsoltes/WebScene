@@ -264,7 +264,9 @@ void document::pointer(std::string type, float x, float y, uint32_t buttons) {
   }
   if (type == "pointerdown") {
     state_->keyboard_modality = false;
-    state_->pressed = id;
+    // Only the primary button participates in click activation.
+    // Auxiliary presses still reach native handlers (for example CAD panning).
+    state_->pressed = (buttons & 1u) ? id : 0;
     state_->dom.mark_dirty();
   }
   if (type == "pointercancel") {

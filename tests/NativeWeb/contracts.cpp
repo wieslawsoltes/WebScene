@@ -128,6 +128,20 @@ int main() {
     d.pointer("pointerdown", bounds.x + 1, bounds.y + 1, 4);
     check(middle_seen, "native pointer preserves middle-button mask");
     d.pointer("pointercancel", bounds.x + 1, bounds.y + 1, 0);
+    unsigned clicks = 0;
+    auto click = d.on(target, "click", [&](auto &) { ++clicks; });
+    for (auto mask : {2u, 4u}) {
+      d.pointer("pointerdown", bounds.x + 1, bounds.y + 1, mask);
+      d.pointer("pointerup", bounds.x + 1, bounds.y + 1, 0);
+    }
+    check(clicks == 0, "auxiliary buttons do not synthesize primary click");
+    d.pointer("pointerdown", bounds.x + 1, bounds.y + 1, 1);
+    d.pointer("pointercancel", bounds.x + 1, bounds.y + 1, 0);
+    d.pointer("pointerup", bounds.x + 1, bounds.y + 1, 0);
+    check(clicks == 0, "cancelled primary press does not click");
+    d.pointer("pointerdown", bounds.x + 1, bounds.y + 1, 1);
+    d.pointer("pointerup", bounds.x + 1, bounds.y + 1, 0);
+    check(clicks == 1, "primary button still activates after cancellation");
   }
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
