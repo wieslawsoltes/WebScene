@@ -126,3 +126,10 @@ shared-image surface. Hosts submit and poll without blocking the UI thread;
 completed leases use the existing Foco GPU adapter. The Metal test exercises
 three resized drawing frames and pending-frame backpressure. Foco window wiring,
 annotation drawing and compiled Kestrel controls remain outstanding.
+
+The initial compiled UI scaffold is in Main.html/Main.css: toolbar, layer panel,
+viewport and status. Layer rows are standard HTML templates compiled into the
+`kestrel.ui` module. A native test constructs the drawing's layers, attaches C++
+visibility handlers and lays out the viewport without runtime HTML parsing.
+This is an initial scaffold, not the complete upstream UI; toolbar commands,
+remaining panels, full CSS coverage and window integration remain outstanding.

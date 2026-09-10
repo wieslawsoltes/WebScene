@@ -91,6 +91,10 @@ if(BUILD_TESTING)
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/geometry.cppm"
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/render_data.cppm"
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/shaders.cppm")
+ add_executable(kestrel_native_ui "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_ui.cpp")
+ target_link_libraries(kestrel_native_ui PRIVATE kestrel_native webscene_native_web)
+ webscene_compile_html_module(kestrel_native_ui "${WEBSCENE_ROOT}/samples/NativeKestrel/Main.html" kestrel.ui)
+ add_test(NAME kestrel_native_ui COMMAND kestrel_native_ui)
  add_executable(kestrel_native_render_data "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_render_data.cpp")
  target_link_libraries(kestrel_native_render_data PRIVATE kestrel_native)
  add_test(NAME kestrel_native_render_data COMMAND kestrel_native_render_data)

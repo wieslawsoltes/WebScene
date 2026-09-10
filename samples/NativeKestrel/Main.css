@@ -1,0 +1,15 @@
+body { margin: 0; background-color: #121c29; color: #dce4ed; font-size: 14px; }
+#app { display: flex; flex-direction: column; width: 100vw; height: 100vh; }
+#toolbar { display: flex; flex-direction: row; gap: 8px; padding: 12px; background-color: #1b2a3b; }
+h1 { font-size: 20px; margin: 0; width: 200px; }
+h2 { font-size: 16px; }
+button { padding: 8px; background-color: #263b4e; color: #dce4ed; border-radius: 4px; }
+button:hover { background-color: #34526b; }
+button:focus { background-color: #34526b; }
+#workspace { display: flex; flex-direction: row; flex-grow: 1; }
+#sidebar { width: 240px; padding: 12px; background-color: #182535; }
+#viewport-panel { flex-grow: 1; }
+#viewport { width: 100%; height: 100%; }
+.layer-row { display: flex; flex-direction: row; gap: 4px; margin-bottom: 4px; }
+.layer-name { flex-grow: 1; }
+#status { margin: 0; padding: 8px; background-color: #1b2a3b; }
