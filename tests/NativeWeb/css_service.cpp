@@ -9,6 +9,7 @@
 #include "webscene_css_layout_values.h"
 #include "webscene_css_pseudo_values.h"
 #include "webscene_css_stylesheet_sink.h"
+#include "webscene_css_rule_payload.h"
 #include <iostream>
 
 struct stylesheet_test_host {
@@ -346,5 +347,19 @@ int main() {
     if(parsed_keyframes["spin"].rotation_stops.size()!=2 ||
        parsed_keyframes["spin"].rotation_stops[0].degrees!=0 ||
        parsed_keyframes["spin"].rotation_stops[1].degrees!=180) return 70;
+    webscene_native::css::rule_payload_cache payload_cache;
+    std::mutex payload_mutex;
+    const auto payload_for=[&](const std::string& selector,const std::string& color) {
+        return webscene_native::css::intern_rule_payload(payload_mutex,payload_cache,
+            webscene_native::css::compile_selector,selector,{{"color",color,false}},{});
+    };
+    auto red_payload=payload_for(".base","red");
+    if(red_payload!=payload_for(".base","red") || red_payload==payload_for(".base","blue") ||
+       red_payload->compiled_selector.compiled_compounds.size()!=1 || red_payload->specificity==0) return 71;
+    std::weak_ptr<const webscene_native::css::css_rule_payload> released=red_payload;
+    red_payload.reset();
+    if(!released.expired()) return 72;
+    red_payload=payload_for(".base","red");
+    if(!red_payload || red_payload->declarations[0].value!="red") return 73;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

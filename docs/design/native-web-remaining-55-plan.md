@@ -499,3 +499,10 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   It also verifies turn-to-degree rotation and implicit initial rotation handling.
   Existing first-declaration, name normalization and restricted property/grammar
   behavior remain; this is reuse of current semantics, not complete CSS animations.
+
+- Rule payload preparation/storage extraction: runtime and native callers can now
+  share immutable selector/declaration/media payload construction and weak-cache
+  interning through webscene_css_rule_payload.h. The native service test checks
+  selector preparation, specificity, identity reuse, declaration isolation and
+  releasing/recreating unused payloads. Cache ownership and rule indexing remain
+  with their host; this does not yet supply the complete native stylesheet owner.
