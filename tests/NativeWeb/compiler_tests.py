@@ -23,6 +23,18 @@ class CompilerTests(unittest.TestCase):
         for tracks in ['-1px 1fr', 'minmax(1px)', 'bogus', '1fr -2px']:
             result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
             self.assertNotEqual(result.returncode,0,tracks)
+    def test_grid_repeat_is_expanded_at_build_time(self):
+        result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:repeat(3,1fr); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        self.assertEqual(generated.count('grid_track::sizing::fractional'),3)
+        self.assertNotIn('repeat(',generated)
+        result,out=self.compile('<div></div>', 'div { grid-template-columns:10px repeat(2, 20px minmax(0, 1fr)); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(out.read_text().count('grid_track::sizing::minmax'),2)
+        for tracks in ['repeat(0,1fr)', 'repeat(-1,1fr)', 'repeat(2,none)', 'repeat(2,repeat(2,1fr))', 'repeat(2.5,1fr)', 'repeat(1025,1fr)']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
+            self.assertNotEqual(result.returncode,0,tracks)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

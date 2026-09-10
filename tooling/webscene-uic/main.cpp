@@ -90,7 +90,7 @@ static std::string grid_track_code(std::string value) {
   return "{" + length(value) + ", " + length(value) + ", 0.0f, " + prefix +
          "fixed}";
 }
-static std::string grid_tracks_code(const std::string &value) {
+static std::string grid_tracks_code(const std::string &value, bool in_repeat = false) {
   if (value == "none")
     return "{}";
   std::string result = "{", token;
@@ -100,7 +100,26 @@ static std::string grid_tracks_code(const std::string &value) {
       return;
     if (result.size() > 1)
       result += ",";
-    result += grid_track_code(token);
+    if (token.starts_with("repeat(") && token.ends_with(")")) {
+      if (in_repeat) throw std::runtime_error("nested grid repeat is invalid");
+      auto comma = token.find(',');
+      if (comma == token.npos) throw std::runtime_error("grid repeat requires count and tracks");
+      auto count_text = trim(token.substr(7, comma - 7));
+      if (!std::regex_match(count_text, std::regex("[0-9]+")))
+        throw std::runtime_error("grid repeat currently requires an integer count");
+      auto count = std::stoul(count_text);
+      if (!count || count > 1024) throw std::runtime_error("grid repeat count must be 1..1024");
+      auto body = trim(token.substr(comma + 1, token.size() - comma - 2));
+      if (body == "none") throw std::runtime_error("grid repeat requires tracks");
+      auto tracks = grid_tracks_code(body, true);
+      tracks = tracks.substr(1, tracks.size() - 2);
+      for (unsigned i = 0; i < count; ++i) {
+        if (i) result += ",";
+        result += tracks;
+      }
+    } else {
+      result += grid_track_code(token);
+    }
     token.clear();
   };
   for (char c : value) {
