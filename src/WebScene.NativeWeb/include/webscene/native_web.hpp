@@ -282,6 +282,8 @@ public:
   node_id text(node_id parent, std::string value);
   void set_text(node_id, std::string);
   void attribute(node_id, std::string name, std::string value);
+  std::optional<std::string> attribute(node_id, std::string_view name) const;
+  node_id parent(node_id) const;
   void remove(node_id);
   node_id find(std::string_view id) const;
   void add_rule(rule);

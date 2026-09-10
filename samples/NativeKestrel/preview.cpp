@@ -105,6 +105,26 @@ public:
     }
     view->refresh();
     model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
+    handlers.push_back(view->document.on(view->document.root(), "click",
+        [this](auto &event) {
+          if (!viewport) return;
+          for (auto node = event.target; node; node = view->document.parent(node)) {
+            auto action = view->document.attribute(node, "data-action");
+            if (!action) continue;
+            if (*action == "wireframe") viewport->options.style = kestrel::display_style::wireframe;
+            else if (*action == "shaded") viewport->options.style = kestrel::display_style::shaded;
+            else if (*action == "xray") viewport->options.style = kestrel::display_style::xray;
+            else if (*action == "shaded-edges") viewport->options.style = kestrel::display_style::shaded_edges;
+            else if (*action == "zoomin") viewport->camera.zoom_at(1.25);
+            else if (*action == "zoomout") viewport->camera.zoom_at(0.8);
+            else if (*action == "grid") viewport->grid_enabled = !viewport->grid_enabled;
+            else if (action->starts_with("view-")) viewport->camera.set_view(action->substr(5));
+            else return;
+            gpu_dirty = true;
+            event.prevent_default();
+            return;
+          }
+        }));
     handlers.push_back(view->document.on(view->document.find("viewport"), "pointerdown",
         [this](auto &event) {
           if (!viewport || !(event.buttons & 4u)) return;

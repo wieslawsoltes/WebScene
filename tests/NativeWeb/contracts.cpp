@@ -75,6 +75,12 @@ int main() {
     auto canvas = layered.element(layered.body(), "canvas");
     auto overlay = layered.element(layered.body(), "button");
     layered.set_text(overlay, "Overlay");
+    layered.attribute(overlay, "data-action", "view-top");
+    auto icon = layered.element(overlay, "span");
+    check(layered.parent(icon) == overlay, "native parent supports delegated icon actions");
+    check(layered.attribute(layered.parent(icon), "data-action") == "view-top",
+          "native action attribute remains available without parsing HTML");
+    check(!layered.attribute(icon, "data-action"), "missing attribute differs from an empty value");
     layered.set_external_canvas(canvas, true);
     const auto &scene = layered.render(800, 600);
     bool placed = false, text_after_canvas = false;

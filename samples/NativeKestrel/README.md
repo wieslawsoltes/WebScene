@@ -252,3 +252,10 @@ latency or solve retained-image stretching during resize.
 the Foco adapter, checks immediate native handler delivery, and verifies that a
 host tick drains the pending refresh request. This is a scheduling smoke check,
 not a frame-rate benchmark.
+
+The original ribbon's `data-action` attributes now route native view-direction,
+zoom-in/out, grid and wireframe/shaded/shaded-edges/x-ray commands. A delegated
+root handler walks native parent links so nested icon clicks and replacement
+ribbon templates use the same route. No HTML is parsed or rewritten for this
+routing. The toolbar controls and document labels still need state synchronization;
+most editing commands remain unported.

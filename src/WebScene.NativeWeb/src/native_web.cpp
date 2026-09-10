@@ -116,6 +116,16 @@ void document::set_text(node_id id, std::string value) {
   }
   state_->dom.mark_dirty();
 }
+std::optional<std::string> document::attribute(node_id id, std::string_view name) const {
+  const auto &node = state_->node(id);
+  auto found = node.attributes.find(std::string(name));
+  if (found == node.attributes.end()) return std::nullopt;
+  return found->second;
+}
+node_id document::parent(node_id id) const {
+  auto *parent = state_->node(id).parent;
+  return parent ? parent->id : 0;
+}
 void document::attribute(node_id id, std::string name, std::string value) {
   auto &n = state_->node(id);
   if (name == "style" || name.starts_with("on"))
