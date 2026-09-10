@@ -48,6 +48,9 @@ public:
       grid.fractional_rows |= track.fraction > 0;
     grid.template_rows = std::move(tracks);
   }
+  void set_z_index(int32_t value, bool automatic = false) { value_.z_index = value; value_.z_index_auto = automatic; }
+  void set_pointer_events(bool none, bool specified = true) { value_.pointer_events_none = none; value_.pointer_events_specified = specified; }
+  void set_visibility(bool hidden, bool specified = true) { value_.visibility_hidden = hidden; value_.visibility_specified = specified; }
   void set_overflow_x(overflow_mode value) { value_.overflow_x = value; }
   void set_overflow_y(overflow_mode value) { value_.overflow_y = value; }
   void set_text_align(std::string value) { value_.mutable_textual().text_align = std::move(value); }

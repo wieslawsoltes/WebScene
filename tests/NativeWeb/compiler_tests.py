@@ -153,6 +153,13 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn('namespace app_tabs',module.read_text())
         self.assertNotIn('namespace compiled_ui',module.read_text())
+    def test_stacking_and_pointer_properties(self):
+        result,out=self.compile('<div></div>', 'div { z-index:-3; pointer-events:none; visibility:hidden; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('set_z_index(-3)',out.read_text())
+        for value in ['2.5','2147483648','bogus']:
+            result,_=self.compile('<div></div>', 'div { z-index:'+value+'; }')
+            self.assertNotEqual(result.returncode,0)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

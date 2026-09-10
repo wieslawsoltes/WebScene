@@ -340,5 +340,22 @@ int main() {
     structural.render(500, 300);
     check(structural.bounds(first).width == 99, "removal updates structural selector");
   }
+  {
+    document hit;
+    compiled_ui::build(hit);
+    auto front = hit.find("hit-front"), back = hit.find("hit-back");
+    int target = 0;
+    auto a = hit.on(front,"pointerdown",[&](event&){target=1;});
+    auto b = hit.on(back,"pointerdown",[&](event&){target=2;});
+    hit.render(1000,1500);
+    auto bounds = hit.bounds(front);
+    hit.pointer("pointerdown",bounds.x+5,bounds.y+5);
+    check(target == 1,"compiled z-index determines pointer target");
+    hit.attribute(front,"class","pass");
+    hit.render(1000,1500);
+    target=0;
+    hit.pointer("pointerdown",bounds.x+5,bounds.y+5);
+    check(target == 2,"compiled pointer-events passes through overlay");
+  }
   std::cout << "Native Web contracts passed\n";
 }

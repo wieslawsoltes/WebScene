@@ -248,6 +248,21 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "z-index") {
+    if (value == "auto") return "s.set_z_index(0,true);";
+    if (!std::regex_match(value, std::regex(R"([+-]?[0-9]+)"))) throw std::runtime_error("z-index requires an integer or auto");
+    auto integer = std::stoll(value);
+    if (integer < INT32_MIN || integer > INT32_MAX) throw std::runtime_error("z-index outside native integer range");
+    return "s.set_z_index(" + std::to_string(integer) + ");";
+  }
+  if (name == "pointer-events" || name == "visibility") {
+    auto setter = name == "pointer-events" ? "set_pointer_events" : "set_visibility";
+    if (value == "inherit" || value == "unset") return std::string("s.") + setter + "(false,false);";
+    bool off = name == "pointer-events" ? value == "none" : value == "hidden";
+    bool on = name == "pointer-events" ? value == "auto" : value == "visible";
+    if (!off && !on) throw std::runtime_error("unsupported " + name + ": " + value);
+    return std::string("s.") + setter + "(" + (off ? "true" : "false") + ");";
+  }
   if (name == "font") {
     if (value == "inherit" || value == "unset")
       return "s.set_font_size(-1.0f);s.set_font_weight(0);s.set_font_family(\"\");s.set_line_height(-1.0f);";
