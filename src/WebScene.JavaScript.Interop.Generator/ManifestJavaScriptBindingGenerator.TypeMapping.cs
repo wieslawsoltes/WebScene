@@ -93,6 +93,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     : "double",
             "typeParameter" => EscapeIdentifier(type.GetProperty("name").GetString()!),
             "reference" => ResolveReference(generation, type),
+            "retainedHandle" => "global::WebScene.JavaScript.Interop.JavaScriptObjectReference",
             "union" => ResolveUnion(generation, type, member),
             _ => null
         };
@@ -113,6 +114,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     referenceName!,
                     out var sourceType)
                 && Kind(sourceType) == "typeAlias"
+                && !generation.ExternalCodecs.ContainsKey(sourceName)
                 && sourceType.TryGetProperty("aliasTarget", out var aliasTarget))
             {
                 referenceAliasMapping = MapType(
@@ -895,19 +897,19 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         }
         if (generation.TypeMappings.TryGetValue(name, out var mapping))
         {
-            return mapping;
+            return ResolveExternalMapping(generation, qualifiedName ?? name, mapping);
         }
         if (qualifiedName is not null
             && generation.TypeMappings.TryGetValue(qualifiedName, out mapping))
         {
-            return mapping;
+            return ResolveExternalMapping(generation, qualifiedName ?? name, mapping);
         }
         if (type.TryGetProperty("display", out var display)
             && generation.TypeMappings.TryGetValue(
                 display.GetString()!,
                 out mapping))
         {
-            return mapping;
+            return ResolveExternalMapping(generation, qualifiedName ?? name, mapping);
         }
         var sourceName = qualifiedName ?? name;
         if (TryGetType(generation.Types, sourceName, name, out var sourceType))
@@ -1162,6 +1164,51 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                              : ")")))
            + " }";
 
+    private static string ResolveExternalMapping(
+        GenerationContext generation,
+        string sourceName,
+        string mapping)
+    {
+        // Handle mappings already have a native wire representation. Other
+        // external contracts do not own the generated model codec methods.
+        if (mapping.TrimEnd('?') is not "global::WebScene.JavaScript.Interop.JavaScriptObjectReference"
+            and not "global::WebScene.JavaScript.Interop.JavaScriptFunctionReference"
+            && !TryPrepareExternalCodec(generation, sourceName, mapping, out var reason)
+            && generation.ReportedExternalMappings.Add(sourceName))
+        {
+            generation.Context.ReportDiagnostic(Diagnostic.Create(
+                ExternalMappingWithoutBinaryCodec,
+                Location.None,
+                sourceName,
+                mapping,
+                reason));
+        }
+        return mapping;
+    }
+
+    // Adapter classes implement callbacks in .NET; they cannot be constructed
+    // from a JavaScript object. Property access returns an owned native handle.
+    private static JsonElement AdapterPropertyWireType(
+        GenerationContext generation, JsonElement type, bool optional)
+    {
+        var payload = type;
+        var nullable = optional;
+        if (Kind(type) == "union")
+        {
+            if (!TryGetBinaryUnionPayloadType(type, out payload)) return type;
+            nullable |= FlattenUnionTypes(type).Any(candidate => Kind(candidate) is "null" or "undefined");
+        }
+        if (Kind(payload) != "reference"
+            || !MapType(generation, payload, optional: false, "adapter property").IsObjectReferenceProvider)
+        {
+            return type;
+        }
+        using var projected = JsonDocument.Parse(nullable
+            ? "{\"kind\":\"union\",\"types\":[{\"kind\":\"retainedHandle\"},{\"kind\":\"null\"}]}"
+            : "{\"kind\":\"retainedHandle\"}");
+        return projected.RootElement.Clone();
+    }
+
     private static bool CanEmitBinaryType(
         GenerationContext generation,
         JsonElement type)
@@ -1169,7 +1216,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var kind = Kind(type);
         if (kind is "string" or "number" or "boolean" or "null"
             or "undefined" or "object" or "any" or "unknown"
-            or "callback")
+            or "callback" or "retainedHandle")
         {
             return true;
         }
@@ -1223,6 +1270,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var sourceName = type.TryGetProperty("qualifiedName", out var qualified)
             ? qualified.GetString()!
             : shortName;
+        if (generation.ExternalCodecs.ContainsKey(sourceName))
+        {
+            return true;
+        }
         if (!generation.ModelNames.ContainsKey(sourceName)
             && !generation.ModelNames.ContainsKey(shortName))
         {
@@ -1251,6 +1302,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var result = generation.NextLocal("binaryValue");
         switch (kind)
         {
+            case "retainedHandle":
+                source.Append(indent).Append("var ").Append(result).Append(" = writer.WriteHandle(")
+                    .Append(valueExpression).AppendLine(");");
+                return result;
             case "string":
                 source.Append(indent).Append("var ").Append(result)
                     .Append(" = writer.WriteString(")
@@ -1358,6 +1413,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                         valueExpression,
                         indent);
                 }
+                var nullableValue = generation.NextLocal("nullableValue");
+                source.Append(indent).Append("var ").Append(nullableValue).Append(" = ")
+                    .Append(valueExpression).AppendLine(";");
+                valueExpression = nullableValue;
                 source.Append(indent).Append("uint ").Append(result)
                     .AppendLine(";")
                     .Append(indent).Append("if (").Append(valueExpression)
@@ -1374,7 +1433,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                     optional: false,
                     "binary union");
                 var concreteExpression = IsNonNullableValueType(
-                    mapping.CSharpType)
+                    generation, mapping.CSharpType)
                     ? valueExpression + ".Value"
                     : valueExpression;
                 var child = EmitBinaryWriteValue(
@@ -1425,9 +1484,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 {
                     source.Append(indent).Append("var ").Append(result)
                         .Append(" = ").Append(
-                            QualifyGeneratedBinaryType(
-                                generation,
-                                mapping.NonNullableCSharpType))
+                            BinaryReferenceCodecType(generation, type, mapping.NonNullableCSharpType))
                         .Append(".__WebSceneWriteBinary(ref writer, ")
                         .Append(valueExpression).AppendLine(");");
                 }
@@ -1451,6 +1508,10 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         var result = generation.NextLocal("binaryResult");
         switch (kind)
         {
+            case "retainedHandle":
+                source.Append(indent).Append("var ").Append(result).Append(" = ")
+                    .Append(valueExpression).AppendLine(".GetHandle();");
+                return result;
             case "string":
                 source.Append(indent).Append("var ").Append(result)
                     .Append(" = ").Append(valueExpression)
@@ -1630,9 +1691,7 @@ public sealed partial class ManifestJavaScriptBindingGenerator
                 {
                     source.Append(indent).Append("var ").Append(result)
                         .Append(" = ").Append(
-                            QualifyGeneratedBinaryType(
-                                generation,
-                                mapping.NonNullableCSharpType))
+                            BinaryReferenceCodecType(generation, type, mapping.NonNullableCSharpType))
                         .Append(".__WebSceneReadBinary(")
                         .Append(valueExpression).Append(", ")
                         .Append(invokerExpression).AppendLine(");");
@@ -1697,11 +1756,24 @@ public sealed partial class ManifestJavaScriptBindingGenerator
         return true;
     }
 
-    private static bool IsNonNullableValueType(string type)
-        => type is "bool" or "double" or "int" or "long"
+    private static bool IsNonNullableValueType(GenerationContext generation, string type)
+        => generation.ExternalCodecs.Values.Any(codec => codec.IsValueType
+            && (codec.ClrType == type || codec.ClrType == "global::" + type))
+           || type is "bool" or "double" or "int" or "long"
             or "global::System.Numerics.BigInteger"
+            or "global::WebScene.JavaScript.Interop.JavaScriptObjectReference"
            || type.StartsWith("(", StringComparison.Ordinal)
            && !type.EndsWith("?", StringComparison.Ordinal);
+
+    private static string BinaryReferenceCodecType(
+        GenerationContext generation, JsonElement type, string clrType)
+    {
+        var name = type.TryGetProperty("qualifiedName", out var qualified)
+            ? qualified.GetString()! : type.GetProperty("name").GetString()!;
+        return generation.ExternalCodecs.TryGetValue(name, out var codec)
+            ? "global::" + generation.Namespace + "." + codec.Name
+            : QualifyGeneratedBinaryType(generation, clrType);
+    }
 
     private static string QualifyGeneratedBinaryType(
         GenerationContext generation,

@@ -1,5 +1,10 @@
 # WebScene Flutter backend
 
+Use `onJavaScriptException` for production page error logging and `onRuntimeFailed`
+for terminal failures. `onConsoleMessage` enables opt-in console capture without
+frame polling. See [Runtime diagnostics](../../docs/runtime-diagnostics.md) for
+controller state, custom failure UI, native integration tests and legacy migration.
+
 `webscene_flutter` renders WebScene's immutable native scene stream with Flutter.
 It owns the native engine lifecycle, translates Flutter input and lifecycle
 events, services host requests, and paints scene revisions without embedding a

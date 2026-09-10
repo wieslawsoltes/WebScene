@@ -1,0 +1,188 @@
+using Avalonia.Skia;
+using SkiaSharp;
+
+namespace WebScene.Backends.Avalonia.Native;
+
+// Serialized by the composition owner. Replacement is CPU-only; all imported
+// resources stay here until retirement completes under the host graphics lease.
+internal enum NativeGpuSceneApplyResult { Applied, Backpressure, InvalidScene, RejectedDiff, AcknowledgementFailed }
+
+internal sealed class NativeGpuScenePresenter
+{
+    private NativeGpuSceneImages? _current;
+    private bool _hostInspected;
+    internal bool SupportsProducerGpuWaits { get; private set; }
+    private readonly NativeGpuSceneImages?[] _retiring = new NativeGpuSceneImages?[2];
+    private bool _prepared;
+    internal bool IsStopping { get; private set; }
+    internal int ImportedCount { get; private set; }
+    internal bool HasPendingRetirements => Array.Exists(_retiring, image => image is not null) || (IsStopping && _current is not null);
+
+    // On false, ownership remains with the caller. Never replace a visible
+    // group's ownership until there is bounded space to retire it safely.
+    internal bool TryReplace(NativeGpuSceneImages images)
+    {
+        ArgumentNullException.ThrowIfNull(images);
+        if (IsStopping) return false;
+        if (images.IsRetiring || Array.Exists(_retiring, image => ReferenceEquals(image, images)))
+            throw new InvalidOperationException("A retiring scene cannot become current.");
+        if (ReferenceEquals(_current, images)) return true;
+        if (_current is not null)
+        {
+            if (_current.ImportedCount == 0)
+            {
+                // An intermediate mailbox scene never borrowed a GPU image.
+                // Release its CPU leases without consuming a fence-retirement slot.
+                _current.DiscardUnprepared();
+            }
+            else
+            {
+                var slot = Array.FindIndex(_retiring, image => image is null);
+                if (slot < 0) return false;
+                _retiring[slot] = _current;
+            }
+        }
+        _current = images;
+        _prepared = false;
+        return true;
+    }
+
+    // Apply under the composition owner's serialization. Image retention is
+    // completed before mutating the renderer; acknowledge only after both the
+    // renderer and its indexed image bindings have accepted the same version.
+    internal unsafe NativeGpuSceneApplyResult ApplyScene(NativeSceneLeaseV3 scene, NativeCanvasSceneRenderer renderer, NativeSceneRenderObserver? observer = null,
+        NativeCanvasSceneRenderer.PreparedCanvasLayers? prepared = null)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(renderer);
+        if (IsStopping || ((_current?.ImportedCount ?? 0) != 0 && Array.TrueForAll(_retiring, image => image is not null)))
+            return NativeGpuSceneApplyResult.Backpressure;
+        var result = NativeGpuSceneApplyResult.InvalidScene;
+        scene.WithView(view =>
+        {
+            var supported = NativeWebSceneApi.GpuImageCapability | NativeWebSceneApi.OrderedCanvasCapability | NativeWebSceneApi.CanvasCheckpointCapability
+                | (SupportsProducerGpuWaits ? NativeWebSceneApi.ProducerGpuWaitCapability : 0UL);
+            if (view.SceneVersion != 3 || view.StructSize != System.Runtime.InteropServices.Marshal.SizeOf<NativeSceneViewV3>() ||
+                (view.RequiredCapabilities & ~supported) != 0 || !NativeSceneViewValidation.IsValid((NativeSceneView*)view.CpuView)) return;
+            var status = NativeGpuSceneImages.Acquire(scene, out var images);
+            observer?.RecordScheduling("apply:images-retained", 0, ((NativeSceneView*)view.CpuView)->Header.Revision, HasPendingRetirements);
+            if (status == NativeSceneAcquireStatus.Backpressure) { result = NativeGpuSceneApplyResult.Backpressure; return; }
+            if (status != NativeSceneAcquireStatus.Success || images is null)
+                throw new InvalidOperationException($"Scene image retention failed: {status}");
+            try
+            {
+                var cpu = (NativeSceneView*)view.CpuView;
+                foreach (var command in new ReadOnlySpan<SceneCommand>(cpu->Commands, checked((int)cpu->Header.CommandCount)))
+                    if (command.Kind == NativeWebSceneApi.GpuImagePaintCommand &&
+                        ((view.RequiredCapabilities & NativeWebSceneApi.GpuImageCapability) == 0 || command.Rgba >= images.ImageCount)) return;
+                if (!renderer.ApplyDiff((NativeSceneView*)view.CpuView, orderedGpuImages: (view.RequiredCapabilities & supported) != 0, prepared))
+                { result = NativeGpuSceneApplyResult.RejectedDiff; return; }
+                observer?.RecordScheduling("apply:cpu-applied", 0, cpu->Header.Revision, HasPendingRetirements);
+                if (!TryReplace(images)) throw new InvalidOperationException("Scene replacement lost its serialized admission slot.");
+                images = null; // Presenter now owns the bindings used by this renderer version.
+                observer?.RecordScheduling("apply:replaced", 0, cpu->Header.Revision, HasPendingRetirements);
+                result = scene.Acknowledge() ? NativeGpuSceneApplyResult.Applied : NativeGpuSceneApplyResult.AcknowledgementFailed;
+            }
+            finally { images?.DiscardUnprepared(); }
+        });
+        return result;
+    }
+
+    // A visual that never imported an image can stop synchronously. Once an
+    // import exists, shutdown must retain the visual's graphics retirement path.
+    internal bool TryDiscardUnprepared()
+    {
+        if ((_current?.ImportedCount ?? 0) != 0 || Array.Exists(_retiring, image => (image?.ImportedCount ?? 0) != 0)) return false;
+        IsStopping = true;
+        _current?.DiscardUnprepared(); _current = null;
+        for (var index = 0; index < _retiring.Length; ++index)
+        { _retiring[index]?.DiscardUnprepared(); _retiring[index] = null; }
+        _prepared = false;
+        return true;
+    }
+
+    private void DrainRetirements(ISkiaSharpApiLease lease)
+    {
+        for (var index = 0; index < _retiring.Length; ++index)
+        {
+            if (_retiring[index] is not { } image) continue;
+            image.Retire(lease);
+            if (image.TryComplete(lease)) _retiring[index] = null;
+        }
+    }
+
+    // Recheck retired groups after recording the current frame, while the
+    // composition owner still holds its graphics lease. Never poll by waiting.
+    internal void PollRetirementsAfterDraw(ISkiaSharpApiLease lease)
+    {
+        if (!IsStopping) DrainRetirements(lease);
+    }
+
+    // Windows retirement is sealed on the graphics owner during draw. Poll its
+    // D3D11 completion fences before admitting the next producer frame, so an
+    // already completed consumer does not occupy a pool slot for another vsync.
+    // No GL context, new signal or CPU wait is allowed on this path.
+    internal void PollWindowsRetirementsBeforeFrame()
+    {
+        if (IsStopping || !OperatingSystem.IsWindows()) return;
+        for (var index = 0; index < _retiring.Length; ++index)
+            if (_retiring[index] is { } image && image.TryRetireWithoutVisual())
+                _retiring[index] = null;
+    }
+
+    internal bool TryPrepare(ISkiaSharpApiLease lease)
+    {
+        if (IsStopping) throw new InvalidOperationException("Scene presenter is stopping.");
+        if (!_hostInspected)
+        {
+            SupportsProducerGpuWaits = OperatingSystem.IsWindows()
+                ? NativeWindowsRetainedGpuImage.Supports(lease)
+                : NativeMetalRetainedGpuImage.Supports(lease);
+            _hostInspected = true;
+        }
+        DrainRetirements(lease);
+        if (_current is null) return false;
+        var before = _current.ImportedCount;
+        try { return _prepared = _current.TryPrepare(lease); }
+        finally { ImportedCount += _current.ImportedCount - before; }
+    }
+
+    internal void Draw(ISkiaSharpApiLease lease, uint index, SKRect destination)
+    {
+        if (IsStopping || !_prepared || _current is null)
+            throw new InvalidOperationException("Scene presenter is not ready to draw.");
+        _current.Draw(lease, index, destination);
+    }
+
+    // The host must continue graphics callbacks until TryComplete returns true,
+    // including when ordinary scene rendering has stopped or is hidden.
+    internal void BeginShutdown() => IsStopping = true;
+    internal void SealForDetachedRetirement()
+    {
+        if (!IsStopping) throw new InvalidOperationException("Scene presenter has not begun shutdown.");
+        foreach (var image in _retiring) image?.SealForDetachedRetirement();
+        _current?.SealForDetachedRetirement();
+    }
+    internal bool TryComplete(ISkiaSharpApiLease lease)
+    {
+        if (!IsStopping) throw new InvalidOperationException("Scene presenter has not begun shutdown.");
+        DrainRetirements(lease);
+        if (_current is not null)
+        {
+            _current.Retire(lease);
+            if (_current.TryComplete(lease)) _current = null;
+        }
+        return !HasPendingRetirements;
+    }
+    // Transfer this presenter exclusively to the retirement worker after stop.
+    // No replacement, preparation or drawing may run concurrently with it.
+    internal bool TryCompleteWithoutVisual()
+    {
+        if (!IsStopping) throw new InvalidOperationException("Scene presenter has not begun shutdown.");
+        for (var index = 0; index < _retiring.Length; ++index)
+            if (_retiring[index] is { } image && image.TryRetireWithoutVisual()) _retiring[index] = null;
+        if (_current is not null && _current.TryRetireWithoutVisual()) _current = null;
+        return !HasPendingRetirements;
+    }
+
+}

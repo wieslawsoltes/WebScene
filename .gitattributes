@@ -6,3 +6,8 @@
 tests/WebPlatformSubset/upstream/** text eol=lf -whitespace
 third-party/v8-patches/*.txt text eol=lf
 packaging/WebScene.NativeEngine.Runtime/patches/*.txt text eol=lf
+eng/graphics/** text eol=lf
+tests/GraphicsCompatibility/*.mjs text eol=lf
+tests/GraphicsCompatibility/fixtures/*.json text eol=lf
+tests/GraphicsCompatibility/fixtures/Kestrel-LICENSE.txt -text
+tests/GraphicsCompatibility/fixtures/Kestrel-CAD.zip -text

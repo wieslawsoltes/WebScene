@@ -53,6 +53,7 @@ inline display_mode native_default_display_for_node(const dom_node& node)
             : display_mode::none;
     }
     if (node.attributes.contains("hidden")) return display_mode::none;
+    if (node.tag == "dialog" && !node.attributes.contains("open")) return display_mode::none;
     if (node.tag == "input") {
         const auto type = node.attributes.find("type");
         if (type != node.attributes.end()) {

@@ -1,0 +1,15 @@
+{
+  "route": "Dawn-IOSurface-CGL-Ganesh",
+  "renderedFrames": 32,
+  "imports": 2,
+  "gpuRetirementCompleted": true,
+  "explicitTransportCopies": 0,
+  "diagnosticReadbacks": 8,
+  "physicalPresentationVerified": false,
+  "detachedBeforeRetirement": false,
+  "scope": "Production two-phase completion gate tested with controlled phase ordering; delayed whole-scene capture remains pending.",
+  "tests": [
+    "webscene_graphics_completion_tests passed (0.31s)",
+    "webscene_graphics_v8_runtime_tests passed (0.60s)"
+  ]
+}

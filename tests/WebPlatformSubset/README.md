@@ -4,6 +4,10 @@ This directory contains WebScene's native-only compatibility profile. It is a bo
 set of browser contracts for trusted, packaged UI components—not a claim of full Web
 Platform Test conformance.
 
+For the release-note styling causes, required contracts, native font-cache tests,
+and variable-font weight qualification gates, see
+[release notes coverage](RELEASE_NOTES_COVERAGE.md).
+
 The profile manifest is `webscene-component-profile.json`. Every entry has one state:
 
 - `required` — reviewed release-gating behavior;
@@ -110,6 +114,102 @@ code.
 
 Input tests enqueue pointer, wheel, keyboard, focus, and resize actions through the
 native input ABI. They must not call presenter internals directly.
+
+## Retina canvas export regression
+
+`contracts/resize-observer-device-pixel-canvas-export.html` is a project-owned
+WPT-style reduction, not an imported upstream WPT. It covers initial and resized
+constrained canvas exports plus same-origin iframe measurements. The pane and time
+axis take their backing sizes from `devicePixelContentBoxSize`; a detached price
+axis uses `devicePixelRatio`. Assertions reject mixed-scale layers, price-axis
+spill into the footer, and incorrect export dimensions. The DOM DPR is checked
+against the runner's requested scale so a nominal 2x run cannot silently test 1x.
+
+The ordinary component profile includes the 1x control as a candidate. Run the
+paired 2x candidate with:
+
+```bash
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- \
+  --manifest tests/WebPlatformSubset/webscene-retina-canvas-export-profile.json \
+  --selection candidate --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --output artifacts/retina-canvas-export/native-2x
+
+CHROME_BIN=/absolute/path/to/chromium node tests/WebPlatformSubset/chrome/run-contracts.mjs \
+  --path contracts/resize-observer-device-pixel-canvas-export.html \
+  --device-scale-factor 2 --output artifacts/retina-canvas-export/chrome-2x
+```
+
+Repeat the Chrome command with `--device-scale-factor 1` and a fresh output path
+for the control. The browser runner sets the physical process scale as well as
+CDP viewport metrics: changing emulated DPR alone does not exercise the physical
+ResizeObserver box in Chromium. The native adapter likewise sends the manifest
+scale through resize input before any document script, rather than only scaling
+the screenshot renderer.
+
+The native executable has two focused filters:
+`resize-observer-retina-export` and `resize-observer-device-scale`. The latter
+drives real host scale transitions 1x → 2x → 1.5x → 1x without changing CSS size,
+requiring new physical measurements without duplicate content-box notifications.
+Both are registered in the full native suite.
+
+Before the fix, native failed 9 of the original 13 assertions at 2x (including
+a 511x611 export instead of 842x1082), and both focused native tests failed.
+The fixed implementation supplies separate content, border, and rounded physical
+sizes, tracks the selected observation box, and reaches the observation checkpoint
+on outer-document resizes even without an iframe. The expanded contract also
+covers padding/borders, option replacement, unobserve, invalid options, and
+fractional untransformed sizes. Native and Chromium pass 21/21 at both scales;
+the two focused native regressions and the full native suite pass. The real
+constrained chart export was independently checked at 421x541 (1x) and 842x1082
+(2x), without the earlier diagnostic sizing shim. Local evidence is under
+`artifacts/resize-observer-export-fix` and
+`artifacts/export-diagnosis/457-dpr{1,2}-native-fixed`.
+
+Keep the web contract candidate until cross-RID validation is complete. Candidate
+failures are reported in result JSON but do not set the runner's exit code;
+the direct native regressions do exit nonzero.
+
+## Go To tab lines and phantom scrolling (#1248)
+
+`contracts/go-to-tabs-overflow.html` is a project-owned WPT-style reduction of
+[the tester's follow-up](https://github.com/SandwichTradingDevOps/StackWich/issues/1248#issuecomment-5511713642).
+The original responsive Go To test covered widths and grid tracks, but did not
+include the production tab wrappers or calendar percentage-height chain.
+
+Two independent causes are covered here:
+
+- Stylesheet margin shorthands must keep nested `calc(max(var(...), ...)*-1)`
+  expressions intact. Splitting on spaces changed the tab margins and produced
+  separated underline layers.
+- Percentage heights in ordinary auto-height parents use intrinsic sizing, not
+  the parent's provisional height. The latter enlarged the calendar from 332px
+  to 382px and created overflow. Definite percentage chains, grown column-flex
+  items, and fixed portals must still provide definite percentage bases.
+
+The direct native filter `go-to-overflow` reads the same fixture, checks repeated
+302 → 431 → 302 width changes, verifies both underline paint layers coincide,
+rejects painted phantom scrollbars, and ensures genuinely constrained content
+can still scroll. It also runs in the full native suite. The web test remains a
+candidate pending cross-RID verification.
+
+```bash
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- \
+  --selection all --test go-to-tabs-overflow \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --output artifacts/go-to-native
+
+CHROME_BIN=/absolute/path/to/chromium node tests/WebPlatformSubset/chrome/run-contracts.mjs \
+  --path contracts/go-to-tabs-overflow.html --output artifacts/go-to-chrome
+
+dotnet run --project samples/NativeTradingViewTerminal -- --headless-proof \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --width 431 --height 900 --open-overlay go-to --output artifacts/go-to-live
+```
+
+Repeat the live proof at width 858 for the desktop layout. It invokes the actual
+Go To application handler, then uses native pointer input to select Date → Custom
+range → Date, recording screenshots, scroll geometry, and the loaded library's
+path/SHA-256. It does not override the application's layout or hide scrollbars.
 
 ## Broad discovery
 
@@ -564,3 +664,19 @@ Against the clean parent, three alternating same-machine runs put the 500-sample
 median-of-medians at 0.715/0.702 ms (parent/current) and the 30-sample light-DOM selector
 workload at 32.465/32.648 ms (+0.56%). This is within the established no-meaningful-
 regression envelope while the feature paths themselves remain pay for what is used.
+
+The project-owned animation-frame batch candidate covers cancellation, one timestamp per admitted batch, microtask checkpoints, deferred nested RAF and timer ordering. Run it with:
+
+```sh
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- --manifest tests/WebPlatformSubset/webscene-animation-frame-batch-profile.json --selection candidate --native-library /absolute/path/to/libwebscene_native_engine.dylib --output artifacts/wpt-animation-frame-batch
+```
+
+It is a local candidate, not an upstream WPT or physical-presentation qualification. The native engine regression additionally checks that host evaluation cannot observe a partial admitted batch.
+
+A harness or contract entry can opt into `"nativeNavigation": true`. That path loads the prepared HTML through the native document parser and the product resource loader, instead of extracting scripts/styles into an `innerHTML` fixture. The temporary prepared file lives beside the source fixture so relative resources retain their directory, and is removed after engine destruction. Other entries retain their existing adapter path. This still uses the runner’s prepared harness scripts; it is not a claim of an unmodified upstream navigation test.
+
+The inert script/comment/template stylesheet regression uses this path. Reproduce its candidate result with:
+
+```sh
+dotnet run --project tests/WebPlatformSubset/runner -c Release -- --manifest tests/WebPlatformSubset/webscene-native-navigation-profile.json --selection candidate --native-library /absolute/path/to/libwebscene_native_engine.dylib --output artifacts/wpt-native-navigation
+```

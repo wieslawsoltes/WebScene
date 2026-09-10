@@ -14,6 +14,7 @@
 #include <limits>
 #include <numeric>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string_view>
 #include <tuple>
@@ -121,12 +122,17 @@ dom_node make_pseudo_layout_node(
     result.text_content = pseudo.content;
     result.parent = const_cast<dom_node*>(&originating);
     result.visible = originating.visible && pseudo_generates_box(pseudo);
+    result.generated_pseudo_box = true;
     result.style.width = pseudo.width;
     result.style.height = pseudo.height;
     result.style.left = pseudo.left;
     result.style.top = pseudo.top;
     result.style.right = pseudo.right;
     result.style.bottom = pseudo.bottom;
+    result.style.padding_left = pseudo.padding_left;
+    result.style.padding_top = pseudo.padding_top;
+    result.style.padding_right = pseudo.padding_right;
+    result.style.padding_bottom = pseudo.padding_bottom;
     result.style.margin_left = pseudo.margin_left;
     result.style.margin_top = pseudo.margin_top;
     result.style.margin_right = pseudo.margin_right;
@@ -181,42 +187,38 @@ struct paint_z_index_update final {
     bool contains_retained_canvas{false};
 };
 
+bool style_establishes_atomic_stacking_context(const dom_node& node) noexcept
+{
+    return node.style.position == position_mode::fixed
+        || node.style.position == position_mode::sticky
+        || (node.style.position != position_mode::normal
+            && !node.style.z_index_auto)
+        || node.style.contain_stacking_context
+        || node.style.opacity < 0.999F
+        || node.style.transform_stacking_context;
+}
+
 paint_z_index_update update_paint_z_index(
     const native_document& document,
     dom_node& node) noexcept
 {
-    auto descendant_z_index = 0;
     // Canvas paint order is structural. A width/height reset clears its
     // display list before the application redraws, but it does not move the
     // element or an authored ::after overlay to a different CSS paint phase.
     // Basing this bit on the current command list made the cached layout state
     // alternate between backdrop and overlay across ordinary chart redraws.
-    auto contains_retained_canvas = node.tag == "canvas"
+    auto contains_retained_canvas = (node.tag == "canvas" || node.tag == "video")
         && node.visible
         && node.style.display != display_mode::none;
     for (auto* child : document.composed_children(node)) {
         const auto child_update = update_paint_z_index(document, *child);
-        descendant_z_index = std::max(
-            descendant_z_index,
-            child_update.z_index);
         contains_retained_canvas =
             contains_retained_canvas || child_update.contains_retained_canvas;
     }
-    const auto establishes_atomic_stacking_context =
-        node.style.position == position_mode::fixed
-        || node.style.opacity < 0.999F
-        || node.style.transform_rotate_degrees != 0
-        || node.style.transform_scale_x != 1.0F
-        || node.style.transform_scale_y != 1.0F;
-    node.paint_z_index = node.style.z_index != 0
-        ? node.style.z_index
-        // Relative/absolute positioning with z-index:auto does not establish a
-        // stacking context. Portal wrappers commonly use that shape, so their
-        // positioned tooltip descendants still participate in the ancestor
-        // context. Fixed/transform/opacity contexts and retained canvases remain
-        // atomic composition boundaries.
-        : !establishes_atomic_stacking_context && !contains_retained_canvas
-            ? descendant_z_index : 0;
+    // A positive descendant participates in the enclosing stacking context,
+    // but does not elevate the backgrounds/text of its z-index:auto ancestors.
+    // Scene traversal emits those descendants separately with their clip chain.
+    node.paint_z_index = node.style.z_index;
     node.contains_retained_canvas = contains_retained_canvas;
     return {node.paint_z_index, contains_retained_canvas};
 }
@@ -228,6 +230,14 @@ void collect_positive_stacking_nodes(
 {
     if (node.style.z_index > 0) {
         result.push_back(&node);
+        return;
+    }
+    // A descendant stacking level is scoped to the nearest atomic context.
+    // In particular, contain:layout/paint/content/strict prevents a positive-z
+    // toolbar item from being lifted above a later sibling overlay.
+    if (style_establishes_atomic_stacking_context(node)
+        || node.contains_retained_canvas) {
+        return;
     }
     for (auto* child : document.composed_children(node)) {
         collect_positive_stacking_nodes(document, *child, result);
@@ -247,6 +257,20 @@ void collect_fixed_positioned_nodes(
     }
 }
 
+void collect_outermost_fixed_positioned_nodes(
+    const native_document& document,
+    dom_node& node,
+    std::vector<dom_node*>& result)
+{
+    if (node.style.position == position_mode::fixed) {
+        result.push_back(&node);
+        return;
+    }
+    for (auto* child : document.composed_children(node)) {
+        collect_outermost_fixed_positioned_nodes(document, *child, result);
+    }
+}
+
 size_t count_retained_canvases(
     const native_document& document,
     const dom_node& node)
@@ -254,7 +278,7 @@ size_t count_retained_canvases(
     // Count visible canvas elements rather than non-empty display lists. The
     // latter can be transiently empty between reset and redraw and must not
     // change the stable backdrop/canvas/overlay partition.
-    auto count = node.tag == "canvas"
+    auto count = (node.tag == "canvas" || node.tag == "video")
         && node.visible
         && node.style.display != display_mode::none
         ? size_t{1U}
@@ -277,7 +301,7 @@ void update_retained_canvas_paint_phase(
     // the final canvas can safely use the global overlay by document order.
     node.paints_after_retained_canvas =
         retained_canvas_seen && retained_canvases_remaining == 0U;
-    if (node.tag == "canvas"
+    if ((node.tag == "canvas" || node.tag == "video")
         && node.visible
         && node.style.display != display_mode::none) {
         retained_canvas_seen = true;
@@ -285,10 +309,31 @@ void update_retained_canvas_paint_phase(
             --retained_canvases_remaining;
         }
     }
-    auto paint_order = document.composed_children(node);
-    if (std::any_of(paint_order.begin(), paint_order.end(), [](const auto* child) {
-        return child->style.z_index != 0;
-    })) {
+    const auto& composed_paint_order = document.composed_children(node);
+#if WEBSCENE_NATIVE_ENGINE_RETAINED_PAINT_ORDER_CONTROL
+    auto paint_order = composed_paint_order;
+    const auto requires_sort = std::any_of(
+        paint_order.begin(),
+        paint_order.end(),
+        [](const auto* child) { return child->style.z_index != 0; });
+#else
+    const auto requires_sort = std::any_of(
+        composed_paint_order.begin(),
+        composed_paint_order.end(),
+        [](const auto* child) { return child->style.z_index != 0; });
+    if (!requires_sort) {
+        for (auto* child : composed_paint_order) {
+            update_retained_canvas_paint_phase(
+                document,
+                *child,
+                retained_canvas_seen,
+                retained_canvases_remaining);
+        }
+        return;
+    }
+    auto paint_order = composed_paint_order;
+#endif
+    if (requires_sort) {
         std::stable_sort(
             paint_order.begin(),
             paint_order.end(),
@@ -721,7 +766,33 @@ void serialize_svg_subtree(const dom_node& node, std::string& output, bool root)
     bool has_color = false;
     const auto css_fill = node.style.textual().svg_fill;
     const auto css_stroke = node.style.textual().svg_stroke;
+    // Stylesheets outside the detached SVG are unavailable to the host SVG
+    // renderer. Project cascaded typography as presentation attributes, keeping
+    // local attributes and SVG inheritance when no CSS declaration overrides them.
+    std::vector<std::pair<std::string, std::string>> typography;
+    const auto collect_typography = [&](const dom_node& source, bool inherited) {
+        const auto add = [&](const char* name, std::string value) {
+            if (value.empty()) return;
+            if (inherited && node.attributes.contains(name)) return;
+            if (std::any_of(typography.begin(), typography.end(),
+                    [&](const auto& entry) { return entry.first == name; })) return;
+            typography.emplace_back(name, std::move(value));
+        };
+        if (source.style.font_size >= 0) add("font-size", std::to_string(source.style.font_size));
+        if (source.style.font_weight > 0) add("font-weight", std::to_string(source.style.font_weight));
+        add("font-family", source.style.textual().font_family);
+        if (source.style.letter_spacing_specified) add("letter-spacing", std::to_string(source.style.letter_spacing));
+        if (source.style.word_spacing_specified) add("word-spacing", std::to_string(source.style.word_spacing));
+        add("text-anchor", source.style.textual().svg_text_anchor);
+    };
+    collect_typography(node, false);
+    if (root) {
+        for (auto* ancestor = node.parent; ancestor; ancestor = ancestor->parent)
+            collect_typography(*ancestor, true);
+    }
     for (const auto& [name, value] : node.attributes) {
+        if (std::any_of(typography.begin(), typography.end(),
+                [&](const auto& entry) { return entry.first == name; })) continue;
         if (name == "xmlns") has_xmlns = true;
         else if (name == "id") has_id = true;
         else if (name == "class") has_class = true;
@@ -744,6 +815,11 @@ void serialize_svg_subtree(const dom_node& node, std::string& output, bool root)
         } else {
             append_xml_escaped(value, output, true);
         }
+        output.push_back('"');
+    }
+    for (const auto& [name, value] : typography) {
+        output += " " + name + "=\"";
+        append_xml_escaped(value, output, true);
         output.push_back('"');
     }
     if (root && !has_xmlns) output += " xmlns=\"http://www.w3.org/2000/svg\"";
@@ -813,6 +889,7 @@ float resolved_font_size(const dom_node& node)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
         if (current->style.font_size >= 0) return current->style.font_size;
+        if (current->tag == "html") return 16.0F;
     }
     return 14.0F;
 }
@@ -820,6 +897,8 @@ float resolved_font_size(const dom_node& node)
 float resolved_line_height(const dom_node& node, float font_size)
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
+        if (current->style.line_height <= -3.0F)
+            return (-3.0F - current->style.line_height) * font_size;
         if (current->style.line_height == -2.0F) return font_size * 1.125F;
         if (current->style.line_height >= 0) return current->style.line_height;
     }
@@ -829,7 +908,11 @@ float resolved_line_height(const dom_node& node, float font_size)
     return font_size * 1.125F;
 }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_FONT_FAMILY_VIEW_CONTROL)
 std::string resolved_font_family(const dom_node& node)
+#else
+std::string_view resolved_font_family(const dom_node& node)
+#endif
 {
     for (auto* current = &node; current != nullptr; current = current->parent) {
         if (!current->style.textual().font_family.empty()) {
@@ -882,15 +965,19 @@ std::string resolved_text_align(const dom_node& node)
     return "start";
 }
 
-std::string resolved_text_transform(const dom_node& node, std::string value)
+std::string_view resolved_text_transform_name(const dom_node& node)
 {
-    auto transform = std::string{"none"};
     for (auto* current = &node; current != nullptr; current = current->parent) {
         if (!current->style.textual().text_transform.empty()) {
-            transform = current->style.textual().text_transform;
-            break;
+            return current->style.textual().text_transform;
         }
     }
+    return "none";
+}
+
+std::string resolved_text_transform(const dom_node& node, std::string value)
+{
+    const auto transform = resolved_text_transform_name(node);
     if (transform == "uppercase") {
         std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
             return static_cast<char>(std::toupper(character));
@@ -945,6 +1032,7 @@ bool resolved_collapses_whitespace(const dom_node& node)
 bool is_collapsible_whitespace_text(const dom_node& node)
 {
     return node.tag == "#text"
+        && !node.generated_pseudo_box
         && resolved_collapses_whitespace(node)
         && !has_visible_text(node.text_content);
 }
@@ -969,7 +1057,8 @@ bool is_collapsed_select(const dom_node& node)
         || parse_number(authored_size->second, 0) <= 1.0F;
 }
 
-void collect_option_nodes(const dom_node& root, std::vector<const dom_node*>& result)
+template <typename Collection>
+void collect_option_nodes(const dom_node& root, Collection& result)
 {
     for (const auto* child : root.children) {
         if (child == nullptr) continue;
@@ -1049,6 +1138,30 @@ uint32_t append_scene_string(
 }
 
 } // namespace
+
+const dom_node& css_document_element(const dom_node& node) noexcept
+{
+    auto* root = &node;
+    while (root->parent != nullptr && root->tag != "html"
+        && root->parent->tag != "iframe") root = root->parent;
+    return *root;
+}
+
+float document_root_font_size(const dom_node& node) noexcept
+{
+    const auto& root = css_document_element(node);
+    return root.style.font_size >= 0 ? root.style.font_size
+        : root.tag == "html" ? 16.0F : 14.0F;
+}
+
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+thread_local std::array<uint64_t, 17U>
+    intrinsic_size_branch_counts_for_benchmark{};
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+thread_local std::array<uint64_t, 4U>
+    intrinsic_view_box_parse_counts_for_benchmark{};
+#endif
 
 display_mode blockified_display(const dom_node& node) noexcept
 {

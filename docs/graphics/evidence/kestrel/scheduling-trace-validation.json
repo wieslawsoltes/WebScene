@@ -1,0 +1,37 @@
+{
+  "tests": {
+    "net8.0": {
+      "passed": 2,
+      "failed": 0
+    },
+    "net10.0": {
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "runs": [
+    {
+      "validated": false,
+      "reason": "Injected gesture contaminated by additional pointer events; validator rejected workload",
+      "stageCounts": {
+        "frame": 95,
+        "acquire:Success": 75,
+        "apply:Applied": 75,
+        "acquire:Empty": 4
+      },
+      "physicalPresentationVerified": false
+    },
+    {
+      "validated": false,
+      "reason": "Injected gesture contaminated by additional pointer events; validator rejected workload",
+      "stageCounts": {
+        "frame": 104,
+        "acquire:Success": 67,
+        "apply:Applied": 67,
+        "acquire:Empty": 4
+      },
+      "physicalPresentationVerified": false
+    }
+  ],
+  "performanceComparisonQualified": false
+}

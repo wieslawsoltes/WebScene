@@ -31,6 +31,9 @@ css_length native_document::parse_length(const std::string& value)
     if (value == "max-content") return {0, length_unit::max_content};
     if (value == "min-content") return {0, length_unit::min_content};
     if (value == "fit-content") return {0, length_unit::fit_content};
+    if (value == "stretch" || value == "-webkit-fill-available") {
+        return {0, length_unit::stretch};
+    }
     if (value.size() > 1 && value.back() == '%') {
         return {parse_number(std::string_view(value).substr(0, value.size() - 1)), length_unit::percent};
     }
@@ -257,6 +260,96 @@ uint32_t native_document::parse_color(const std::string& value)
     if (normalized == "navy") return 0x000080FFU;
     if (normalized == "teal") return 0x008080FFU;
     if (normalized == "orange") return 0xFFA500FFU;
+    if ((normalized.starts_with("hsl(") || normalized.starts_with("hsla("))
+        && normalized.ends_with(')')) {
+        const auto open = normalized.find('(');
+        auto arguments = normalized.substr(open + 1U, normalized.size() - open - 2U);
+        std::replace(arguments.begin(), arguments.end(), ',', ' ');
+        std::replace(arguments.begin(), arguments.end(), '/', ' ');
+        std::istringstream stream(arguments);
+        std::string hue_token;
+        std::string saturation_token;
+        std::string lightness_token;
+        std::string alpha_token;
+        std::string extra_token;
+        stream >> hue_token >> saturation_token >> lightness_token;
+        static_cast<void>(stream >> alpha_token);
+        if (!hue_token.empty() && !saturation_token.empty() && !lightness_token.empty()
+            && !(stream >> extra_token)) {
+            const auto parse_scalar = [](std::string_view token, float& result) {
+                auto text = std::string(token);
+                char* end = nullptr;
+                result = std::strtof(text.c_str(), &end);
+                return end != text.c_str() && end == text.c_str() + text.size()
+                    && std::isfinite(result);
+            };
+            const auto parse_percentage = [&](std::string_view token, float& result) {
+                if (!token.ends_with('%')) return false;
+                token.remove_suffix(1U);
+                if (!parse_scalar(token, result)) return false;
+                result = std::clamp(result / 100.0F, 0.0F, 1.0F);
+                return true;
+            };
+            auto hue_turns = 0.0F;
+            auto hue_number = hue_token;
+            auto hue_divisor = 360.0F;
+            if (hue_number.ends_with("turn")) {
+                hue_number.resize(hue_number.size() - 4U);
+                hue_divisor = 1.0F;
+            } else if (hue_number.ends_with("grad")) {
+                hue_number.resize(hue_number.size() - 4U);
+                hue_divisor = 400.0F;
+            } else if (hue_number.ends_with("rad")) {
+                hue_number.resize(hue_number.size() - 3U);
+                hue_divisor = 6.28318530717958647692F;
+            } else if (hue_number.ends_with("deg")) {
+                hue_number.resize(hue_number.size() - 3U);
+            }
+            auto saturation = 0.0F;
+            auto lightness = 0.0F;
+            auto alpha = 1.0F;
+            if (parse_scalar(hue_number, hue_turns)
+                && parse_percentage(saturation_token, saturation)
+                && parse_percentage(lightness_token, lightness)) {
+                hue_turns /= hue_divisor;
+                hue_turns = std::fmod(std::fmod(hue_turns, 1.0F) + 1.0F, 1.0F);
+                auto valid_alpha = true;
+                if (!alpha_token.empty()) {
+                    if (alpha_token.ends_with('%')) {
+                        valid_alpha = parse_percentage(alpha_token, alpha);
+                    } else {
+                        valid_alpha = parse_scalar(alpha_token, alpha);
+                        alpha = std::clamp(alpha, 0.0F, 1.0F);
+                    }
+                }
+                if (valid_alpha) {
+                    const auto chroma = (1.0F - std::abs(2.0F * lightness - 1.0F))
+                        * saturation;
+                    const auto sector = hue_turns * 6.0F;
+                    const auto secondary = chroma
+                        * (1.0F - std::abs(std::fmod(sector, 2.0F) - 1.0F));
+                    auto red = 0.0F;
+                    auto green = 0.0F;
+                    auto blue = 0.0F;
+                    if (sector < 1.0F) { red = chroma; green = secondary; }
+                    else if (sector < 2.0F) { red = secondary; green = chroma; }
+                    else if (sector < 3.0F) { green = chroma; blue = secondary; }
+                    else if (sector < 4.0F) { green = secondary; blue = chroma; }
+                    else if (sector < 5.0F) { red = secondary; blue = chroma; }
+                    else { red = chroma; blue = secondary; }
+                    const auto match = lightness - chroma * 0.5F;
+                    const auto channel = [match](float component) {
+                        return static_cast<uint32_t>(std::lround(
+                            std::clamp(component + match, 0.0F, 1.0F) * 255.0F));
+                    };
+                    return channel(red) << 24U
+                        | channel(green) << 16U
+                        | channel(blue) << 8U
+                        | static_cast<uint32_t>(std::lround(alpha * 255.0F));
+                }
+            }
+        }
+    }
     if (normalized.starts_with("color(srgb ") && normalized.ends_with(')')) {
         auto components = normalized.substr(11U, normalized.size() - 12U);
         std::replace(components.begin(), components.end(), '/', ' ');
@@ -419,11 +512,30 @@ float native_document::resolve_length(
         return value.value * resolved_font_size(context);
     }
     if (value.unit == length_unit::rem) {
-        auto* root = &context;
-        while (root->parent != nullptr) root = root->parent;
-        return value.value * resolved_font_size(*root);
+        return value.value * document_root_font_size(context);
     }
     return resolve_length(value, available, fallback);
+}
+
+float native_document::resolve_vertical_padding(
+    const dom_node& node, css_length value, float available, float fallback) const
+{
+    if (value.unit != length_unit::percent) return resolve_length(node,value,available,fallback);
+    const auto* container = composed_parent(node);
+    const auto positioned = is_out_of_flow(node.style.position);
+    if (positioned) {
+        while (container != nullptr && container->style.position == position_mode::normal
+            && !container->style.transform_stacking_context) container = composed_parent(*container);
+    }
+    auto inline_size = viewport_width_;
+    if (container != nullptr) {
+        inline_size = positioned
+            ? container->layout.width
+                - resolve_length(*container,container->style.border_left_width,container->layout.width,0)
+                - resolve_length(*container,container->style.border_right_width,container->layout.width,0)
+            : container->scroll_viewport_width;
+    }
+    return resolve_length(node,value,std::max(0.0F,inline_size),fallback);
 }
 
 float native_document::resolve_length(css_length value, float available, float fallback) const
@@ -455,6 +567,8 @@ float native_document::resolve_length(css_length value, float available, float f
     case length_unit::min_content:
     case length_unit::fit_content:
         return fallback;
+    case length_unit::stretch:
+        return available;
     case length_unit::automatic:
     default:
         return fallback;

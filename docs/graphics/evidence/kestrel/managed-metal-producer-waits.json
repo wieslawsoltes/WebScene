@@ -1,0 +1,39 @@
+{
+  "physicalPresentationVerified": false,
+  "publicationToAcceptance": {
+    "count": 32,
+    "medianMilliseconds": 26.233604,
+    "p95Milliseconds": 33.912584,
+    "maximumMilliseconds": 34.374666
+  },
+  "acceptanceToDrawCallbackEnd": {
+    "count": 32,
+    "medianMilliseconds": 0.789792,
+    "p95Milliseconds": 1.279542,
+    "maximumMilliseconds": 2.492625
+  },
+  "publicationToDrawCallbackEnd": {
+    "count": 32,
+    "medianMilliseconds": 27.1083955,
+    "p95Milliseconds": 34.754084,
+    "maximumMilliseconds": 35.232083
+  },
+  "inputToPublishedConsumptionWatermark": {
+    "count": 80,
+    "medianMilliseconds": 16.128500000000003,
+    "p95Milliseconds": 34.445833,
+    "maximumMilliseconds": 44.239667
+  },
+  "unmatchedInputCount": 0,
+  "limitations": [
+    "Draw callback completion is not physical presentation.",
+    "A consumption watermark does not prove each coalesced move was drawn.",
+    "Measurement includes settling; no FPS qualification is derived."
+  ],
+  "scope": "Original Kestrel Metal pan with managed native-event borrowing and wait submission enabled; producer publication still completion-certified",
+  "borrowTests": {
+    "net8.0": "1 passed",
+    "net10.0": "1 passed"
+  },
+  "earlyPublicationEnabled": false
+}

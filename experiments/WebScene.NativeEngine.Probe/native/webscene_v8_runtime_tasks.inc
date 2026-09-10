@@ -1,6 +1,13 @@
     bool promote_pending_promise_error()
     {
         if (pending_promise_rejections.empty()) return true;
+        if (diagnostics != nullptr) {
+            for (auto& rejection : pending_promise_rejections) {
+                if (rejection.diagnostic.message.empty()) continue;
+                rejection.diagnostic.promise_rejection = true;
+                diagnostics->publish(std::move(rejection.diagnostic));
+            }
+        }
         last_error = std::move(pending_promise_rejections.front().error);
         pending_promise_rejections.clear();
         return false;
@@ -131,7 +138,7 @@
                 task_context->Global(),
                 static_cast<int>(arguments.size()),
                 arguments.empty() ? nullptr : arguments.data()).IsEmpty()) {
-            const auto callback_error = describe_exception(try_catch, task_context);
+            const auto callback_error = describe_reported_exception(try_catch, task_context);
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, task_context);
 #endif
@@ -186,7 +193,7 @@
 #endif
                 active_timer_id = 0;
                 last_error = "Window.onerror handler failed: "
-                    + describe_exception(onerror_try_catch, task_context);
+                    + describe_reported_exception(onerror_try_catch, task_context);
                 return false;
             }
         }
@@ -427,13 +434,30 @@
             report_inspector_exception(try_catch, target_context);
 #endif
             last_error = "Window.postMessage dispatch failed: "
-                + describe_exception(try_catch, target_context);
+                + describe_reported_exception(try_catch, target_context);
             ++frame_script_error_count;
             return false;
         }
         perform_microtask_checkpoint();
         style_batch.finish();
         return true;
+    }
+
+    bool drain_dialog_close_event_task()
+    {
+        auto task = std::move(pending_dialog_close_events.front());
+        pending_dialog_close_events.erase(pending_dialog_close_events.begin());
+        auto local_context = task.context.Get(isolate);
+        auto* target = document.find_by_native_id(task.target_id);
+        if (target == nullptr || local_context.IsEmpty()) return true;
+        v8::Context::Scope context_scope(local_context);
+        activate_css_cascade(local_context);
+        webscene_input_event input{};
+        v8::TryCatch try_catch(isolate);
+        if (dispatch_input_event_type(input, "close", *target)) return true;
+        last_error = "Dialog close dispatch failed: "
+            + describe_reported_exception(try_catch, local_context);
+        return false;
     }
 
     void enqueue_programmatic_scroll_event(dom_node& target)
@@ -470,7 +494,7 @@
         v8::TryCatch try_catch(isolate);
         if (dispatch_input_event_type(input, "scroll", *target)) return true;
         last_error = "Programmatic scroll dispatch failed: "
-            + describe_exception(try_catch, task_context);
+            + describe_reported_exception(try_catch, task_context);
         return false;
     }
 
@@ -520,6 +544,30 @@
         // compilation and optimization work. An embedder must service that
         // queue; otherwise hot application code remains on its initial tier.
         pump_v8_platform_tasks();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        if (graphics && !graphics_delivering && graphics->has_ready_work()) {
+            struct delivery_guard {
+                bool& active;
+                explicit delivery_guard(bool& value) : active(value) { active=true; }
+                ~delivery_guard() { active=false; }
+            } guard(graphics_delivering);
+            // execute() also reaches this path after its script context scope
+            // has unwound. Enter the owning context explicitly for delivery.
+            auto graphics_context = context.Get(isolate);
+            v8::Context::Scope graphics_context_scope(graphics_context);
+            // Bound each batch and continue task arbitration to avoid starving DOM.
+            if (graphics->pump(graphics_deliver, 64))
+                perform_microtask_checkpoint();
+        }
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+        publish_ready_gpu_canvases();
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        synchronize_media_elements();
+        if(drain_media())return true;
+#endif
+        if (has_worker_messages()) return drain_worker_message();
         if (websocket_transport.has_pending_events()) {
             return drain_websocket_event();
         }
@@ -528,6 +576,9 @@
         }
         if (has_ready_fetch_task()) {
             return drain_fetch_task();
+        }
+        if (!pending_dialog_close_events.empty()) {
+            return drain_dialog_close_event_task();
         }
         if (!pending_programmatic_scroll_events.empty()) {
             return drain_programmatic_scroll_event_task();
@@ -560,10 +611,9 @@
             return drain_connected_resource_task();
         }
         if (resize_observers_pending) {
-            resize_observers_pending = false;
             prefer_frame_hydration_task = true;
             ensure_layout();
-            return dispatch_resize_observers();
+            return deliver_resize_observer_checkpoint();
         }
         const auto now_time = std::chrono::steady_clock::now();
         const auto next = std::min_element(
@@ -727,6 +777,101 @@
         return event;
     }
 
+    bool dispatch_media_query_list_changes()
+    {
+        // Authored callbacks can call matchMedia and reallocate the owner vector.
+        // Keep only the stable pointee across calls and snapshot the dispatch set.
+        const auto query_count = media_query_lists.size();
+        for (size_t query_index = 0; query_index < query_count; ++query_index) {
+            auto* state = media_query_lists[query_index].get();
+            if (state == nullptr) continue;
+            const auto matches = media_query_matches(state->query);
+            if (matches == state->matches) continue;
+            state->matches = matches;
+            auto local_context = state->context.Get(isolate);
+            auto wrapper = state->wrapper.Get(isolate);
+            if (local_context.IsEmpty() || wrapper.IsEmpty()) continue;
+            v8::Context::Scope context_scope(local_context);
+            wrapper->Set(
+                local_context,
+                js_string(isolate, "matches"),
+                v8::Boolean::New(isolate, matches)).Check();
+            auto event = create_event_instance(local_context);
+            event->Set(
+                local_context,
+                js_string(isolate, "type"),
+                js_string(isolate, "change")).Check();
+            event->Set(local_context, js_string(isolate, "target"), wrapper).Check();
+            event->Set(local_context, js_string(isolate, "currentTarget"), wrapper).Check();
+            event->Set(local_context, js_string(isolate, "srcElement"), wrapper).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "matches"),
+                v8::Boolean::New(isolate, matches)).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "media"),
+                js_string(isolate, state->query.c_str())).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "bubbles"),
+                v8::False(isolate)).Check();
+            event->Set(
+                local_context,
+                js_string(isolate, "cancelable"),
+                v8::False(isolate)).Check();
+            v8::Local<v8::Value> arguments[] = {event};
+            const auto listener_count = state->listeners.size();
+            for (size_t index = 0; index < listener_count; ++index) {
+                auto& registration = state->listeners[index];
+                auto callback = registration.callback.Get(isolate);
+                if (callback.IsEmpty()) continue;
+                if (registration.once) registration.callback.Reset();
+                v8::TryCatch try_catch(isolate);
+                if (call_event_listener(
+                        isolate,
+                        local_context,
+                        callback,
+                        wrapper,
+                        1,
+                        arguments).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                    report_inspector_exception(try_catch, local_context);
+#endif
+                    last_error = describe_reported_exception(try_catch);
+                    return false;
+                }
+            }
+            std::erase_if(
+                state->listeners,
+                [](const auto& listener) { return listener.callback.IsEmpty(); });
+            v8::Local<v8::Value> onchange;
+            if (!wrapper->Get(
+                    local_context,
+                    js_string(isolate, "onchange")).ToLocal(&onchange)) {
+                return false;
+            }
+            if (!onchange->IsNullOrUndefined()) {
+                v8::TryCatch try_catch(isolate);
+                if (call_event_listener(
+                        isolate,
+                        local_context,
+                        onchange,
+                        wrapper,
+                        1,
+                        arguments).IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
+                    report_inspector_exception(try_catch, local_context);
+#endif
+                    last_error = describe_reported_exception(try_catch);
+                    return false;
+                }
+            }
+            perform_microtask_checkpoint();
+        }
+        return true;
+    }
+
     bool dispatch_resize()
     {
         record_feature(
@@ -810,7 +955,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                     report_inspector_exception(try_catch, local_context);
 #endif
-                    last_error = describe_exception(try_catch);
+                    last_error = describe_reported_exception(try_catch);
                     return false;
                 }
             }
@@ -834,7 +979,11 @@
             activate_css_cascade(css_context);
             v8::Context::Scope css_context_scope(css_context);
             if (!refresh_css_media_matches()) return;
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT)
+            rebuild_root_variables();
+#else
             rebuild_css_rule_indexes_and_root_variables();
+#endif
             apply_css_rules_subtree(active_root());
         };
         refresh_context_styles(context.Get(isolate));
@@ -845,9 +994,11 @@
             }
         }
         activate_css_cascade(context.Get(isolate));
+        if (!dispatch_media_query_list_changes()) return false;
 
-        if (frame_context.IsEmpty()) return true;
-        {
+        // The outer document also needs the post-layout observation checkpoint
+        // when no iframe exists (including a scale-only host resize).
+        if (!frame_context.IsEmpty()) {
             auto local_frame_context = frame_context.Get(isolate);
             activate_css_cascade(local_frame_context);
             v8::Context::Scope frame_scope(local_frame_context);
@@ -936,7 +1087,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
                         stop_cpu_profile();
 #endif
-                        last_error = describe_exception(try_catch, local_frame_context);
+                        last_error = describe_reported_exception(try_catch, local_frame_context);
                         return false;
                     }
                     ++input_callback_invocation_count;
@@ -982,7 +1133,7 @@
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 layout_finished - frame_listeners_finished).count());
 #endif
-        const auto result = dispatch_resize_observers();
+        const auto result = deliver_resize_observer_checkpoint();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         last_resize_observers_ns = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -991,8 +1142,45 @@
         return result;
     }
 
+    bool deliver_resize_observer_checkpoint()
+    {
+        // ResizeObserver delivery belongs to the rendering lifecycle after
+        // style/layout and before paint. A callback may change the observed
+        // geometry, so repeat layout and observation until the sizes settle.
+        // This is the bounded equivalent of Blink's resize-observation loop.
+        resize_observers_pending = false;
+        constexpr auto maximum_depth = size_t{10};
+        for (auto depth = size_t{0}; depth < maximum_depth; ++depth) {
+            if (!dispatch_resize_observers()) return false;
+            if (!document.dirty()) return true;
+            ensure_layout();
+        }
+        return true;
+    }
+
+    std::pair<double, double> resize_observer_box_size(
+        const dom_node& node, resize_observer_box box, double scale) const
+    {
+        if (has_display_none_ancestor(node)) return {0, 0};
+        if (box == resize_observer_box::border) {
+            return {std::max(0.0F, node.layout.width), std::max(0.0F, node.layout.height)};
+        }
+        const auto content = connected_box_for(node);
+        if (box == resize_observer_box::device_pixel_content) {
+            // Physical content extents are integral, unlike CSS box sizes.
+            // Do not use transformed/client rects or alias the CSS-pixel box:
+            // canvas libraries use this value as the bitmap backing size.
+            return {std::round(content.content_width * scale),
+                std::round(content.content_height * scale)};
+        }
+        return {content.content_width, content.content_height};
+    }
+
     bool dispatch_resize_observers()
     {
+        const auto requested_scale = viewport_provider().device_scale_factor;
+        const auto scale = std::isfinite(requested_scale) && requested_scale > 0
+            ? requested_scale : 1.0;
         std::vector<resize_observer_state*> pending;
         pending.reserve(resize_observers.size());
         for (const auto& observer : resize_observers) {
@@ -1004,7 +1192,8 @@
             changed_nodes.reserve(observer->nodes.size());
             for (auto* node : observer->nodes) {
                 if (node == nullptr) continue;
-                const auto size = std::pair{node->layout.width, node->layout.height};
+                const auto size = resize_observer_box_size(
+                    *node, observer->observed_boxes.at(node->id), scale);
                 const auto previous = observer->delivered_sizes.find(node->id);
                 if (previous == observer->delivered_sizes.end() || previous->second != size) {
                     changed_nodes.push_back(node);
@@ -1015,11 +1204,18 @@
             auto observer_context = observer->context.Get(isolate);
             auto callback = observer->callback.Get(isolate);
             if (observer_context.IsEmpty() || callback.IsEmpty()) continue;
+            activate_css_cascade(observer_context);
             v8::Context::Scope observer_scope(observer_context);
             auto entries = v8::Array::New(isolate, static_cast<int>(changed_nodes.size()));
             for (uint32_t index = 0; index < changed_nodes.size(); ++index) {
                 auto* node = changed_nodes[index];
                 if (node == nullptr) continue;
+                const auto content = resize_observer_box_size(*node, resize_observer_box::content, scale);
+                const auto border = resize_observer_box_size(*node, resize_observer_box::border, scale);
+                const auto device_pixels = resize_observer_box_size(*node, resize_observer_box::device_pixel_content, scale);
+                const auto padding_width = connected_box_for(*node).padding_width;
+                const auto x = resolve_connected_css_length(*node, node->style.padding_left, padding_width);
+                const auto y = resolve_connected_css_length(*node, node->style.padding_top, padding_width);
                 auto rect = v8::Object::New(isolate);
                 const auto set = [&](const char* name, double value) {
                     rect->Set(
@@ -1027,27 +1223,27 @@
                         js_string(isolate, name),
                         v8::Number::New(isolate, value)).Check();
                 };
-                set("x", node->layout.x);
-                set("y", node->layout.y);
-                set("width", node->layout.width);
-                set("height", node->layout.height);
-                set("top", node->layout.y);
-                set("left", node->layout.x);
-                set("right", node->layout.x + node->layout.width);
-                set("bottom", node->layout.y + node->layout.height);
+                set("x", x);
+                set("y", y);
+                set("width", content.first);
+                set("height", content.second);
+                set("top", y);
+                set("left", x);
+                set("right", x + content.first);
+                set("bottom", y + content.second);
                 auto entry = v8::Object::New(isolate);
                 entry->Set(observer_context, js_string(isolate, "target"), wrap_node(*node)).Check();
                 entry->Set(observer_context, js_string(isolate, "contentRect"), rect).Check();
-                auto box_size = v8::Object::New(isolate);
-                box_size->Set(
-                    observer_context,
-                    js_string(isolate, "inlineSize"),
-                    v8::Number::New(isolate, node->layout.width)).Check();
-                box_size->Set(
-                    observer_context,
-                    js_string(isolate, "blockSize"),
-                    v8::Number::New(isolate, node->layout.height)).Check();
-                const auto make_box_array = [&] {
+                const auto make_box_array = [&](std::pair<double, double> size) {
+                    auto box_size = v8::Object::New(isolate);
+                    box_size->Set(
+                        observer_context,
+                        js_string(isolate, "inlineSize"),
+                        v8::Number::New(isolate, size.first)).Check();
+                    box_size->Set(
+                        observer_context,
+                        js_string(isolate, "blockSize"),
+                        v8::Number::New(isolate, size.second)).Check();
                     auto values = v8::Array::New(isolate, 1);
                     values->Set(observer_context, 0, box_size).Check();
                     return values;
@@ -1055,15 +1251,15 @@
                 entry->Set(
                     observer_context,
                     js_string(isolate, "contentBoxSize"),
-                    make_box_array()).Check();
+                    make_box_array(content)).Check();
                 entry->Set(
                     observer_context,
                     js_string(isolate, "borderBoxSize"),
-                    make_box_array()).Check();
+                    make_box_array(border)).Check();
                 entry->Set(
                     observer_context,
                     js_string(isolate, "devicePixelContentBoxSize"),
-                    make_box_array()).Check();
+                    make_box_array(device_pixels)).Check();
                 entries->Set(observer_context, index, entry).Check();
             }
             v8::Local<v8::Value> arguments[] = {entries, v8::Undefined(isolate)};
@@ -1076,7 +1272,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
                 report_inspector_exception(try_catch, observer_context);
 #endif
-                last_error = describe_exception(try_catch, observer_context);
+                last_error = describe_reported_exception(try_catch, observer_context);
                 return false;
             }
             ++input_callback_invocation_count;
@@ -1233,6 +1429,15 @@
         bool* default_prevented = nullptr,
         dom_node* submitter = nullptr)
     {
+        webscene_frame_trace::scope trace(frame_trace, "event-start", "event-end", input.sequence);
+        const auto previous_context = isolate->GetCurrentContext();
+        auto local_context = context_for_node(target);
+        v8::Context::Scope event_context_scope(local_context);
+        activate_css_cascade(local_context);
+        const auto restore_cascade = [this, previous_context](void*) {
+            activate_css_cascade(previous_context);
+        };
+        std::unique_ptr<void, decltype(restore_cascade)> cascade_scope(this, restore_cascade);
         // Event listeners and their microtasks form one browser task. A
         // computed-style or geometry getter calls ensure_layout() and remains
         // a synchronous style-recalculation barrier within this scope.
@@ -1248,23 +1453,24 @@
         ++event_dispatch_target_counts[type][target.id];
 #endif
         const auto callback_count_before = input_callback_invocation_count;
-        auto local_context = frame_context.IsEmpty()
-            ? context.Get(isolate)
-            : frame_context.Get(isolate);
         auto event = create_event_instance(local_context);
         auto target_wrapper = wrap_node(target);
         const auto set_number = [&](const char* name, double value) {
             event->Set(local_context, js_string(isolate, name), v8::Number::New(isolate, value)).Check();
         };
         const auto type_view = std::string_view(type);
-        const auto bubbles = type_view != "blur"
+        const auto bubbles = type_view != "beforetoggle"
+            && type_view != "close"
+            && type_view != "cancel"
+            && type_view != "blur"
             && type_view != "focus"
             && type_view != "mouseenter"
             && type_view != "mouseleave"
             && type_view != "pointerenter"
             && type_view != "pointerleave"
             && type_view != "scroll";
-        const auto cancelable = type_view != "blur"
+        const auto cancelable = type_view != "close"
+            && type_view != "blur"
             && type_view != "focus"
             && type_view != "focusin"
             && type_view != "focusout"
@@ -1281,6 +1487,11 @@
         event->Set(local_context, js_string(isolate, "bubbles"), v8::Boolean::New(isolate, bubbles)).Check();
         event->Set(local_context, js_string(isolate, "cancelable"), v8::Boolean::New(isolate, cancelable)).Check();
         event->Set(local_context, js_string(isolate, "defaultPrevented"), v8::False(isolate)).Check();
+        if (type_view == "beforetoggle") {
+            event->Set(local_context, js_string(isolate, "oldState"), js_string(isolate, "closed")).Check();
+            event->Set(local_context, js_string(isolate, "newState"), js_string(isolate, "open")).Check();
+            event->Set(local_context, js_string(isolate, "source"), v8::Null(isolate)).Check();
+        }
         if (type_view == "submit") {
             event->Set(
                 local_context,
@@ -1348,6 +1559,7 @@
         const auto pointer_input = input.kind == WEBSCENE_INPUT_POINTER_MOVE
             || input.kind == WEBSCENE_INPUT_POINTER_DOWN
             || input.kind == WEBSCENE_INPUT_POINTER_UP
+            || input.kind == WEBSCENE_INPUT_POINTER_LEAVE
             || input.kind == WEBSCENE_INPUT_WHEEL;
         const auto text_input = input.kind == WEBSCENE_INPUT_TEXT;
         event->Set(local_context, js_string(isolate, "altKey"), v8::Boolean::New(
@@ -1642,6 +1854,7 @@
         event->Set(local_context, js_string(isolate, "currentTarget"), v8::Null(isolate)).Check();
         perform_microtask_checkpoint();
         style_batch.finish();
+
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         event_callback_counts[type] +=
             input_callback_invocation_count - callback_count_before;
@@ -1788,6 +2001,7 @@
 
     bool is_effectively_visible_for_focus(const dom_node* node)
     {
+        if (node != nullptr && document.is_inert(*node)) return false;
         auto visibility_resolved = false;
         auto visibility_hidden = false;
         for (auto* current_node = node; current_node != nullptr;
@@ -2026,6 +2240,7 @@
 
     bool blur_active_element_before_detach(dom_node& detached_root)
     {
+        document.unregister_modal_subtree(detached_root);
         if (!subtree_contains(detached_root, active_element)) return true;
         webscene_input_event synthetic{};
         if (!set_active_element(nullptr, synthetic)) return false;
@@ -2095,6 +2310,9 @@
 
     bool dispatch_keyboard_or_text(const webscene_input_event& input)
     {
+        if (active_element != nullptr && document.is_inert(*active_element)) {
+            if (!set_active_element(nullptr, input)) return false;
+        }
         auto* target = active_element == nullptr ? &active_root() : active_element;
         if (input.kind == WEBSCENE_INPUT_KEY_UP) {
             pending_text_input_from_keydown = false;
@@ -2116,7 +2334,7 @@
                 target = find_node_by_native_id(active_root(), target_id);
                 if (target == nullptr) return true;
             }
-            if (!is_text_control(target)) return true;
+            if (!is_text_control(target) || document.is_inert(*target)) return true;
             bool prevented = false;
             if (!dispatch_input_event_type(input, "beforeinput", *target, &prevented)) return false;
             if (prevented) return true;
@@ -2178,6 +2396,12 @@
                 focus_visible = true;
                 return set_active_element(next, input);
             }
+        }
+        if (!prevented && key_code == 13 && target->tag == "a"
+            && target->attributes.contains("href") && is_connected(*target)) {
+            bool click_prevented = false;
+            if (!dispatch_input_event_type(input, "click", *target, &click_prevented)) return false;
+            return click_prevented || queue_external_navigation(*target);
         }
         if (!prevented && key_code == 13 && target->tag == "input") {
             return perform_implicit_submission(input, *target);
@@ -2473,40 +2697,245 @@
         return descendants.empty() ? nullptr : descendants.front();
     }
 
-    bool dispatch_input(const webscene_input_event& input)
+    struct scrollbar_thumb_hit final {
+        dom_node* target{nullptr};
+        bool vertical{false};
+        float pointer_origin{0};
+        float scroll_origin{0};
+        float maximum{0};
+        float thumb_travel{0};
+    };
+
+    std::optional<scrollbar_thumb_hit> hit_test_scrollbar_thumb(
+        dom_node& hit_target,
+        float x,
+        float y)
+    {
+        constexpr auto minimum_thumb = 18.0F;
+        for (auto* node = &hit_target; node != nullptr; node = node->parent) {
+            if (node->style.scrollbar_hidden
+                || node->layout.width <= 0 || node->layout.height <= 0) continue;
+            const auto border_left = document.resolve_used_length(
+                *node, node->style.border_left_width, node->layout.width, 0);
+            const auto border_right = document.resolve_used_length(
+                *node, node->style.border_right_width, node->layout.width, 0);
+            const auto border_top = document.resolve_used_length(
+                *node, node->style.border_top_width, node->layout.height, 0);
+            const auto border_bottom = document.resolve_used_length(
+                *node, node->style.border_bottom_width, node->layout.height, 0);
+            const auto padding_left = document.resolve_used_length(
+                *node, node->style.padding_left, node->layout.width, 0);
+            const auto padding_right = document.resolve_used_length(
+                *node, node->style.padding_right, node->layout.width, 0);
+            const auto padding_top = document.resolve_used_length(
+                *node, node->style.padding_top, node->layout.height, 0);
+            const auto padding_bottom = document.resolve_used_length(
+                *node, node->style.padding_bottom, node->layout.height, 0);
+            const auto viewport_x = node->layout.x + border_left + padding_left;
+            const auto viewport_y = node->layout.y + border_top + padding_top;
+            const auto viewport_width = std::max(
+                0.0F, node->layout.width - border_left - border_right
+                    - padding_left - padding_right);
+            const auto viewport_height = std::max(
+                0.0F, node->layout.height - border_top - border_bottom
+                    - padding_top - padding_bottom);
+            const auto maximum_x = std::max(
+                0.0F, node->scroll_content_width - node->scroll_viewport_width);
+            const auto maximum_y = std::max(
+                0.0F, node->scroll_content_height - node->scroll_viewport_height);
+            const auto root_scroll_x = node->parent == nullptr
+                && node->style.overflow_x == overflow_mode::visible;
+            const auto root_scroll_y = node->parent == nullptr
+                && node->style.overflow_y == overflow_mode::visible;
+            const auto& scrollbar = node->style.scrollbar();
+            const auto inset = scrollbar.overlay_inset;
+            if ((node->style.scroll_y_enabled || root_scroll_y)
+                && maximum_y > 0.01F && scrollbar.width > 0) {
+                const auto rail_x = viewport_x + viewport_width - scrollbar.width - inset;
+                const auto rail_y = viewport_y + inset;
+                const auto rail_height = std::max(0.0F, viewport_height - inset * 2);
+                const auto thumb_height = std::min(rail_height, std::max(
+                    minimum_thumb,
+                    rail_height * node->scroll_viewport_height
+                        / std::max(node->scroll_viewport_height, node->scroll_content_height)));
+                const auto travel = std::max(0.0F, rail_height - thumb_height);
+                const auto thumb_y = rail_y + travel
+                    * std::clamp(node->scroll_top / maximum_y, 0.0F, 1.0F);
+                if (x >= rail_x && x <= rail_x + scrollbar.width
+                    && y >= thumb_y && y <= thumb_y + thumb_height) {
+                    return scrollbar_thumb_hit{
+                        node, true, y, node->scroll_top, maximum_y, travel};
+                }
+            }
+            if ((node->style.scroll_x_enabled || root_scroll_x)
+                && maximum_x > 0.01F && scrollbar.height > 0) {
+                const auto rail_x = viewport_x + inset;
+                const auto rail_y = viewport_y + viewport_height - scrollbar.height - inset;
+                const auto rail_width = std::max(0.0F, viewport_width - inset * 2);
+                const auto thumb_width = std::min(rail_width, std::max(
+                    minimum_thumb,
+                    rail_width * node->scroll_viewport_width
+                        / std::max(node->scroll_viewport_width, node->scroll_content_width)));
+                const auto travel = std::max(0.0F, rail_width - thumb_width);
+                const auto thumb_x = rail_x + travel
+                    * std::clamp(node->scroll_left / maximum_x, 0.0F, 1.0F);
+                if (x >= thumb_x && x <= thumb_x + thumb_width
+                    && y >= rail_y && y <= rail_y + scrollbar.height) {
+                    return scrollbar_thumb_hit{
+                        node, false, x, node->scroll_left, maximum_x, travel};
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    bool dispatch_input(const webscene_input_event& input, bool defer_cursor_update = false)
     {
         current_input_sequence = input.sequence;
         auto isolate_locker = lock_shared_isolate();
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
-        auto local_context = frame_context.IsEmpty()
-            ? context.Get(isolate)
-            : frame_context.Get(isolate);
+        // Hit-test the complete host viewport before choosing a browsing
+        // context. The most recently loaded iframe does not own all input.
+        auto local_context = context.Get(isolate);
+        {
+            v8::Context::Scope layout_context_scope(local_context);
+            activate_css_cascade(local_context);
+            ensure_layout();
+        }
+        const auto keyboard = input.kind == WEBSCENE_INPUT_KEY_DOWN
+            || input.kind == WEBSCENE_INPUT_KEY_UP || input.kind == WEBSCENE_INPUT_TEXT;
+        auto* initial_hit_target = keyboard ? nullptr : document.hit_test(
+            document.body(), static_cast<float>(input.x), static_cast<float>(input.y));
+        auto* input_owner = keyboard ? active_element
+            : pointer_capture_target != nullptr ? pointer_capture_target : initial_hit_target;
+        if (input_owner != nullptr) local_context = context_for_node(*input_owner);
         activate_css_cascade(local_context);
         v8::Context::Scope context_scope(local_context);
-        ensure_layout();
         v8::TryCatch try_catch(isolate);
         const auto report_input_exception = [&] {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, local_context);
 #endif
         };
+        const auto leave_host = [&]() -> bool {
+            // OS/control exits need not have a final mousemove. Clear :hover
+            // before dispatch, with no destination element (relatedTarget=null).
+            // Capture keeps its boundary until release; a host exit is not up
+            // or cancel and must not interrupt a chart/scrollbar drag.
+            if (pointer_capture_target != nullptr || scrollbar_drag_target != nullptr) {
+                return true;
+            }
+            auto* previous = hover_target;
+            hover_target = nullptr;
+            current_related_target = nullptr;
+            current_cursor_kind_value = WEBSCENE_CURSOR_DEFAULT;
+            pointer_cursor_update_pending = false;
+            has_pointer_position = false;
+            current_movement_x = current_movement_y = 0;
+            recascade_hover_transition(previous, nullptr, "host-pointer-exit");
+            if (previous == nullptr) return true;
+            std::vector<dom_node*> exited_nodes;
+            for (auto* node = previous; node != nullptr; node = node->parent) {
+                exited_nodes.push_back(node);
+            }
+            const auto dispatch = [&](const char* type, dom_node& node) {
+                if (dispatch_input_event_type(input, type, node)) return true;
+                last_error = "Native host pointer exit dispatch failed: "
+                    + describe_reported_exception(try_catch, local_context);
+                report_input_exception();
+                return false;
+            };
+            if (!dispatch("pointerout", *previous)) return false;
+            for (auto* node : exited_nodes) {
+                if (!dispatch("pointerleave", *node)) return false;
+            }
+            if (!dispatch("mouseout", *previous)) return false;
+            for (auto* node : exited_nodes) {
+                if (!dispatch("mouseleave", *node)) return false;
+            }
+            return true;
+        };
+        if (input.kind == WEBSCENE_INPUT_POINTER_LEAVE) {
+            return leave_host();
+        }
         if (input.kind == WEBSCENE_INPUT_KEY_DOWN
             || input.kind == WEBSCENE_INPUT_KEY_UP
             || input.kind == WEBSCENE_INPUT_TEXT) {
             if (!dispatch_keyboard_or_text(input)) {
                 last_error = "Native keyboard input dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 report_input_exception();
                 return false;
             }
             return true;
         }
-        auto* hit_target = document.hit_test(
-            active_root(),
-            static_cast<float>(input.x),
-            static_cast<float>(input.y));
-        if (hit_target == nullptr) hit_target = &active_root();
+        const auto viewport = viewport_provider();
+        const auto pointer_outside = input.x < 0 || input.y < 0
+            || input.x >= viewport.width || input.y >= viewport.height;
+        if (scrollbar_drag_target != nullptr
+            && (input.kind == WEBSCENE_INPUT_POINTER_MOVE
+                || input.kind == WEBSCENE_INPUT_POINTER_UP)) {
+            if (input.kind == WEBSCENE_INPUT_POINTER_MOVE
+                && scrollbar_drag_thumb_travel > 0.01F) {
+                const auto pointer = scrollbar_drag_vertical ? input.y : input.x;
+                const auto next = std::clamp(
+                    scrollbar_drag_scroll_origin
+                        + static_cast<float>(pointer - scrollbar_drag_pointer_origin)
+                            * scrollbar_drag_maximum / scrollbar_drag_thumb_travel,
+                    0.0F,
+                    scrollbar_drag_maximum);
+                auto& current = scrollbar_drag_vertical
+                    ? scrollbar_drag_target->scroll_top
+                    : scrollbar_drag_target->scroll_left;
+                if (std::abs(next - current) > 0.01F) {
+                    current = next;
+                    document.mark_dirty();
+                    if (!dispatch_input_event_type(
+                            input, "scroll", *scrollbar_drag_target)) {
+                        last_error = "Native scrollbar scroll dispatch failed: "
+                            + describe_reported_exception(try_catch, local_context);
+                        report_input_exception();
+                        return false;
+                    }
+                }
+            }
+            if (input.kind == WEBSCENE_INPUT_POINTER_UP) {
+                scrollbar_drag_target = nullptr;
+                if (pointer_outside) return leave_host();
+            }
+            return true;
+        }
+        if (pointer_outside && pointer_capture_target == nullptr
+            && (input.kind == WEBSCENE_INPUT_POINTER_MOVE
+                || input.kind == WEBSCENE_INPUT_POINTER_DOWN
+                || input.kind == WEBSCENE_INPUT_POINTER_UP)) {
+            if (!leave_host()) return false;
+            // Hosts capture the mouse for ordinary document-level drags too,
+            // even when script does not call setPointerCapture. Keep delivering
+            // their move/up stream, without restoring :hover outside the host.
+            if (pointer_down_target == nullptr) return true;
+        }
+        auto* hit_target = initial_hit_target;
+        if (hit_target == nullptr) hit_target = &document.body();
+        if (pointer_outside) {
+            hit_target = pointer_capture_target != nullptr
+                ? pointer_capture_target : &active_root();
+        }
+        if (input.kind == WEBSCENE_INPUT_POINTER_DOWN
+            && ((input.flags >> 8U) & 0xffU) <= 1U) {
+            if (const auto hit = hit_test_scrollbar_thumb(
+                    *hit_target, static_cast<float>(input.x), static_cast<float>(input.y));
+                hit.has_value()) {
+                scrollbar_drag_target = hit->target;
+                scrollbar_drag_vertical = hit->vertical;
+                scrollbar_drag_pointer_origin = hit->pointer_origin;
+                scrollbar_drag_scroll_origin = hit->scroll_origin;
+                scrollbar_drag_maximum = hit->maximum;
+                scrollbar_drag_thumb_travel = hit->thumb_travel;
+                return true;
+            }
+        }
         auto* target = pointer_capture_target != nullptr
             && input.kind != WEBSCENE_INPUT_POINTER_DOWN
             ? pointer_capture_target
@@ -2520,6 +2949,7 @@
         }
         if ((input.kind == WEBSCENE_INPUT_POINTER_MOVE
                 || input.kind == WEBSCENE_INPUT_POINTER_DOWN)
+            && (!pointer_outside || pointer_capture_target != nullptr)
             && hit_target != hover_target) {
             auto* previous_hover_target = hover_target;
             // Browsers update :hover before dispatching the boundary events.
@@ -2543,7 +2973,7 @@
                 current_related_target = hit_target;
                 if (!dispatch_input_event_type(input, "pointerout", *previous_hover_target)) {
                     last_error = "Native input transition dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
@@ -2552,14 +2982,14 @@
                      exited = exited->parent) {
                     if (!dispatch_input_event_type(input, "pointerleave", *exited)) {
                         last_error = "Native input transition dispatch failed: "
-                            + describe_exception(try_catch, local_context);
+                            + describe_reported_exception(try_catch, local_context);
                         report_input_exception();
                         return false;
                     }
                 }
                 if (!dispatch_input_event_type(input, "mouseout", *previous_hover_target)) {
                     last_error = "Native input transition dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
@@ -2568,7 +2998,7 @@
                      exited = exited->parent) {
                     if (!dispatch_input_event_type(input, "mouseleave", *exited)) {
                         last_error = "Native input transition dispatch failed: "
-                            + describe_exception(try_catch, local_context);
+                            + describe_reported_exception(try_catch, local_context);
                         report_input_exception();
                         return false;
                     }
@@ -2584,28 +3014,28 @@
             std::reverse(entered_nodes.begin(), entered_nodes.end());
             if (!dispatch_input_event_type(input, "pointerover", *hit_target)) {
                 last_error = "Native input transition dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 report_input_exception();
                 return false;
             }
             for (auto* entered : entered_nodes) {
                 if (!dispatch_input_event_type(input, "pointerenter", *entered)) {
                     last_error = "Native input transition dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
             }
             if (!dispatch_input_event_type(input, "mouseover", *hit_target)) {
                 last_error = "Native input transition dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 report_input_exception();
                 return false;
             }
             for (auto* entered : entered_nodes) {
                 if (!dispatch_input_event_type(input, "mouseenter", *entered)) {
                     last_error = "Native input transition dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
@@ -2621,7 +3051,7 @@
             // leaving the toolbar opener permanently in its `isOpened` state.
             ensure_layout();
             hit_target = document.hit_test(
-                active_root(),
+                document.body(),
                 static_cast<float>(input.x),
                 static_cast<float>(input.y));
             if (hit_target == nullptr) hit_target = &active_root();
@@ -2743,7 +3173,7 @@
                     types[index],
                     *target,
                     observe_default ? &event_default_prevented : nullptr)) {
-                last_error = "Native input dispatch failed: " + describe_exception(try_catch, local_context);
+                last_error = "Native input dispatch failed: " + describe_reported_exception(try_catch, local_context);
                 report_input_exception();
                 return false;
             }
@@ -2771,7 +3201,14 @@
                 const auto maximum_y = std::max(
                     0.0F,
                     scroll_target->scroll_content_height - scroll_target->scroll_viewport_height);
-                const auto* exposed_root = &active_root();
+                // The retained viewport belongs to the outer document, not
+                // whichever iframe context last ran script or loaded. In
+                // particular an overflow:hidden embed must not disable page
+                // scrolling, including wheel input outside the embed.
+                const auto* exposed_root = static_cast<const dom_node*>(
+                    context.Get(isolate)->GetAlignedPointerFromEmbedderData(
+                        1, v8::kEmbedderDataTypeTagDefault));
+                if (exposed_root == nullptr) exposed_root = &document.body();
                 const auto root_viewport_scroll_x = scroll_target == &document.body()
                     && (exposed_root->style.overflow_x == overflow_mode::visible
                         || exposed_root->style.scroll_x_enabled);
@@ -2801,7 +3238,7 @@
                 document.mark_dirty();
                 if (!dispatch_input_event_type(input, "scroll", *scroll_target)) {
                     last_error = "Native scroll dispatch failed: "
-                        + describe_exception(try_catch, local_context);
+                        + describe_reported_exception(try_catch, local_context);
                     report_input_exception();
                     return false;
                 }
@@ -2816,14 +3253,14 @@
             if ((focus_target != nullptr || active_element != nullptr)
                 && !set_active_element(focus_target, input)) {
                 last_error = "Native focus dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 return false;
             }
         }
         if (context_menu_target != nullptr
             && !dispatch_input_event_type(input, "contextmenu", *context_menu_target)) {
             last_error = "Native contextmenu dispatch failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
             return false;
         }
         bool click_default_prevented = false;
@@ -2834,7 +3271,7 @@
                     *click_target,
                     &click_default_prevented)) {
                 last_error = "Native click dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 return false;
             }
             if (checkable_activation.active) {
@@ -2852,7 +3289,7 @@
         if (auxiliary_click_target != nullptr
             && !dispatch_input_event_type(input, "auxclick", *auxiliary_click_target)) {
             last_error = "Native auxiliary click dispatch failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
             return false;
         }
         if (activate_label_control_after_click && !click_default_prevented) {
@@ -2873,7 +3310,7 @@
                     *activated_form_control,
                     &control_click_default_prevented)) {
                 last_error = "Native label-control activation failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 return false;
             }
             if (label_checkable_activation.active) {
@@ -2891,25 +3328,32 @@
             if (!dispatch_input_event_type(input, "input", *activated_form_control)
                 || !dispatch_input_event_type(input, "change", *activated_form_control)) {
                 last_error = "Native form-control dispatch failed: "
-                    + describe_exception(try_catch, local_context);
+                    + describe_reported_exception(try_catch, local_context);
                 return false;
             }
         }
         if (input.kind == WEBSCENE_INPUT_POINTER_UP) {
             pointer_capture_target = nullptr;
             pointer_down_target = nullptr;
+            if (pointer_outside) return leave_host();
         }
         if (input.kind == WEBSCENE_INPUT_POINTER_MOVE
             || input.kind == WEBSCENE_INPUT_POINTER_DOWN
             || input.kind == WEBSCENE_INPUT_POINTER_UP) {
+            if (defer_cursor_update && input.kind == WEBSCENE_INPUT_POINTER_MOVE) {
+                pointer_cursor_update_pending = true;
+                return true;
+            }
+            pointer_cursor_update_pending = false;
             ensure_layout();
             auto* cursor_target = document.hit_test(
-                active_root(),
+                document.body(),
                 static_cast<float>(input.x),
                 static_cast<float>(input.y));
             current_cursor_kind_value = cursor_target == nullptr
                 ? WEBSCENE_CURSOR_DEFAULT
                 : cursor_kind_for(*cursor_target);
+
         }
         return true;
     }

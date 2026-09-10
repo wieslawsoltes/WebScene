@@ -1,4 +1,23 @@
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+#include "media/media_session.h"
+#include "media/audio_graph.h"
+#include "media/decode_service.h"
+#if defined(__APPLE__)
+#include "graphics/iosurface_canvas_images.h"
+#endif
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+#include "graphics/platform_webgpu_canvas.h"
+#endif
 #include "webscene_v8_runtime.h"
+#include "webscene_frame_trace.h"
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+#include "graphics/graphics_service.h"
+#include "graphics/v8_webgpu_realm.h"
+#include "graphics/v8_webgpu_constants.h"
+#endif
+#include "webscene_runtime_diagnostics.h"
+#include "webscene_embed_fallback.h"
 
 #include "webscene_native_dom.h"
 #include "webscene_native_style_defaults.h"
@@ -72,6 +91,130 @@
 #include <unistd.h>
 #endif
 
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+namespace {
+std::atomic<uint64_t> canvas_paint_string_property_probes{0U};
+std::atomic<uint64_t> canvas_paint_utf8_conversions{0U};
+std::atomic<uint64_t> canvas_paint_stack_comparisons{0U};
+std::atomic<uint64_t> canvas_paint_cached_value_hits{0U};
+}
+
+extern "C" WEBSCENE_API void webscene_canvas_paint_state_benchmark_reset_counters(void)
+{
+    canvas_paint_string_property_probes.store(0U, std::memory_order_relaxed);
+    canvas_paint_utf8_conversions.store(0U, std::memory_order_relaxed);
+    canvas_paint_stack_comparisons.store(0U, std::memory_order_relaxed);
+    canvas_paint_cached_value_hits.store(0U, std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_string_property_probes(void)
+{
+    return canvas_paint_string_property_probes.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_utf8_conversions(void)
+{
+    return canvas_paint_utf8_conversions.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_stack_comparisons(void)
+{
+    return canvas_paint_stack_comparisons.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_canvas_paint_state_benchmark_cached_value_hits(void)
+{
+    return canvas_paint_cached_value_hits.load(std::memory_order_relaxed);
+}
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+namespace {
+std::atomic<uint64_t> media_refresh_index_rule_calls{0U};
+std::atomic<uint64_t> media_refresh_root_variable_refreshes{0U};
+std::atomic<uint64_t> media_refresh_class_lookups{0U};
+std::atomic<uint64_t> media_refresh_owned_class_lookup_keys{0U};
+std::atomic<uint64_t> media_refresh_owned_class_lookup_bytes{0U};
+}
+
+extern "C" WEBSCENE_API void webscene_media_refresh_benchmark_reset_counters(void)
+{
+    media_refresh_index_rule_calls.store(0U, std::memory_order_relaxed);
+    media_refresh_root_variable_refreshes.store(0U, std::memory_order_relaxed);
+    media_refresh_class_lookups.store(0U, std::memory_order_relaxed);
+    media_refresh_owned_class_lookup_keys.store(0U, std::memory_order_relaxed);
+    media_refresh_owned_class_lookup_bytes.store(0U, std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_media_refresh_benchmark_index_rule_calls(void)
+{
+    return media_refresh_index_rule_calls.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_media_refresh_benchmark_root_variable_refreshes(void)
+{
+    return media_refresh_root_variable_refreshes.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_media_refresh_benchmark_class_lookups(void)
+{
+    return media_refresh_class_lookups.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_media_refresh_benchmark_owned_class_lookup_keys(void)
+{
+    return media_refresh_owned_class_lookup_keys.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t
+webscene_media_refresh_benchmark_owned_class_lookup_bytes(void)
+{
+    return media_refresh_owned_class_lookup_bytes.load(std::memory_order_relaxed);
+}
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+namespace {
+std::atomic<uint64_t> selector_sibling_positional_matches{0U};
+std::atomic<uint64_t> selector_sibling_scans{0U};
+std::atomic<uint64_t> selector_sibling_vector_materializations{0U};
+std::atomic<uint64_t> selector_sibling_pointer_copies{0U};
+}
+
+extern "C" WEBSCENE_API void webscene_selector_sibling_benchmark_reset_counters(void)
+{
+    selector_sibling_positional_matches.store(0U, std::memory_order_relaxed);
+    selector_sibling_scans.store(0U, std::memory_order_relaxed);
+    selector_sibling_vector_materializations.store(0U, std::memory_order_relaxed);
+    selector_sibling_pointer_copies.store(0U, std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_positional_matches(void)
+{
+    return selector_sibling_positional_matches.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_sibling_scans(void)
+{
+    return selector_sibling_scans.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_vector_materializations(void)
+{
+    return selector_sibling_vector_materializations.load(std::memory_order_relaxed);
+}
+
+extern "C" WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_pointer_copies(void)
+{
+    return selector_sibling_pointer_copies.load(std::memory_order_relaxed);
+}
+#endif
+
 namespace webscene_native {
 namespace {
 
@@ -84,6 +227,34 @@ void prewarm_v8_process()
 }
 
 struct v8_dom_runtime::implementation final {
+    webscene_frame_trace frame_trace;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    bool graphics_transitioning{};
+    bool graphics_delivering{};
+    bool graphics_shutdown{};
+    const std::thread::id graphics_thread = std::this_thread::get_id();
+    std::unique_ptr<webscene::graphics::graphics_service> graphics;
+    std::unique_ptr<webscene::graphics::v8_webgpu_realm> webgpu;
+    v8::Global<v8::Object> webgpu_navigator;
+    v8::Global<v8::Function> webgpu_dom_exception;
+    std::function<void(const std::string&)> webgpu_document_policy;
+    webscene::graphics::webgpu_canvas_interop webgpu_interop=webscene::graphics::webgpu_canvas_interop::none;
+    std::shared_ptr<webscene::graphics::completion_wake> webgpu_wake;
+#if (defined(__APPLE__) || defined(_WIN32))
+    struct gpu_canvas_entry {
+        dom_node* node;
+        std::shared_ptr<webscene::graphics::platform_dawn_canvas_host> provider;
+        std::unique_ptr<webscene::graphics::v8_webgpu_canvas_context> context;
+        bool bitmap_reset_awaiting_frame=false;
+        bool presentation_resize_pending=false;
+        uint64_t presentation_generation_floor=0;
+    };
+    std::unordered_map<uint64_t,gpu_canvas_entry> gpu_canvases;
+    bool gpu_rendering_opportunity=false;
+    uint64_t gpu_canvas_timeline=webscene::graphics::new_owner_token();
+#endif
+    std::function<void(webscene::graphics::completion_record)> graphics_deliver;
+#endif
 #include "webscene_v8_runtime_state_types.inc"
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
 #include "webscene_v8_runtime_inspector.inc"
@@ -93,7 +264,7 @@ struct v8_dom_runtime::implementation final {
     {
         prune_persistent_compilation_cache();
         initialize_v8_process();
-        if (std::getenv("WEBSCENE_V8_SHARED_ISOLATE") != nullptr) {
+        if (!force_dedicated_isolate && std::getenv("WEBSCENE_V8_SHARED_ISOLATE") != nullptr) {
             try {
                 shared_isolate = acquire_shared_isolate();
             } catch (const std::exception& exception) {
@@ -102,9 +273,11 @@ struct v8_dom_runtime::implementation final {
             }
             isolate = shared_isolate == nullptr ? nullptr : shared_isolate->isolate;
         } else {
-            allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+            allocator.reset(v8::ArrayBuffer::Allocator::NewDefaultAllocator());
             v8::Isolate::CreateParams params;
-            params.array_buffer_allocator = allocator;
+            // Transferred backing stores can outlive the originating worker isolate.
+            // V8 retains this shared allocator until the final backing store is released.
+            params.array_buffer_allocator_shared = allocator;
             if (const auto maximum_heap_mib =
                     unsigned_environment_value("WEBSCENE_V8_MAX_HEAP_MIB");
                 maximum_heap_mib.has_value() && *maximum_heap_mib > 0) {
@@ -118,7 +291,7 @@ struct v8_dom_runtime::implementation final {
                 configure_startup_snapshot(params);
             } catch (const std::exception& exception) {
                 last_error = exception.what();
-                delete allocator;
+                allocator.reset();
                 allocator = nullptr;
                 return false;
             }
@@ -135,6 +308,8 @@ struct v8_dom_runtime::implementation final {
         }
         isolate->SetMicrotasksPolicy(v8::MicrotasksPolicy::kExplicit);
         isolate->SetPromiseRejectCallback(promise_rejected);
+        isolate->SetHostInitializeImportMetaObjectCallback(initialize_import_meta);
+        isolate->SetHostImportModuleDynamicallyCallback(import_module_dynamically);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_bindings || profile_resize_cpu) {
             cpu_profiler = v8::CpuProfiler::New(isolate);
@@ -254,6 +429,8 @@ struct v8_dom_runtime::implementation final {
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "offsetParent"), get_offset_parent);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "width"), get_element_width, set_element_width);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "height"), get_element_height, set_element_height);
+        element->InstanceTemplate()->SetNativeDataProperty(
+            js_string(isolate, "hidden"), get_hidden, set_hidden);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "colSpan"), get_table_cell_span, set_table_cell_span);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "rowSpan"), get_table_cell_span, set_table_cell_span);
         element->InstanceTemplate()->SetNativeDataProperty(
@@ -297,6 +474,10 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "tabIndex"), get_tab_index, set_tab_index);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "src"), get_element_url, set_element_src);
         element->InstanceTemplate()->SetNativeDataProperty(js_string(isolate, "href"), get_element_url, set_element_href);
+        element->InstanceTemplate()->SetNativeDataProperty(
+            js_string(isolate, "accept"),
+            get_reflected_string_attribute,
+            set_reflected_string_attribute);
         element->InstanceTemplate()->SetNativeDataProperty(
             js_string(isolate, "download"),
             get_reflected_string_attribute,
@@ -506,9 +687,10 @@ struct v8_dom_runtime::implementation final {
         const char* properties[] = {
             "width", "height", "minWidth", "minHeight", "maxWidth", "maxHeight",
             "left", "top", "right", "bottom", "inset", "insetInlineStart", "insetInlineEnd",
-            "display", "position", "cssFloat", "flexDirection", "flexFlow",
+            "display", "position", "contain", "cssFloat", "flexDirection", "flexFlow",
             "flexGrow", "flexShrink", "flexBasis", "flexWrap",
             "alignItems", "alignSelf", "justifyContent", "gap", "rowGap", "columnGap",
+            "gridGap", "gridRowGap", "gridColumnGap",
             "padding", "paddingInline", "paddingBlock",
             "paddingLeft", "paddingTop", "paddingRight", "paddingBottom",
             "paddingInlineStart", "paddingInlineEnd", "paddingBlockStart", "paddingBlockEnd",
@@ -612,6 +794,10 @@ struct v8_dom_runtime::implementation final {
         frame_document->Set(
             js_string(isolate, "createEvent"),
             v8::FunctionTemplate::New(isolate, document_create_event));
+        frame_document->Set(
+            js_string(isolate, "execCommand"),
+            v8::FunctionTemplate::New(isolate, document_exec_command, {}, {}, 1,
+                v8::ConstructorBehavior::kThrow));
         frame_document->SetNativeDataProperty(
             js_string(isolate, "body"), get_body);
         frame_document->SetNativeDataProperty(
@@ -1094,6 +1280,13 @@ struct v8_dom_runtime::implementation final {
             body,
             content_type};
         const auto local_context = info.GetIsolate()->GetCurrentContext();
+        if(specifier.starts_with("blob:")) {
+            auto resolver=v8::Promise::Resolver::New(local_context).ToLocalChecked();
+            auto found=self->object_url_binary.find(specifier);
+            if(found==self->object_url_binary.end()||found->second.origin!=resource_origin(base))resolver->Reject(local_context,v8::Exception::TypeError(js_string(info.GetIsolate(),"Blob URL is unavailable for this origin"))).Check();
+            else {auto value=v8::Object::New(info.GetIsolate());auto bytes=v8::ArrayBuffer::New(info.GetIsolate(),found->second.bytes.size());if(!found->second.bytes.empty())std::memcpy(bytes->GetBackingStore()->Data(),found->second.bytes.data(),found->second.bytes.size());value->CreateDataProperty(local_context,js_string(info.GetIsolate(),"body"),bytes).Check();value->CreateDataProperty(local_context,js_string(info.GetIsolate(),"url"),js_dom_string(info.GetIsolate(),specifier)).Check();resolver->Resolve(local_context,value).Check();}
+            info.GetReturnValue().Set(resolver->GetPromise());return;
+        }
         if (self->pending_fetches.size() >= maximum_pending_fetches) {
             info.GetIsolate()->ThrowException(v8::Exception::Error(
                 js_string(info.GetIsolate(), "Too many pending fetch requests")));
@@ -1183,6 +1376,9 @@ struct v8_dom_runtime::implementation final {
         auto prototype = constructor->Get(
             local_context,
             js_string(isolate, "prototype")).ToLocalChecked().As<v8::Object>();
+        prototype->Set(local_context, js_string(isolate, "execCommand"),
+            v8::Function::New(local_context, document_exec_command, {}, 1,
+                v8::ConstructorBehavior::kThrow).ToLocalChecked()).Check();
         const auto cookie_name = js_string(isolate, "cookie");
         auto cookie_getter = v8::Function::New(
             local_context,
@@ -1593,7 +1789,7 @@ struct v8_dom_runtime::implementation final {
                 1,
                 arguments).IsEmpty()) {
             last_error = "WebSocket event dispatch failed: "
-                + describe_exception(try_catch, event_context);
+                + describe_reported_exception(try_catch, event_context);
             if (value.type == native_websocket_transport::event_type::closed) {
                 websocket_bindings.erase(value.socket_id);
                 websocket_transport.release(value.socket_id);
@@ -2657,7 +2853,7 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "__webSceneActivateCustomElements")).Check();
         if (try_catch.HasCaught()) {
             last_error = "Custom-elements bootstrap failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 
@@ -2681,7 +2877,7 @@ struct v8_dom_runtime::implementation final {
             nullptr));
         if (try_catch.HasCaught()) {
             last_error = "TreeWalker bootstrap failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 
@@ -2914,6 +3110,8 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "__webSceneCreateObjectUrl"),
             v8::Function::New(local_context, create_object_url).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate,"__webSceneRevokeObjectUrl"),
+            v8::Function::New(local_context,revoke_object_url).ToLocalChecked()).Check();
         global->Set(
             local_context,
             js_string(isolate, "__webSceneResolveUrl"),
@@ -2978,6 +3176,8 @@ struct v8_dom_runtime::implementation final {
             local_context,
             js_string(isolate, "__webSceneCreateObjectUrl"),
             v8::Function::New(local_context, create_object_url).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate,"__webSceneRevokeObjectUrl"),
+            v8::Function::New(local_context,revoke_object_url).ToLocalChecked()).Check();
         global->Set(local_context, js_string(isolate, "Image"),
             v8::FunctionTemplate::New(isolate, image_constructor)
                 ->GetFunction(local_context).ToLocalChecked()).Check();
@@ -3013,17 +3213,10 @@ struct v8_dom_runtime::implementation final {
 
         install_navigator(isolate, local_context, global);
 
-        auto console = v8::Object::New(isolate);
-        console->Set(local_context, js_string(isolate, "log"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 0)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "warn"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 1)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "error"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 2)).ToLocalChecked()).Check();
-        global->Set(local_context, js_string(isolate, "console"), console).Check();
+        install_console(local_context, global);
         install_host_bridge(local_context);
 
-        constexpr std::string_view crypto_source = R"JS(
+        constexpr std::string_view crypto_source_parts[] = {R"JS(
             class WebSceneBlob {
               constructor(parts = [], options = {}) {
                 __webSceneRecordWebApi(
@@ -3033,7 +3226,9 @@ struct v8_dom_runtime::implementation final {
                 let size = 0;
                 for (const part of parts) {
                   let bytes;
-                  if (part instanceof ArrayBuffer) {
+                  if (part instanceof WebSceneBlob) {
+                    bytes=part._bytes;
+                  } else if (part instanceof ArrayBuffer) {
                     bytes = new Uint8Array(part);
                   } else if (ArrayBuffer.isView(part)) {
                     bytes = new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
@@ -3054,7 +3249,17 @@ struct v8_dom_runtime::implementation final {
                 this._text = Array.from(parts, String).join('');
               }
               toString() { return this._text; }
+              text() { return Promise.resolve(new TextDecoder().decode(this._bytes)); }
+              arrayBuffer() { return Promise.resolve(this._bytes.slice().buffer); }
+              slice(start=0,end=this.size,type='') {return new WebSceneBlob([this._bytes.slice(start,end)],{type});}
             }
+            globalThis.File = class File extends WebSceneBlob {
+              constructor(parts, name, options={}) {
+                super(parts,options);
+                this.name=String(name).replace(/[\/]/g, ':');
+                this.lastModified=Number(options.lastModified ?? Date.now());
+              }
+            };
             class WebSceneURLSearchParams {
               constructor(init = null) {
                 this._owner = init && typeof init === 'object'
@@ -3163,13 +3368,45 @@ struct v8_dom_runtime::implementation final {
               }
             }
             class WebSceneFormData {
-              constructor(form = undefined) {
+              constructor(form = undefined, submitter = null) {
                 __webSceneRecordWebApi(
                   'FormData.constructor', 'partially-supported',
                   'ordered string and Blob fields with multipart fetch serialization');
                 this._entries = [];
-                if (form !== undefined && form !== null) {
-                  throw new TypeError('Constructing FormData from a form is not yet supported');
+                if (form !== undefined) {
+                  if (!(form instanceof HTMLFormElement)) throw new TypeError('FormData requires an HTMLFormElement');
+                  const isSubmit = control => control && ((control.tagName === 'BUTTON' && (!control.type || control.type === 'submit')) ||
+        )JS", R"JS(
+                    (control.tagName === 'INPUT' && ['submit', 'image'].includes(control.type)));
+                  if (submitter !== null) {
+                    if (!(submitter instanceof HTMLElement) || !isSubmit(submitter)) throw new TypeError('FormData submitter must be a submit button');
+                    if (submitter.form !== form) throw new DOMException('Submitter belongs to another form', 'NotFoundError');
+                  }
+                  const root = form.getRootNode();
+                  for (const control of root.querySelectorAll('input,select,textarea,button')) {
+                    if (control.form !== form || control.matches(':disabled') || control.closest('datalist')) continue;
+                    const tag = control.tagName;
+                    const type = String(control.type || (tag === 'BUTTON' ? 'submit' : 'text')).toLowerCase();
+                    if ((tag === 'BUTTON' || ['submit', 'image', 'reset', 'button'].includes(type)) && control !== submitter) continue;
+                    const name = control.getAttribute('name') || '';
+                    if (type === 'image') {
+                      this.append(name ? name + '.x' : 'x', '0');
+                      this.append(name ? name + '.y' : 'y', '0');
+                      continue;
+                    }
+                    if (!name || (['checkbox', 'radio'].includes(type) && !control.checked)) continue;
+                    if (tag === 'SELECT') {
+                      for (const option of control.options) {
+                        if (option.selected && !option.matches(':disabled')) this.append(name, option.value);
+                      }
+                    } else if (type === 'file') {
+                      throw new TypeError('File controls in FormData are not yet supported');
+                    } else {
+                      const value = type === 'hidden' && name === '_charset_' ? 'UTF-8' :
+                        ['checkbox', 'radio'].includes(type) && !control.hasAttribute('value') ? 'on' : control.value;
+                      this.append(name, value);
+                    }
+                  }
                 }
               }
               append(name, value, filename = undefined) {
@@ -3260,7 +3497,7 @@ struct v8_dom_runtime::implementation final {
               }
               toJSON() { return this.toString(); }
               static createObjectURL(blob) { return __webSceneCreateObjectUrl(blob); }
-              static revokeObjectURL() {}
+              static revokeObjectURL(url) { __webSceneRevokeObjectUrl(String(url)); }
             }
             class WebSceneDOMException extends Error {
               constructor(message = '', name = 'Error') {
@@ -3277,6 +3514,7 @@ struct v8_dom_runtime::implementation final {
                   InUseAttributeError: 10,
                   InvalidStateError: 11,
                   SyntaxError: 12,
+        )JS", R"JS(
                   InvalidModificationError: 13,
                   NamespaceError: 14,
                   InvalidAccessError: 15,
@@ -3314,18 +3552,34 @@ struct v8_dom_runtime::implementation final {
                 }
               }, configurable: true }
             });
-        )JS";
+        )JS"};
+        std::string crypto_source;
+        for (const auto part : crypto_source_parts) crypto_source.append(part);
         auto crypto_script = v8::Script::Compile(
             local_context,
             js_string(isolate, std::string(crypto_source).c_str())).ToLocalChecked();
         crypto_script->Run(local_context).ToLocalChecked();
+        local_context->Global()->Set(local_context, js_string(isolate, "structuredClone"),
+            v8::Function::New(local_context, structured_clone, {}, 1).ToLocalChecked()).Check();
+        auto worker_constructor=v8::Function::New(local_context, worker_construct, {}, 1).ToLocalChecked();
+        v8::Local<v8::Value> event_target,worker_prototype,event_prototype;
+        if(local_context->Global()->Get(local_context,js_string(isolate,"EventTarget")).ToLocal(&event_target)
+            &&event_target->IsFunction()
+            &&worker_constructor->Get(local_context,js_string(isolate,"prototype")).ToLocal(&worker_prototype)
+            &&event_target.As<v8::Object>()->Get(local_context,js_string(isolate,"prototype")).ToLocal(&event_prototype))
+            worker_prototype.As<v8::Object>()->SetPrototype(local_context,event_prototype).FromMaybe(false);
+        local_context->Global()->Set(local_context, js_string(isolate, "Worker"),worker_constructor).Check();
         install_clipboard_api(local_context);
         install_websocket_globals(local_context);
         install_editor_web_platform_globals(local_context);
         install_tree_walker_platform(local_context);
         install_custom_elements_platform(local_context);
+        local_context->Global()->Set(local_context,js_string(isolate,"__webSceneRevokeObjectUrl"),v8::Function::New(local_context,revoke_object_url).ToLocalChecked()).Check();
         install_fetch_globals(local_context);
         install_intersection_observer_polyfill(local_context);
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        install_media_globals(local_context);
+#endif
     }
 
     void install_fetch_globals(v8::Local<v8::Context> local_context)
@@ -3384,7 +3638,7 @@ struct v8_dom_runtime::implementation final {
 
             class WebSceneResponse {
               constructor(body = '', options = {}) {
-                this._body = String(body ?? '');
+                this._body = body instanceof ArrayBuffer ? new Uint8Array(body.slice(0)) : ArrayBuffer.isView(body) ? new Uint8Array(body.buffer.slice(body.byteOffset,body.byteOffset+body.byteLength)) : body instanceof Blob ? body._bytes.slice() : new TextEncoder().encode(String(body ?? ''));
                 this.bodyUsed = false;
                 this.status = Number(options.status ?? 200);
                 this.statusText = String(options.statusText ?? 'OK');
@@ -3399,10 +3653,18 @@ struct v8_dom_runtime::implementation final {
                   return Promise.reject(new TypeError('Response body already used'));
                 }
                 this.bodyUsed = true;
-                return Promise.resolve(this._body);
+                return Promise.resolve(new TextDecoder().decode(this._body));
               }
               json() {
                 return this.text().then(value => JSON.parse(value));
+              }
+              arrayBuffer() {
+                if(this.bodyUsed)return Promise.reject(new TypeError('Response body already used'));
+                this.bodyUsed=true;return Promise.resolve(this._body.slice().buffer);
+              }
+              blob() {
+                if(this.bodyUsed)return Promise.reject(new TypeError('Response body already used'));
+                this.bodyUsed=true;return Promise.resolve(new Blob([this._body],{type:this.headers.get('content-type')||''}));
               }
               clone() {
                 if (this.bodyUsed) throw new TypeError('Response body already used');
@@ -3433,7 +3695,7 @@ struct v8_dom_runtime::implementation final {
               }
             }
 
-            function webSceneFetch(input, options = {}) {
+            function webSceneFetchInternal(input, options = {}) {
               const request = new WebSceneRequest(input, options);
               if ((request.method === 'GET' || request.method === 'HEAD')
                   && request.body !== null) {
@@ -3497,6 +3759,17 @@ struct v8_dom_runtime::implementation final {
               } catch (error) {
                 return Promise.reject(error);
               }
+            }
+
+            function webSceneFetch(input, options = {}) {
+              const signal=options.signal ?? input?.signal;
+              if(!signal)return webSceneFetchInternal(input,options);
+              if(signal.aborted)return Promise.reject(signal.reason ?? new DOMException('Fetch aborted','AbortError'));
+              return new Promise((resolve,reject)=>{
+                const abort=()=>reject(signal.reason ?? new DOMException('Fetch aborted','AbortError'));
+                signal.addEventListener('abort',abort,{once:true});
+                webSceneFetchInternal(input,options).then(resolve,reject).finally(()=>signal.removeEventListener('abort',abort));
+              });
             }
 
             class WebSceneXMLHttpRequest {
@@ -3745,14 +4018,20 @@ struct v8_dom_runtime::implementation final {
         return true;
     }
 
+#include "webscene_v8_runtime_files.inc"
+
     bool queue_external_navigation(dom_node& target)
     {
+        if (file_service_enabled.load() && target.tag == "input"
+            && target.attributes["type"] == "file") return queue_file_request(target, false);
         auto* anchor = &target;
         while (anchor != nullptr && anchor->tag != "a") anchor = anchor->parent;
         if (anchor == nullptr) return true;
+        v8::Context::Scope navigation_context_scope(context_for_node(*anchor));
         const auto authored = anchor->attributes.find("href");
         if (authored == anchor->attributes.end() || authored->second.empty()) return true;
         if (anchor->attributes.contains("download")) {
+            if (file_service_enabled.load()) return queue_file_request(*anchor, true);
             auto local_context = frame_context.IsEmpty()
                 ? context.Get(isolate)
                 : frame_context.Get(isolate);
@@ -3791,6 +4070,22 @@ struct v8_dom_runtime::implementation final {
                     "native-binding");
                 return enqueue_host_request(local_context, request);
             }
+            const auto object_url_canvas =
+                object_url_canvas_node_ids.find(authored->second);
+            if (object_url_canvas != object_url_canvas_node_ids.end()) {
+                request->Set(
+                    local_context,
+                    js_string(isolate, "canvasNodeId"),
+                    v8::Integer::NewFromUnsigned(
+                        isolate, object_url_canvas->second)).Check();
+                record_feature(
+                    "canvas",
+                    "HTMLCanvasElement.toBlob",
+                    "partially-supported",
+                    "canvas-backed object URL handoff to the desktop host",
+                    "default-action");
+                return enqueue_host_request(local_context, request);
+            }
             const auto download_payload =
                 object_url_download_payloads.find(authored->second);
             const auto object_url = object_urls.find(authored->second);
@@ -3822,9 +4117,7 @@ struct v8_dom_runtime::implementation final {
         const auto lower = lower_html_name(resolved);
         if (!lower.starts_with("https://") && !lower.starts_with("http://")) return true;
 
-        auto local_context = frame_context.IsEmpty()
-            ? context.Get(isolate)
-            : frame_context.Get(isolate);
+        auto local_context = isolate->GetCurrentContext();
         auto request = v8::Object::New(isolate);
         request->Set(
             local_context,
@@ -3952,6 +4245,10 @@ struct v8_dom_runtime::implementation final {
         info.GetReturnValue().Set(v8::True(info.GetIsolate()));
     }
 
+#include "webscene_v8_runtime_clone.inc"
+#include "webscene_v8_runtime_modules.inc"
+#include "webscene_v8_runtime_workers.inc"
+#include "webscene_v8_runtime_media.inc"
 #include "webscene_v8_runtime_navigation.inc"
     // Keep these fragments in one translation unit: their order and direct
     // visibility preserve the runtime's existing release code generation.
@@ -3959,6 +4256,7 @@ struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_tasks.inc"
 #include "webscene_v8_runtime_resources.inc"
 #include "webscene_v8_runtime_dom_core.inc"
+#include "webscene_v8_runtime_diagnostics.inc"
 #include "webscene_v8_runtime_dom_properties.inc"
 #include "webscene_v8_runtime_canvas.inc"
 #include "webscene_v8_runtime_document.inc"
@@ -3999,17 +4297,11 @@ struct v8_dom_runtime::implementation final {
         }
         if (message.GetEvent() != v8::kPromiseRejectWithNoHandler) return;
         auto value = message.GetValue();
-        auto error = value.IsEmpty()
-            ? "Unhandled promise rejection"
-            : "Unhandled promise rejection: " + to_utf8(isolate, value);
-        if (!value.IsEmpty() && value->IsObject()) {
-            auto local_context = isolate->GetCurrentContext();
-            v8::Local<v8::Value> stack;
-            if (value.As<v8::Object>()->Get(local_context, js_string(isolate, "stack")).ToLocal(&stack)
-                && stack->IsString()) {
-                error += "\n" + to_utf8(isolate, stack);
-            }
-        }
+        auto rejection = self->exception_diagnostic(value,
+            value.IsEmpty() ? v8::Local<v8::Message>{} : v8::Exception::CreateMessage(isolate, value),
+            isolate->GetCurrentContext());
+        auto error = "Unhandled promise rejection: " + rejection.message;
+        if (!rejection.stack.empty()) error += "\n" + rejection.stack;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         auto local_context = isolate->GetCurrentContext();
         const auto inspector_exception_id = value.IsEmpty()
@@ -4036,13 +4328,26 @@ struct v8_dom_runtime::implementation final {
             }
         }
 #endif
+        if (self->pending_promise_rejections.size() >= runtime_diagnostics::maximum_records) {
+            self->pending_promise_rejections.pop_front();
+            if (self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_EXCEPTIONS))
+                self->diagnostics->note_dropped();
+        }
         self->pending_promise_rejections.push_back({
             v8::Global<v8::Promise>(isolate, promise),
-            std::move(error)});
+            std::move(error),
+            self->diagnostics != nullptr && self->diagnostics->enabled(WEBSCENE_DIAGNOSTIC_EXCEPTIONS)
+                ? std::move(rejection) : runtime_diagnostic{}});
     }
 
 #include "webscene_v8_runtime_state.inc"
 };
+
+void v8_dom_runtime::set_stylesheet_consumer(
+    std::function<void(const std::string&, const std::string&)> consumer)
+{
+    impl_->stylesheet_consumer = std::move(consumer);
+}
 
 v8_dom_runtime::v8_dom_runtime(
     native_document& document,
@@ -4052,7 +4357,8 @@ v8_dom_runtime::v8_dom_runtime(
     std::function<void()> host_request_available,
     std::function<void()> interop_callback_available,
     interop_callback_sink_v3 interop_callback_sink,
-    std::function<void()> runtime_work_available)
+    std::function<void()> runtime_work_available,
+    runtime_diagnostics* diagnostics)
     : impl_(std::make_unique<implementation>(
         document,
         std::move(viewport_provider),
@@ -4061,7 +4367,7 @@ v8_dom_runtime::v8_dom_runtime(
           std::move(host_request_available),
           std::move(interop_callback_available),
           std::move(interop_callback_sink),
-          std::move(runtime_work_available)))
+          std::move(runtime_work_available), diagnostics))
 {
 }
 
@@ -4069,7 +4375,11 @@ v8_dom_runtime::~v8_dom_runtime() = default;
 
 bool v8_dom_runtime::initialize()
 {
-    return impl_->initialize();
+    if(!impl_->initialize())return false;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    if(impl_->webgpu_document_policy)impl_->webgpu_document_policy("about:blank");
+#endif
+    return true;
 }
 
 bool v8_dom_runtime::execute(const std::string& source, const std::string& document_name)
@@ -4240,6 +4550,20 @@ bool v8_dom_runtime::dispatch_resize()
         && impl_->promote_pending_promise_error();
 }
 
+bool v8_dom_runtime::deliver_resize_observers()
+{
+    if (impl_->isolate == nullptr) return true;
+    auto isolate_locker = impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto local_context = impl_->frame_context.IsEmpty()
+        ? impl_->context.Get(impl_->isolate)
+        : impl_->frame_context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(local_context);
+    return impl_->deliver_resize_observer_checkpoint()
+        && impl_->promote_pending_promise_error();
+}
+
 bool v8_dom_runtime::refresh_media_environment()
 {
     return impl_->refresh_media_environment()
@@ -4282,10 +4606,20 @@ uint64_t v8_dom_runtime::last_resize_observers_nanoseconds() const noexcept
 #endif
 }
 
-bool v8_dom_runtime::dispatch_input(const webscene_input_event& event)
+bool v8_dom_runtime::dispatch_input(const webscene_input_event& event, bool defer_cursor_update)
 {
-    return impl_->dispatch_input(event)
+    return impl_->dispatch_input(event, defer_cursor_update)
         && impl_->promote_pending_promise_error();
+}
+
+void v8_dom_runtime::refresh_pointer_cursor_after_layout()
+{
+    if (!impl_->pointer_cursor_update_pending) return;
+    impl_->pointer_cursor_update_pending = false;
+    auto* target = impl_->document.hit_test(impl_->document.body(),
+        static_cast<float>(impl_->last_pointer_x), static_cast<float>(impl_->last_pointer_y));
+    impl_->current_cursor_kind_value = target == nullptr
+        ? WEBSCENE_CURSOR_DEFAULT : impl_->cursor_kind_for(*target);
 }
 
 bool v8_dom_runtime::dispatch_transition_events()
@@ -4306,6 +4640,14 @@ void v8_dom_runtime::notify_low_memory()
     auto isolate_locker = impl_->lock_shared_isolate();
     v8::Isolate::Scope isolate_scope(impl_->isolate);
     impl_->isolate->LowMemoryNotification();
+    // Idle tasks may previously have declined to collect weak wrappers. Now
+    // that V8 has collected, revisit roots in the normal bounded idle slices,
+    // including workloads smaller than the mutation-triggered GC threshold.
+    if (!impl_->detached_dom_roots.empty()) {
+        impl_->detached_dom_gc_requested = true;
+        impl_->detached_dom_gc_deferred_once = false;
+        impl_->detached_dom_gc_retry_count = 0U;
+    }
 }
 
 void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
@@ -4315,6 +4657,20 @@ void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
         ? timestamp_ms
         : std::chrono::duration<double, std::milli>(now.time_since_epoch()).count();
     impl_->last_animation_frame_timestamp_ms = timestamp;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    impl_->signal_media_presentation(timestamp);
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    // Admit a new RAF batch only when configured canvases can obtain storage.
+    // Existing current textures still need their rendering opportunity to end.
+    // Pending callbacks retain their sentinel until a later host frame; no wait
+    // or GPU work is performed here.
+    for(auto& [key,canvas]:impl_->gpu_canvases)
+        if(canvas.context->is_configured()&&!canvas.context->has_current_texture()&&!canvas.provider->can_acquire())
+            return;
+    for(auto& [key,canvas]:impl_->gpu_canvases)canvas.bitmap_reset_awaiting_frame=false;
+    if(impl_->webgpu)impl_->gpu_rendering_opportunity=true;
+#endif
     if (impl_->is_text_control(impl_->active_element)
         && impl_->active_element->mutable_form_control().input_focused) {
         const auto elapsed = std::max(0.0, timestamp - impl_->caret_blink_epoch_ms);
@@ -4346,12 +4702,21 @@ bool v8_dom_runtime::pump_animation_frame_task()
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(local_context);
-    return impl_->drain_animation_frame_task()
-        && impl_->promote_pending_promise_error();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    impl_->drain_media();
+#endif
+    const bool result=impl_->drain_animation_frame_task()&&impl_->promote_pending_promise_error();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    impl_->finish_gpu_rendering_opportunity(result);
+#endif
+    return result;
 }
 
 bool v8_dom_runtime::has_pending_animation_frame_task() const noexcept
 {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    if(impl_->gpu_rendering_opportunity)return true;
+#endif
     return impl_->has_due_animation_frame_task();
 }
 
@@ -4360,11 +4725,158 @@ uint8_t v8_dom_runtime::host_animation_frame_demand() const noexcept
     auto demand = impl_->has_waiting_animation_frame_task()
         ? uint8_t{1U}
         : uint8_t{0U};
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    for(const auto& [key,canvas]:impl_->gpu_canvases)if(canvas.context->has_current_texture()){demand|=1U;break;}
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    // Media requires continuous host opportunities even while its JS RAF is
+    // already admitted/running. Otherwise that brief gap suppresses a refresh.
+    for (const auto& [key, binding] : impl_->media_bindings)
+        if (binding->control->playing.load()) { demand |= 1U; break; }
+#endif
     if (impl_->is_text_control(impl_->active_element)
         && impl_->active_element->mutable_form_control().input_focused) {
         demand |= 4U;
     }
     return demand;
+}
+
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+void v8_dom_runtime::shutdown_graphics()
+{
+    if (std::this_thread::get_id()!=impl_->graphics_thread)
+        throw std::logic_error("Graphics shutdown requires the runtime owner thread");
+    if (impl_->graphics_transitioning || impl_->graphics_delivering)
+        throw std::logic_error("Graphics shutdown during completion delivery");
+    if (impl_->graphics_shutdown) return;
+    impl_->graphics_shutdown=true;
+    if (!impl_->graphics) return;
+    if (!impl_->isolate || impl_->context.IsEmpty()) {
+        impl_->graphics.reset();
+        impl_->graphics_deliver={};
+        return;
+    }
+    auto isolate_locker=impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto context=impl_->context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(context);
+    impl_->retire_document_graphics();
+}
+
+void v8_dom_runtime::set_webgpu_policy(std::shared_ptr<webscene::graphics::completion_wake> wake,
+    std::function<webscene::graphics::webgpu_canvas_interop(const std::string&)> policy)
+{
+    if(std::this_thread::get_id()!=impl_->graphics_thread||impl_->isolate)
+        throw std::logic_error("WebGPU policy must be installed on the owner thread before initialization");
+    if(!wake||!policy)throw std::invalid_argument("WebGPU policy requires a wake and host decision callback");
+    impl_->webgpu_document_policy=[this,wake=std::move(wake),policy=std::move(policy)](const std::string& url) {
+        const auto interop=policy(url);
+        #if defined(__APPLE__) || defined(_WIN32)
+        if(interop==webscene::graphics::platform_canvas_interop)install_webgpu(wake,true,interop);
+#endif
+    };
+}
+
+bool v8_dom_runtime::install_webgpu(std::shared_ptr<webscene::graphics::completion_wake> wake,
+    bool secure_context,webscene::graphics::webgpu_canvas_interop interop)
+{
+    if (!secure_context) return false;
+    if(std::this_thread::get_id()!=impl_->graphics_thread)throw std::logic_error("WebGPU installation requires the runtime owner thread");
+    if (!impl_->isolate || impl_->context.IsEmpty()) throw std::logic_error("WebGPU requires an initialized runtime");
+    auto isolate_locker=impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto context=impl_->context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(context);
+    auto& service=initialize_graphics(wake,[self=impl_.get()](auto record) {
+        if(self->webgpu)self->webgpu->complete(record);
+    });
+    try {
+        auto global=context->Global();v8::Local<v8::Value> navigator,exception;
+        if(!global->Get(context,js_string(impl_->isolate,"navigator")).ToLocal(&navigator)||!navigator->IsObject()||
+            !global->Get(context,js_string(impl_->isolate,"DOMException")).ToLocal(&exception)||!exception->IsFunction())
+            throw std::logic_error("WebGPU requires installed Navigator and DOMException");
+        impl_->webgpu=std::make_unique<webscene::graphics::v8_webgpu_realm>(impl_->isolate,context,service,
+            exception.As<v8::Function>(),interop,
+#if defined(_WIN32)
+            wgpu::BackendType::D3D12,
+#else
+            wgpu::BackendType::Undefined,
+#endif
+            wgpu::TextureFormat::BGRA8Unorm
+#if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
+            ,impl_->event_target_template.Get(impl_->isolate),[self=impl_.get()](v8::Local<v8::Object> object) {
+                if(self->next_standalone_event_target_id==UINT32_MAX)throw std::length_error("EventTarget identity exhausted");
+                auto key=v8::Private::ForApi(self->isolate,js_string(self->isolate,"WebScene.EventTarget.identity"));
+                return object->SetPrivate(self->context.Get(self->isolate),key,
+                    v8::Integer::NewFromUnsigned(self->isolate,self->next_standalone_event_target_id++)).FromMaybe(false);
+            }
+#endif
+            );
+        auto getter=v8::Function::New(context,[](const v8::FunctionCallbackInfo<v8::Value>& info) {
+            info.GetReturnValue().Set(info.Data());
+        },impl_->webgpu->object()).ToLocalChecked();
+        if(!webscene::graphics::install_webgpu_flag_namespaces(impl_->isolate,context))
+            throw std::runtime_error("WebGPU flag namespace installation failed");
+        navigator.As<v8::Object>()->SetAccessorProperty(js_string(impl_->isolate,"gpu"),getter);
+        impl_->webgpu_navigator.Reset(impl_->isolate,navigator.As<v8::Object>());
+        impl_->webgpu_dom_exception.Reset(impl_->isolate,exception.As<v8::Function>());
+        impl_->webgpu_interop=interop;impl_->webgpu_wake=std::move(wake);
+        return true;
+    } catch(...) {
+        impl_->webgpu.reset();impl_->graphics.reset();impl_->graphics_deliver={};throw;
+    }
+}
+
+webscene::graphics::graphics_service& v8_dom_runtime::initialize_graphics(
+    std::shared_ptr<webscene::graphics::completion_wake> wake,
+    std::function<void(webscene::graphics::completion_record)> deliver)
+{
+    if (std::this_thread::get_id() != impl_->graphics_thread)
+        throw std::logic_error("Graphics initialization requires the runtime owner thread");
+    if (impl_->graphics_shutdown) throw std::logic_error("Graphics runtime is shut down");
+    if (impl_->graphics_transitioning) throw std::logic_error("Graphics document transition is in progress");
+    if (impl_->graphics) throw std::logic_error("Graphics dispatcher already initialized");
+    if (!deliver || !wake) throw std::invalid_argument("Graphics requires completion delivery and a safe wake signal");
+    auto service = std::make_unique<webscene::graphics::graphics_service>(std::move(wake));
+    impl_->graphics_deliver = std::move(deliver);
+    impl_->graphics = std::move(service);
+    return *impl_->graphics;
+}
+#endif
+
+void v8_dom_runtime::update_gpu_presentation_images(
+    const std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images)
+{
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    for(auto& [key,entry]:impl_->gpu_canvases) {
+        auto& canvas=entry.node->mutable_canvas();
+        std::shared_ptr<const webscene_gpu_image_lease_v3> retained;
+        if(entry.presentation_resize_pending && entry.context->is_configured()
+            && !canvas.gpu_image && !canvas.gpu_snapshot) {
+            for(const auto& image:images)
+                if(image->value.describe().canvas==canvas.backing.identity()
+                    && image->value.describe().allocation_generation>=entry.presentation_generation_floor){retained=image;break;}
+        }
+        if(canvas.gpu_presentation_image!=retained) {
+            canvas.gpu_presentation_image=std::move(retained);
+            impl_->document.mark_scene_changed();
+        }
+    }
+#endif
+}
+
+bool v8_dom_runtime::has_open_gpu_output() const
+{
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    if(impl_->gpu_rendering_opportunity)return true;
+    for(const auto& [key,canvas]:impl_->gpu_canvases)
+        if(canvas.context->has_current_texture()
+            || (canvas.bitmap_reset_awaiting_frame && !canvas.node->canvas().gpu_presentation_image && canvas.context->is_configured()
+                && impl_->has_waiting_animation_frame_task()))return true;
+#endif
+    return false;
 }
 
 bool v8_dom_runtime::pump_task()
@@ -4374,16 +4886,34 @@ bool v8_dom_runtime::pump_task()
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(local_context);
-    return impl_->drain_tasks()
-        && impl_->promote_pending_promise_error();
+    const bool result = impl_->drain_tasks() && impl_->promote_pending_promise_error();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    impl_->finish_gpu_rendering_opportunity(result);
+#endif
+    return result;
 }
 
 bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    if(impl_->media_work_ready.load(std::memory_order_acquire))return true;
+#if defined(__APPLE__)
+    if(impl_->media_images_ready&&impl_->media_images_ready->ready.load(std::memory_order_acquire))return true;
+#endif
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    if (impl_->graphics && impl_->graphics->has_ready_work()) return true;
+#if (defined(__APPLE__) || defined(_WIN32))
+    if(impl_->gpu_rendering_opportunity)return true;
+    for(const auto& [key,canvas]:impl_->gpu_canvases)if(canvas.provider->has_completed_retirements())return true;
+#endif
+#endif
     return impl_->has_pending_detached_dom_collection()
         || impl_->websocket_transport.has_pending_events()
         || !impl_->pending_window_messages.empty()
+        || impl_->has_worker_messages()
         || impl_->has_ready_fetch_task()
+        || !impl_->pending_dialog_close_events.empty()
         || !impl_->pending_programmatic_scroll_events.empty()
         || !impl_->pending_frame_hydrations.empty()
         || !impl_->connected_resources.empty()
@@ -4396,6 +4926,9 @@ std::chrono::milliseconds v8_dom_runtime::recommended_idle_wait(
 {
     const auto now = std::chrono::steady_clock::now();
     auto wait = maximum;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    if (impl_->graphics) wait = impl_->graphics->recommended_idle_wait(wait);
+#endif
     for (const auto& timer : impl_->timers) {
         // An unreleased requestAnimationFrame is woken by the host frame input,
         // not by wall-clock polling.
@@ -5397,3 +5930,25 @@ const std::string& v8_dom_runtime::frame_last_error() const noexcept
 }
 
 } // namespace webscene_native
+
+namespace webscene_native {
+void v8_dom_runtime::enable_file_service(bool enabled) { impl_->file_service_enabled.store(enabled); }
+std::unique_ptr<native_file_request> v8_dom_runtime::take_file_request() {
+    std::lock_guard lock(impl_->file_requests_mutex);
+    if(impl_->file_requests.empty()) return {};
+    auto result=std::move(impl_->file_requests.front()); impl_->file_requests.pop_front(); return result;
+}
+void v8_dom_runtime::complete_file_request(native_file_completion& completion) {
+    v8::Locker locker(impl_->isolate);
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handles(impl_->isolate);
+    v8::TryCatch caught(impl_->isolate);
+    impl_->complete_native_file(completion);
+    if(caught.HasCaught()) {
+        impl_->last_error=impl_->describe_reported_exception(caught);
+        std::lock_guard lock(impl_->console_message_mutex);
+        if(impl_->console_messages.size()<1024)
+            impl_->console_messages.push_back("error\nNative file completion: "+impl_->last_error);
+    }
+}
+}

@@ -1,0 +1,42 @@
+{
+  "schema": "webscene-wpt-subset-result-v3",
+  "profile": "webscene-component-1",
+  "profileSha256": "c1c75c0be77be83be12e86ca30b9b7f9e228928ddf4b8889f91f004130f75742",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "engine": "native",
+  "nativeEngineIdentity": "abi=3;sha256=6679af609a792823629201d107a75b68e7eb503393cd047251b8cd0a19d412a2",
+  "chromiumIdentity": null,
+  "startedAt": "2026-09-08T08:04:00.933833+00:00",
+  "duration": "00:00:00.1936510",
+  "selection": "candidate",
+  "summary": {
+    "tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "timedOut": 0,
+    "harnessErrors": 0,
+    "subtests": 1,
+    "subtestsPassed": 1,
+    "subtestsFailed": 0
+  },
+  "results": [
+    {
+      "path": "contracts/css-border-functional-color-width.html",
+      "type": "testharness",
+      "status": "PASS",
+      "duration": "00:00:00.1913083",
+      "message": null,
+      "subtests": [
+        {
+          "name": "Color-mix percentage must not overwrite border width",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        }
+      ],
+      "artifacts": null,
+      "chromiumOracle": null
+    }
+  ]
+}

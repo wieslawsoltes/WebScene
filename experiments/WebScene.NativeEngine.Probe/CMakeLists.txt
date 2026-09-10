@@ -4,6 +4,51 @@ project(WebSceneNativeEngineProbe LANGUAGES C CXX)
 include(CTest)
 include(FetchContent)
 
+if(BUILD_TESTING)
+    add_executable(webscene_graphics_scene_abi_layout_tests tests/graphics_scene_abi_layout_tests.c)
+    target_compile_features(webscene_graphics_scene_abi_layout_tests PRIVATE c_std_11)
+    target_include_directories(webscene_graphics_scene_abi_layout_tests PRIVATE native)
+    add_test(NAME webscene_graphics_scene_abi_layout_tests COMMAND webscene_graphics_scene_abi_layout_tests)
+    add_executable(webscene_graphics_canvas_backing_tests tests/graphics_canvas_backing_tests.cpp)
+    target_compile_features(webscene_graphics_canvas_backing_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_canvas_backing_tests PRIVATE native)
+    add_test(NAME webscene_graphics_canvas_backing_tests COMMAND webscene_graphics_canvas_backing_tests)
+    find_package(Threads REQUIRED)
+    add_executable(webscene_graphics_image_lease_tests tests/graphics_image_lease_tests.cpp)
+    target_compile_features(webscene_graphics_image_lease_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_image_lease_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_image_lease_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_image_lease_tests COMMAND webscene_graphics_image_lease_tests)
+    add_executable(webscene_nt_handle_tests tests/graphics_nt_handle_tests.cpp)
+    target_compile_features(webscene_nt_handle_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_nt_handle_tests PRIVATE native)
+    add_test(NAME webscene_nt_handle_tests COMMAND webscene_nt_handle_tests)
+    add_executable(webscene_graphics_dxgi_contract_tests tests/graphics_dxgi_contract_tests.cpp)
+    target_compile_features(webscene_graphics_dxgi_contract_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_dxgi_contract_tests PRIVATE native)
+    add_test(NAME webscene_graphics_dxgi_contract_tests COMMAND webscene_graphics_dxgi_contract_tests)
+    add_executable(webscene_graphics_resource_tests tests/graphics_resource_tests.cpp)
+    target_compile_features(webscene_graphics_resource_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_resource_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_resource_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_resource_tests COMMAND webscene_graphics_resource_tests)
+    add_executable(webscene_graphics_queue_tests tests/graphics_queue_tests.cpp)
+    target_compile_features(webscene_graphics_queue_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_queue_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_queue_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_queue_tests COMMAND webscene_graphics_queue_tests)
+    add_executable(webscene_graphics_completion_tests tests/graphics_completion_tests.cpp)
+    target_compile_features(webscene_graphics_completion_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_completion_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_completion_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_completion_tests COMMAND webscene_graphics_completion_tests)
+    add_executable(webscene_graphics_wake_tests tests/graphics_wake_tests.cpp)
+    target_compile_features(webscene_graphics_wake_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_wake_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_wake_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_wake_tests COMMAND webscene_graphics_wake_tests)
+endif()
+
 # CMake 3.24 made extracted archive timestamps deterministic through CMP0135.
 # Use the policy when available while remaining compatible with the Ubuntu
 # 22.04 runner's CMake 3.22, which does not recognize
@@ -27,12 +72,104 @@ if(MSVC)
 endif()
 
 add_library(webscene_native_engine SHARED
+    native/graphics/windows_gpu_interop.cpp
     native/webscene_native_engine.cpp
     native/webscene_native_dom.cpp)
 
 target_compile_features(webscene_native_engine PRIVATE cxx_std_20)
 target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_BUILD)
 target_include_directories(webscene_native_engine PUBLIC native)
+
+option(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA "Build native HTML media and Web Audio services" ON)
+if(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    add_subdirectory(native/media)
+    target_link_libraries(webscene_native_engine PRIVATE webscene_media)
+    target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA=1)
+endif()
+
+
+option(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS "Link pinned native GPU dependencies for this platform" OFF)
+if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    set(WEBSCENE_GRAPHICS_COMPONENTS dawn)
+    set(webscene_graphics_libraries dawn::webgpu_dawn)
+    # The native macOS presenter shares Metal textures directly with Skia.
+    # Windows requires ANGLE for the D3D11/EGL composition bridge.
+    if(APPLE)
+        add_compile_definitions(WEBSCENE_GRAPHICS_ENABLE_ANGLE=0)
+    else()
+        list(APPEND WEBSCENE_GRAPHICS_COMPONENTS angle)
+        list(APPEND webscene_graphics_libraries webscene_angle_EGL webscene_angle_GLESv2)
+    endif()
+    include("${CMAKE_CURRENT_LIST_DIR}/../../eng/graphics/GraphicsDependencies.cmake")
+    target_link_libraries(webscene_native_engine PRIVATE
+        ${webscene_graphics_libraries})
+    target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=1)
+    if(WIN32)
+        target_link_libraries(webscene_native_engine PRIVATE d3d12 d3d11 dxgi)
+    endif()
+    if(APPLE)
+        target_link_libraries(webscene_native_engine PRIVATE
+            "-framework CoreFoundation" "-framework IOSurface" "-framework CoreVideo")
+    endif()
+    if(BUILD_TESTING)
+        add_executable(webscene_graphics_dawn_event_tests tests/graphics_dawn_event_tests.cpp)
+        target_compile_features(webscene_graphics_dawn_event_tests PRIVATE cxx_std_20)
+        target_include_directories(webscene_graphics_dawn_event_tests PRIVATE native)
+        target_link_libraries(webscene_graphics_dawn_event_tests PRIVATE ${webscene_graphics_libraries} Threads::Threads)
+        add_test(NAME webscene_graphics_dawn_event_tests COMMAND webscene_graphics_dawn_event_tests)
+        set_tests_properties(webscene_graphics_dawn_event_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+        foreach(library IN LISTS webscene_graphics_libraries)
+            add_custom_command(TARGET webscene_graphics_dawn_event_tests POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "$<TARGET_FILE:${library}>" "$<TARGET_FILE_DIR:webscene_graphics_dawn_event_tests>")
+        endforeach()
+        if(NOT APPLE)
+            add_executable(webscene_graphics_angle_context_tests tests/graphics_angle_context_tests.cpp)
+            target_compile_features(webscene_graphics_angle_context_tests PRIVATE cxx_std_20)
+            target_include_directories(webscene_graphics_angle_context_tests PRIVATE native)
+            target_link_libraries(webscene_graphics_angle_context_tests PRIVATE webscene_angle_EGL webscene_angle_GLESv2 Threads::Threads)
+            add_test(NAME webscene_graphics_angle_context_tests COMMAND webscene_graphics_angle_context_tests 2)
+            add_test(NAME webscene_graphics_angle_es3_context_tests COMMAND webscene_graphics_angle_context_tests 3)
+            set_tests_properties(webscene_graphics_angle_context_tests webscene_graphics_angle_es3_context_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+            add_executable(webscene_graphics_service_tests tests/graphics_service_tests.cpp)
+            target_compile_features(webscene_graphics_service_tests PRIVATE cxx_std_20)
+            target_include_directories(webscene_graphics_service_tests PRIVATE native)
+            target_link_libraries(webscene_graphics_service_tests PRIVATE ${webscene_graphics_libraries} Threads::Threads)
+            add_test(NAME webscene_graphics_service_tests COMMAND webscene_graphics_service_tests)
+            set_tests_properties(webscene_graphics_service_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+            foreach(library ${webscene_graphics_libraries})
+                add_custom_command(TARGET webscene_graphics_service_tests POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "$<TARGET_FILE:${library}>" "$<TARGET_FILE_DIR:webscene_graphics_service_tests>")
+            endforeach()
+            foreach(library EGL GLESv2)
+                add_custom_command(TARGET webscene_graphics_angle_context_tests POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_graphics_angle_context_tests>")
+            endforeach()
+        endif()
+    endif()
+    add_custom_command(TARGET webscene_native_engine POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:dawn::webgpu_dawn>" "$<TARGET_FILE_DIR:webscene_native_engine>")
+    if(WIN32)
+        add_custom_command(TARGET webscene_native_engine POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${WEBSCENE_GRAPHICS_SDK_ROOT}/dawn/bin/d3dcompiler_47.dll" "$<TARGET_FILE_DIR:webscene_native_engine>")
+    endif()
+    if(APPLE)
+        set_target_properties(webscene_native_engine PROPERTIES BUILD_RPATH "@loader_path")
+    elseif(UNIX)
+        set_target_properties(webscene_native_engine PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
+    if(NOT APPLE)
+        foreach(library EGL GLESv2)
+            add_custom_command(TARGET webscene_native_engine POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_native_engine>")
+        endforeach()
+    endif()
+endif()
 
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8 "Link the engine directly to the pinned V8 monolith" OFF)
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
@@ -60,6 +197,32 @@ option(WEBSCENE_NATIVE_ENGINE_BUILD_CSS_PARSER_BENCHMARK
     "Build the V8-free selected CSS syntax parser microbenchmark" OFF)
 option(WEBSCENE_NATIVE_ENGINE_BUILD_DOM_BINDING_BENCHMARK
     "Build the native V8 DOM binding lifecycle benchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT
+    "Experimentally replace positional-selector sibling vectors with direct scans" OFF)
+option(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS
+    "Expose positional-selector sibling traversal benchmark counters" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_CANVAS_SAVE_BENCHMARK
+    "Build the native V8 canvas save/restore benchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_CANVAS_SAVE_SNAPSHOT_CONTROL
+    "Retain the pre-optimization canvas save property rereads" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_CANVAS_PAINT_STATE_BENCHMARK
+    "Build the native V8 canvas paint-state string benchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT
+    "Experimentally cache V8 canvas paint strings between unchanged draws" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_MEDIA_REFRESH_BENCHMARK
+    "Build the native V8 media-query refresh benchmark" OFF)
+option(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT
+    "Experimentally skip selector-index rebuilds during media-only refresh" OFF)
+option(WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT
+    "Experimentally use non-owning class keys for CSS index lookups" OFF)
+option(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT
+    "Experimentally parse intrinsic SVG viewBox values without a stream" OFF)
+option(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT
+    "Experimentally replace inline-box std::function recursion with a generic lambda" OFF)
+option(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL
+    "Retain the pre-optimization intrinsic-size pointer/axis hash table" OFF)
+option(WEBSCENE_NATIVE_ENGINE_BUILD_LAYOUT_SCRATCH_BENCHMARK
+    "Build the V8-free flex/layout scratch-allocation benchmark" OFF)
 set(WEBSCENE_NATIVE_ENGINE_HTML_PARSER "html5ever" CACHE STRING
     "Native HTML parser implementation: legacy or html5ever")
 set_property(CACHE WEBSCENE_NATIVE_ENGINE_HTML_PARSER PROPERTY STRINGS legacy html5ever)
@@ -81,6 +244,26 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
     message(FATAL_ERROR
         "WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR requires "
         "WEBSCENE_NATIVE_ENGINE_ENABLE_V8")
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT)
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT=1)
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT)
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT=1)
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT)
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT=1)
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT)
+    target_compile_definitions(webscene_native_engine PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT=1)
 endif()
 
 if(WEBSCENE_NATIVE_ENGINE_DOM_BINDINGS STREQUAL "generated")
@@ -287,6 +470,30 @@ set(WEBSCENE_V8_ICU_DATA
     "${WEBSCENE_V8_OUTPUT_ROOT}/icudtl.dat")
 
 if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    if(WEBSCENE_NATIVE_ENGINE_CANVAS_SAVE_SNAPSHOT_CONTROL)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_CANVAS_SAVE_SNAPSHOT_CONTROL=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_ROOT_ONLY_EXPERIMENT=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
+        target_compile_definitions(webscene_native_engine PRIVATE
+            WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+        target_compile_definitions(webscene_native_engine PUBLIC
+            WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS=1)
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_MEDIA_REFRESH_BENCHMARK)
+        target_compile_definitions(webscene_native_engine PUBLIC
+            WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS=1)
+    endif()
     if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
         target_compile_definitions(webscene_native_engine PRIVATE
             WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR=1)
@@ -302,6 +509,9 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
     endif()
     if(NOT EXISTS "${WEBSCENE_V8_ICU_DATA}")
         message(FATAL_ERROR "WebScene native engine: ICU data not found at ${WEBSCENE_V8_ICU_DATA}")
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
+        include("${CMAKE_CURRENT_LIST_DIR}/cmake/VerifyV8Inspector.cmake")
     endif()
 
     # WebSocket I/O is a native implementation detail. IXWebSocket supplies a
@@ -497,6 +707,12 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
             tests/native_v8_runtime_tests.cpp
             native/webscene_native_dom.cpp)
         target_compile_features(webscene_native_engine_tests PRIVATE cxx_std_20)
+        if(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
+            # The white-box fixture compiles native DOM sources directly, so
+            # keep its dom_node layout identical to the linked engine.
+            target_compile_definitions(webscene_native_engine_tests PRIVATE
+                WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL=1)
+        endif()
         if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
             target_compile_definitions(webscene_native_engine_tests PRIVATE
                 WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR=1)
@@ -516,8 +732,317 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
         target_link_libraries(webscene_dom_binding_benchmark PRIVATE
             webscene_native_engine)
     endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_CANVAS_SAVE_BENCHMARK)
+        add_executable(webscene_canvas_save_benchmark
+            benchmarks/canvas_save_benchmark.cpp)
+        target_compile_features(webscene_canvas_save_benchmark PRIVATE cxx_std_20)
+        target_link_libraries(webscene_canvas_save_benchmark PRIVATE
+            webscene_native_engine)
+        if(BUILD_TESTING)
+            add_test(
+                NAME webscene_canvas_save_benchmark_smoke
+                COMMAND webscene_canvas_save_benchmark 2 1 0)
+            set_tests_properties(webscene_canvas_save_benchmark_smoke PROPERTIES
+                PASS_REGULAR_EXPRESSION "\"propertyReadsPerSave\"")
+        endif()
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_CANVAS_PAINT_STATE_BENCHMARK)
+        target_compile_definitions(webscene_native_engine PUBLIC
+            WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS=1)
+        add_executable(webscene_canvas_paint_state_benchmark
+            benchmarks/canvas_paint_state_benchmark.cpp)
+        target_compile_features(webscene_canvas_paint_state_benchmark PRIVATE cxx_std_20)
+        target_link_libraries(webscene_canvas_paint_state_benchmark PRIVATE
+            webscene_native_engine)
+        if(BUILD_TESTING)
+            add_test(
+                NAME webscene_canvas_paint_state_benchmark_smoke
+                COMMAND webscene_canvas_paint_state_benchmark 2 1 0)
+            set_tests_properties(webscene_canvas_paint_state_benchmark_smoke PROPERTIES
+                PASS_REGULAR_EXPRESSION "stringPropertyProbes")
+        endif()
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_BUILD_MEDIA_REFRESH_BENCHMARK)
+        add_executable(webscene_media_refresh_benchmark
+            benchmarks/media_refresh_benchmark.cpp)
+        target_compile_features(webscene_media_refresh_benchmark PRIVATE cxx_std_20)
+        target_link_libraries(webscene_media_refresh_benchmark PRIVATE
+            webscene_native_engine)
+        add_custom_command(TARGET webscene_media_refresh_benchmark POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${WEBSCENE_V8_ICU_DATA}"
+                "$<TARGET_FILE_DIR:webscene_media_refresh_benchmark>/icudtl.dat"
+            VERBATIM)
+        if(BUILD_TESTING)
+            add_test(
+                NAME webscene_media_refresh_benchmark_smoke
+                COMMAND webscene_media_refresh_benchmark 2 1 0 8)
+            set_tests_properties(webscene_media_refresh_benchmark_smoke PROPERTIES
+                PASS_REGULAR_EXPRESSION "\"rootVariableRefreshes\":2")
+        endif()
+    endif()
 else()
     message(STATUS "WebScene native engine: V8 intentionally disabled")
+endif()
+
+if(WEBSCENE_NATIVE_ENGINE_BUILD_LAYOUT_SCRATCH_BENCHMARK)
+    foreach(layout_benchmark_target IN ITEMS
+        webscene_layout_scratch_control_benchmark
+        webscene_retained_paint_order_control_benchmark
+        webscene_layout_callback_control_benchmark
+        webscene_inline_layout_scratch_control_benchmark
+        webscene_text_measurement_lookup_control_benchmark
+        webscene_text_transform_copy_control_benchmark
+        webscene_font_family_view_control_benchmark
+        webscene_scene_paint_order_control_benchmark
+        webscene_scene_paint_order_benchmark
+        webscene_intrinsic_size_direct_cache_control_benchmark
+        webscene_intrinsic_size_direct_cache_benchmark
+        webscene_intrinsic_row_collector_control_benchmark
+        webscene_intrinsic_row_collector_benchmark
+        webscene_intrinsic_view_box_control_benchmark
+        webscene_intrinsic_view_box_benchmark
+        webscene_intrinsic_size_branch_benchmark
+        webscene_intrinsic_text_fast_path_control_benchmark
+        webscene_intrinsic_text_fast_path_benchmark
+        webscene_intrinsic_item_copy_control_benchmark
+        webscene_intrinsic_item_copy_benchmark
+        webscene_inline_box_bounds_control_benchmark
+        webscene_inline_box_bounds_benchmark
+        webscene_layout_scratch_benchmark)
+        add_executable(${layout_benchmark_target}
+            benchmarks/layout_scratch_benchmark.cpp
+            native/webscene_native_dom.cpp)
+        target_compile_features(${layout_benchmark_target} PRIVATE cxx_std_20)
+        target_include_directories(${layout_benchmark_target} PRIVATE native)
+    endforeach()
+    target_compile_definitions(webscene_layout_scratch_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SCRATCH_CONTROL=1)
+    target_compile_definitions(webscene_retained_paint_order_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_RETAINED_PAINT_ORDER_CONTROL=1)
+    target_compile_definitions(webscene_layout_callback_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_LAYOUT_CALLBACK_CONTROL=1)
+    target_compile_definitions(webscene_inline_layout_scratch_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INLINE_LAYOUT_SCRATCH_CONTROL=1)
+    target_compile_definitions(webscene_text_measurement_lookup_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_TEXT_MEASUREMENT_LOOKUP_CONTROL=1)
+    target_compile_definitions(webscene_text_transform_copy_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_TEXT_TRANSFORM_COPY_CONTROL=1)
+    target_compile_definitions(webscene_font_family_view_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_FONT_FAMILY_VIEW_CONTROL=1)
+    target_compile_definitions(webscene_scene_paint_order_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_CONTROL=1)
+    target_compile_definitions(webscene_scene_paint_order_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_SCENE_PAINT_ORDER_BENCHMARK=1)
+    target_compile_definitions(
+        webscene_intrinsic_size_direct_cache_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_size_direct_cache_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK=1)
+    target_compile_definitions(webscene_intrinsic_row_collector_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ROW_COLLECTOR_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ROW_COLLECTOR_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_row_collector_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ROW_COLLECTOR_BENCHMARK=1)
+    target_compile_definitions(webscene_intrinsic_view_box_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_STREAM_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_view_box_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_EXPERIMENT=1)
+    target_compile_definitions(webscene_intrinsic_size_branch_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1)
+    target_compile_definitions(webscene_intrinsic_text_fast_path_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_TEXT_NODE_FAST_PATH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_TEXT_NODE_FAST_PATH_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_text_fast_path_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_TEXT_NODE_FAST_PATH_BENCHMARK=1)
+    target_compile_definitions(webscene_intrinsic_item_copy_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ITEM_COPY_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ITEM_COPY_CONTROL=1)
+    target_compile_definitions(webscene_intrinsic_item_copy_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INTRINSIC_ITEM_COPY_BENCHMARK=1)
+    target_compile_definitions(webscene_inline_box_bounds_control_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_CALLBACK_CONTROL=1)
+    target_compile_definitions(webscene_inline_box_bounds_benchmark PRIVATE
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_BENCHMARK=1
+        WEBSCENE_NATIVE_ENGINE_INLINE_BOX_BOUNDS_EXPERIMENT=1)
+    if(BUILD_TESTING)
+        add_test(
+            NAME webscene_layout_scratch_benchmark_smoke
+            COMMAND webscene_layout_scratch_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_layout_scratch_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"allocationCountPerLayout\"")
+        add_test(
+            NAME webscene_layout_scratch_control_benchmark_smoke
+            COMMAND webscene_layout_scratch_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_layout_scratch_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-control\"")
+        add_test(
+            NAME webscene_retained_paint_order_control_benchmark_smoke
+            COMMAND webscene_retained_paint_order_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_retained_paint_order_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-cumulative-control\"")
+        add_test(
+            NAME webscene_layout_callback_control_benchmark_smoke
+            COMMAND webscene_layout_callback_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_layout_callback_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-paint-order-control\"")
+        add_test(
+            NAME webscene_inline_layout_scratch_control_benchmark_smoke
+            COMMAND webscene_inline_layout_scratch_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_inline_layout_scratch_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-layout-callback-control\"")
+        add_test(
+            NAME webscene_text_measurement_lookup_control_benchmark_smoke
+            COMMAND webscene_text_measurement_lookup_control_benchmark
+                --fixture inline-text-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_text_measurement_lookup_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-inline-layout-scratch-control\"")
+        add_test(
+            NAME webscene_text_transform_copy_control_benchmark_smoke
+            COMMAND webscene_text_transform_copy_control_benchmark
+                --fixture inline-text-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_text_transform_copy_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-text-measurement-lookup-control\"")
+        add_test(
+            NAME webscene_font_family_view_control_benchmark_smoke
+            COMMAND webscene_font_family_view_control_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_font_family_view_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"accepted-text-transform-none-copy-control\"")
+        add_test(
+            NAME webscene_scene_paint_order_control_benchmark_smoke
+            COMMAND webscene_scene_paint_order_control_benchmark
+                --fixture inline-font-family-v1 --phase scene
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_scene_paint_order_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"scene-paint-order-vector-control\"")
+        add_test(
+            NAME webscene_scene_paint_order_benchmark_smoke
+            COMMAND webscene_scene_paint_order_benchmark
+                --fixture inline-font-family-v1 --phase scene
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_scene_paint_order_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"scene-paint-order-inline-candidate\"")
+        add_test(
+            NAME webscene_intrinsic_size_direct_cache_control_benchmark_smoke
+            COMMAND webscene_intrinsic_size_direct_cache_control_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_size_direct_cache_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-size-hash-control\"")
+        add_test(
+            NAME webscene_intrinsic_size_direct_cache_benchmark_smoke
+            COMMAND webscene_intrinsic_size_direct_cache_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_size_direct_cache_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"intrinsicDirectCacheHitsPerLayout\"")
+        add_test(
+            NAME webscene_intrinsic_row_collector_control_benchmark_smoke
+            COMMAND webscene_intrinsic_row_collector_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_row_collector_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-row-std-function-control\"")
+        add_test(
+            NAME webscene_intrinsic_row_collector_benchmark_smoke
+            COMMAND webscene_intrinsic_row_collector_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_row_collector_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-row-recursive-lambda-candidate\"")
+        add_test(
+            NAME webscene_intrinsic_view_box_control_benchmark_smoke
+            COMMAND webscene_intrinsic_view_box_control_benchmark
+                --fixture intrinsic-svg-view-box-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_view_box_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-view-box-stream-control\"")
+        add_test(
+            NAME webscene_intrinsic_view_box_benchmark_smoke
+            COMMAND webscene_intrinsic_view_box_benchmark
+                --fixture intrinsic-svg-view-box-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_view_box_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-view-box-direct-parser-candidate\"")
+        add_test(
+            NAME webscene_intrinsic_size_branch_benchmark_smoke
+            COMMAND webscene_intrinsic_size_branch_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_size_branch_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"intrinsicSizeBranchesPerLayout\"")
+        add_test(
+            NAME webscene_intrinsic_text_fast_path_control_benchmark_smoke
+            COMMAND webscene_intrinsic_text_fast_path_control_benchmark
+                --fixture inline-text-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_text_fast_path_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-text-legacy-control\"")
+        add_test(
+            NAME webscene_intrinsic_text_fast_path_benchmark_smoke
+            COMMAND webscene_intrinsic_text_fast_path_benchmark
+                --fixture inline-text-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_text_fast_path_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-text-fast-path-candidate\"")
+        add_test(
+            NAME webscene_intrinsic_item_copy_control_benchmark_smoke
+            COMMAND webscene_intrinsic_item_copy_control_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_intrinsic_item_copy_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-item-copy-control\"")
+        add_test(
+            NAME webscene_intrinsic_item_copy_benchmark_smoke
+            COMMAND webscene_intrinsic_item_copy_benchmark
+                --fixture intrinsic-table-select-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_intrinsic_item_copy_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"intrinsic-item-direct-view-candidate\"")
+        add_test(
+            NAME webscene_inline_box_bounds_control_benchmark_smoke
+            COMMAND webscene_inline_box_bounds_control_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(
+            webscene_inline_box_bounds_control_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"inline-box-std-function-control\"")
+        add_test(
+            NAME webscene_inline_box_bounds_benchmark_smoke
+            COMMAND webscene_inline_box_bounds_benchmark
+                --fixture inline-font-family-v1
+                --warmups 1 --samples 2 --iterations 2)
+        set_tests_properties(webscene_inline_box_bounds_benchmark_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "\"variant\":\"inline-box-recursive-lambda-candidate\"")
+    endif()
 endif()
 
 if(MSVC)
@@ -530,7 +1055,7 @@ if(MSVC)
     # conformance switch is enabled. V8 checks __cplusplus directly when
     # enforcing its C++20 embedder requirement.
     target_compile_options(webscene_native_engine PRIVATE
-        /W4 /permissive- /GR- /wd4996 /std:c++20 /Zc:__cplusplus)
+        /W4 /permissive- /GR- /wd4996 /std:c++20 /Zc:__cplusplus /bigobj)
     target_compile_definitions(webscene_native_engine PRIVATE NOMINMAX)
     if(TARGET webscene_native_engine_tests)
         set_property(TARGET webscene_native_engine_tests PROPERTY
@@ -608,15 +1133,64 @@ if(WEBSCENE_NATIVE_ENGINE_DENSE_LINK)
             -fvisibility=hidden
             -fvisibility-inlines-hidden)
         if(APPLE)
+            set_property(TARGET webscene_native_engine APPEND PROPERTY LINK_DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_native_engine.exports")
             target_link_options(webscene_native_engine PRIVATE
                 "LINKER:-dead_strip"
                 "LINKER:-x"
                 "LINKER:-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_native_engine.exports")
         elseif(UNIX)
+            set_property(TARGET webscene_native_engine APPEND PROPERTY LINK_DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_native_engine.map")
             target_link_options(webscene_native_engine PRIVATE
                 "LINKER:--gc-sections"
                 "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/native/webscene_native_engine.map"
                 "LINKER:-x")
         endif()
     endif()
+endif()
+
+# White-box runtime coverage without adding test hooks to the production C ABI.
+# Compile the same source/configuration graph into a separate executable.
+if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS AND WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    get_target_property(graphics_runtime_sources webscene_native_engine SOURCES)
+    add_executable(webscene_graphics_v8_runtime_tests
+        tests/graphics_v8_runtime_tests.cpp ${graphics_runtime_sources})
+    target_compile_features(webscene_graphics_v8_runtime_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,INCLUDE_DIRECTORIES>")
+    target_compile_definitions(webscene_graphics_v8_runtime_tests PRIVATE
+        WEBSCENE_GRAPHICS_SCENE_TESTS=1
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_DEFINITIONS>")
+    target_compile_options(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_OPTIONS>")
+    target_link_libraries(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,LINK_LIBRARIES>" Threads::Threads)
+    # Preserve toolchain/LTO options, excluding the production ABI export lists.
+    target_link_options(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<FILTER:$<TARGET_PROPERTY:webscene_native_engine,LINK_OPTIONS>,EXCLUDE,exported_symbols_list|version-script>")
+    get_target_property(graphics_runtime_ipo webscene_native_engine INTERPROCEDURAL_OPTIMIZATION)
+    if(graphics_runtime_ipo)
+        set_property(TARGET webscene_graphics_v8_runtime_tests PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+    add_dependencies(webscene_graphics_v8_runtime_tests webscene_native_engine)
+    add_test(NAME webscene_graphics_v8_runtime_tests COMMAND webscene_graphics_v8_runtime_tests)
+    set_tests_properties(webscene_graphics_v8_runtime_tests PROPERTIES TIMEOUT 30 LABELS "graphics;runtime;hardware")
+endif()
+
+if(BUILD_TESTING AND APPLE AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    enable_language(OBJCXX)
+    add_executable(webscene_graphics_metal_event_handoff_tests tests/graphics_metal_event_handoff.mm)
+    target_compile_features(webscene_graphics_metal_event_handoff_tests PRIVATE cxx_std_20)
+    target_compile_options(webscene_graphics_metal_event_handoff_tests PRIVATE -fobjc-arc)
+    target_link_libraries(webscene_graphics_metal_event_handoff_tests PRIVATE dawn::webgpu_dawn "-framework Foundation" "-framework Metal")
+    add_test(NAME webscene_graphics_metal_event_handoff_tests COMMAND webscene_graphics_metal_event_handoff_tests)
+    set_tests_properties(webscene_graphics_metal_event_handoff_tests PROPERTIES TIMEOUT 15 LABELS "graphics;hardware;metal")
+    # Private managed-interop fixture, deliberately excluded from install/package targets.
+    add_library(webscene_graphics_iosurface_fixture SHARED EXCLUDE_FROM_ALL tests/graphics_iosurface_fixture.cpp)
+    target_compile_features(webscene_graphics_iosurface_fixture PRIVATE cxx_std_20)
+    target_compile_options(webscene_graphics_iosurface_fixture PRIVATE -fno-rtti)
+    target_include_directories(webscene_graphics_iosurface_fixture PRIVATE native)
+    target_link_libraries(webscene_graphics_iosurface_fixture PRIVATE dawn::webgpu_dawn
+        "-framework CoreFoundation" "-framework IOSurface" "-framework CoreVideo" "-framework OpenGL")
 endif()

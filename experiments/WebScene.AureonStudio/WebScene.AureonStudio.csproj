@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>AureonStudio</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup><PackageReference Include="Avalonia.Desktop" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../../src/WebScene.Backend.Avalonia/WebScene.Backend.Avalonia.csproj" /></ItemGroup>
+</Project>

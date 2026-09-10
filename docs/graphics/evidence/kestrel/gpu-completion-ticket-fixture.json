@@ -1,0 +1,12 @@
+{
+  "route": "Dawn-IOSurface-CGL-Ganesh",
+  "renderedFrames": 32,
+  "imports": 2,
+  "gpuRetirementCompleted": true,
+  "explicitTransportCopies": 0,
+  "diagnosticReadbacks": 8,
+  "physicalPresentationVerified": false,
+  "detachedBeforeRetirement": false,
+  "scope": "Submission snapshot retention and existing Ganesh fixture; scene publisher integration remains pending",
+  "nativeRuntimeRegression": "webscene_graphics_v8_runtime_tests passed (0.58 seconds)"
+}

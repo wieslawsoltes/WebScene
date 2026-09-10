@@ -1,0 +1,13 @@
+{
+  "application": "Unmodified Kestrel-CAD/Kestrel-CAD.html",
+  "documentSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "host": "macOS NativeWebSceneView",
+  "navigatorGpuExposed": true,
+  "applicationReady": true,
+  "renderer": "Canvas 2D · Compatibility",
+  "webGpuStartupPassed": false,
+  "exitCode": 1,
+  "fallbackReason": "d.pushErrorScope is not a function",
+  "interactionQualified": false,
+  "resizeQualified": false
+}

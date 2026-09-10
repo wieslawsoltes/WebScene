@@ -26,6 +26,7 @@
 
     void ensure_layout(const dom_node* reusable_client_geometry_subject = nullptr)
     {
+        webscene_frame_trace::scope trace(frame_trace, "layout-start", "layout-end", current_input_sequence);
         flush_pending_style_recascades();
         if (!document.dirty()) return;
         if (reusable_client_geometry_subject != nullptr
@@ -644,6 +645,18 @@
         return const_cast<dom_node*>(active_css_cascade_root);
     }
 
+    v8::Local<v8::Context> context_for_node(const dom_node& node)
+    {
+        for (auto* ancestor = node.parent; ancestor != nullptr; ancestor = ancestor->parent) {
+            if (ancestor->tag != "iframe") continue;
+            const auto owner = actual_frame_contexts.find(ancestor->id);
+            if (owner != actual_frame_contexts.end() && !owner->second.IsEmpty()) {
+                return owner->second.Get(isolate);
+            }
+        }
+        return context.Get(isolate);
+    }
+
     dom_node& active_root()
     {
         auto local_context = isolate->GetCurrentContext();
@@ -763,6 +776,11 @@
             pending_window_messages,
             [&](const auto& task) {
                 return task.target_context.Get(isolate) == local_context;
+            });
+        std::erase_if(
+            pending_dialog_close_events,
+            [&](const auto& task) {
+                return task.context.Get(isolate) == local_context;
             });
         std::erase_if(
             pending_programmatic_scroll_events,
@@ -1040,7 +1058,7 @@
         }
         if (try_catch.HasCaught()) {
             last_error = "Custom element subtree reaction failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 
@@ -1081,7 +1099,7 @@
             arguments));
         if (try_catch.HasCaught()) {
             last_error = "Custom element attribute reaction failed: "
-                + describe_exception(try_catch, local_context);
+                + describe_reported_exception(try_catch, local_context);
         }
     }
 
@@ -1244,7 +1262,10 @@
             std::erase_if(observer->nodes, [&](const auto* node) {
                 return nodes.contains(const_cast<dom_node*>(node));
             });
-            for (const auto id : node_ids) observer->delivered_sizes.erase(id);
+            for (const auto id : node_ids) {
+                observer->delivered_sizes.erase(id);
+                observer->observed_boxes.erase(id);
+            }
         }
         std::erase_if(provisional_frame_bodies, [&](const auto& entry) {
             return node_ids.contains(entry.first) || nodes.contains(entry.second);
@@ -1287,6 +1308,7 @@
         if (nodes.contains(active_element)) active_element = nullptr;
         if (nodes.contains(pointer_capture_target)) pointer_capture_target = nullptr;
         if (nodes.contains(pointer_down_target)) pointer_down_target = nullptr;
+        if (nodes.contains(scrollbar_drag_target)) scrollbar_drag_target = nullptr;
         if (nodes.contains(hover_target)) hover_target = nullptr;
         if (nodes.contains(current_related_target)) current_related_target = nullptr;
         released_detached_dom_nodes += document.erase_detached_subtrees(roots);
@@ -1443,6 +1465,8 @@
             ? (node.namespace_uri() == dom_node::html_namespace_uri
                 ? (node.tag == "slot"
                     ? html_slot_element_template.Get(isolate)
+                    : node.tag == "dialog"
+                        ? html_dialog_element_template.Get(isolate)
                     : node.tag == "form"
                         ? html_form_element_template.Get(isolate)
                     : node.tag == "select"
@@ -1451,8 +1475,11 @@
                         ? html_script_element_template.Get(isolate)
                     : node.tag == "style"
                         ? html_style_element_template.Get(isolate)
+                    : node.tag == "td" || node.tag == "th"
+                        ? html_table_cell_element_template.Get(isolate)
                     : html_element_template.Get(isolate))
-                : element_template.Get(isolate))
+                : node.namespace_uri() == "http://www.w3.org/2000/svg"
+                    ? svg_element_template.Get(isolate) : element_template.Get(isolate))
             : node.kind == dom_node_kind::document_fragment
                 ? (document.is_shadow_root(node)
                     ? shadow_root_template.Get(isolate)
@@ -1503,6 +1530,9 @@
                 js_string(isolate, "form"),
                 get_form_owner).Check();
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        attach_media_prototype(local_context,node,object);
+#endif
         auto& wrapper = node_wrappers[key];
         wrapper.Reset(isolate, object);
         if (!is_connected(node)) wrapper.SetWeak();
@@ -1616,6 +1646,7 @@
             if (detached_document_roots.contains(ancestor->id)) return;
         }
         if (node.tag == "script") {
+            bool module_script = false;
             const auto authored_type = node.attributes.find("type");
             if (authored_type != node.attributes.end()) {
                 auto type = lower_html_name(authored_type->second);
@@ -1624,6 +1655,7 @@
                 type = first == std::string::npos
                     ? std::string{}
                     : type.substr(first, last - first + 1U);
+                module_script = type == "module";
                 const auto executable = type.empty() || type == "module"
                     || type == "text/javascript"
                     || type == "application/javascript"
@@ -1667,12 +1699,11 @@
                             wrapper).Check();
                     }
                     std::string error;
-                    const auto executed = execute_in_context(
-                        resource_context,
-                        source,
-                        name,
-                        error,
-                        false);
+                    if (module_script && !document_value.IsEmpty() && document_value->IsObject())
+                        document_value.As<v8::Object>()->Set(resource_context,js_string(isolate,"currentScript"),v8::Null(isolate)).Check();
+                    const auto executed = module_script
+                        ? execute_module(resource_context, source, name, error)
+                        : execute_in_context(resource_context, source, name, error, false);
                     if (!document_value.IsEmpty() && document_value->IsObject()) {
                         document_value.As<v8::Object>()->Set(
                             resource_context,
@@ -1758,6 +1789,23 @@
         }
     }
 
+    bool install_embed_fallback(dom_node& node)
+    {
+        if (!webscene::embed_fallback::enabled() || node.attributes.contains("frame-html")
+            || node.attributes.contains("srcdoc")) return false;
+        const auto source = node.attributes.find("src");
+        if (source == node.attributes.end()) return false;
+        const auto resolved = resolve_resource_url(source->second, current_base_address());
+        const auto title = node.attributes.find("title");
+        auto html = webscene::embed_fallback::document(resolved,
+            title == node.attributes.end() ? std::string_view{} : title->second);
+        if (!html) return false;
+        node.attributes["object-html"] = std::move(*html);
+        node.attributes["data-webscene-embed-fallback"] = "youtube";
+        node.attributes["data-webscene-remote-result"] = "loaded";
+        return true;
+    }
+
     void enqueue_iframe_hydration_if_needed(dom_node& node)
     {
         if (!is_connected(node)) return;
@@ -1769,8 +1817,15 @@
             }
             return;
         }
+        // Intercept before either document prefetch or script preparation. A
+        // fallback is an engine-owned document; no player resources are loaded.
+        const auto fallback = install_embed_fallback(node);
         const auto source = node.attributes.find("src");
-        if (source != node.attributes.end()) {
+        if (!fallback && source != node.attributes.end()) {
+            if (node.attributes.erase("data-webscene-embed-fallback") != 0) {
+                node.attributes.erase("object-html");
+                node.attributes.erase("data-webscene-remote-result");
+            }
             const auto object = object_urls.find(source->second);
             if (object != object_urls.end()) {
                 node.attributes["object-html"] = object->second;
@@ -3241,6 +3296,8 @@
             ? std::optional<std::string>(state->owner->attributes.at(state->name))
             : std::nullopt;
         state->owner->attributes[state->name] = text;
+        if (state->namespace_uri.empty() && (state->name == "width" || state->name == "height"))
+            reset_canvas_backing_store(*self, *state->owner);
         if (state->name == "id") state->owner->id_attribute = text;
         else if (state->name == "class") state->owner->class_name = text;
         if (state->name == "class") {
@@ -3311,6 +3368,8 @@
             ? std::optional<std::string>(owner->attributes.at(state->name))
             : std::nullopt;
         owner->attributes[state->name] = value;
+        if (state->namespace_uri.empty() && (state->name == "width" || state->name == "height"))
+            reset_canvas_backing_store(*self, *owner);
         if (state->name == "id") owner->id_attribute = value;
         else if (state->name == "class") owner->class_name = value;
         if (state->name == "class") {
@@ -3348,6 +3407,8 @@
         }
         const auto old_value = owner->attributes.at(state->name);
         owner->attributes.erase(state->name);
+        if (state->namespace_uri.empty() && (state->name == "width" || state->name == "height"))
+            reset_canvas_backing_store(*self, *owner);
         if (state->name == "id") owner->id_attribute.clear();
         else if (state->name == "class") owner->class_name.clear();
         state->value = old_value;
@@ -4171,6 +4232,47 @@
     static void document_has_focus(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         info.GetReturnValue().Set(v8::True(info.GetIsolate()));
+    }
+
+    static void document_exec_command(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* isolate = info.GetIsolate();
+        auto* self = current(isolate);
+        bool document_receiver = self != nullptr && self->is_document_object(info.This());
+        if (self != nullptr && !document_receiver) {
+            for (const auto& [_, value] : self->detached_documents) {
+                if (!value.IsEmpty() && info.This()->StrictEquals(value.Get(isolate))) {
+                    document_receiver = true;
+                    break;
+                }
+            }
+        }
+        if (!document_receiver || info.Length() == 0) {
+            isolate->ThrowException(v8::Exception::TypeError(js_string(isolate,
+                "Document.execCommand requires a Document receiver and a command argument")));
+            return;
+        }
+        const auto context = isolate->GetCurrentContext();
+        v8::Local<v8::String> command;
+        if (!info[0]->ToString(context).ToLocal(&command)) return;
+        if (info.Length() > 2 && !info[2]->IsUndefined()) {
+            v8::Local<v8::String> value;
+            if (!info[2]->ToString(context).ToLocal(&value)) return;
+        }
+        auto* root = unwrap_node(info.This());
+        if (root != nullptr && (root->xml_mode || root->tag == "#document-root")) {
+            throw_dom_exception(info, "execCommand is only supported on HTML documents",
+                "InvalidStateError");
+            return;
+        }
+        // This component runtime has no legacy editing command executor. The
+        // command algorithm returns false for unsupported/disabled commands;
+        // never claim a successful copy or dispatch an event without executing
+        // it. Clipboard helpers can then use the implemented async clipboard API.
+        self->record_feature("web-api", "Document.execCommand", "unsupported",
+            "legacy editing commands return false; use navigator.clipboard for copying",
+            "web-api-binding");
+        info.GetReturnValue().Set(false);
     }
 
     static void return_empty_string(const v8::FunctionCallbackInfo<v8::Value>& info)

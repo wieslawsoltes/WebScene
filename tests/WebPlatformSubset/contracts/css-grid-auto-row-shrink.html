@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8">
+<title>Auto grid rows respect item minimums when resized</title>
+<link rel="help" href="https://drafts.csswg.org/css-grid-2/#algo-track-sizing">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>
+.grid { display:grid;grid-template-columns:100px 100px;height:160px;width:200px; }
+.scroll { overflow:auto; } .zero { min-height:0; } .content { height:400px; }
+</style>
+<div class="grid" id="scroll-grid"><div class="scroll" id="scroll-item"><div class="content"></div></div><div></div></div>
+<div class="grid" id="zero-grid"><div class="zero" id="zero-item"><div class="content"></div></div><div></div></div>
+<div class="grid" id="visible-grid"><div id="visible-item"><div class="content"></div></div><div></div></div>
+<script>
+test(()=>{
+ const grid=document.getElementById('scroll-grid'),item=document.getElementById('scroll-item');
+ for(const height of [160,500,120,200]) { grid.style.height=height+'px';assert_equals(item.getBoundingClientRect().height,height,'scroll row at '+height); }
+},'Scrollable auto row grows and shrinks with definite grid height');
+test(()=>{
+ const grid=document.getElementById('zero-grid'),item=document.getElementById('zero-item');
+ for(const height of [160,500,120,200]) { grid.style.height=height+'px';assert_equals(item.getBoundingClientRect().height,height,'zero minimum row at '+height); }
+ item.style.minHeight='250px';assert_equals(item.getBoundingClientRect().height,250,'authored minimum is retained');
+},'Explicit zero minimum permits row shrinking without losing authored minimum');
+test(()=>{assert_equals(document.getElementById('visible-item').getBoundingClientRect().height,400);},'Visible overflow retains content-based automatic minimum');
+</script>

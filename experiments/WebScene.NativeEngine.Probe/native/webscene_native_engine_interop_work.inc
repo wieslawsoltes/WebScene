@@ -170,8 +170,11 @@
         const auto previous = host_animation_frame_requested_.exchange(
             demand,
             std::memory_order_release);
+        const auto pointer_frame_pending =
+            frame_paced_pointer_pending_.load(std::memory_order_acquire);
         if (previous == 0U
             && demand != 0U
+            && !pointer_frame_pending
             && animation_frame_requested_callback_ != nullptr) {
             animation_frame_requested_callback_(
                 animation_frame_requested_user_data_);
@@ -180,15 +183,7 @@
 
     void signal_worker() noexcept
     {
-        {
-            // This is an auto-reset event, not an unlatched condition-variable
-            // edge. Mutating the predicate under the wait mutex closes the
-            // producer's check-to-sleep race while still coalescing any number
-            // of signals into one immediate worker wake.
-            std::lock_guard lock(wake_mutex_);
-            wake_pending_ = true;
-        }
-        wake_.notify_one();
+        worker_wake_.signal();
     }
 
     bool take_latest_resize(

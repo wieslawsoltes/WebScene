@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HSL color beneath generated pseudo-element gradient layers</title>
+<link rel="match" href="css-hsl-pseudo-gradient-color-plane-ref.html">
+<meta name="assert" content="An HSL background and two generated pseudo-element linear gradients compose into a saturation/value color plane.">
+<style>
+  html, body { margin: 0; background: #202124; }
+  .plane {
+    position: absolute;
+    left: 40px;
+    top: 40px;
+    width: 200px;
+    height: 184px;
+    overflow: hidden;
+    background-color: hsl(0, 100%, 50%);
+  }
+  .plane::before,
+  .plane::after {
+    content: "";
+    display: block;
+    position: absolute;
+    inset: 0;
+  }
+  .plane::before { background-image: linear-gradient(90deg, #fff, #fff0); }
+  .plane::after { background-image: linear-gradient(0deg, #000, #0000); }
+</style>
+<div class="plane"></div>

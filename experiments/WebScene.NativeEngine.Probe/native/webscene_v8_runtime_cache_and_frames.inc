@@ -1059,7 +1059,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, local_context);
 #endif
-            error = describe_exception(try_catch, local_context);
+            error = describe_reported_exception(try_catch, local_context);
             return false;
         }
         style_recascade_batch_scope style_batch(*this);
@@ -1075,7 +1075,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             report_inspector_exception(try_catch, local_context);
 #endif
-            error = describe_exception(try_catch, local_context);
+            error = describe_reported_exception(try_catch, local_context);
             return false;
         }
         if (checkpoint_microtasks) perform_microtask_checkpoint();
@@ -1101,6 +1101,7 @@
 
     void report_document_start_error(const std::string& error)
     {
+        if (diagnostics == nullptr || !diagnostics->enabled(WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE)) return;
         std::lock_guard lock(console_message_mutex);
         constexpr size_t maximum_console_messages = 1024U;
         if (console_messages.size() >= maximum_console_messages) {
@@ -1369,6 +1370,8 @@
             local_context,
             js_string(isolate, "__webSceneCreateObjectUrl"),
             v8::Function::New(local_context, create_object_url).ToLocalChecked()).Check();
+        global->Set(local_context, js_string(isolate,"__webSceneRevokeObjectUrl"),
+            v8::Function::New(local_context,revoke_object_url).ToLocalChecked()).Check();
         global->Set(
             local_context,
             js_string(isolate, "__webSceneResolveUrl"),
@@ -1387,14 +1390,7 @@
 
         install_navigator(isolate, local_context, global);
 
-        auto console = v8::Object::New(isolate);
-        console->Set(local_context, js_string(isolate, "log"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 0)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "warn"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 1)).ToLocalChecked()).Check();
-        console->Set(local_context, js_string(isolate, "error"),
-            v8::Function::New(local_context, console_log, v8::Integer::New(isolate, 2)).ToLocalChecked()).Check();
-        global->Set(local_context, js_string(isolate, "console"), console).Check();
+        install_console(local_context, global);
 
         auto performance = v8::Object::New(isolate);
         performance->Set(local_context, js_string(isolate, "now"), v8::Function::New(local_context, performance_now).ToLocalChecked()).Check();
@@ -1479,7 +1475,9 @@
                   let size = 0;
                   for (const part of parts) {
                     let bytes;
-                    if (part instanceof ArrayBuffer) {
+                    if (part instanceof WebSceneBlob) {
+                    bytes = part._bytes;
+                  } else if (part instanceof ArrayBuffer) {
                       bytes = new Uint8Array(part);
                     } else if (ArrayBuffer.isView(part)) {
                       bytes = new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
@@ -1500,8 +1498,20 @@
                   this._text = Array.from(parts, String).join('');
                 }
                 toString() { return this._text; }
+              async text() { return new TextDecoder().decode(this._bytes); }
+              async arrayBuffer() { return this._bytes.slice().buffer; }
+              slice(start=0, end=this.size, type='') {
+                return new WebSceneBlob([this._bytes.slice(start,end)], {type});
               }
-              class WebSceneURLSearchParams {
+              }
+              globalThis.File = class File extends WebSceneBlob {
+              constructor(parts, name, options={}) {
+                super(parts,options);
+                this.name=String(name).replace(/[\/]/g, ':');
+                this.lastModified=Number(options.lastModified ?? Date.now());
+              }
+            };
+            class WebSceneURLSearchParams {
                 constructor(init = null) {
                   this._owner = init && typeof init === 'object'
                     && 'href' in init ? init : null;
@@ -1611,13 +1621,44 @@
         )JS";
         constexpr std::string_view message_channel_source_suffix = R"JS(
               class WebSceneFormData {
-                constructor(form = undefined) {
+                constructor(form = undefined, submitter = null) {
                   __webSceneRecordWebApi(
                     'FormData.constructor', 'partially-supported',
                     'ordered string and Blob fields with multipart fetch serialization');
                   this._entries = [];
-                  if (form !== undefined && form !== null) {
-                    throw new TypeError('Constructing FormData from a form is not yet supported');
+                  if (form !== undefined) {
+                    if (!(form instanceof HTMLFormElement)) throw new TypeError('FormData requires an HTMLFormElement');
+                    const isSubmit = control => control && ((control.tagName === 'BUTTON' && (!control.type || control.type === 'submit')) ||
+                      (control.tagName === 'INPUT' && ['submit', 'image'].includes(control.type)));
+                    if (submitter !== null) {
+                      if (!(submitter instanceof HTMLElement) || !isSubmit(submitter)) throw new TypeError('FormData submitter must be a submit button');
+                      if (submitter.form !== form) throw new DOMException('Submitter belongs to another form', 'NotFoundError');
+                    }
+                    const root = form.getRootNode();
+                    for (const control of root.querySelectorAll('input,select,textarea,button')) {
+                      if (control.form !== form || control.matches(':disabled') || control.closest('datalist')) continue;
+                      const tag = control.tagName;
+                      const type = String(control.type || (tag === 'BUTTON' ? 'submit' : 'text')).toLowerCase();
+                      if ((tag === 'BUTTON' || ['submit', 'image', 'reset', 'button'].includes(type)) && control !== submitter) continue;
+                      const name = control.getAttribute('name') || '';
+                      if (type === 'image') {
+                        this.append(name ? name + '.x' : 'x', '0');
+                        this.append(name ? name + '.y' : 'y', '0');
+                        continue;
+                      }
+                      if (!name || (['checkbox', 'radio'].includes(type) && !control.checked)) continue;
+                      if (tag === 'SELECT') {
+                        for (const option of control.options) {
+                          if (option.selected && !option.matches(':disabled')) this.append(name, option.value);
+                        }
+                      } else if (type === 'file') {
+                        throw new TypeError('File controls in FormData are not yet supported');
+                      } else {
+                        const value = type === 'hidden' && name === '_charset_' ? 'UTF-8' :
+                          ['checkbox', 'radio'].includes(type) && !control.hasAttribute('value') ? 'on' : control.value;
+                        this.append(name, value);
+                      }
+                    }
                   }
                 }
                 append(name, value, filename = undefined) {
@@ -1708,7 +1749,7 @@
                 }
                 toJSON() { return this.toString(); }
                 static createObjectURL(blob) { return __webSceneCreateObjectUrl(blob); }
-                static revokeObjectURL() {}
+                static revokeObjectURL(url) { __webSceneRevokeObjectUrl(String(url)); }
               }
               class WebSceneDOMException extends Error {
                 constructor(message = '', name = 'Error') {
@@ -2041,7 +2082,7 @@
         }
         std::string source = script.code;
         std::shared_ptr<const immutable_text_source> immutable_source;
-        auto name = "webscene-frame-inline-" + std::to_string(script.index) + ".js";
+        auto name = hydration.base_address + "#inline-script-" + std::to_string(script.index);
         if (!script.source.empty()) {
             if (!load_text_resource(
                     script.source,
@@ -2060,19 +2101,15 @@
             auto document_value = local_frame_context->Global()->Get(
                 local_frame_context,
                 js_string(isolate, "document")).ToLocalChecked().As<v8::Object>();
-            set_current_script(local_frame_context, document_value, name);
+            if(script.module)document_value->Set(local_frame_context,js_string(isolate,"currentScript"),v8::Null(isolate)).Check();
+            else set_current_script(local_frame_context, document_value, name);
         }
         std::string error;
         const auto script_source = immutable_source != nullptr
             ? immutable_source->view()
             : std::string_view(source);
-        if (!execute_in_context(
-                local_frame_context,
-                script_source,
-                name,
-                error,
-                true,
-                std::move(immutable_source))) {
+        if (!(script.module ? execute_module(local_frame_context,script_source,name,error)
+            : execute_in_context(local_frame_context,script_source,name,error,true,std::move(immutable_source)))) {
             frame_last_error_value = "Iframe script #" + std::to_string(script.index)
                 + " failed: " + error;
             ++frame_script_error_count;
@@ -2181,7 +2218,7 @@
                     arguments).IsEmpty()) {
                 frame_last_error_value = std::string("Iframe ") + type
                     + " dispatch failed: "
-                    + describe_exception(try_catch, local_frame_context);
+                    + describe_reported_exception(try_catch, local_frame_context);
                 ++frame_script_error_count;
                 return false;
             }
@@ -2386,6 +2423,23 @@
             }
         }
 
+        // Navigation replaces the previous document's layout root. Preserve
+        // existing JS references until the frame is disposed, but never stack
+        // old and new documents vertically inside the same iframe.
+        if (const auto previous = actual_frame_contexts.find(frame.id);
+            previous != actual_frame_contexts.end() && !previous->second.IsEmpty()) {
+            const auto previous_context = previous->second.Get(isolate);
+            auto* previous_root = static_cast<dom_node*>(previous_context->GetAlignedPointerFromEmbedderData(
+                1, v8::kEmbedderDataTypeTagDefault));
+            if (previous_root != nullptr && previous_root->parent == &frame) {
+                previous_root->mutable_authored_style().declarations["display"] = "none";
+                previous_root->style.inline_property_mask |= inline_display;
+                previous_root->style.display = display_mode::none;
+                previous_root->visible = false;
+                static_cast<void>(deactivate_connected_stylesheets(*previous_root, false));
+                cancel_detached_frame_context_tasks(previous_context);
+            }
+        }
         auto& frame_body = document.create_element("body");
         frame_base_addresses[&frame_body] = frame_base_address;
         activate_css_cascade(&frame_body);
@@ -2561,6 +2615,12 @@
             v8::kEmbedderDataTypeTagDefault);
         frame_context.Reset(isolate, local_frame_context);
         install_frame_globals(local_frame_context, frame, frame_body);
+        {
+            // Parser-created images need the same resource task as appended
+            // images, using their own frame's URL and wrapper context.
+            v8::Context::Scope image_context_scope(local_frame_context);
+            enqueue_connected_image_resources_subtree(frame_body, local_frame_context);
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         register_inspector_context(
             local_frame_context,

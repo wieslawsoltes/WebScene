@@ -82,6 +82,10 @@
         } else if (name == "position") {
             node.style.position = position_mode::normal;
             node.style.inline_property_mask &= ~inline_position;
+        } else if (name == "contain") {
+            node.style.contain_stacking_context = false;
+            node.style.mutable_textual().contain_value = "none";
+            node.style.inline_property_mask &= ~inline_contain;
         } else if (name == "cssFloat" || name == "float") {
             node.style.floating = float_mode::none;
             node.style.inline_property_mask &= ~inline_float;
@@ -172,6 +176,7 @@
             node.style.transform_scale_y = 1;
             node.style.transform_rotate_degrees = 0;
             node.style.transform_specified = false;
+            node.style.transform_stacking_context = false;
             node.style.inline_property_mask &= ~inline_transform;
         } else if (name == "transformOrigin" || name == "transform-origin") {
             node.style.transform_origin_x = {50, length_unit::percent};
@@ -328,6 +333,7 @@
             if (length.unit == length_unit::max_content) return std::string{"max-content"};
             if (length.unit == length_unit::min_content) return std::string{"min-content"};
             if (length.unit == length_unit::fit_content) return std::string{"fit-content"};
+            if (length.unit == length_unit::stretch) return std::string{"stretch"};
             if (length.unit == length_unit::percent
                 && std::abs(length.pixel_offset) > 0.000001F) {
                 return std::string{"calc("} + serialize_css_number(length.value) + "% "
@@ -462,7 +468,7 @@
         uint64_t inline_property_mask = 0U;
         for (const auto& declaration : parse_css_declarations(value, true)) {
             if (!store_inline_declaration(*node, declaration)) continue;
-            self->apply_css_declaration(*node, declaration);
+            self->apply_css_declaration(*node, declaration, true);
             inline_property_mask |= inline_style_mask(declaration.name);
         }
         node->style.inline_property_mask |= inline_property_mask;
@@ -483,7 +489,7 @@
         const std::optional<std::string> old_value = previous == node->attributes.end()
             ? std::nullopt
             : std::optional<std::string>(previous->second);
-        const auto name = to_utf8(info.GetIsolate(), info[0]);
+        const auto name = canonical_css_property_name(to_utf8(info.GetIsolate(), info[0]));
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (self->resize_profile_active) {
             const auto canonical_name = canonical_css_property_name(name);
@@ -496,7 +502,8 @@
 #endif
         const auto property_mask = inline_style_mask(name);
         const auto has_important_rule =
-            (node->style.important_property_mask & property_mask) != 0U;
+            (node->style.important_property_mask & property_mask) != 0U
+            || (node->style.important_margin_sides & margin_sides(name)) != 0U;
         const auto value = to_utf8(info.GetIsolate(), info[1]);
         self->inventory_css_value_functions(value, "cssom-style");
         if (name.starts_with("--")) {
@@ -519,7 +526,7 @@
                 authored.important_declarations.erase(name);
             }
             sync_style_attribute(*node);
-            self->recascade_connected_subtree(*node);
+            self->recascade_custom_property(*node, name);
             self->notify_custom_element_attribute(
                 *node, "style", old_value, node->attributes.at("style"));
             return;
@@ -532,6 +539,8 @@
                 return;
             }
             clear_inline_style(*node, name);
+            self->mark_cssom_layout_dirty(
+                *node, canonical_css_property_name(name));
             sync_style_attribute(*node);
             self->recascade_connected_subtree(
                 *node, "style.setProperty-clear");
@@ -614,9 +623,21 @@
         } else if (name == "position") {
             node->style.position = value == "absolute" ? position_mode::absolute
                 : value == "fixed" ? position_mode::fixed
+                : value == "sticky" ? position_mode::sticky
                 : value == "relative" ? position_mode::relative
                 : position_mode::normal;
             node->style.inline_property_mask |= inline_position;
+        } else if (name == "contain") {
+            const auto contain = lower_html_name(value);
+            node->style.mutable_textual().contain_value =
+                contain == "initial" || contain == "unset" || contain == "revert"
+                ? "none" : contain;
+            const auto& computed = node->style.textual().contain_value;
+            node->style.contain_stacking_context = computed == "content"
+                || computed == "strict"
+                || (" " + computed + " ").find(" layout ") != std::string::npos
+                || (" " + computed + " ").find(" paint ") != std::string::npos;
+            node->style.inline_property_mask |= inline_contain;
         } else if (name == "float" || name == "cssFloat") {
             node->style.floating = value == "left" ? float_mode::left
                 : value == "right" ? float_mode::right
@@ -728,6 +749,8 @@
                 node->style.transform_scale_y,
                 node->style.transform_rotate_degrees);
             node->style.transform_specified = true;
+            node->style.transform_stacking_context =
+                lower_html_name(value) != "none";
             node->style.inline_property_mask |= inline_transform;
         } else if (name == "transform-origin") {
             native_document::parse_transform_origin(
@@ -855,6 +878,11 @@
         sync_style_attribute(*node);
         self->notify_custom_element_attribute(
             *node, "style", old_value, node->attributes.at("style"));
+        if (canonical_name == "font-size" || canonical_name == "font") {
+            self->recascade_connected_subtree(*node, "font-metrics");
+            self->document.mark_dirty();
+            return;
+        }
         if (has_important_rule) self->apply_css_rules(*node);
         else {
             self->configure_style_keyframe_animation(*node);
@@ -922,6 +950,7 @@
                 if (length.unit == length_unit::max_content) return std::string{"max-content"};
                 if (length.unit == length_unit::min_content) return std::string{"min-content"};
                 if (length.unit == length_unit::fit_content) return std::string{"fit-content"};
+                if (length.unit == length_unit::stretch) return std::string{"stretch"};
                 std::ostringstream stream;
                 if (length.unit == length_unit::percent
                     && std::abs(length.pixel_offset) > 0.000001F) {
@@ -974,8 +1003,12 @@
             } else if (name == "position") {
                 value = node->style.position == position_mode::absolute ? "absolute"
                     : node->style.position == position_mode::fixed ? "fixed"
+                    : node->style.position == position_mode::sticky ? "sticky"
                     : node->style.position == position_mode::relative ? "relative"
                     : "static";
+            } else if (name == "contain") {
+                value = node->style.textual().contain_value.empty()
+                    ? "none" : node->style.textual().contain_value;
             } else if (name == "float") {
                 value = node->style.floating == float_mode::left ? "left"
                     : node->style.floating == float_mode::right ? "right" : "none";
@@ -1228,7 +1261,11 @@
                     ancestor = ancestor->parent) {
                     line_height = ancestor->style.line_height;
                 }
-                if (line_height == -2.0F) {
+                if (line_height <= -3.0F) {
+                    value = serialize_css_number(
+                        (-3.0F - line_height) * (node->style.font_size >= 0
+                            ? node->style.font_size : inherited_font_size(*node))) + "px";
+                } else if (line_height == -2.0F) {
                     value = "normal";
                 } else if (line_height < 0) {
                     const auto font_size = node->style.font_size >= 0
@@ -1278,7 +1315,7 @@
             authored.declarations.erase(name);
             authored.important_declarations.erase(name);
             sync_style_attribute(*node);
-            self->recascade_connected_subtree(*node);
+            self->recascade_custom_property(*node, name);
             self->notify_custom_element_attribute(
                 *node, "style", old_value, node->attributes.at("style"));
             return;
@@ -1291,6 +1328,8 @@
             return;
         }
         clear_inline_style(*node, name);
+        self->mark_cssom_layout_dirty(
+            *node, canonical_css_property_name(name));
         sync_style_attribute(*node);
         self->recascade_connected_subtree(
             *node, "style.removeProperty");
@@ -1342,6 +1381,7 @@
             if (length.unit == length_unit::max_content) return std::string{"max-content"};
             if (length.unit == length_unit::min_content) return std::string{"min-content"};
             if (length.unit == length_unit::fit_content) return std::string{"fit-content"};
+            if (length.unit == length_unit::stretch) return std::string{"stretch"};
             std::ostringstream stream;
             if (length.unit == length_unit::percent
                 && std::abs(length.pixel_offset) > 0.000001F) {
@@ -1464,6 +1504,7 @@
         } else if (name == "position") {
             value = node->style.position == position_mode::absolute ? "absolute"
                 : node->style.position == position_mode::fixed ? "fixed"
+                : node->style.position == position_mode::sticky ? "sticky"
                 : node->style.position == position_mode::relative ? "relative"
                 : "static";
         } else if (name == "cssFloat") {
@@ -1545,13 +1586,25 @@
         } else if (name == "borderLeftWidth") {
             value = format_box_length(node->style.border_left_width);
         } else if (name == "borderTopColor") {
-            value = serialize_color(node->style.border_top_rgba);
+            value = serialize_color(resolved_border_color_for_cssom(
+                *node,
+                node->style.border_top_rgba,
+                node->style.border_top_current_color));
         } else if (name == "borderRightColor") {
-            value = serialize_color(node->style.border_right_rgba);
+            value = serialize_color(resolved_border_color_for_cssom(
+                *node,
+                node->style.border_right_rgba,
+                node->style.border_right_current_color));
         } else if (name == "borderBottomColor") {
-            value = serialize_color(node->style.border_bottom_rgba);
+            value = serialize_color(resolved_border_color_for_cssom(
+                *node,
+                node->style.border_bottom_rgba,
+                node->style.border_bottom_current_color));
         } else if (name == "borderLeftColor") {
-            value = serialize_color(node->style.border_left_rgba);
+            value = serialize_color(resolved_border_color_for_cssom(
+                *node,
+                node->style.border_left_rgba,
+                node->style.border_left_current_color));
         } else if (name == "borderTopLeftRadius") {
             value = format_corner_radius(
                 node->style.border_top_left_radius,
@@ -1728,7 +1781,10 @@
         } else if (name == "borderTopStyle") {
             value = node->style.border_top_width.value > 0 ? "solid" : "none";
         } else if (name == "borderTopColor") {
-            value = serialize_color(node->style.border_top_rgba);
+            value = serialize_color(resolved_border_color_for_cssom(
+                *node,
+                node->style.border_top_rgba,
+                node->style.border_top_current_color));
         } else if (name == "outlineColor") {
             value = serialize_color(node->style.outline_rgba);
         } else if (name == "outlineWidth") {
@@ -1789,7 +1845,11 @@
                 ancestor = ancestor->parent) {
                 line_height = ancestor->style.line_height;
             }
-            if (line_height == -2.0F) {
+            if (line_height <= -3.0F) {
+                value = serialize_css_number(
+                    (-3.0F - line_height) * (node->style.font_size >= 0
+                        ? node->style.font_size : inherited_font_size(*node))) + "px";
+            } else if (line_height == -2.0F) {
                 value = "normal";
             } else if (line_height < 0) {
                 const auto font_size = node->style.font_size >= 0
@@ -1854,7 +1914,8 @@
         }
         const auto property_mask = inline_style_mask(name);
         const auto has_important_rule =
-            (node->style.important_property_mask & property_mask) != 0U;
+            (node->style.important_property_mask & property_mask) != 0U
+            || (node->style.important_margin_sides & margin_sides(name)) != 0U;
         const auto value = to_utf8(info.GetIsolate(), raw_value);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (self->resize_profile_active) {
@@ -1875,6 +1936,8 @@
                 return;
             }
             clear_inline_style(*node, name);
+            self->mark_cssom_layout_dirty(
+                *node, canonical_css_property_name(name));
             sync_style_attribute(*node);
             self->recascade_connected_subtree(
                 *node, "style.named-property-clear");
@@ -1953,6 +2016,7 @@
         } else if (name == "position") {
             node->style.position = value == "absolute" ? position_mode::absolute
                 : value == "fixed" ? position_mode::fixed
+                : value == "sticky" ? position_mode::sticky
                 : value == "relative" ? position_mode::relative
                 : position_mode::normal;
             node->style.inline_property_mask |= inline_position;
@@ -2067,6 +2131,8 @@
                 node->style.transform_scale_y,
                 node->style.transform_rotate_degrees);
             node->style.transform_specified = true;
+            node->style.transform_stacking_context =
+                lower_html_name(value) != "none";
             node->style.inline_property_mask |= inline_transform;
         } else if (name == "transformOrigin") {
             native_document::parse_transform_origin(
@@ -2215,6 +2281,11 @@
         sync_style_attribute(*node);
         self->notify_custom_element_attribute(
             *node, "style", old_value, node->attributes.at("style"));
+        if (canonical_name == "font-size" || canonical_name == "font") {
+            self->recascade_connected_subtree(*node, "font-metrics");
+            self->document.mark_dirty();
+            return;
+        }
         if (has_important_rule) self->apply_css_rules(*node);
         else {
             self->configure_style_keyframe_animation(*node);
@@ -2231,4 +2302,20 @@
             ? unwrap_node(info[0].As<v8::Object>())
             : nullptr;
         if (node != nullptr) info.GetReturnValue().Set(self->wrap_computed_style(*node));
+    }
+    static uint32_t resolved_current_color_for_cssom(const dom_node& node)
+    {
+        for (auto* current = &node; current != nullptr; current = current->parent) {
+            const auto foreground = current->painted_foreground_value();
+            if ((foreground & 0xFFU) != 0U) return foreground;
+        }
+        return 0xD1D4DCFFU;
+    }
+
+    static uint32_t resolved_border_color_for_cssom(
+        const dom_node& node,
+        uint32_t authored,
+        bool current_color)
+    {
+        return current_color ? resolved_current_color_for_cssom(node) : authored;
     }

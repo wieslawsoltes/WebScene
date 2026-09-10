@@ -18,8 +18,28 @@ extern "C" {
 #endif
 
 typedef struct webscene_engine webscene_engine;
+typedef void (*webscene_diagnostic_available_callback)(void* user_data);
+enum {
+    WEBSCENE_DIAGNOSTIC_EXCEPTIONS = 1U,
+    WEBSCENE_DIAGNOSTIC_CONSOLE = 2U,
+    WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE = 4U,
+    WEBSCENE_DIAGNOSTIC_RESOURCE_FAILURES = 8U
+};
+
+/* Additive ABI 3 diagnostics. Callback is a non-blocking signal only; do not
+ * re-enter the engine from it. Passing null unregisters synchronously. */
+WEBSCENE_API void webscene_engine_configure_diagnostics(
+    webscene_engine* engine, uint32_t flags,
+    webscene_diagnostic_available_callback callback, void* user_data);
+/* UTF-8 JSON, including trailing NUL. Null/short buffers do not consume. */
+WEBSCENE_API size_t webscene_engine_take_diagnostic(
+    webscene_engine* engine, char* destination, size_t destination_capacity);
+/* Non-consuming terminal status, independent of ordinary script error counters. */
+WEBSCENE_API size_t webscene_engine_copy_runtime_failure(
+    webscene_engine* engine, char* destination, size_t destination_capacity);
 typedef struct webscene_scene_view webscene_scene_view;
 typedef struct webscene_interop_result_view_v3 webscene_interop_result_view_v3;
+typedef struct webscene_interop_callback_view_v3 webscene_interop_callback_view_v3;
 
 /* Legacy direct-message callback retained for ABI compatibility. */
 typedef void (*webscene_inspector_message_callback)(
@@ -45,7 +65,10 @@ typedef enum webscene_input_kind {
     WEBSCENE_INPUT_KEY_DOWN = 7,
     WEBSCENE_INPUT_KEY_UP = 8,
     // x carries one Unicode scalar value. Hosts enqueue one event per scalar.
-    WEBSCENE_INPUT_TEXT = 9
+    WEBSCENE_INPUT_TEXT = 9,
+    // A discrete host-surface exit, not a mousemove. Coordinates may still be
+    // the last known position inside the surface. Does not cancel capture.
+    WEBSCENE_INPUT_POINTER_LEAVE = 10
 } webscene_input_kind;
 
 typedef enum webscene_cursor_kind {
@@ -455,6 +478,127 @@ struct webscene_scene_view {
     uint32_t reserved;
 };
 
+/* Separately versioned scene acquisition. No GPU capability is advertised yet. */
+#define WEBSCENE_SCENE_VIEW_VERSION_3 3U
+#define WEBSCENE_SCENE_CAPABILITY_GPU_IMAGES (UINT64_C(1) << 0)
+#define WEBSCENE_SCENE_CAPABILITY_ORDERED_CANVAS (UINT64_C(1) << 1)
+/* Consumer must enqueue every native producer dependency before GPU reads. */
+#define WEBSCENE_SCENE_CAPABILITY_PRODUCER_GPU_WAITS (UINT64_C(1) << 2)
+#define WEBSCENE_SCENE_CAPABILITY_CANVAS_CHECKPOINTS (UINT64_C(1) << 3)
+/* UTF-8 versioned raster/state checkpoint resource, interpreted by capable hosts. */
+#define WEBSCENE_CANVAS_COMMAND_RASTER_CHECKPOINT 58U
+WEBSCENE_API uint8_t webscene_engine_submit_canvas_checkpoint_v3(
+    webscene_engine* engine, uint32_t node_id, uint64_t generation,
+    uint32_t command_count, const char* payload, size_t payload_length);
+/* Draw in the existing command stream at x/y/width/height. rgba carries the
+ * scene GPU image index (not a color); node_id retains the canvas node ID. Existing transform/clip/isolation operations apply. */
+#define WEBSCENE_SCENE_COMMAND_GPU_IMAGE 256U
+/* Requires SCENE_CAPABILITY_ORDERED_CANVAS in the scene capability mask.
+ * Ordered v3 placement of a retained Canvas2D layer. node_id selects the layer;
+ * its current layout and bitmap dimensions provide placement/scaling. */
+#define WEBSCENE_SCENE_COMMAND_CANVAS_LAYER 257U
+/* Optional hint on a replacement canvas layer. Against header.base_revision,
+ * the previous layer's command and string arrays are unchanged prefixes of
+ * this complete replacement payload. Consumers may ignore this hint. */
+#define WEBSCENE_CANVAS_LAYER_UNCHANGED_PREFIX 4U
+typedef struct webscene_scene_acquire_options_v3 {
+    uint32_t struct_size;
+    uint32_t scene_version;
+    uint64_t consumer_capabilities;
+} webscene_scene_acquire_options_v3;
+typedef enum webscene_scene_acquire_status {
+    WEBSCENE_SCENE_ACQUIRE_SUCCESS = 0,
+    WEBSCENE_SCENE_ACQUIRE_EMPTY = 1,
+    WEBSCENE_SCENE_ACQUIRE_INVALID_ARGUMENT = 2,
+    WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_VERSION = 3,
+    WEBSCENE_SCENE_ACQUIRE_UNSUPPORTED_CAPABILITIES = 4,
+    WEBSCENE_SCENE_ACQUIRE_OUT_OF_MEMORY = 5,
+    WEBSCENE_SCENE_ACQUIRE_INTERNAL_ERROR = 6,
+    WEBSCENE_SCENE_ACQUIRE_BACKPRESSURE = 7
+} webscene_scene_acquire_status;
+typedef struct webscene_scene_view_v3 {
+    uint32_t struct_size;
+    uint32_t scene_version;
+    uint64_t required_capabilities;
+    /* Borrowed for this v3 lease's lifetime. Do not release separately. */
+    const webscene_scene_view* cpu_view;
+    const void* lease_token;
+} webscene_scene_view_v3;
+WEBSCENE_API webscene_scene_acquire_status webscene_engine_acquire_latest_scene_v3(
+    webscene_engine* engine,const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result);
+WEBSCENE_API webscene_scene_acquire_status webscene_engine_acquire_next_scene_v3(
+    webscene_engine* engine,const webscene_scene_acquire_options_v3* options,const webscene_scene_view_v3** result);
+WEBSCENE_API uint8_t webscene_scene_acknowledge_v3(const webscene_scene_view_v3* scene);
+WEBSCENE_API void webscene_scene_release_v3(const webscene_scene_view_v3* scene);
+
+/* Opaque native image leases. A retained lease can outlive its scene/engine.
+ * Release ends CPU retention only. Complete a consumer only after its GPU fence.
+ * Calls on the same handle must be externally serialized; released handles are invalid.
+ */
+typedef struct webscene_gpu_image_lease_v3 webscene_gpu_image_lease_v3;
+typedef struct webscene_gpu_image_consumer_v3 webscene_gpu_image_consumer_v3;
+typedef struct webscene_gpu_image_info_v3 {
+    uint32_t struct_size, version;
+    uint64_t canvas, allocation, allocation_generation, content_serial;
+    uint64_t producer_timeline, producer_value;
+    uint32_t width, height;
+    /* format: 1 RGBA8 unorm, 2 BGRA8 unorm, 3 RGBA16 float,
+     *         4 RGBA8 sRGB, 5 BGRA8 sRGB.
+     * alpha: 1 opaque, 2 premultiplied, 3 straight.
+     * color_space: 1 sRGB, 2 Display P3. orientation: 1 top-left, 2 bottom-left.
+     * Timeline/allocation IDs require native provider resolution, never casts.
+     */
+    uint32_t format, alpha, color_space, orientation;
+} webscene_gpu_image_info_v3;
+WEBSCENE_API uint32_t webscene_scene_gpu_image_count_v3(const webscene_scene_view_v3* scene);
+WEBSCENE_API webscene_scene_acquire_status webscene_scene_retain_gpu_image_v3(
+    const webscene_scene_view_v3* scene,uint32_t index,webscene_gpu_image_lease_v3** result);
+WEBSCENE_API webscene_scene_acquire_status webscene_gpu_image_retain_v3(
+    const webscene_gpu_image_lease_v3* image,webscene_gpu_image_lease_v3** result);
+WEBSCENE_API uint8_t webscene_gpu_image_describe_v3(
+    const webscene_gpu_image_lease_v3* image,webscene_gpu_image_info_v3* result);
+WEBSCENE_API void webscene_gpu_image_release_v3(webscene_gpu_image_lease_v3* image);
+WEBSCENE_API webscene_scene_acquire_status webscene_gpu_image_begin_consumer_v3(
+    const webscene_gpu_image_lease_v3* image,webscene_gpu_image_consumer_v3** result);
+WEBSCENE_API void webscene_gpu_image_complete_consumer_v3(webscene_gpu_image_consumer_v3* consumer);
+/* macOS native presenter hook, not portable image metadata or a JavaScript API.
+ * The pointer is borrowed until consumer completion. This lookup does not wait
+ * for the producer, begin native access, or authorize early consumer completion.
+ * Returns zero for unsupported providers/platforms/builds or invalid arguments.
+ */
+typedef struct webscene_gpu_iosurface_view_v3 {
+    uint32_t struct_size, version;
+    void* borrowed_iosurface;
+    uint64_t allocation_bytes;
+} webscene_gpu_iosurface_view_v3;
+WEBSCENE_API uint8_t webscene_gpu_image_get_iosurface_v3(
+    const webscene_gpu_image_consumer_v3* consumer,webscene_gpu_iosurface_view_v3* result);
+
+/* Windows host-queue bridge. Keep consumer alive until seal on the drawing
+ * thread and poll returning S_OK (zero). Texture is borrowed from import_owner.
+ * Destroy only before any draw, or after completed retirement. */
+WEBSCENE_API int32_t webscene_gpu_d3d11_import_v3(webscene_gpu_image_consumer_v3* consumer,
+    void* borrowed_device,void** import_owner,void** borrowed_texture);
+WEBSCENE_API int32_t webscene_gpu_d3d11_supported_v3(void* borrowed_device);
+WEBSCENE_API int32_t webscene_gpu_d3d11_seal_v3(void* import_owner);
+WEBSCENE_API int32_t webscene_gpu_d3d11_poll_v3(void* import_owner);
+WEBSCENE_API void webscene_gpu_d3d11_destroy_v3(void* import_owner);
+
+/* Optional native producer synchronization. Borrowed event ownership follows the
+ * consumer; callers must encode every dependency before reading an early image.
+ * A successful zero count means no attached dependencies, not GPU completion.
+ * These hooks never wait or authorize consumer completion. */
+typedef struct webscene_gpu_metal_event_view_v3 {
+    uint32_t struct_size, version;
+    void* borrowed_shared_event;
+    uint64_t signaled_value;
+} webscene_gpu_metal_event_view_v3;
+WEBSCENE_API uint8_t webscene_gpu_image_dependency_count_v3(
+    const webscene_gpu_image_consumer_v3* consumer,uint32_t* count);
+WEBSCENE_API uint8_t webscene_gpu_image_get_metal_event_v3(
+    const webscene_gpu_image_consumer_v3* consumer,uint32_t index,webscene_gpu_metal_event_view_v3* result);
+
+
 typedef enum webscene_resource_kind {
     WEBSCENE_RESOURCE_DOCUMENT = 0,
     WEBSCENE_RESOURCE_SCRIPT = 1,
@@ -472,6 +616,14 @@ typedef enum webscene_resource_kind {
  * cacheability/freshness metadata, validators, and UTF-8 content. Returning
  * zero reports a load failure. The URL is already absolute and normalized by
  * WebScene.
+ * Envelope (little endian): uint8 status, uint8 cacheable, uint32 tag length,
+ * int64 last-modified seconds, int64 fresh-until seconds, UTF-8 tag, content.
+ * Status 1 = content, 2 = not modified. Status 3 = failure: tag is a stable
+ * error category (http/network/timeout/cancelled/not-found/unsupported/loader),
+ * first int64 is HTTP status (0 unknown), second is elapsed microseconds.
+ * Failure content must be empty; do not include exception text, credentials or
+ * request bodies. Older engines safely treat status 3 as an ordinary failure.
+ * Returning zero remains supported, with generic loader diagnostics.
  */
 typedef size_t (*webscene_resource_load_callback)(
     void* user_data,
@@ -626,12 +778,30 @@ typedef void (*webscene_host_request_available_callback)(void* user_data);
 typedef void (*webscene_interop_callback_available_callback)(void* user_data);
 
 /*
- * Edge notification emitted when the engine's host animation-frame demand
- * transitions from idle to active. The callback runs on the engine worker and
- * must only wake a compositor; demand is still queried through
- * webscene_engine_requires_animation_frame and released by a frame input.
+ * Edge notification emitted when the engine's host animation-frame or
+ * frame-aligned pointer-input demand transitions from idle to active. The
+ * callback runs on the engine worker and must only wake a compositor; demand
+ * is still queried through webscene_engine_requires_animation_frame and
+ * released by a compositor observation/frame input.
  */
 typedef void (*webscene_animation_frame_requested_callback)(void* user_data);
+
+/* Observes stylesheet consumption, including native cache hits and inline CSS.
+ * Runs synchronously on the runtime worker before styling/layout. Buffers are
+ * borrowed for the callback only. Hosts may register fonts but must not reenter
+ * this engine. The callback must not throw across the ABI. */
+typedef void (*webscene_stylesheet_consumed_callback)(
+    void* user_data, const char* address, size_t address_length,
+    const char* css, size_t css_length);
+
+/* Optional host admission for the main document, evaluated on the runtime
+ * worker before scripts with the final resolved URL (initially about:blank).
+ * IOSURFACE certifies both a secure context and a GPU-capable scene consumer.
+ * Return DISABLED for untrusted/non-secure documents. No ABI reentry or throws.
+ * Current implementation supports IOSURFACE only on graphics-enabled macOS. */
+enum { WEBSCENE_WEBGPU_DISABLED = 0, WEBSCENE_WEBGPU_IOSURFACE = 1, WEBSCENE_WEBGPU_DXGI = 2 };
+typedef uint32_t (*webscene_webgpu_policy_callback)(void* user_data,
+    const char* document_url, size_t document_url_length);
 
 typedef struct webscene_engine_options {
     uint32_t struct_size;
@@ -654,6 +824,10 @@ typedef struct webscene_engine_options {
     void* resource_load_v2_user_data;
     webscene_resource_load_callback_v3 resource_load_callback_v3;
     void* resource_load_v3_user_data;
+    webscene_stylesheet_consumed_callback stylesheet_consumed_callback;
+    void* stylesheet_consumed_user_data;
+    webscene_webgpu_policy_callback webgpu_policy_callback;
+    void* webgpu_policy_user_data;
 } webscene_engine_options;
 
 enum {
@@ -947,6 +1121,28 @@ WEBSCENE_API uint32_t webscene_engine_get_abi_version(void);
  * respective bits are present.
  */
 WEBSCENE_API uint32_t webscene_engine_get_build_features(void);
+#if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
+WEBSCENE_API void webscene_media_refresh_benchmark_reset_counters(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_index_rule_calls(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_root_variable_refreshes(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_class_lookups(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_owned_class_lookup_keys(void);
+WEBSCENE_API uint64_t webscene_media_refresh_benchmark_owned_class_lookup_bytes(void);
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
+WEBSCENE_API void webscene_selector_sibling_benchmark_reset_counters(void);
+WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_positional_matches(void);
+WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_sibling_scans(void);
+WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_vector_materializations(void);
+WEBSCENE_API uint64_t webscene_selector_sibling_benchmark_pointer_copies(void);
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+WEBSCENE_API void webscene_canvas_paint_state_benchmark_reset_counters(void);
+WEBSCENE_API uint64_t webscene_canvas_paint_state_benchmark_string_property_probes(void);
+WEBSCENE_API uint64_t webscene_canvas_paint_state_benchmark_utf8_conversions(void);
+WEBSCENE_API uint64_t webscene_canvas_paint_state_benchmark_stack_comparisons(void);
+WEBSCENE_API uint64_t webscene_canvas_paint_state_benchmark_cached_value_hits(void);
+#endif
 WEBSCENE_API uint8_t webscene_engine_prewarm(void);
 WEBSCENE_API webscene_engine* webscene_engine_create(uint32_t simulated_chart_command_count);
 WEBSCENE_API webscene_engine* webscene_engine_create_with_options(const webscene_engine_options* options);
@@ -959,6 +1155,11 @@ WEBSCENE_API uint8_t webscene_engine_load_url(
     webscene_engine* engine,
     const char* url,
     size_t url_length);
+/* Set the initial viewport on the worker immediately before document scripts.
+ * This avoids publishing a canvas initialized against default dimensions. */
+WEBSCENE_API uint8_t webscene_engine_load_url_with_viewport(
+    webscene_engine* engine, const char* url, size_t url_length,
+    const webscene_input_event* viewport);
 WEBSCENE_API uint8_t webscene_engine_load_url_with_options(
     webscene_engine* engine,
     const char* url,
@@ -996,6 +1197,14 @@ WEBSCENE_API uint8_t webscene_engine_set_preferred_color_scheme(
     uint32_t preferred_color_scheme);
 /* Returns the CSS cursor resolved at the latest hit-tested pointer position. */
 WEBSCENE_API uint32_t webscene_engine_get_cursor(const webscene_engine* engine);
+/*
+ * Advances the document clock at a host input boundary without declaring a
+ * rendering opportunity. This keeps idle transitions current while allowing
+ * continuous pointer input to remain paced by real compositor boundaries.
+ */
+WEBSCENE_API void webscene_engine_observe_host_timeline(
+    webscene_engine* engine,
+    double timestamp_ms);
 /*
  * Observes an inexpensive host compositor boundary without releasing V8 RAF
  * callbacks or requesting a scene. This keeps the CSS document timeline
@@ -1095,6 +1304,33 @@ WEBSCENE_API uint8_t webscene_engine_get_interop_pool_metrics_v3(
  * payload is UTF-8 JSON. A too-small/null destination reports the required
  * size without consuming the request; a successful full copy consumes it.
  */
+/* Native file service v1. Explicit opt-in permits script-triggered native
+ * dialogs. Requests own immutable UTF-8 metadata and bytes until release.
+ * Hosts must return only user-selected bytes, never script-supplied paths.
+ * kind: 1 Open, 2 Save; status: 0 completed, 1 cancelled, 2 failed.
+ * Completion copies its inputs before returning and is delivered on the JS
+ * worker. Maximum 64 MiB per operation, 64 files, 16 pending requests.
+ * The existing host_request_available callback also signals this queue. */
+typedef struct webscene_file_data_v1 {
+    const char* name;
+    const char* mime_type;
+    const uint8_t* bytes;
+    size_t byte_count;
+} webscene_file_data_v1;
+typedef struct webscene_file_request_v1 {
+    uint32_t struct_size, version;
+    uint64_t request_id;
+    uint32_t kind, multiple;
+    const char* accept;
+    webscene_file_data_v1 file;
+} webscene_file_request_v1;
+WEBSCENE_API uint8_t webscene_engine_enable_file_service_v1(webscene_engine* engine, uint8_t enabled);
+WEBSCENE_API const webscene_file_request_v1* webscene_engine_take_file_request_v1(webscene_engine* engine);
+WEBSCENE_API void webscene_file_request_release_v1(const webscene_file_request_v1* request);
+WEBSCENE_API uint8_t webscene_engine_complete_file_request_v1(webscene_engine* engine,
+    uint64_t request_id, uint32_t status, const webscene_file_data_v1* files,
+    size_t file_count, const char* error_message);
+
 WEBSCENE_API size_t webscene_engine_take_host_request(
     webscene_engine* engine,
     char* destination,
@@ -1154,6 +1390,9 @@ WEBSCENE_API size_t webscene_engine_copy_canvas_layouts(
  * renderer (for example after compositor/context recreation).
  */
 WEBSCENE_API uint8_t webscene_engine_request_scene_checkpoint(webscene_engine* engine);
+WEBSCENE_API uint8_t webscene_engine_release_canvas_export(
+    webscene_engine* engine,
+    uint32_t node_id);
 WEBSCENE_API const webscene_scene_view* webscene_engine_acquire_latest_scene(webscene_engine* engine);
 /*
  * Enables the bounded ordered consumer lane and acquires its oldest pending

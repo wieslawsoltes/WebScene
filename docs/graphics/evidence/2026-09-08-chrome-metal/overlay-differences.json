@@ -1,0 +1,174 @@
+[
+  {
+    "case": "courtyard-dpr2-dark",
+    "phase": "after",
+    "files": [
+      {
+        "file": "courtyard-dpr2-dark-run1-after-overlay.png",
+        "sha256": "0d999736f93b0e3514f6648e1c9804757331edb528ec16c6f95285a894b223f5",
+        "width": 2892,
+        "height": 1486
+      },
+      {
+        "file": "courtyard-dpr2-dark-run2-after-overlay.png",
+        "sha256": "1d6f47f5b6a8302499027cb829b746ccc0f43204683ae9364f88d9d816b25434",
+        "width": 2892,
+        "height": 1486
+      }
+    ],
+    "changedPixels": 684,
+    "differenceBounds": [
+      78,
+      270,
+      2232,
+      1414
+    ],
+    "channelDifferenceExtrema": [
+      [
+        0,
+        170
+      ],
+      [
+        0,
+        185
+      ],
+      [
+        0,
+        203
+      ],
+      [
+        0,
+        217
+      ]
+    ]
+  },
+  {
+    "case": "fixture-dpr1-dark",
+    "phase": "before",
+    "files": [
+      {
+        "file": "fixture-dpr1-dark-run1-before-overlay.png",
+        "sha256": "e9c126af3eb314fd96255d8b91f5c01a1accd6ef8631b15e12ba42d6f5b8d762",
+        "width": 1446,
+        "height": 743
+      },
+      {
+        "file": "fixture-dpr1-dark-run2-before-overlay.png",
+        "sha256": "beaec590bb09b2c4f5edd73297973a1534bd41ef18365ded14e2c89cb2e8015b",
+        "width": 1446,
+        "height": 743
+      }
+    ],
+    "changedPixels": 245,
+    "differenceBounds": [
+      39,
+      547,
+      1035,
+      717
+    ],
+    "channelDifferenceExtrema": [
+      [
+        0,
+        170
+      ],
+      [
+        0,
+        185
+      ],
+      [
+        0,
+        203
+      ],
+      [
+        0,
+        163
+      ]
+    ]
+  },
+  {
+    "case": "fixture-dpr1-light",
+    "phase": "before",
+    "files": [
+      {
+        "file": "fixture-dpr1-light-run1-before-overlay.png",
+        "sha256": "da5fbf43053064390a9f4158621f83a2fd892919749eb9e474a40dd52f9ca8c3",
+        "width": 1446,
+        "height": 743
+      },
+      {
+        "file": "fixture-dpr1-light-run2-before-overlay.png",
+        "sha256": "cd2cdeed3eb0c727f3939a764e6d91d2ca138e22c70e71bb4d7f185ef854ddf0",
+        "width": 1446,
+        "height": 743
+      }
+    ],
+    "changedPixels": 247,
+    "differenceBounds": [
+      39,
+      547,
+      1035,
+      717
+    ],
+    "channelDifferenceExtrema": [
+      [
+        0,
+        255
+      ],
+      [
+        0,
+        255
+      ],
+      [
+        0,
+        255
+      ],
+      [
+        0,
+        163
+      ]
+    ]
+  },
+  {
+    "case": "fixture-dpr1-light",
+    "phase": "after",
+    "files": [
+      {
+        "file": "fixture-dpr1-light-run1-after-overlay.png",
+        "sha256": "c755fe8dec9905c153bc0439f604c500ad8d46b4ab38ac9978837fe422bff239",
+        "width": 1446,
+        "height": 743
+      },
+      {
+        "file": "fixture-dpr1-light-run2-after-overlay.png",
+        "sha256": "a307fe2c09cb38916aa9772328cad64e124aa5219023ed53291a78e18a0bbe79",
+        "width": 1446,
+        "height": 743
+      }
+    ],
+    "changedPixels": 11993,
+    "differenceBounds": [
+      39,
+      273,
+      1205,
+      717
+    ],
+    "channelDifferenceExtrema": [
+      [
+        0,
+        255
+      ],
+      [
+        0,
+        255
+      ],
+      [
+        0,
+        255
+      ],
+      [
+        0,
+        255
+      ]
+    ]
+  }
+]

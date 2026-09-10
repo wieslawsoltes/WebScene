@@ -1,0 +1,13 @@
+{
+  "host": "Avalonia.Native.MetalDevice",
+  "metalDeviceAvailable": true,
+  "metalQueueAvailable": true,
+  "skiaGpuContextAvailable": true,
+  "metalTextureWrapperVerified": true,
+  "dawnIOSurfaceImportVerified": true,
+  "producerInteropVerified": false,
+  "physicalPresentationVerified": false,
+  "scope": "Dawn completion-certified fixture IOSurface imported on leased Avalonia Metal device and wrapped as valid Skia backend texture; no image sampling",
+  "explicitTransportCopies": 0,
+  "consumerReadSubmitted": false
+}

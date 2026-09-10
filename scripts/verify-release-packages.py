@@ -130,6 +130,34 @@ def validate_package_metadata(package: pathlib.Path, package_id: str) -> dict[st
     }
 
 
+def validate_graphics_runtime(archive: zipfile.ZipFile, rid: str) -> None:
+    expected = {
+        "osx-arm64": {"libwebgpu_dawn.dylib"},
+        "win-x64": {"webgpu_dawn.dll", "libEGL.dll", "libGLESv2.dll", "d3dcompiler_47.dll"},
+    }.get(rid)
+    if expected is None:
+        return  # Existing Linux packages remain non-GPU in this milestone.
+    prefix = f"runtimes/{rid}/native/"
+    name = prefix + "webscene-graphics-runtime.json"
+    if name not in archive.namelist():
+        raise RuntimeError(f"{rid}: missing graphics runtime manifest")
+    manifest = json.loads(archive.read(name))
+    if manifest.get("rid") != rid or set(manifest.get("libraries", {})) != expected:
+        raise RuntimeError(f"{rid}: graphics runtime library set is incomplete or unexpected")
+    components = {"dawn"} if rid == "osx-arm64" else {"dawn", "angle"}
+    if set(manifest.get("components", {})) != components:
+        raise RuntimeError(f"{rid}: incorrect graphics SDK components")
+    targets = "buildTransitive/graphics/WebScene.NativeEngine.Graphics.targets"
+    if targets not in archive.namelist():
+        raise RuntimeError(f"{rid}: missing transitive graphics publish targets")
+    for library, digest in manifest["libraries"].items():
+        asset = prefix + library
+        if asset not in archive.namelist() or hashlib.sha256(archive.read(asset)).hexdigest() != digest:
+            raise RuntimeError(f"{rid}: missing or corrupt graphics asset {library}")
+    if rid == "osx-arm64" and any(prefix + name in archive.namelist() for name in ("libEGL.dylib", "libGLESv2.dylib")):
+        raise RuntimeError("macOS Metal runtime must not ship ANGLE")
+
+
 def validate_native_runtime(
     package: pathlib.Path,
     runtime_identifier: str,
@@ -139,6 +167,7 @@ def validate_native_runtime(
         f"runtimes/{runtime_identifier}/native/webscene-native-runtime.json"
     )
     with zipfile.ZipFile(package) as archive:
+        validate_graphics_runtime(archive, runtime_identifier)
         if manifest_name not in archive.namelist():
             raise RuntimeError(f"{package}: missing {manifest_name}")
         manifest = json.loads(archive.read(manifest_name))

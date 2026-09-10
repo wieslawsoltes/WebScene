@@ -1,0 +1,3 @@
+ninja: Entering directory `artifacts/graphics-build/native-v8-enabled'
+[1/2] Linking CXX shared library libwebscene_native_engine.dylib
+[2/2] Linking CXX executable webscene_native_engine_tests

@@ -129,6 +129,29 @@ public sealed class NativeDomLinearGradientTests
     }
 
     [Fact]
+    public void TransparentBlackToBlueInterpolatesInPremultipliedSrgb()
+    {
+        using var bitmap = new SKBitmap(64, 8, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.White);
+        var command = new SceneCommand { Width = 64, Height = 8 };
+
+        NativeCanvasSceneRenderer.DrawDomBackgroundForTest(
+            canvas,
+            "linear-gradient(to right, transparent, rgb(0, 80, 255))",
+            command);
+        canvas.Flush();
+
+        var midpoint = bitmap.GetPixel(32, 4);
+        // CSS gradients interpolate premultiplied sRGB components. The
+        // transparent endpoint must therefore reveal the same blue hue as
+        // opacity increases instead of introducing a dark/black band.
+        Assert.InRange(midpoint.Red, 118, 130);
+        Assert.InRange(midpoint.Green, 158, 170);
+        Assert.InRange(midpoint.Blue, 250, 255);
+    }
+
+    [Fact]
     public void DiagonalEqualPositionHardStopPaintsBothHalvesOfSplitSwatch()
     {
         using var bitmap = new SKBitmap(40, 24, SKColorType.Bgra8888, SKAlphaType.Premul);

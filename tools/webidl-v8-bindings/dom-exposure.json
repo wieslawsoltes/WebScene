@@ -219,6 +219,17 @@
       "constants": []
     },
     {
+      "name": "SVGElement",
+      "template": "svg_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "Element",
+      "attributes": [
+        { "name": "style", "getter": "get_style" }
+      ],
+      "methods": [],
+      "constants": []
+    },
+    {
       "name": "HTMLElement",
       "template": "html_element_template",
       "constructor": "illegal_dom_constructor",
@@ -226,6 +237,7 @@
       "attributes": [
         { "name": "style", "getter": "get_style" },
         { "name": "dataset", "getter": "get_dataset" },
+        { "name": "inert", "getter": "get_inert", "setter": "set_inert" },
         { "name": "innerText", "getter": "get_inner_text", "setter": "set_text_content" },
         { "name": "content", "getter": "get_template_content" },
         { "name": "clientWidth", "getter": "get_client_width" },
@@ -243,6 +255,7 @@
         { "name": "offsetParent", "getter": "get_offset_parent" },
         { "name": "width", "getter": "get_element_width", "setter": "set_element_width" },
         { "name": "height", "getter": "get_element_height", "setter": "set_element_height" },
+        { "name": "hidden", "getter": "get_hidden", "setter": "set_hidden" },
         { "name": "colSpan", "getter": "get_table_cell_span", "setter": "set_table_cell_span" },
         { "name": "rowSpan", "getter": "get_table_cell_span", "setter": "set_table_cell_span" },
         { "name": "cellSpacing", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
@@ -270,6 +283,7 @@
         { "name": "tabIndex", "getter": "get_tab_index", "setter": "set_tab_index" },
         { "name": "src", "getter": "get_element_url", "setter": "set_element_src" },
         { "name": "href", "getter": "get_element_url", "setter": "set_element_href" },
+        { "name": "accept", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "download", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "hash", "getter": "get_anchor_hash", "setter": "set_anchor_hash" },
         { "name": "contentWindow", "getter": "get_content_window" },
@@ -277,6 +291,8 @@
       ],
       "methods": [
         { "name": "scrollIntoView", "callback": "element_scroll_into_view", "length": 0 },
+        { "name": "scrollTo", "callback": "element_scroll_to", "length": 0 },
+        { "name": "scroll", "callback": "element_scroll_to", "length": 0 },
         { "name": "getContext", "callback": "canvas_get_context", "length": 1 },
         { "name": "toDataURL", "callback": "canvas_to_data_url", "length": 0 },
         { "name": "toBlob", "callback": "canvas_to_blob", "length": 1 },
@@ -290,6 +306,32 @@
         { "name": "setSelectionRange", "callback": "element_set_selection_range", "length": 2 },
         { "name": "click", "callback": "element_click", "length": 0 },
         { "name": "reset", "callback": "form_reset", "length": 0 }
+      ],
+      "constants": []
+    },
+    {
+      "name": "HTMLTableCellElement",
+      "template": "html_table_cell_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "HTMLElement",
+      "attributes": [],
+      "methods": [],
+      "constants": []
+    },
+    {
+      "name": "HTMLDialogElement",
+      "template": "html_dialog_element_template",
+      "constructor": "illegal_dom_constructor",
+      "parent": "HTMLElement",
+      "attributes": [
+        { "name": "open", "getter": "get_dialog_open", "setter": "set_dialog_open" },
+        { "name": "returnValue", "getter": "get_dialog_return_value", "setter": "set_dialog_return_value" }
+      ],
+      "methods": [
+        { "name": "show", "callback": "dialog_show", "length": 0 },
+        { "name": "showModal", "callback": "dialog_show_modal", "length": 0 },
+        { "name": "close", "callback": "dialog_close", "length": 0 },
+        { "name": "requestClose", "callback": "dialog_request_close", "length": 0 }
       ],
       "constants": []
     },
@@ -361,7 +403,6 @@
     "HTMLImageElement": "HTMLElement",
     "HTMLInputElement": "HTMLElement",
     "HTMLParagraphElement": "HTMLElement",
-    "SVGElement": "Element",
     "Window": "EventTarget"
   }
 }

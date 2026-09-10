@@ -38,6 +38,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 {
     private IntPtr _engine;
     private readonly bool _useCompositionVisual;
+    private readonly bool _enableGpuScenes;
     private readonly bool _submitAnimationFrames;
     private readonly NativeCanvasSceneRenderer _renderer = new();
     private readonly object _rendererGate = new();
@@ -64,25 +65,42 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     private int _frameCallbackScheduled;
     private bool _presentationActive = true;
     private bool _pointerDown;
+    private readonly Func<InputEvent, bool> _enqueuePointerInput;
     private int _lastCursorKind = -1;
     private int _compositionProjectionActive;
     private long _compositionUiWakeCount;
     private CompositionCustomVisual? _customVisual;
+    private NativeSceneCompositionHandler? _compositionHandler;
 
     public NativeSceneSurface(
         IntPtr engine,
         bool useCompositionVisual = false,
-        bool submitAnimationFrames = true)
+        bool submitAnimationFrames = true,
+        bool enableGpuScenes = false)
+        : this(engine, useCompositionVisual, submitAnimationFrames, null, enableGpuScenes)
+    {
+    }
+
+    internal NativeSceneSurface(
+        IntPtr engine,
+        bool useCompositionVisual,
+        bool submitAnimationFrames,
+        Func<InputEvent, bool>? enqueuePointerInput,
+        bool enableGpuScenes = false)
     {
         _performanceInstrumentation = new NativePerformanceInstrumentation();
         _renderObserver = new NativeSceneRenderObserver(_performanceInstrumentation);
         _engine = engine;
+        _enqueuePointerInput = enqueuePointerInput ?? EnqueueNativePointerInput;
         _useCompositionVisual = useCompositionVisual
             && !string.Equals(
                 Environment.GetEnvironmentVariable(
                     "WEBSCENE_AVALONIA_DIRECT_DRAW"),
                 "1",
                 StringComparison.Ordinal);
+        if (enableGpuScenes && ((!OperatingSystem.IsMacOS() && !OperatingSystem.IsWindows()) || !_useCompositionVisual))
+            throw new PlatformNotSupportedException("GPU scenes require macOS or Windows composition rendering.");
+        _enableGpuScenes = enableGpuScenes;
         _submitAnimationFrames = submitAnimationFrames;
         Focusable = true;
         ClipToBounds = true;
@@ -90,6 +108,11 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             InputElement.PointerMovedEvent,
             OnPointerMoved,
             RoutingStrategies.Direct | RoutingStrategies.Bubble,
+            handledEventsToo: true);
+        AddHandler(
+            InputElement.PointerExitedEvent,
+            OnPointerExited,
+            RoutingStrategies.Direct,
             handledEventsToo: true);
         AddHandler(
             InputElement.PointerPressedEvent,
@@ -146,6 +169,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         if (_customVisual is not null)
         {
             Volatile.Write(ref _compositionProjectionActive, 0);
+            _compositionHandler?.RevokeEngineAccess();
+            _compositionHandler = null;
             _customVisual.SendHandlerMessage(NativeSceneCompositionMessage.Stop);
             ElementComposition.SetElementChildVisual(this, null);
             _customVisual = null;
@@ -196,15 +221,16 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             var compositor = ElementComposition.GetElementVisual(this)?.Compositor;
             if (compositor is not null)
             {
-                _customVisual = compositor.CreateCustomVisual(
-                    new NativeSceneCompositionHandler(
+                _compositionHandler = new NativeSceneCompositionHandler(
                         _engine,
                         _renderObserver,
                         _compositionMailbox,
                         _compositionUiWakeGate,
                         _performanceInstrumentation,
                         ScheduleCompositionUiWake,
-                        TopLevel.GetTopLevel(this)?.RenderScaling ?? 1));
+                        TopLevel.GetTopLevel(this)?.RenderScaling ?? 1,
+                        enableGpuScenes: _enableGpuScenes);
+                _customVisual = compositor.CreateCustomVisual(_compositionHandler);
                 _customVisual.Size = new Vector2((float)Bounds.Width, (float)Bounds.Height);
                 ElementComposition.SetElementChildVisual(this, _customVisual);
                 Volatile.Write(ref _compositionProjectionActive, 1);
@@ -213,6 +239,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             }
         }
 
+        if (_enableGpuScenes)
+            throw new InvalidOperationException("GPU scene rendering requires an attached compositor.");
         _frameLoopActive = true;
         RequestNextFrame();
     }
@@ -223,6 +251,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         if (_customVisual is not null)
         {
             Volatile.Write(ref _compositionProjectionActive, 0);
+            _compositionHandler?.RevokeEngineAccess();
+            _compositionHandler = null;
             _customVisual.SendHandlerMessage(NativeSceneCompositionMessage.Stop);
             ElementComposition.SetElementChildVisual(this, null);
             _customVisual = null;
@@ -347,6 +377,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     public long[] RenderedSceneTimestamps
         => _renderObserver.RenderedSceneTimestamps;
+
+    public NativeSceneSchedulingSample[] SchedulingSamples => _renderObserver.SchedulingSamples;
 
     public NativeSceneRenderSample[] RenderedScenes
         => _renderObserver.RenderedScenes;
@@ -752,13 +784,12 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     }
 
     private void ObserveHostTimeline()
-        => NativeWebSceneApi.EngineObserveCompositorFrame(
+        => NativeWebSceneApi.EngineObserveHostTimeline(
             _engine,
             Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency);
 
     private void EnqueuePointer(uint kind, PointerEventArgs args)
     {
-        ObserveHostTimeline();
         var point = args.GetCurrentPoint(this);
         var properties = point.Properties;
         var button = properties.PointerUpdateKind switch
@@ -785,7 +816,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         };
         _lastPointerX = input.X;
         _lastPointerY = input.Y;
-        var accepted = NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0;
+        var accepted = _enqueuePointerInput(input);
         if (_performanceInstrumentation.IsEnabled)
         {
             Interlocked.Increment(ref _routedInputEvents);
@@ -797,8 +828,18 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         args.Handled = true;
     }
 
+    private bool EnqueueNativePointerInput(InputEvent input)
+    {
+        if (_engine == IntPtr.Zero) return false;
+        ObserveHostTimeline();
+        return NativeWebSceneApi.EngineEnqueue(_engine, in input) != 0;
+    }
+
     private void OnPointerMoved(object? sender, PointerEventArgs args)
         => EnqueuePointer(1, args);
+
+    private void OnPointerExited(object? sender, PointerEventArgs args)
+        => EnqueuePointer(10, args);
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs args)
     {
@@ -1315,6 +1356,26 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         return Task.FromResult<byte[]?>(bytes);
     }
 
+    public Task<byte[]?> CaptureCanvasPngAsync(
+        uint nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        Dispatcher.UIThread.VerifyAccess();
+        if (_customVisual is not null)
+        {
+            var request = new NativeCanvasCaptureRequest(nodeId);
+            _customVisual.SendHandlerMessage(request);
+            return AwaitCanvasCaptureAsync(request, cancellationToken);
+        }
+
+        byte[]? bytes;
+        lock (_rendererGate)
+        {
+            bytes = _renderer.CaptureCanvasPng(nodeId);
+        }
+        return Task.FromResult(bytes);
+    }
+
     public byte[] CaptureRetainedScenePng()
     {
         Dispatcher.UIThread.VerifyAccess();
@@ -1332,6 +1393,23 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     private static async Task<byte[]?> AwaitCompositionCaptureAsync(
         NativeSceneCaptureRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await request.Completion
+                .WaitAsync(TimeSpan.FromSeconds(5), cancellationToken)
+                .ConfigureAwait(true);
+        }
+        catch (TimeoutException)
+        {
+            request.TryCancel();
+            return null;
+        }
+    }
+
+    private static async Task<byte[]?> AwaitCanvasCaptureAsync(
+        NativeCanvasCaptureRequest request,
         CancellationToken cancellationToken)
     {
         try

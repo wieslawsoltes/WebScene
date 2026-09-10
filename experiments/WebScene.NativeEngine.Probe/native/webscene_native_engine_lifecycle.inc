@@ -19,7 +19,11 @@
         void* interop_callback_available_user_data = nullptr,
         webscene_animation_frame_requested_callback
             animation_frame_requested_callback = nullptr,
-        void* animation_frame_requested_user_data = nullptr)
+        void* animation_frame_requested_user_data = nullptr,
+        webscene_stylesheet_consumed_callback stylesheet_consumed_callback = nullptr,
+        void* stylesheet_consumed_user_data = nullptr,
+        webscene_webgpu_policy_callback webgpu_policy_callback = nullptr,
+        void* webgpu_policy_user_data = nullptr)
         : command_count_(command_count == 0U
               ? 0U
               : (command_count < minimum_command_count
@@ -32,6 +36,10 @@
         , resource_load_v2_user_data_(resource_load_v2_user_data)
         , resource_load_callback_v3_(resource_load_callback_v3)
         , resource_load_v3_user_data_(resource_load_v3_user_data)
+        , stylesheet_consumed_callback_(stylesheet_consumed_callback)
+        , stylesheet_consumed_user_data_(stylesheet_consumed_user_data)
+        , webgpu_policy_callback_(webgpu_policy_callback)
+        , webgpu_policy_user_data_(webgpu_policy_user_data)
         , scene_published_callback_(scene_published_callback)
         , scene_published_user_data_(scene_published_user_data)
         , host_request_available_callback_(host_request_available_callback)
@@ -49,7 +57,7 @@
     {
         worker_.request_stop();
         signal_worker();
-        worker_.join();
+        if (worker_.joinable()) worker_.join();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         delete inspector_state_.exchange(nullptr, std::memory_order_acq_rel);
 #endif
@@ -86,6 +94,37 @@
     }
 #endif
 
+    bool complete_file_request(webscene_native::native_file_completion completion) {
+        std::lock_guard lock(script_mutex_);
+        if (script_work_.size() >= 1024) return false;
+        script_work_.emplace_back(std::move(completion));
+        signal_worker();
+        return true;
+    }
+    void retire_file_runtime() {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        std::unique_ptr<webscene_native::v8_dom_runtime> retired;
+        {
+            std::lock_guard lock(file_runtime_mutex_);
+            file_runtime_ready_=false;
+            retired=std::move(runtime_);
+        }
+        // Destruction stays on the V8 worker and outside the host queue lock.
+#endif
+    }
+    bool enable_file_service(bool enabled) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        file_service_enabled_.store(enabled); signal_worker(); return true;
+#endif
+        return false;
+    }
+    std::unique_ptr<webscene_native::native_file_request> take_file_request() {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        std::lock_guard lock(file_runtime_mutex_);
+        if (file_runtime_ready_) return runtime_->take_file_request();
+#endif
+        return {};
+    }
     bool enqueue(const webscene_input_event& event)
     {
         if (event.kind == WEBSCENE_INPUT_RESIZE) {
@@ -107,7 +146,11 @@
             return true;
         }
 
-        if (!inputs_.try_push(event)) {
+        const auto pointer_move = event.kind == WEBSCENE_INPUT_POINTER_MOVE;
+        if (pointer_move) pending_pointer_move_inputs_.fetch_add(1, std::memory_order_release);
+        if (!inputs_.try_push(queued_input_event(event,
+                observed_compositor_timestamp_microseconds_.load(std::memory_order_acquire)))) {
+            if (pointer_move) pending_pointer_move_inputs_.fetch_sub(1, std::memory_order_release);
             dropped_inputs_.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
@@ -185,26 +228,65 @@
         return current_cursor_.load(std::memory_order_acquire);
     }
 
+    static bool advance_observed_timestamp(
+        std::atomic<uint64_t>& destination,
+        uint64_t timestamp_microseconds) noexcept
+    {
+        auto observed = destination.load(std::memory_order_relaxed);
+        while (timestamp_microseconds > observed) {
+            if (destination.compare_exchange_weak(
+                    observed,
+                    timestamp_microseconds,
+                    std::memory_order_release,
+                    std::memory_order_relaxed)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void observe_host_timeline(double timestamp_ms) noexcept
+    {
+        if (!std::isfinite(timestamp_ms) || timestamp_ms < 0) return;
+        const auto timestamp_microseconds = static_cast<uint64_t>(
+            timestamp_ms * 1000.0);
+        static_cast<void>(advance_observed_timestamp(
+            observed_host_timestamp_microseconds_,
+            timestamp_microseconds));
+    }
+
     void observe_compositor_frame(double timestamp_ms) noexcept
     {
         if (!std::isfinite(timestamp_ms) || timestamp_ms < 0) return;
         const auto timestamp_microseconds = static_cast<uint64_t>(
             timestamp_ms * 1000.0);
-        auto observed = observed_compositor_timestamp_microseconds_.load(
-            std::memory_order_relaxed);
-        while (timestamp_microseconds > observed
-            && !observed_compositor_timestamp_microseconds_.compare_exchange_weak(
-                observed,
-                timestamp_microseconds,
-                std::memory_order_release,
-                std::memory_order_relaxed)) {
+        static_cast<void>(advance_observed_timestamp(
+            observed_host_timestamp_microseconds_,
+            timestamp_microseconds));
+        if (advance_observed_timestamp(
+                observed_compositor_timestamp_microseconds_,
+                timestamp_microseconds)
+            && frame_paced_pointer_pending_.load(std::memory_order_acquire)) {
+            // A deferred continuous pointer sample is released at the next
+            // actual display boundary even when the page has no RAF demand.
+            signal_worker();
         }
     }
 
     uint8_t animation_frame_demand() const noexcept
     {
-        return host_animation_frame_requested_.load(
+        // Read the handoff flag first: observing false acquires the RAF demand
+        // published before the worker released its in-flight pointer demand.
+        const auto pointer_pending = frame_paced_pointer_pending_.load(std::memory_order_acquire);
+        const auto queued_pointer = pending_pointer_move_inputs_.load(std::memory_order_acquire) != 0
+            && observed_compositor_timestamp_microseconds_.load(std::memory_order_acquire) != 0;
+        const auto host_demand = host_animation_frame_requested_.load(
             std::memory_order_acquire);
+        return static_cast<uint8_t>(
+            host_demand
+            | (pointer_pending || queued_pointer
+                    ? uint8_t{4U}
+                    : uint8_t{0U}));
     }
 
     bool execute_script(
@@ -404,6 +486,15 @@
         return enqueue_url(value, length, {});
     }
 
+    bool load_url_with_viewport(const char* value, size_t length, const webscene_input_event& viewport)
+    {
+        if (viewport.kind != WEBSCENE_INPUT_RESIZE ||
+            !std::isfinite(viewport.x) || !std::isfinite(viewport.y) ||
+            !std::isfinite(viewport.delta_x) || viewport.x <= 0 || viewport.y <= 0 || viewport.delta_x <= 0)
+            return false;
+        return enqueue_url(value, length, {}, viewport);
+    }
+
     bool load_url(
         const char* value,
         size_t length,
@@ -480,7 +571,8 @@
     bool enqueue_url(
         const char* value,
         size_t length,
-        std::vector<webscene_native::document_start_script> scripts)
+        std::vector<webscene_native::document_start_script> scripts,
+        std::optional<webscene_input_event> viewport = {})
     {
 #if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
         static_cast<void>(value);
@@ -506,7 +598,7 @@
         }
         script_work_.emplace_back(url_request{
             std::string(value, length),
-            std::move(scripts)});
+            std::move(scripts), viewport});
         signal_worker();
         return true;
 #endif

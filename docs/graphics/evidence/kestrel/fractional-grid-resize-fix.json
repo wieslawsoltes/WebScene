@@ -1,0 +1,776 @@
+{
+  "originalSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "problem": "A flexible track minimum was subtracted before calculating the entire fractional size, leaving 250 CSS pixels unused in Kestrel.",
+  "implementation": "Allocate fractions from available space minus non-flexible tracks and gaps; freeze tracks below their minimum and recompute, keeping the denominator at least one. Share the allocator between axes and route explicit single-column/row templates through track layout.",
+  "specification": "https://drafts.csswg.org/css-grid-2/#algo-find-fr-size",
+  "regressionBefore": {
+    "schema": "webscene-wpt-subset-result-v3",
+    "profile": "webscene-component-1",
+    "profileSha256": "d640b7825f53b56437622cc238f78569a4a0a4c0f15f08937909338064bb471a",
+    "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+    "runtime": "v8",
+    "engine": "native",
+    "nativeEngineIdentity": "abi=3;sha256=78cb8160904fc5a35997770383cabda2542ef619f8ac93197d726532fa62c6d0",
+    "chromiumIdentity": null,
+    "startedAt": "2026-09-08T09:08:41.061542+00:00",
+    "duration": "00:00:00.2337178",
+    "selection": "candidate",
+    "summary": {
+      "tests": 1,
+      "passed": 0,
+      "failed": 1,
+      "timedOut": 0,
+      "harnessErrors": 0,
+      "subtests": 6,
+      "subtestsPassed": 1,
+      "subtestsFailed": 5
+    },
+    "results": [
+      {
+        "path": "contracts/css-grid-flex-track-minimum.html",
+        "type": "testharness",
+        "status": "FAIL",
+        "duration": "00:00:00.2309316",
+        "message": "diagnostic: activeElement=",
+        "subtests": [
+          {
+            "name": "Flexible minimum is part of the final fraction, with fixed tracks and gaps",
+            "status": "FAIL",
+            "message": "assert_approx_equals: track 1 expected 380 +/- 0.01 but got 230",
+            "stack": "Error\n    at get_stack (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4802:21)\n    at new AssertionError (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4795:22)\n    at assert (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4779:19)\n    at assert_approx_equals (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1812:13)\n    at assert_wrapper (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1518:30)\n    at check (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:7:42)\n    at Test.<anonymous> (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:10:10)\n    at Test.step (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:2869:25)\n    at test (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:633:30)\n    at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:10:1"
+          },
+          {
+            "name": "A frozen minimum redistributes remaining space",
+            "status": "FAIL",
+            "message": "assert_approx_equals: track 1 expected 100 +/- 0.01 but got 40",
+            "stack": "Error\n    at get_stack (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4802:21)\n    at new AssertionError (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4795:22)\n    at assert (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4779:19)\n    at assert_approx_equals (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1812:13)\n    at assert_wrapper (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1518:30)\n    at check (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:7:42)\n    at Test.<anonymous> (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:11:10)\n    at Test.step (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:2869:25)\n    at test (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:633:30)\n    at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:11:1"
+          },
+          {
+            "name": "Unequal fractions recompute after minimum freezing",
+            "status": "FAIL",
+            "message": "assert_approx_equals: track 1 expected 300 +/- 0.01 but got 200",
+            "stack": "Error\n    at get_stack (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4802:21)\n    at new AssertionError (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4795:22)\n    at assert (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4779:19)\n    at assert_approx_equals (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1812:13)\n    at assert_wrapper (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1518:30)\n    at check (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:7:42)\n    at Test.<anonymous> (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:12:10)\n    at Test.step (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:2869:25)\n    at test (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:633:30)\n    at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:12:1"
+          },
+          {
+            "name": "Fractions below one leave their unrequested share unused",
+            "status": "FAIL",
+            "message": "assert_approx_equals: track 0 expected 225 +/- 0.01 but got 800",
+            "stack": "Error\n    at get_stack (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4802:21)\n    at new AssertionError (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4795:22)\n    at assert (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4779:19)\n    at assert_approx_equals (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1812:13)\n    at assert_wrapper (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1518:30)\n    at check (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:7:42)\n    at Test.<anonymous> (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:13:10)\n    at Test.step (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:2869:25)\n    at test (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:633:30)\n    at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:13:1"
+          },
+          {
+            "name": "Minimum sizes overflow instead of becoming negative",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "Block-axis fractional tracks use the same allocation rule",
+            "status": "FAIL",
+            "message": "assert_approx_equals: track 0 expected 250 +/- 0.01 but got 300",
+            "stack": "Error\n    at get_stack (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4802:21)\n    at new AssertionError (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4795:22)\n    at assert (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4779:19)\n    at assert_approx_equals (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1812:13)\n    at assert_wrapper (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1518:30)\n    at check (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:7:42)\n    at Test.<anonymous> (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:15:10)\n    at Test.step (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:2869:25)\n    at test (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:633:30)\n    at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:15:1"
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      }
+    ]
+  },
+  "candidateGridAfter": {
+    "schema": "webscene-wpt-subset-result-v3",
+    "profile": "webscene-component-1",
+    "profileSha256": "d640b7825f53b56437622cc238f78569a4a0a4c0f15f08937909338064bb471a",
+    "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+    "runtime": "v8",
+    "engine": "native",
+    "nativeEngineIdentity": "abi=3;sha256=c6f3428fc890b23c6df4e0af9f0a15f26d2d6ad3aa083765ecb4376488cc4064",
+    "chromiumIdentity": null,
+    "startedAt": "2026-09-08T09:10:02.582383+00:00",
+    "duration": "00:00:02.2631426",
+    "selection": "candidate",
+    "summary": {
+      "tests": 7,
+      "passed": 7,
+      "failed": 0,
+      "timedOut": 0,
+      "harnessErrors": 0,
+      "subtests": 21,
+      "subtestsPassed": 21,
+      "subtestsFailed": 0
+    },
+    "results": [
+      {
+        "path": "contracts/css-grid-flex-track-minimum.html",
+        "type": "testharness",
+        "status": "PASS",
+        "duration": "00:00:00.6930496",
+        "message": null,
+        "subtests": [
+          {
+            "name": "Flexible minimum is part of the final fraction, with fixed tracks and gaps",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "A frozen minimum redistributes remaining space",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "Unequal fractions recompute after minimum freezing",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "Fractions below one leave their unrequested share unused",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "Minimum sizes overflow instead of becoming negative",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "Block-axis fractional tracks use the same allocation rule",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/css-grid-auto-row-shrink.html",
+        "type": "testharness",
+        "status": "PASS",
+        "duration": "00:00:00.1125121",
+        "message": null,
+        "subtests": [
+          {
+            "name": "Scrollable auto row grows and shrinks with definite grid height",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "Explicit zero minimum permits row shrinking without losing authored minimum",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "Visible overflow retains content-based automatic minimum",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/css-grid-form-layout.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.1144459",
+        "message": null,
+        "subtests": [
+          {
+            "name": "one automatic middle track leaves equal fractional form tracks",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "minmax fractional CRUD columns share the available width",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "explicit row spans and column placement retain the authored cells",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/css-grid-column-subgrid-form-row.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.1058056",
+        "message": null,
+        "subtests": [
+          {
+            "name": "a spanning column subgrid inherits the parent form tracks",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/css-grid-display-contents-items.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.0987575",
+        "message": null,
+        "subtests": [
+          {
+            "name": "display contents rows do not generate grid item boxes",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "a definite grid end line aligns the header with flattened row cells",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "the row descendants occupy one compact parent-grid row",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "all flattened cells remain within the five-track grid",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/grid-auto-row-stretch-dir-radius.html",
+        "type": "reftest",
+        "status": "PASS",
+        "duration": "00:00:01.0399840",
+        "message": null,
+        "subtests": [],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/implicit-grid-and-compact-flex-controls.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.0948501",
+        "message": null,
+        "subtests": [
+          {
+            "name": "column auto-flow creates three equal implicit fractional tracks",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "an inline flex item is blockified and stretches in the cross axis",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "a three-column fractional grid preserves a nested nonshrinking suffix",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "a spaced flex summary keeps its numeric value on one line",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      }
+    ]
+  },
+  "requiredGridAfter": {
+    "schema": "webscene-wpt-subset-result-v3",
+    "profile": "webscene-component-1",
+    "profileSha256": "d640b7825f53b56437622cc238f78569a4a0a4c0f15f08937909338064bb471a",
+    "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+    "runtime": "v8",
+    "engine": "native",
+    "nativeEngineIdentity": "abi=3;sha256=c6f3428fc890b23c6df4e0af9f0a15f26d2d6ad3aa083765ecb4376488cc4064",
+    "chromiumIdentity": null,
+    "startedAt": "2026-09-08T09:10:22.576568+00:00",
+    "duration": "00:00:01.4257227",
+    "selection": "required",
+    "summary": {
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "timedOut": 0,
+      "harnessErrors": 0,
+      "subtests": 9,
+      "subtestsPassed": 9,
+      "subtestsFailed": 0
+    },
+    "results": [
+      {
+        "path": "contracts/css-grid-gap-alias-flex.html",
+        "type": "testharness",
+        "status": "PASS",
+        "duration": "00:00:00.1495392",
+        "message": null,
+        "subtests": [
+          {
+            "name": "Grid row/column gap aliases preserve flex spacing and wrapping",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "CSSOM camel-case gridColumnGap sets the column-gap alias",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/responsive-settings-property-grid.html",
+        "type": "testharness",
+        "status": "PASS",
+        "duration": "00:00:00.1219079",
+        "message": null,
+        "subtests": [
+          {
+            "name": "compact 1fr/min-content settings rows use post-track wrapped block contributions",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "css/css-grid/alignment/grid-gutters-001.html",
+        "type": "reftest",
+        "status": "PASS",
+        "duration": "00:00:01.0514904",
+        "message": null,
+        "subtests": [],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/css-grid-placement-cssom.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.1000779",
+        "message": null,
+        "subtests": [
+          {
+            "name": "a one-line grid-area expands to four computed placement longhands",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "a four-line stylesheet grid-area preserves placement order",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "grid-row and grid-column expand their omitted ends to auto",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "grid placement longhands retain unitless integer values",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "an explicit placement longhand overrides its shorthand component",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "removing a grid placement shorthand restores auto longhands",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      }
+    ]
+  },
+  "nativeTests": {
+    "engineSeconds": 11.03,
+    "gpuRuntimeSeconds": 1.79,
+    "passed": true
+  },
+  "kestrelResize": [
+    {
+      "window": [
+        980,
+        680
+      ],
+      "canvas": [
+        1610,
+        750
+      ],
+      "css": [
+        805,
+        375
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            175,
+            196,
+            805,
+            375
+          ],
+          "height": "375px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            196,
+            980,
+            375
+          ],
+          "height": "375px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1440,
+        900
+      ],
+      "canvas": [
+        1932,
+        1126
+      ],
+      "css": [
+        966,
+        563
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            222,
+            205,
+            966,
+            563
+          ],
+          "height": "563px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1440,
+            563
+          ],
+          "height": "563px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1100,
+        740
+      ],
+      "canvas": [
+        1362,
+        806
+      ],
+      "css": [
+        681,
+        403
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            195,
+            205,
+            681,
+            403
+          ],
+          "height": "403px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1100,
+            403
+          ],
+          "height": "403px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1280,
+        800
+      ],
+      "canvas": [
+        1612,
+        926
+      ],
+      "css": [
+        806,
+        463
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            222,
+            205,
+            806,
+            463
+          ],
+          "height": "463px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1280,
+            463
+          ],
+          "height": "463px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    }
+  ],
+  "screenshot": "macos-kestrel-grid-resize-fixed.png",
+  "limitations": [
+    "Stable resized geometry and screenshot verified; live resize timing and pan flicker are not certified by a still image.",
+    "No full grid conformance or cross-platform qualification claimed. New contract remains candidate.",
+    "Dynamic CSSOM setup using cssText/property assignment did not establish the intended fixture; the regression uses style attributes. CSSOM coverage remains separate."
+  ]
+}

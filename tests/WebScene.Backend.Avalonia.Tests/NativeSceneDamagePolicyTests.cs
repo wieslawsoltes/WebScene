@@ -6,6 +6,40 @@ namespace WebScene.Backend.Avalonia.Tests;
 
 public sealed class NativeSceneDamagePolicyTests
 {
+    [Fact]
+    public void CoalescedScenesInvalidateBothSeparatedChanges()
+    {
+        var first = new NativeSceneDamage(true, false, new Rect(10, 20, 30, 40), 1, 1200);
+        var following = new NativeSceneDamage(true, false, new Rect(200, 100, 20, 10), 1, 200);
+        var combined = first.Combine(following);
+        Assert.True(combined.RequiresRender);
+        Assert.False(combined.IsFull);
+        Assert.Equal(new Rect(10, 20, 210, 90), combined.Bounds);
+        Assert.Equal(2, combined.RectangleCount);
+        Assert.Equal(1400, combined.SummedArea);
+    }
+
+    [Fact]
+    public void UnchangedFollowingSceneCannotEraseEarlierDamage()
+    {
+        var changed = new NativeSceneDamage(true, false, new Rect(80, 90, 10, 20), 1, 200);
+        Assert.Equal(changed, changed.Combine(NativeSceneDamage.None));
+        Assert.Equal(changed, NativeSceneDamage.None.Combine(changed));
+        Assert.Equal(NativeSceneDamage.None, NativeSceneDamage.None.Combine(NativeSceneDamage.None));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FullDamageSurvivesEitherSceneOrder(bool fullFirst)
+    {
+        var full = new NativeSceneDamage(true, true, default, 0, 0);
+        var local = new NativeSceneDamage(true, false, new Rect(80, 90, 10, 20), 1, 200);
+        var combined = fullFirst ? full.Combine(local) : local.Combine(full);
+        Assert.True(combined.RequiresRender);
+        Assert.True(combined.IsFull);
+    }
+
     private const uint SceneCheckpoint = 1;
     private const uint SceneDomReplacement = 2;
 

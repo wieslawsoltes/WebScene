@@ -1,0 +1,33 @@
+{
+  "validated": true,
+  "exitCode": 0,
+  "activeSpanMilliseconds": 1353.228292,
+  "activeCadence": {
+    "updates": {
+      "count": 80,
+      "medianIntervalMilliseconds": 15.73125,
+      "maximumIntervalMilliseconds": 66.180083
+    },
+    "compositorTicks": {
+      "count": 94,
+      "medianIntervalMilliseconds": 16.240334,
+      "maximumIntervalMilliseconds": 25.734875
+    },
+    "drawCallbacks": {
+      "count": 54,
+      "medianIntervalMilliseconds": 30.004791,
+      "maximumIntervalMilliseconds": 51.366583
+    },
+    "setters": {
+      "medianMilliseconds": 0.020104,
+      "maximumMilliseconds": 0.626709
+    }
+  },
+  "physicalPresentationVerified": false,
+  "nativeUserDragVerified": false,
+  "limitations": [
+    "Single scripted run; callbacks are not physical presentation.",
+    "Deadline pacing changes the input workload, not production rendering.",
+    "Long input outliers remain; no fixed 60Hz delivery guarantee."
+  ]
+}

@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8">
+<title>Margin priority applies to individual sides</title>
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>
+body{margin:0} .container{width:400px}
+.important{margin-bottom:0!important}
+.center{width:200px;height:20px;margin:32px auto}
+.override{margin:10px!important}
+.later{margin:40px}
+</style>
+<div class="container">
+ <div id="a" class="important center"></div>
+ <div id="b" class="center" style="margin-bottom:0"></div>
+ <div id="c" class="important center later"></div>
+ <div id="d" class="override" style="margin-left:30px!important;width:200px;height:20px"></div>
+</div>
+<script>
+test(()=>{assert_equals(a.getBoundingClientRect().x,100);assert_equals(getComputedStyle(a).marginBottom,'0px');assert_equals(getComputedStyle(a).marginTop,'32px');},'Important bottom margin does not suppress normal auto margins');
+test(()=>{assert_equals(b.getBoundingClientRect().x,100);assert_equals(getComputedStyle(b).marginBottom,'0px');},'Inline bottom margin does not suppress stylesheet auto margins');
+test(()=>{assert_equals(getComputedStyle(c).marginLeft,'40px');assert_equals(getComputedStyle(c).marginBottom,'0px');},'A later shorthand changes unprotected sides but preserves the important side');
+test(()=>{assert_equals(getComputedStyle(d).marginLeft,'30px');assert_equals(getComputedStyle(d).marginRight,'10px');},'An inline important side wins over an important stylesheet shorthand');
+test(()=>{
+ a.style.marginBottom='50px';
+ assert_equals(getComputedStyle(a).marginBottom,'0px');
+ a.style.setProperty('margin-bottom','60px');
+ assert_equals(getComputedStyle(a).marginBottom,'0px');
+ a.className='center';
+ assert_equals(getComputedStyle(a).marginBottom,'60px');
+ assert_equals(a.getBoundingClientRect().x,100);
+},'CSSOM changes preserve important side priority and recover authored values when the rule is removed');
+</script>

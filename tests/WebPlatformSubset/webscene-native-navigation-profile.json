@@ -1,0 +1,27 @@
+{
+  "profile": "native-navigation-style-check",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "deviceScaleFactor": 1
+  },
+  "required": [],
+  "candidate": [
+    {
+      "path": "contracts/html-script-style-text-is-inert.html",
+      "type": "testharness",
+      "capabilities": [
+        "html-raw-text",
+        "stylesheet-discovery"
+      ],
+      "evidence": [
+        "kestrel-print-preview-style-leak"
+      ],
+      "reason": "Candidate passes through native document navigation, preserving parser raw-text/comment/template semantics. Prepared-markup regex loading cannot qualify this parsing regression.",
+      "nativeNavigation": true
+    }
+  ],
+  "harnessBlocked": []
+}

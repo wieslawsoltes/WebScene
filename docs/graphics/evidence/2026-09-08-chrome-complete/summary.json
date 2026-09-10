@@ -1,0 +1,31 @@
+{
+  "status": "captured",
+  "runs": 32,
+  "pairedCases": 16,
+  "allRepeatedImagesExact": true,
+  "hardwareConfirmedRuns": 32,
+  "verifiedReferencedFiles": 232,
+  "browser": {
+    "protocolVersion": "1.3",
+    "product": "Chrome/152.0.7977.77",
+    "revision": "@529d9a34b491745086b59458f58a5aae8292adaa",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+    "jsVersion": "15.2.124.19"
+  },
+  "sourceCommit": "dde007e77cae2de36c9c6fe8659e7c8bb5498e56",
+  "reporterCadenceRange": [
+    58.99933134091147,
+    60.33652274215002
+  ],
+  "reporterP95IntervalMillisecondsRange": [
+    16.667,
+    33.333
+  ],
+  "scope": "Chrome platform-feedback-derived reporter cadence; not WebScene presentation or physical scanout qualification",
+  "rawArchiveDirectory": "artifacts/chrome-reference-final-navigation-20260908",
+  "limits": [
+    "Full raw artifact set currently local; permanent remote retention remains outstanding",
+    "Does not qualify WebScene GPU conformance or physical 60fps",
+    "Earlier failed/differing captures remain separate and are not relabelled as passes"
+  ]
+}

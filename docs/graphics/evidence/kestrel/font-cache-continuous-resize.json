@@ -1,0 +1,102 @@
+{
+  "validated": true,
+  "exitCode": 0,
+  "publishedScenes": 106,
+  "drawnScenes": 101,
+  "activeUpdateSpanMilliseconds": 2812.973292,
+  "drawCallbackGapMilliseconds": {
+    "median": 33.14197849999999,
+    "maximum": 50.558834
+  },
+  "finalGeometry": {
+    "window": [
+      1280,
+      800
+    ],
+    "canvas": [
+      1612,
+      926
+    ],
+    "css": [
+      806,
+      463
+    ],
+    "ancestors": [
+      {
+        "id": "viewport",
+        "tag": "SECTION",
+        "rect": [
+          222,
+          205,
+          806,
+          463
+        ],
+        "height": "463px",
+        "minHeight": "",
+        "display": "block"
+      },
+      {
+        "id": "workbench",
+        "tag": "MAIN",
+        "rect": [
+          0,
+          205,
+          1280,
+          463
+        ],
+        "height": "463px",
+        "minHeight": "140px",
+        "display": "grid"
+      },
+      {
+        "id": "shell",
+        "tag": "DIV",
+        "rect": [
+          0,
+          0,
+          1280,
+          800
+        ],
+        "height": "800px",
+        "minHeight": "",
+        "display": "flex"
+      },
+      {
+        "id": "",
+        "tag": "BODY",
+        "rect": [
+          0,
+          0,
+          1280,
+          800
+        ],
+        "height": "800px",
+        "minHeight": "",
+        "display": "block"
+      },
+      {
+        "id": "",
+        "tag": "HTML",
+        "rect": [
+          0,
+          0,
+          1280,
+          800
+        ],
+        "height": "800px",
+        "minHeight": "",
+        "display": "block"
+      }
+    ],
+    "dpr": 2,
+    "backend": "WebGPU \u00b7 GPU pipeline",
+    "errors": 0
+  },
+  "physicalPresentationVerified": false,
+  "nativeUserDragVerified": false,
+  "limitations": [
+    "Single scripted run, no statistical comparison or physical FPS qualification.",
+    "Includes settling in callback gaps; update loop requests 16ms delays but actual cadence differs.",
+    "Intermediate scene checks establish progress, not the absence of visual flicker."
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "change": "Bound system font-name existence probes, preserving live web-font registry precedence",
+  "sidebar": {
+    "validated": true,
+    "cpuApplicationMedianMilliseconds": 2.926958,
+    "cpuApplicationMaximumMilliseconds": 12.344041,
+    "drawnScenes": 61,
+    "maximumDrawCallbackGapMilliseconds": 39.091083
+  },
+  "pan": {
+    "physicalPresentationVerified": false,
+    "publicationToAcceptance": {
+      "count": 64,
+      "medianMilliseconds": 14.408978999999999,
+      "p95Milliseconds": 16.598875,
+      "maximumMilliseconds": 17.79075
+    },
+    "acceptanceToDrawCallbackEnd": {
+      "count": 64,
+      "medianMilliseconds": 0.9060625,
+      "p95Milliseconds": 1.524167,
+      "maximumMilliseconds": 3.365
+    },
+    "publicationToDrawCallbackEnd": {
+      "count": 64,
+      "medianMilliseconds": 15.206479,
+      "p95Milliseconds": 17.412167,
+      "maximumMilliseconds": 18.852459
+    },
+    "inputToPublishedConsumptionWatermark": {
+      "count": 80,
+      "medianMilliseconds": 12.6670835,
+      "p95Milliseconds": 24.210875,
+      "maximumMilliseconds": 30.659
+    },
+    "unmatchedInputCount": 0,
+    "limitations": [
+      "Draw callback completion is not physical presentation.",
+      "A consumption watermark does not prove each coalesced move was drawn.",
+      "Measurement includes settling; no FPS qualification is derived."
+    ]
+  },
+  "tests": {
+    "net8.0": {
+      "regularPassed": 68,
+      "nativeIntegrationPassed": 2,
+      "failed": 0
+    },
+    "net10.0": {
+      "regularPassed": 68,
+      "nativeIntegrationPassed": 2,
+      "failed": 0
+    }
+  },
+  "limitations": [
+    "One validated pan and sidebar run; no statistical or physical 60 FPS qualification.",
+    "Cache follows existing process system-font resolution policy; live OS font-install notifications are not introduced.",
+    "Initial native integration skip was rerun with the native library and both cases passed on each framework."
+  ]
+}

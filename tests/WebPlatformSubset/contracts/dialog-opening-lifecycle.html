@@ -1,0 +1,71 @@
+<!doctype html><meta charset="utf-8">
+<title>Dialog opening mode, cancellation, focus and cleanup</title>
+<link rel="help" href="https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<body>
+<script>
+function fixture(t) {
+  const opener = document.createElement('button');
+  const dialog = document.createElement('dialog');
+  dialog.innerHTML = '<input><button autofocus>Accept</button>';
+  document.body.append(opener, dialog);
+  t.add_cleanup(() => { dialog.close(); dialog.remove(); opener.remove(); });
+  return {opener, dialog};
+}
+test(t => {
+  const {dialog} = fixture(t);
+  assert_equals(HTMLDialogElement.prototype.show.length, 0);
+  assert_equals(HTMLDialogElement.prototype.showModal.length, 0);
+  assert_throws_js(TypeError, () => HTMLDialogElement.prototype.showModal.call(document.createElement('div')));
+  dialog.show(); dialog.show();
+  assert_true(dialog.open);
+  assert_throws_dom('InvalidStateError', () => dialog.showModal());
+  dialog.close(); dialog.showModal(); dialog.showModal();
+  assert_throws_dom('InvalidStateError', () => dialog.show());
+  dialog.close(); dialog.show();
+  assert_true(dialog.open);
+}, 'show and showModal preserve mode and reject switching while open');
+test(t => {
+  const {dialog} = fixture(t);
+  dialog.remove();
+  assert_throws_dom('InvalidStateError', () => dialog.showModal());
+  assert_false(dialog.open);
+  dialog.show(); assert_true(dialog.open);
+}, 'showModal requires connection; show supports disconnected dialogs');
+test(t => {
+  const {dialog} = fixture(t);
+  let calls = 0;
+  dialog.addEventListener('beforetoggle', e => {
+    calls++;
+    assert_true(e.cancelable); assert_false(e.bubbles);
+    assert_equals(e.oldState, 'closed'); assert_equals(e.newState, 'open');
+    e.preventDefault();
+  }, {once:true});
+  dialog.showModal();
+  assert_equals(calls, 1); assert_false(dialog.open);
+  dialog.addEventListener('beforetoggle', () => dialog.remove(), {once:true});
+  dialog.showModal(); assert_false(dialog.open);
+}, 'beforetoggle can cancel opening or detach the dialog');
+test(t => {
+  const {opener, dialog} = fixture(t);
+  opener.focus(); dialog.showModal();
+  assert_equals(document.activeElement, dialog.querySelector('[autofocus]'));
+  opener.focus();
+  assert_not_equals(document.activeElement, opener, 'background is inert');
+  dialog.close('accepted');
+  assert_equals(dialog.returnValue, 'accepted');
+  assert_equals(document.activeElement, opener, 'previous focus restored');
+  opener.focus(); assert_equals(document.activeElement, opener, 'modal blocking removed');
+}, 'modal focus uses autofocus and close restores background interaction');
+test(t => {
+  const {opener, dialog} = fixture(t);
+  for (const remove of [() => { dialog.open = false; }, () => dialog.removeAttribute('open')]) {
+    dialog.showModal(); remove();
+    opener.focus();
+    assert_not_equals(document.activeElement, opener, 'attribute removal is not close');
+    dialog.remove(); opener.focus();
+    assert_equals(document.activeElement, opener, 'detachment releases modal blocking');
+    document.body.append(dialog); dialog.show(); assert_true(dialog.open); dialog.close();
+  }
+}, 'Removing open alone retains modal state; detachment releases it');
+</script>

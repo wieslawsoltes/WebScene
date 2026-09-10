@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-08",
+  "originalDocumentSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "command": "BOX",
+  "dimensions": {
+    "width": 2000,
+    "depth": 1500,
+    "height": 2500
+  },
+  "expectedObjects": 266,
+  "observed": {
+    "objects": 265,
+    "backend": "WebGPU \u00b7 GPU pipeline",
+    "errors": 1,
+    "modalError": "Constructing FormData from a form is not yet supported",
+    "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands.CommandBOXError$(...).showModal is not a function"
+  },
+  "exitCode": 1,
+  "qualification": "Failed before geometry creation: HTMLDialogElement.showModal and FormData(form) are missing. This does not qualify or disprove GPU mesh rendering."
+}

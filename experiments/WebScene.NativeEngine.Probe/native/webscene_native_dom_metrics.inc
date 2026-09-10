@@ -16,6 +16,11 @@ native_document::allocation_metrics native_document::read_allocation_metrics() c
     result.node_object_bytes = nodes_.size() * sizeof(dom_node);
     result.node_pool_reserved_bytes = node_pool_upstream_.reserved_bytes();
     result.node_pool_peak_bytes = node_pool_upstream_.peak_bytes();
+    if (layout_scratch_ != nullptr) {
+        result.layout_scratch_reserved_bytes =
+            layout_scratch_->upstream.reserved_bytes();
+        result.layout_scratch_peak_bytes = layout_scratch_->upstream.peak_bytes();
+    }
     result.text_measurement_cache_entry_count = text_measurement_cache_.size();
     result.text_measurement_cache_storage_bytes =
         text_measurement_cache_.bucket_count() * sizeof(void*)
@@ -152,7 +157,8 @@ native_document::allocation_metrics native_document::read_allocation_metrics() c
             return values.bucket_count() * sizeof(void*)
                 + values.size() * (sizeof(value_type) + 2U * sizeof(void*));
         };
-        result.canvas_storage_bytes += hash_bytes(canvas.string_indices);
+        result.canvas_storage_bytes += hash_bytes(canvas.string_indices)
+            + hash_bytes(canvas.canvas_dependencies);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         result.canvas_storage_bytes +=
             hash_bytes(canvas.probable_volume_by_generation)
@@ -232,6 +238,7 @@ native_document::allocation_metrics native_document::read_allocation_metrics() c
             + textual->cursor.capacity() + 1U
             + textual->svg_fill.capacity() + 1U
             + textual->svg_stroke.capacity() + 1U
+            + textual->svg_text_anchor.capacity() + 1U
             + textual->list_style_position.capacity() + 1U
             + textual->list_style_type.capacity() + 1U;
     }
@@ -621,6 +628,34 @@ uint64_t native_document::intrinsic_size_cache_hits() const noexcept
 uint64_t native_document::intrinsic_size_cache_misses() const noexcept
 {
     return intrinsic_size_cache_misses_;
+}
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_DIRECT_CACHE_BENCHMARK)
+uint64_t native_document::intrinsic_size_direct_cache_hits() const noexcept
+{
+    return intrinsic_size_direct_cache_hits_;
+}
+
+uint64_t native_document::intrinsic_size_hash_lookups() const noexcept
+{
+    return intrinsic_size_hash_lookups_;
+}
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
+std::array<uint64_t, 17U>
+native_document::intrinsic_size_branch_counts() const noexcept
+{
+    return intrinsic_size_branch_counts_for_benchmark;
+}
+#endif
+
+#if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_VIEW_BOX_BENCHMARK)
+std::array<uint64_t, 4U>
+native_document::intrinsic_view_box_parse_counts() const noexcept
+{
+    return intrinsic_view_box_parse_counts_for_benchmark;
 }
 #endif
 

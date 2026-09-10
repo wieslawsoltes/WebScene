@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8">
+<title>Container rules must not leak into the unconditional cascade</title>
+<link rel="help" href="https://drafts.csswg.org/css-conditional-5/#container-rule">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>
+#host{width:300px;container-type:inline-size;container-name:panel}
+#item{--gap:20px;padding-inline:var(--gap)}
+@container panel (min-width:1854px){#item{--gap:100px}}
+</style><div id="host"><div id="item"></div></div>
+<script>test(()=>assert_equals(getComputedStyle(item).paddingLeft,'20px'),'A non-matching container rule cannot replace the base spacing token');</script>

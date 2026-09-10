@@ -285,6 +285,50 @@ void test_svg_current_color_is_resolved_before_scene_serialization(webscene_engi
         "inherited SVG currentColor did not resolve to an explicit immutable-scene color");
 }
 
+void test_svg_stylesheet_typography_reaches_scene(webscene_engine* engine)
+{
+    execute(engine, R"JS(
+        document.body.innerHTML = `<style>
+          #cube { width:83px; height:77px; font-family:Helvetica; }
+          #cube text {font-size:8px; font-weight:600; letter-spacing:.7px; text-anchor:middle;}
+        </style><svg id="cube" viewBox="0 0 110 100">
+          <g><text x="55" y="34" font-size="30" text-anchor="end">TOP</text></g>
+          <text x="33" y="64" transform="rotate(29 33 64)">FRONT</text>
+          <text x="76" y="64" transform="rotate(-29 76 64)">RIGHT</text>
+        </svg>`;
+    )JS", "native-svg-typography.js");
+    webscene_engine_request_scene_checkpoint(engine);
+    auto found_resolved_svg = false;
+    for (auto attempt = 0; attempt < 100; ++attempt) {
+        const auto* scene = webscene_engine_acquire_latest_scene(engine);
+        if (scene != nullptr) {
+            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
+                const auto& command = scene->commands[index];
+                if (command.kind != 6U || command.flags >= scene->string_count) continue;
+                const auto resource = scene->strings[command.flags];
+                const std::string_view bytes(
+                    scene->string_bytes + resource.byte_offset,
+                    resource.byte_length);
+                found_resolved_svg = bytes.find("font-size=\"8.000000\"") != std::string_view::npos
+                    && bytes.find("font-weight=\"600\"") != std::string_view::npos
+                    && bytes.find("font-family=\"Helvetica\"") != std::string_view::npos
+                    && bytes.find("letter-spacing=\"0.700000\"") != std::string_view::npos
+                    && bytes.find("text-anchor=\"middle\"") != std::string_view::npos
+                    && bytes.find("rotate(-29 76 64)") != std::string_view::npos
+                    && bytes.find("font-size=\"30\"") == std::string_view::npos
+                    && bytes.find("text-anchor=\"end\"") == std::string_view::npos;
+                if (found_resolved_svg) break;
+            }
+            webscene_scene_acknowledge(scene);
+            webscene_scene_release(scene);
+        }
+        if (found_resolved_svg) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(found_resolved_svg,
+        "SVG stylesheet typography was lost or failed to override presentation attributes");
+}
+
 void test_svg_preserve_aspect_ratio_reaches_scene_serialization(webscene_engine* engine)
 {
     execute(engine, R"JS(
@@ -1274,7 +1318,7 @@ void test_unsupported_features_are_reported_at_native_decision_points(webscene_e
                 != std::string::npos
             && report.find(R"("feature":"Crypto.getRandomValues","classification":"partially-supported")")
                 != std::string::npos
-            && report.find(R"("feature":"Window.matchMedia","classification":"partially-supported")")
+            && report.find(R"("feature":"Window.matchMedia","classification":"supported")")
                 != std::string::npos
             && report.find(R"("feature":"Performance.getEntriesByName","classification":"unsupported")")
                 != std::string::npos

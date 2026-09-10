@@ -1,0 +1,33 @@
+{
+  "scope": "Native completion mailbox shutdown; device_lost callback status is injected, not physical device-loss qualification",
+  "sourceBaseCommit": "ba757275bdc26b152b9ced282c20342595560870",
+  "shutdownRounds": 500,
+  "operations": 8000,
+  "mailboxCapacity": 16,
+  "checks": [
+    "Exactly one cancellation per admitted operation after close",
+    "Admission rejected after close",
+    "Native callbacks retire occupied slots after logical cancellation",
+    "Wake ownership released after callbacks finish",
+    "Duplicate late callbacks rejected"
+  ],
+  "sanitizerRuns": [
+    {
+      "flags": "-fsanitize=address,undefined",
+      "exitCode": 0
+    },
+    {
+      "flags": "-fsanitize=thread",
+      "exitCode": 0
+    }
+  ],
+  "buildTemplate": "clang++ -std=c++20 -g -O1 <sanitizer flags> -fno-omit-frame-pointer -pthread -I experiments/WebScene.NativeEngine.Probe/native experiments/WebScene.NativeEngine.Probe/tests/graphics_completion_tests.cpp -o /tmp/webscene-completion-shutdown-test",
+  "runCommand": "/tmp/webscene-completion-shutdown-test",
+  "cmakeBuild": "cmake --build artifacts/graphics-build/native-v8-enabled --target webscene_graphics_completion_tests -j4",
+  "ctest": "ctest --test-dir artifacts/graphics-build/native-v8-enabled -R '^webscene_graphics_completion_tests$' --output-on-failure",
+  "ctestResult": {
+    "passed": 1,
+    "failed": 0,
+    "seconds": 0.31
+  }
+}

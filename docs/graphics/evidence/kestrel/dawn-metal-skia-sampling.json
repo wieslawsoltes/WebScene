@@ -1,0 +1,23 @@
+{
+  "host": "Avalonia.Native.MetalDevice",
+  "metalDeviceAvailable": true,
+  "metalQueueAvailable": true,
+  "skiaGpuContextAvailable": true,
+  "metalTextureWrapperVerified": true,
+  "dawnIOSurfaceImportVerified": true,
+  "metalSampledPixelsVerified": true,
+  "diagnosticReadbacks": 1,
+  "producerInteropVerified": false,
+  "physicalPresentationVerified": false,
+  "scope": "Original Dawn completion-certified fixture sampled by Skia into a GPU diagnostic surface using active Avalonia Metal context",
+  "expectedRGBA": [
+    51,
+    102,
+    153,
+    255
+  ],
+  "rgbTolerance": 1,
+  "checkedEveryPixel": true,
+  "cleanup": "Diagnostic synchronous GRContext.Flush before native consumer release",
+  "productionPresenterIntegrated": false
+}

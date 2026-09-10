@@ -26,6 +26,12 @@
         std::string source_origin;
     };
 
+    struct pending_dialog_close_event final {
+        uint32_t target_id;
+        v8::Global<v8::Context> context;
+        v8::Global<v8::Object> target;
+    };
+
     struct pending_programmatic_scroll_event final {
         uint32_t target_id;
         v8::Global<v8::Context> context;
@@ -40,6 +46,7 @@
     struct pending_promise_rejection final {
         v8::Global<v8::Promise> promise;
         std::string error;
+        runtime_diagnostic diagnostic;
     };
 
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -65,6 +72,7 @@
         std::string code;
         bool defer{false};
         size_t index{0};
+        bool module{false};
     };
 
     struct css_declaration final {
@@ -104,6 +112,18 @@ struct transparent_string_equal final {
         return left == right;
     }
 };
+
+#if defined(WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT)
+template<typename Value>
+using css_index_string_map = std::unordered_map<
+    std::string, Value, transparent_string_hash, transparent_string_equal>;
+using css_index_string_set = std::unordered_set<
+    std::string, transparent_string_hash, transparent_string_equal>;
+#else
+template<typename Value>
+using css_index_string_map = std::unordered_map<std::string, Value>;
+using css_index_string_set = std::unordered_set<std::string>;
+#endif
 
     struct compiled_css_selector final {
         std::vector<std::string> compounds;
@@ -178,16 +198,15 @@ struct transparent_string_equal final {
         uint32_t stylesheet_owner_id{0};
         uint32_t stylesheet_shadow_scope_root_id{0};
         std::unordered_map<std::string, css_opacity_keyframes> opacity_keyframes;
-        std::unordered_map<std::string, std::vector<size_t>> rules_by_class;
-        std::unordered_map<std::string, std::vector<size_t>> rules_by_id;
-        std::unordered_map<std::string, std::vector<size_t>> rules_by_tag;
-        std::unordered_map<std::string, std::vector<size_t>> rules_by_attribute;
-        std::unordered_map<std::string, std::vector<size_t>>
-            rules_by_variable_reference;
+        css_index_string_map<std::vector<size_t>> rules_by_class;
+        css_index_string_map<std::vector<size_t>> rules_by_id;
+        css_index_string_map<std::vector<size_t>> rules_by_tag;
+        css_index_string_map<std::vector<size_t>> rules_by_attribute;
+        css_index_string_map<std::vector<size_t>> rules_by_variable_reference;
         std::vector<size_t> focus_rules;
         std::vector<size_t> unindexed_rules;
-        std::unordered_set<std::string> attribute_dependencies;
-        std::unordered_set<std::string> descendant_attribute_dependencies;
+        css_index_string_set attribute_dependencies;
+        css_index_string_set descendant_attribute_dependencies;
         std::vector<hover_selector_dependency> hover_dependencies;
         std::unordered_map<std::string, std::string> variables;
         std::unordered_set<std::string> important_variables;
@@ -221,11 +240,14 @@ struct transparent_string_equal final {
         v8::Global<v8::Object> wrapper;
     };
 
+    enum class resize_observer_box { content, border, device_pixel_content };
+
     struct resize_observer_state final {
         v8::Global<v8::Context> context;
         v8::Global<v8::Function> callback;
         std::vector<dom_node*> nodes;
-        std::unordered_map<uint32_t, std::pair<float, float>> delivered_sizes;
+        std::unordered_map<uint32_t, resize_observer_box> observed_boxes;
+        std::unordered_map<uint32_t, std::pair<double, double>> delivered_sizes;
     };
 
     struct session_storage_state final {
@@ -286,6 +308,9 @@ struct transparent_string_equal final {
         std::vector<double> line_dash;
         bool has_clip{false};
         canvas_snapshot emitted_paint_state;
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT)
+        std::array<v8::Global<v8::String>, 10U> emitted_paint_state_string_values;
+#endif
         bool has_emitted_paint_state{false};
     };
 
@@ -305,6 +330,14 @@ struct transparent_string_equal final {
         bool once{false};
         bool passive{false};
         v8::Global<v8::Object> signal;
+    };
+
+    struct media_query_list_state final {
+        std::string query;
+        bool matches{false};
+        v8::Global<v8::Context> context;
+        v8::Global<v8::Object> wrapper;
+        std::vector<event_listener_registration> listeners;
     };
 
     enum class process_compilation_state : uint8_t {
@@ -505,7 +538,7 @@ struct transparent_string_equal final {
     };
 
     struct shared_isolate_state final {
-        v8::ArrayBuffer::Allocator* allocator{nullptr};
+        std::shared_ptr<v8::ArrayBuffer::Allocator> allocator;
         v8::Isolate* isolate{nullptr};
         size_t slot_index{0U};
         std::atomic<size_t> active_contexts{0U};
@@ -528,7 +561,7 @@ struct transparent_string_equal final {
                 }
                 isolate->Dispose();
             }
-            delete allocator;
+            allocator.reset();
         }
     };
 
@@ -795,9 +828,9 @@ struct transparent_string_equal final {
         if (first_empty_slot == config.maximum_count) return {};
         auto state = std::make_shared<shared_isolate_state>();
         state->slot_index = first_empty_slot;
-        state->allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+        state->allocator.reset(v8::ArrayBuffer::Allocator::NewDefaultAllocator());
         v8::Isolate::CreateParams params;
-        params.array_buffer_allocator = state->allocator;
+        params.array_buffer_allocator_shared = state->allocator;
         if (const auto maximum_heap_mib =
                 unsigned_environment_value("WEBSCENE_V8_MAX_HEAP_MIB");
             maximum_heap_mib.has_value() && *maximum_heap_mib > 0) {

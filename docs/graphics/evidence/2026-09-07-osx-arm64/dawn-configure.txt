@@ -1,0 +1,285 @@
+-- The C compiler identification is AppleClang 21.0.0.21000101
+-- The CXX compiler identification is AppleClang 21.0.0.21000101
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Build type...........: Release
+-- C++ compiler.........: /usr/bin/c++
+-- CMake generator......: Ninja
+-- CMake version........: 4.0.3
+-- 
+-- Dawn building using Emscripten toolchain: 0
+-- Dawn build D3D11 backend: OFF
+-- Dawn build D3D12 backend: OFF
+-- Dawn build Metal backend: ON
+-- Dawn build Vulkan backend: OFF
+-- Dawn build OpenGL backend: OFF
+-- Dawn build OpenGL ES backend: OFF
+-- Dawn build Null backend: OFF
+-- 
+-- Tint build SPIR-V reader: OFF
+-- Tint build WGSL reader: ON
+-- Tint build GLSL writer: OFF
+-- Tint build GLSL validator: OFF
+-- Tint build HLSL writer: OFF
+-- Tint build MSL writer: ON
+-- Tint build SPIR-V writer: OFF
+-- Tint build WGSL writer: ON
+-- Tint build NULL writer: OFF
+-- 
+-- Dawn build with ASan: OFF
+-- Dawn build with TSan: OFF
+-- Dawn build with MSan: OFF
+-- Dawn build with UBSan: OFF
+-- Dawn build with RTTI: OFF
+-- DAWN Werror: OFF
+-- Dawn enable install: ON
+-- Dawn allow system component fallback: OFF
+-- Dawn enable SPIR-V validation: OFF
+-- Dawn build with asserts in all configurations: OFF
+-- Dawn build Wayland support: OFF
+-- Dawn build X11 support: OFF
+-- Dawn build GLFW support: OFF
+-- Dawn build Windows UI support: OFF
+-- Dawn build and use DXC: OFF
+-- Dawn enable DXC asserts in non-debug builds: ON
+-- Dawn target MacOS: ON
+-- Dawn build samples: OFF
+-- Dawn build Node bindings: OFF
+-- Dawn build Swiftshader: OFF
+-- Dawn build benchmarks: OFF
+-- Dawn build protobuf: OFF
+-- Dawn build monolithic library: STATIC
+-- Dawn build PIC: ON
+-- Dawn emit coverage: OFF
+-- Dawn fetch dependencies: ON
+-- LLVM Source dir: 
+-- 
+-- Tint build command line executable tools: OFF
+-- Tint install: OFF
+-- Tint build IR binary: OFF
+-- Tint build fuzzers: OFF
+-- Tint build fuzzing vulkan drivers: OFF
+-- Tint build benchmarks: OFF
+-- Tint build tests: OFF
+-- Tint enable IR dumping: ON
+-- Tint enable IR validation assertions: ON
+-- Tint enable break in debugger: OFF
+-- Tint build checking [chromium-style]: OFF
+-- Tint randomize hashes: OFF
+-- Tint build Mesa: OFF
+-- 
+-- Dawn third_party dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party
+-- Dawn GLFW dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/glfw3/src
+-- Dawn Jinja2 dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/jinja2
+-- Dawn MarkupSafe dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/markupsafe
+-- Dawn Khronos dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/khronos
+-- Dawn Swiftshader dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/swiftshader
+-- Dawn Protobuf dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/protobuf
+-- Dawn LPM dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/libprotobuf-mutator/src
+-- Dawn Emdawnwebgpu dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/emdawnwebgpu
+-- Dawn Spir-Tools dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/spirv-tools/src
+-- Dawn Spirv-Headers dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/spirv-headers/src
+-- Dawn Glslang dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/glslang/src
+-- Dawn Vulkan Headers dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/vulkan-headers/src
+-- Dawn Vulkan Utility Libraries dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/vulkan-utility-libraries/src
+-- 
+-- Node Addon API dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/node-addon-api
+-- Node API Headers dir: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/node-api-headers
+-- Webgpu IDL path: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/gpuweb/webgpu.idl
+-- Go exe: go
+-- 
+-- Performing Test dawn_have_compiler_flag-C--Wconditional-uninitialized
+-- Performing Test dawn_have_compiler_flag-C--Wconditional-uninitialized - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wconditional-uninitialized
+-- Performing Test dawn_have_compiler_flag-CXX--Wconditional-uninitialized - Success
+-- Performing Test dawn_have_compiler_flag-C--Wcstring-format-directive
+-- Performing Test dawn_have_compiler_flag-C--Wcstring-format-directive - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wcstring-format-directive
+-- Performing Test dawn_have_compiler_flag-CXX--Wcstring-format-directive - Success
+-- Performing Test dawn_have_compiler_flag-C--Wctad-maybe-unsupported
+-- Performing Test dawn_have_compiler_flag-C--Wctad-maybe-unsupported - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wctad-maybe-unsupported
+-- Performing Test dawn_have_compiler_flag-CXX--Wctad-maybe-unsupported - Success
+-- Performing Test dawn_have_compiler_flag-C--Wc++11-narrowing
+-- Performing Test dawn_have_compiler_flag-C--Wc++11-narrowing - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wc++11-narrowing
+-- Performing Test dawn_have_compiler_flag-CXX--Wc++11-narrowing - Success
+-- Performing Test dawn_have_compiler_flag-C--Wdeprecated-copy
+-- Performing Test dawn_have_compiler_flag-C--Wdeprecated-copy - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wdeprecated-copy
+-- Performing Test dawn_have_compiler_flag-CXX--Wdeprecated-copy - Success
+-- Performing Test dawn_have_compiler_flag-C--Wdeprecated-copy-dtor
+-- Performing Test dawn_have_compiler_flag-C--Wdeprecated-copy-dtor - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wdeprecated-copy-dtor
+-- Performing Test dawn_have_compiler_flag-CXX--Wdeprecated-copy-dtor - Success
+-- Performing Test dawn_have_compiler_flag-C--Wduplicate-enum
+-- Performing Test dawn_have_compiler_flag-C--Wduplicate-enum - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wduplicate-enum
+-- Performing Test dawn_have_compiler_flag-CXX--Wduplicate-enum - Success
+-- Performing Test dawn_have_compiler_flag-C--Wextra-semi
+-- Performing Test dawn_have_compiler_flag-C--Wextra-semi - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wextra-semi
+-- Performing Test dawn_have_compiler_flag-CXX--Wextra-semi - Success
+-- Performing Test dawn_have_compiler_flag-C--Wextra-semi-stmt
+-- Performing Test dawn_have_compiler_flag-C--Wextra-semi-stmt - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wextra-semi-stmt
+-- Performing Test dawn_have_compiler_flag-CXX--Wextra-semi-stmt - Success
+-- Performing Test dawn_have_compiler_flag-C--Wimplicit-fallthrough
+-- Performing Test dawn_have_compiler_flag-C--Wimplicit-fallthrough - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wimplicit-fallthrough
+-- Performing Test dawn_have_compiler_flag-CXX--Wimplicit-fallthrough - Success
+-- Performing Test dawn_have_compiler_flag-C--Winconsistent-missing-destructor-override
+-- Performing Test dawn_have_compiler_flag-C--Winconsistent-missing-destructor-override - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Winconsistent-missing-destructor-override
+-- Performing Test dawn_have_compiler_flag-CXX--Winconsistent-missing-destructor-override - Success
+-- Performing Test dawn_have_compiler_flag-C--Winvalid-offsetof
+-- Performing Test dawn_have_compiler_flag-C--Winvalid-offsetof - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Winvalid-offsetof
+-- Performing Test dawn_have_compiler_flag-CXX--Winvalid-offsetof - Success
+-- Performing Test dawn_have_compiler_flag-C--Wmissing-field-initializers
+-- Performing Test dawn_have_compiler_flag-C--Wmissing-field-initializers - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wmissing-field-initializers
+-- Performing Test dawn_have_compiler_flag-CXX--Wmissing-field-initializers - Success
+-- Performing Test dawn_have_compiler_flag-C--Wnon-c-typedef-for-linkage
+-- Performing Test dawn_have_compiler_flag-C--Wnon-c-typedef-for-linkage - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wnon-c-typedef-for-linkage
+-- Performing Test dawn_have_compiler_flag-CXX--Wnon-c-typedef-for-linkage - Success
+-- Performing Test dawn_have_compiler_flag-C--Wpessimizing-move
+-- Performing Test dawn_have_compiler_flag-C--Wpessimizing-move - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wpessimizing-move
+-- Performing Test dawn_have_compiler_flag-CXX--Wpessimizing-move - Success
+-- Performing Test dawn_have_compiler_flag-C--Wrange-loop-analysis
+-- Performing Test dawn_have_compiler_flag-C--Wrange-loop-analysis - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wrange-loop-analysis
+-- Performing Test dawn_have_compiler_flag-CXX--Wrange-loop-analysis - Success
+-- Performing Test dawn_have_compiler_flag-C--Wredundant-move
+-- Performing Test dawn_have_compiler_flag-C--Wredundant-move - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wredundant-move
+-- Performing Test dawn_have_compiler_flag-CXX--Wredundant-move - Success
+-- Performing Test dawn_have_compiler_flag-C--Wshadow-field
+-- Performing Test dawn_have_compiler_flag-C--Wshadow-field - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wshadow-field
+-- Performing Test dawn_have_compiler_flag-CXX--Wshadow-field - Success
+-- Performing Test dawn_have_compiler_flag-C--Wstrict-prototypes
+-- Performing Test dawn_have_compiler_flag-C--Wstrict-prototypes - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wstrict-prototypes
+-- Performing Test dawn_have_compiler_flag-CXX--Wstrict-prototypes - Success
+-- Performing Test dawn_have_compiler_flag-C--Wsuggest-destructor-override
+-- Performing Test dawn_have_compiler_flag-C--Wsuggest-destructor-override - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wsuggest-destructor-override
+-- Performing Test dawn_have_compiler_flag-CXX--Wsuggest-destructor-override - Success
+-- Performing Test dawn_have_compiler_flag-C--Wsuggest-override
+-- Performing Test dawn_have_compiler_flag-C--Wsuggest-override - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wsuggest-override
+-- Performing Test dawn_have_compiler_flag-CXX--Wsuggest-override - Success
+-- Performing Test dawn_have_compiler_flag-C--Wtautological-unsigned-zero-compare
+-- Performing Test dawn_have_compiler_flag-C--Wtautological-unsigned-zero-compare - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wtautological-unsigned-zero-compare
+-- Performing Test dawn_have_compiler_flag-CXX--Wtautological-unsigned-zero-compare - Success
+-- Performing Test dawn_have_compiler_flag-C--Wunreachable-code-aggressive
+-- Performing Test dawn_have_compiler_flag-C--Wunreachable-code-aggressive - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wunreachable-code-aggressive
+-- Performing Test dawn_have_compiler_flag-CXX--Wunreachable-code-aggressive - Success
+-- Performing Test dawn_have_compiler_flag-C--Wunused-but-set-variable
+-- Performing Test dawn_have_compiler_flag-C--Wunused-but-set-variable - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wunused-but-set-variable
+-- Performing Test dawn_have_compiler_flag-CXX--Wunused-but-set-variable - Success
+-- Performing Test dawn_have_compiler_flag-C--Wunused-macros
+-- Performing Test dawn_have_compiler_flag-C--Wunused-macros - Success
+-- Performing Test dawn_have_compiler_flag-CXX--Wunused-macros
+-- Performing Test dawn_have_compiler_flag-CXX--Wunused-macros - Success
+-- Found Python3: /opt/homebrew/Frameworks/Python.framework/Versions/3.14/bin/python3.14 (found version "3.14.4") found components: Interpreter
+-- Dawn: using python at /opt/homebrew/Frameworks/Python.framework/Versions/3.14/bin/python3.14
+-- Running fetch_dawn_dependencies:
+-- -- Listing dependencies from /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn
+-- -- Fetching dependency 'third_party/abseil-cpp'
+-- -- Shallow cloning 'https://chromium.googlesource.com/chromium/src/third_party/abseil-cpp' at '435e7d977fb36fb47854a4c552c0706dad0bd7cf' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/abseil-cpp'
+-- -- Checking out tag '435e7d977fb36fb47854a4c552c0706dad0bd7cf'
+-- -- Fetching dependency 'third_party/directx-shader-compiler/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/microsoft/DirectXShaderCompiler' at '1b949a448e4c9e821f010c488defebfbb1a50b27' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/directx-shader-compiler/src'
+-- -- Checking out tag '1b949a448e4c9e821f010c488defebfbb1a50b27'
+-- -- Fetching dependency 'third_party/directx-headers/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/microsoft/DirectX-Headers' at '980971e835876dc0cde415e8f9bc646e64667bf7' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/directx-headers/src'
+-- -- Checking out tag '980971e835876dc0cde415e8f9bc646e64667bf7'
+-- -- Fetching dependency 'third_party/glfw3/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/glfw/glfw' at '92dcf4ce74f2e2554a98fea09be7c705c17daa5a' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/glfw3/src'
+-- -- Checking out tag '92dcf4ce74f2e2554a98fea09be7c705c17daa5a'
+-- -- Fetching dependency 'third_party/jinja2'
+-- -- Shallow cloning 'https://chromium.googlesource.com/chromium/src/third_party/jinja2' at 'c3027d884967773057bf74b957e3fea87e5df4d7' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/jinja2'
+-- -- Checking out tag 'c3027d884967773057bf74b957e3fea87e5df4d7'
+-- -- Fetching dependency 'third_party/EGL-Registry/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/KhronosGroup/EGL-Registry' at '5961a7fe64cf8a126890ced6f13d69e0a1e1b83e' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/EGL-Registry/src'
+-- -- Checking out tag '5961a7fe64cf8a126890ced6f13d69e0a1e1b83e'
+-- -- Fetching dependency 'third_party/OpenGL-Registry/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/KhronosGroup/OpenGL-Registry' at '1cdd228e34966dd6b95bd203e9f84faba0f371a1' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/OpenGL-Registry/src'
+-- -- Checking out tag '1cdd228e34966dd6b95bd203e9f84faba0f371a1'
+-- -- Fetching dependency 'third_party/libprotobuf-mutator/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/google/libprotobuf-mutator.git' at 'c1c950eae0440c3808f2b8bd7c57d0c6a42c1a90' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/libprotobuf-mutator/src'
+-- -- Checking out tag 'c1c950eae0440c3808f2b8bd7c57d0c6a42c1a90'
+-- -- Fetching dependency 'third_party/protobuf'
+-- -- Shallow cloning 'https://chromium.googlesource.com/chromium/src/third_party/protobuf' at '5f8c379d1fc89fe8eee16ae560dd5e514a4608da' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/protobuf'
+-- -- Checking out tag '5f8c379d1fc89fe8eee16ae560dd5e514a4608da'
+-- -- Listing dependencies from /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/protobuf
+-- -- WARNING: DEPS file '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/protobuf/DEPS' does not define a 'deps' variable
+-- -- Fetching dependency 'third_party/markupsafe'
+-- -- Shallow cloning 'https://chromium.googlesource.com/chromium/src/third_party/markupsafe' at '4256084ae14175d38a3ff7d739dca83ae49ccec6' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/markupsafe'
+-- -- Checking out tag '4256084ae14175d38a3ff7d739dca83ae49ccec6'
+-- -- Fetching dependency 'third_party/glslang/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/KhronosGroup/glslang' at 'efa016659ffc4f2ae566b6b1db71a70655ac33a1' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/glslang/src'
+-- -- Checking out tag 'efa016659ffc4f2ae566b6b1db71a70655ac33a1'
+-- -- Listing dependencies from /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/glslang/src
+-- -- Fetching dependency 'third_party/google_benchmark/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/google/benchmark.git' at '8abf1e701fbd88c8170f48fe0558247e2e5f8e7d' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/google_benchmark/src'
+-- -- Checking out tag '8abf1e701fbd88c8170f48fe0558247e2e5f8e7d'
+-- -- Fetching dependency 'third_party/googletest/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/google/googletest' at '4fe3307fb2d9f86d19777c7eb0e4809e9694dde7' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/googletest/src'
+-- -- Checking out tag '4fe3307fb2d9f86d19777c7eb0e4809e9694dde7'
+-- -- Fetching dependency 'third_party/spirv-headers/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Headers' at '496543121ce6419f23d6fa5d7194ba66c36212d2' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/spirv-headers/src'
+-- -- Checking out tag '496543121ce6419f23d6fa5d7194ba66c36212d2'
+-- -- Fetching dependency 'third_party/spirv-tools/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools' at '907d104d2b7197b0207b7889671b149e1d1bc8ab' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/spirv-tools/src'
+-- -- Checking out tag '907d104d2b7197b0207b7889671b149e1d1bc8ab'
+-- -- Listing dependencies from /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/spirv-tools/src
+-- -- Fetching dependency 'third_party/vulkan-headers/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Headers' at 'ee2ec5fd83dafce291024683b50dc89219333076' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/vulkan-headers/src'
+-- -- Checking out tag 'ee2ec5fd83dafce291024683b50dc89219333076'
+-- -- Fetching dependency 'third_party/vulkan-loader/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Loader' at 'b8b96a2862bff1eed468e602d43f706beae89cf1' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/vulkan-loader/src'
+-- -- Checking out tag 'b8b96a2862bff1eed468e602d43f706beae89cf1'
+-- -- Fetching dependency 'third_party/vulkan-utility-libraries/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/KhronosGroup/Vulkan-Utility-Libraries' at '2176ec8c5f5d2272161277ab96fe5b8f7633113e' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/vulkan-utility-libraries/src'
+-- -- Checking out tag '2176ec8c5f5d2272161277ab96fe5b8f7633113e'
+-- -- Fetching dependency 'third_party/webgpu-headers/src'
+-- -- Shallow cloning 'https://chromium.googlesource.com/external/github.com/webgpu-native/webgpu-headers' at 'b5ff182caa90e53293f47939716281342c0812ba' into '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/webgpu-headers/src'
+-- -- Checking out tag 'b5ff182caa90e53293f47939716281342c0812ba'
+-- Dawn: using Abseil at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/abseil-cpp
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Dawn: using SPIRV-Headers at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/spirv-headers/src
+-- Dawn: using jinja2 at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/jinja2
+-- Dawn: using markupsafe at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/dawn/third_party/markupsafe
+-- Dawn: Configuring DawnGenerator for Dawn WebGPU Emscripten headers.
+-- Dawn: Configuring DawnGenerator for Dawn WebGPU Emscripten JS files.
+-- Dawn: Configuring DawnGenerator for Dawn version based utilities.
+-- Dawn: Configuring DawnGenerator for Dawn headers.
+-- Dawn: Configuring DawnGenerator for Dawn C++ headers.
+-- Dawn: Configuring DawnGenerator for Dawn GPU info utilities.
+-- Dawn: Configuring DawnGenerator for Dawn native utilities.
+-- Dawn: Configuring DawnGenerator for Dawn wire.
+-- Dawn: Configuring DawnGenerator for Dawn native utilities.
+-- Dawn: Configuring DawnGenerator for Dawn native WebGPU procs.
+-- Dawn: Configuring DawnGenerator for Dawn C++ wrapper.
+-- Dawn: Configuring DawnGenerator for WebGPU headers.
+-- Configuring done (30.5s)
+-- Generating done (0.3s)
+-- Build files have been written to: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/dawn-osx-arm64

@@ -1,0 +1,18 @@
+{
+  "host": "Avalonia.Native.MetalDevice",
+  "metalDeviceAvailable": true,
+  "metalQueueAvailable": true,
+  "skiaGpuContextAvailable": true,
+  "metalTextureWrapperVerified": true,
+  "dawnIOSurfaceImportVerified": true,
+  "metalSampledPixelsVerified": true,
+  "metalConsumerFenceVerified": true,
+  "diagnosticReadbacks": 1,
+  "producerInteropVerified": false,
+  "physicalPresentationVerified": false,
+  "delayedQueueCheckPassed": true,
+  "completionPollNonblocking": true,
+  "completedPollIdempotent": true,
+  "diagnosticPollingOnly": true,
+  "productionPresenterIntegrated": false
+}

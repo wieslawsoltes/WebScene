@@ -1,0 +1,22 @@
+{
+  "sourceBaseCommit": "038c0678e5b4667f36f68cdee68861460cbd761f",
+  "scope": "Native ANGLE Metal ES2/ES3 context and texture isolation on macOS",
+  "buildCommand": "cmake --build artifacts/graphics-build/native-v8-enabled --target webscene_graphics_angle_context_tests -j2",
+  "testCommand": "ctest --test-dir artifacts/graphics-build/native-v8-enabled -R '^webscene_graphics_angle_(es3_)?context_tests$' --output-on-failure",
+  "result": {
+    "passed": 2,
+    "failed": 0,
+    "seconds": 0.42
+  },
+  "checks": [
+    "Texture name from first context is not a texture in independent second context",
+    "Each context uploads and reads back its own exact RGBA pixel via complete framebuffer",
+    "First texture remains valid and correct after second context and its texture are destroyed",
+    "Nested current-context restoration and execution-thread rejection remain covered"
+  ],
+  "limits": [
+    "Diagnostic one-pixel readback is not production presentation transport",
+    "No WebGL browser API/fallback or context-loss qualification",
+    "Windows/Linux target branches still require hardware runs"
+  ]
+}

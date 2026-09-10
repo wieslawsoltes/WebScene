@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Shared/NativeAbiContract.cs" Link="NativeAbiContract.cs" />
     <ProjectReference Include="..\..\src\WebScene.Core\WebScene.Core.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Css\WebScene.Css.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Dom\WebScene.Dom.csproj" />

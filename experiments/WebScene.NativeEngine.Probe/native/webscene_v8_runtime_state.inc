@@ -11,7 +11,7 @@
     std::unordered_map<uint32_t, pending_frame_preparation>
         pending_frame_preparations;
     std::shared_ptr<shared_isolate_state> shared_isolate;
-    v8::ArrayBuffer::Allocator* allocator{nullptr};
+    std::shared_ptr<v8::ArrayBuffer::Allocator> allocator;
     v8::Isolate* isolate{nullptr};
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     v8::CpuProfiler* cpu_profiler{nullptr};
@@ -39,6 +39,9 @@
     v8::Global<v8::FunctionTemplate> element_template;
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> html_element_template;
+    v8::Global<v8::FunctionTemplate> svg_element_template;
+    v8::Global<v8::FunctionTemplate> html_table_cell_element_template;
+    v8::Global<v8::FunctionTemplate> html_dialog_element_template;
     v8::Global<v8::FunctionTemplate> html_form_element_template;
     v8::Global<v8::FunctionTemplate> html_select_element_template;
     v8::Global<v8::FunctionTemplate> html_script_element_template;
@@ -115,8 +118,10 @@
     std::string last_mousemove_ancestry;
 #endif
     std::vector<event_listener_registration> resize_listeners;
+    std::vector<std::unique_ptr<media_query_list_state>> media_query_lists;
     std::vector<timer_task> timers;
     std::deque<pending_window_message> pending_window_messages;
+    std::vector<pending_dialog_close_event> pending_dialog_close_events;
     std::vector<pending_programmatic_scroll_event>
         pending_programmatic_scroll_events;
     native_websocket_transport websocket_transport;
@@ -128,9 +133,17 @@
     std::function<void()> interop_callback_available;
     v8_dom_runtime::interop_callback_sink_v3 interop_callback_sink;
     std::function<void()> runtime_work_available;
+    runtime_diagnostics* diagnostics{nullptr};
     std::mutex console_message_mutex;
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
+    std::atomic<bool> file_service_enabled{false};
+    std::mutex file_requests_mutex;
+    std::deque<std::unique_ptr<native_file_request>> file_requests;
+    struct file_target { uint32_t node_id{}; v8::Global<v8::Context> context; };
+    std::unordered_map<uint64_t,file_target> file_targets;
+    std::unordered_map<std::string,native_file_data> object_url_file_data;
+
     std::vector<std::unique_ptr<resize_observer_state>> resize_observers;
     bool resize_observers_pending{false};
     // DOM mutations stay on the native fast path until a realm registers its
@@ -150,6 +163,12 @@
     // the authored Blob text, while an <a download> activation needs the exact
     // byte payload and MIME type. Keep both representations under the same URL.
     std::unordered_map<std::string, std::string> object_url_download_payloads;
+    struct binary_object_url {std::string bytes,origin;};
+    std::unordered_map<std::string,binary_object_url> object_url_binary;
+    // Canvas.toBlob() intentionally carries no encoded bytes. Preserve its
+    // retained canvas identity across URL.createObjectURL() so an anchor
+    // download can ask the desktop compositor for the exact PNG pixels.
+    std::unordered_map<std::string, uint32_t> object_url_canvas_node_ids;
     std::vector<dom_node*> pending_frame_hydrations;
     std::unordered_map<uint32_t, frame_hydration_state> frame_hydration_states;
     bool prefer_frame_hydration_task{true};
@@ -175,7 +194,7 @@
     uint64_t detached_dom_idle_gc_notifications{0U};
 #endif
     std::string last_error;
-    std::vector<pending_promise_rejection> pending_promise_rejections;
+    std::deque<pending_promise_rejection> pending_promise_rejections;
     std::filesystem::path resource_root;
     std::string document_base_address;
     std::string frame_base_address;
@@ -193,16 +212,15 @@
     uint32_t active_stylesheet_owner_id{0};
     uint32_t active_stylesheet_shadow_scope_root_id{0};
     std::unordered_map<std::string, css_opacity_keyframes> opacity_keyframes;
-    std::unordered_map<std::string, std::vector<size_t>> css_rules_by_class;
-    std::unordered_map<std::string, std::vector<size_t>> css_rules_by_id;
-    std::unordered_map<std::string, std::vector<size_t>> css_rules_by_tag;
-    std::unordered_map<std::string, std::vector<size_t>> css_rules_by_attribute;
-    std::unordered_map<std::string, std::vector<size_t>>
-        css_rules_by_variable_reference;
+    css_index_string_map<std::vector<size_t>> css_rules_by_class;
+    css_index_string_map<std::vector<size_t>> css_rules_by_id;
+    css_index_string_map<std::vector<size_t>> css_rules_by_tag;
+    css_index_string_map<std::vector<size_t>> css_rules_by_attribute;
+    css_index_string_map<std::vector<size_t>> css_rules_by_variable_reference;
     std::vector<size_t> css_focus_rules;
     std::vector<size_t> unindexed_css_rules;
-    std::unordered_set<std::string> css_attribute_dependencies;
-    std::unordered_set<std::string> css_descendant_attribute_dependencies;
+    css_index_string_set css_attribute_dependencies;
+    css_index_string_set css_descendant_attribute_dependencies;
     std::vector<hover_selector_dependency> hover_selector_dependencies;
     std::unordered_map<std::string, std::string> css_variables;
     std::unordered_set<std::string> important_css_variables;
@@ -231,6 +249,7 @@
     static constexpr uint64_t minimum_mapped_cache_body_bytes = 64U * 1024U;
     static constexpr size_t maximum_persistent_cache_entries = 1024U;
     static constexpr uint64_t maximum_persistent_cache_bytes = 512U * 1024U * 1024U;
+    std::function<void(const std::string&, const std::string&)> stylesheet_consumer;
     static constexpr uint64_t maximum_resource_cache_entry_bytes = 64U * 1024U * 1024U;
     static constexpr uint32_t maximum_resource_entity_tag_bytes = 4096U;
     static constexpr size_t maximum_resource_cache_entries = 2048U;
@@ -324,8 +343,15 @@
     uint64_t input_callback_invocation_count{0};
     dom_node* pointer_capture_target{nullptr};
     dom_node* pointer_down_target{nullptr};
+    dom_node* scrollbar_drag_target{nullptr};
+    bool scrollbar_drag_vertical{false};
+    double scrollbar_drag_pointer_origin{0};
+    float scrollbar_drag_scroll_origin{0};
+    float scrollbar_drag_maximum{0};
+    float scrollbar_drag_thumb_travel{0};
     dom_node* hover_target{nullptr};
     uint32_t current_cursor_kind_value{WEBSCENE_CURSOR_DEFAULT};
+    bool pointer_cursor_update_pending{false};
     dom_node* current_related_target{nullptr};
     double pointer_down_x{0};
     double pointer_down_y{0};
@@ -349,6 +375,7 @@
         dom_node* cascade_root{nullptr};
         bool subtree{false};
         std::string reason;
+        std::string custom_property;
     };
     bool batch_style_recascades{true};
     bool batch_connected_resource_style_recascades{true};

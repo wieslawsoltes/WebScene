@@ -113,9 +113,15 @@ line("static std::optional<uint32_t> generated_standalone_event_target_id(");
 line("    v8::Isolate* isolate,");
 line("    v8::Local<v8::Object> receiver)");
 line("{");
+line("    if (receiver.IsEmpty()) return std::nullopt;");
+line("    v8::Local<v8::Value> identity;");
+line("    auto key = v8::Private::ForApi(isolate, js_string(isolate, \"WebScene.EventTarget.identity\"));");
+line("    if (receiver->GetPrivate(isolate->GetCurrentContext(), key).ToLocal(&identity) && identity->IsUint32())");
+line("        return identity.As<v8::Uint32>()->Value();");
 line("    if (receiver.IsEmpty() || receiver->InternalFieldCount() < 2) {");
 line("        return std::nullopt;");
 line("    }");
+line("    if (!receiver->GetInternalField(1)->IsValue()) return std::nullopt;");
 line("    auto value = receiver->GetInternalField(1).As<v8::Value>();");
 line("    if (!value->IsUint32()) return std::nullopt;");
 line("    return value->Uint32Value(isolate->GetCurrentContext()).FromMaybe(0U);");
@@ -180,6 +186,9 @@ for (const value of manifest.interfaces) {
   line(`    auto ${local} = v8::FunctionTemplate::New(isolate, ${value.constructor});`);
   line(`    ${local}->SetClassName(js_string(isolate, \"${value.name}\"));`);
   line(`    ${local}->SetInterfaceName(js_string(isolate, \"${value.name}\"));`);
+  line(`    ${local}->PrototypeTemplate()->Set(`);
+  line(`        v8::Symbol::GetToStringTag(isolate), js_string(isolate, "${value.name}"),`);
+  line(`        static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum));`);
   if (value.parent) {
     line(`    ${local}->Inherit(generated_${safe(value.parent)}_template);`);
   }

@@ -220,6 +220,15 @@ void test_fetch_carries_document_origin_to_resource_host()
         ".then(symbols => globalThis.__symbols = symbols)",
         "fetch-origin-fixture.js");
 
+    // execute_and_wait observes completion of the script that schedules the
+    // fetch, not settlement of the fetch promise. Wait for the fixture result
+    // before inspecting metadata populated by the asynchronous callback.
+    const auto result = evaluate_until_equals(
+        engine,
+        "globalThis.__symbols?.[0]?.symbol ?? ''",
+        "iframe-fetch-origin-result.js",
+        R"("AAPL")");
+
     require(
         server.origin == "https://www.tradingview-widget.test",
         "fetch did not carry the document origin: " + server.origin);
@@ -230,11 +239,6 @@ void test_fetch_carries_document_origin_to_resource_host()
         server.initiator == WEBSCENE_RESOURCE_INITIATOR_FETCH
             && server.mode == WEBSCENE_FETCH_MODE_CORS,
         "fetch request context did not identify a CORS fetch");
-    const auto result = evaluate_until_equals(
-        engine,
-        "globalThis.__symbols?.[0]?.symbol ?? ''",
-        "iframe-fetch-origin-result.js",
-        R"("AAPL")");
     require(result == R"("AAPL")", "symbol fetch did not populate results: " + result);
     webscene_engine_destroy(engine);
 }
@@ -716,6 +720,7 @@ void test_document_start_ordering_storage_and_fail_closed_errors()
         &server};
     auto* engine = webscene_engine_create_with_options(&engine_options);
     require(engine != nullptr, "document-start engine creation failed");
+    webscene_engine_configure_diagnostics(engine, WEBSCENE_DIAGNOSTIC_LEGACY_CONSOLE, nullptr, nullptr);
 
     constexpr std::string_view all_frames_source =
         "if (parent === window) {"
@@ -1878,8 +1883,10 @@ void test_process_wide_resource_load_single_flight()
     const auto origin = "https://resource-single-flight-" + unique_suffix + ".test/";
     const auto document_url = origin + "index.html";
     const auto script_url = origin + "shared.js";
+    const auto warmup_url = origin + "warmup.html";
     resource_server server{
         .content = {
+            {warmup_url, "<html><body>Warmup</body></html>"},
             {document_url,
                 "<html><body><script src=\"shared.js\"></script>"
                 "<script src=\"shared-ascii.js\"></script></body></html>"},
@@ -1910,6 +1917,15 @@ void test_process_wide_resource_load_single_flight()
     std::array<std::string, engine_count> results;
     for (size_t index = 0U; index < engine_count; ++index) {
         workers[index] = std::thread([&, index] {
+            // Engine creation is lazy: initialize each V8 realm on its owning
+            // thread before the release barrier. Otherwise a slow cold isolate
+            // can miss the entire resource flight (observed on Windows CI).
+            // Keep the waiter assertion below: this test must exercise overlap,
+            // not merely sequential cache hits.
+            require(webscene_engine_load_url(engines[index], warmup_url.data(), warmup_url.size()) != 0,
+                "resource single-flight warmup navigation was rejected");
+            require(evaluate(engines[index], "1", "single-flight-warmup.js") == "1",
+                "resource single-flight warmup was rejected");
             ready.fetch_add(1U, std::memory_order_release);
             while (!start.load(std::memory_order_acquire)) {
                 std::this_thread::yield();
@@ -1964,6 +1980,14 @@ void test_process_wide_resource_load_single_flight()
             memory.v8_external_script_source_bytes
                 >= shared_script.size() + shared_ascii_script.size(),
             "large UTF-8 script source was copied into the V8 heap");
+        // Memory telemetry is sampled, not refreshed synchronously by its getter.
+        // A warmed realm can finish navigation within the five-second sample window.
+        for (int attempt = 0; memory.process_resource_mapped_cache_bytes < shared_script.size()
+                && attempt < 600; ++attempt) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            evaluate(engines[index], "1", "single-flight-memory-sample.js");
+            webscene_engine_get_memory_metrics(engines[index], &memory);
+        }
         mapped_resource_bytes = std::max(
             mapped_resource_bytes,
             memory.process_resource_mapped_cache_bytes);
@@ -1972,9 +1996,9 @@ void test_process_wide_resource_load_single_flight()
         mapped_resource_bytes >= shared_script.size(),
         "large persisted script resource was not retained as file-backed memory");
     require(
-        server.requests.load(std::memory_order_relaxed) == 3,
-        "identical resources were loaded more than once across four engines");
-    require(leaders == 3U, "resource loads did not elect one producer per URL");
+        server.requests.load(std::memory_order_relaxed) == 4,
+        "identical resources (including warmup) were loaded more than once across four engines");
+    require(leaders == 4U, "resource loads did not elect one producer per URL");
     require(waiters > 0U, "concurrent resource loads did not record waiters");
     require(memory_hits > 0U, "resource waiters did not consume shared results");
     require(shared_bytes > 0U, "resource waiters did not share immutable response bytes");

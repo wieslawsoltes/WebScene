@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8">
+<title>Hit testing follows positive descendants without raising their ancestors</title>
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>body{margin:0}#root{position:relative;width:200px;height:120px}#sidebar{position:absolute;width:80px;height:120px;overflow:hidden}#elevated{position:absolute;z-index:10;left:60px;top:10px;width:50px;height:20px}canvas{position:absolute;left:80px;width:120px;height:120px}#overlay{position:absolute;inset:0}</style>
+<div id="root"><div id="sidebar"><div id="elevated"></div></div><canvas width="120" height="120"></canvas><div id="overlay"></div></div>
+<script>test(()=>{
+ assert_equals(document.elementFromPoint(10,10).id,'overlay');
+ assert_equals(document.elementFromPoint(70,20).id,'elevated');
+ assert_equals(document.elementFromPoint(90,20).id,'overlay','Clipped part of raised child must not intercept clicks');
+},'Normal sidebar, raised child and ancestor clip have matching hit order');</script>

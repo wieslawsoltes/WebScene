@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using WebScene.Backends.Avalonia;
 using WebScene.Backends.Avalonia.Native;
 using WebScene.Backends.Native;
+using WebScene.Diagnostics.Cdp;
 
 namespace NativeTradingViewTerminal;
 
@@ -15,6 +16,7 @@ public sealed partial class MainWindow : Window
     private readonly bool _runtimeMonitoringEnabled;
     private readonly DispatcherTimer? _diagnosticsTimer;
     private AvaloniaResourceLoader? _resourceLoader;
+    private WebSceneV8InspectorHost? _inspectorHost;
     private string _lastMonitoredError = string.Empty;
     private ulong _lastMonitoredScriptErrors;
     private ulong _lastMonitoredFrameScriptErrors;
@@ -32,6 +34,13 @@ public sealed partial class MainWindow : Window
             "--monitor-runtime",
             StringComparer.Ordinal);
         InitializeComponent();
+        TerminalHost.JavaScriptException += error =>
+            Console.Error.WriteLine($"[WebScene JavaScript] {error.Message}\n{error.Stack}");
+        TerminalHost.RuntimeFailed += failure =>
+            Console.Error.WriteLine($"[WebScene runtime {failure.Stage}] {failure.Message}\n{failure.Stack}");
+        TerminalHost.ShowRuntimeFailure = true;
+        // Production-style error logging is independent of optional debug console capture.
+        TerminalHost.CaptureLegacyConsoleMessages = _runtimeMonitoringEnabled;
         var textMode = Environment.GetEnvironmentVariable(
             "WEBSCENE_TEXT_POSITIONING")?.Trim().ToLowerInvariant();
         Title += textMode is "harfbuzz" or "legacy" or "off" or "0"
@@ -98,6 +107,16 @@ public sealed partial class MainWindow : Window
                     return ValueTask.CompletedTask;
                 });
             StatusText.Text = "TradingView terminal loaded";
+            if (_arguments.Contains("--v8-inspector", StringComparer.Ordinal))
+            {
+                _inspectorHost = new WebSceneV8InspectorHost(
+                    TerminalHost.OpenV8InspectorSession,
+                    () => TerminalHost.Source,
+                    new WebSceneV8InspectorOptions { Enabled = true, Port = 9229 },
+                    title: "TradingView sample");
+                await _inspectorHost.StartAsync();
+                Console.WriteLine($"TradingView Inspector: {_inspectorHost.DiscoveryUri}json/list");
+            }
             if (_arguments.Contains("--startup-profile", StringComparer.Ordinal))
             {
                 var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
@@ -420,6 +439,7 @@ public sealed partial class MainWindow : Window
     {
         _diagnosticsTimer?.Stop();
         _resourceLoader?.FlushResourceCapture();
+        if (_inspectorHost is not null) await _inspectorHost.DisposeAsync();
         await TerminalHost.DisposeAsync();
     }
 }

@@ -10,6 +10,7 @@ using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using Svg.Skia;
 using WebScene.Backends.Avalonia.Native;
+using WebScene.Backends.Avalonia;
 using BackendNativeSceneView = WebScene.Backends.Avalonia.Native.NativeSceneView;
 
 namespace WebScene.WebPlatformSubset.Runner;
@@ -62,14 +63,18 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
     private ulong _sequence;
     private double _frameTimestampMs;
     private bool _loaded;
+    private string? _navigationDocumentPath;
     private bool _disposed;
+    private readonly bool _managedHostEngine;
 
     internal NativeWptEngineEnvironment(
         RunnerOptions options,
         ViewportSettings viewport,
         string upstreamRoot,
         string documentPath,
-        string html)
+        string html,
+        string? fontBaseDirectory = null,
+        bool nativeNavigation = false)
     {
         _viewport = viewport;
         _renderer = new NativeSceneSnapshotRenderer(viewport.DeviceScaleFactor);
@@ -85,7 +90,17 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         }
 
         NativeApi.Configure(libraryPath);
-        _engine = NativeApi.Create(options.NativeCacheDirectory);
+        _managedHostEngine = nativeNavigation || html.Contains("@font-face", StringComparison.OrdinalIgnoreCase);
+        if (_managedHostEngine)
+        {
+            // Navigation and font contracts use the product resource-loading,
+            // registration and measurement path, not a separate harness font map.
+            NativeWebSceneApi.ConfigureLibraryPath(libraryPath);
+            _engine = NativeWebSceneApi.EngineCreate(0, options.NativeCacheDirectory,
+                new AvaloniaResourceLoader { ScriptBaseDirectory = fontBaseDirectory ?? upstreamRoot }, _ => { });
+            _renderer.SetWebTypefaceRegistry(NativeWebSceneApi.GetWebTypefaceRegistry(_engine));
+        }
+        else _engine = NativeApi.Create(options.NativeCacheDirectory);
         if (_engine == IntPtr.Zero)
         {
             throw new InvalidOperationException("The native WebScene engine could not be created.");
@@ -104,9 +119,22 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
                 Kind = 6,
                 Sequence = ++_sequence,
                 X = viewport.Width,
-                Y = viewport.Height
+                Y = viewport.Height,
+                // DOM device-pixel measurements must use the same scale as
+                // screenshot rasterization, including before document scripts.
+                DeltaX = viewport.DeviceScaleFactor
             });
-            LoadPreparedDocument(html, upstreamRoot, documentPath);
+            if (nativeNavigation)
+            {
+                // Preserve parser ordering and raw-text/template semantics.
+                // Keep relative fixture resources beside the prepared document.
+                _navigationDocumentPath = Path.Combine(fontBaseDirectory ?? upstreamRoot,
+                    $".webscene-wpt-navigation-{Guid.NewGuid():N}.html");
+                File.WriteAllText(_navigationDocumentPath, html);
+                if (!NativeWebSceneApi.TryLoadUrl(_engine, new Uri(_navigationDocumentPath).AbsoluteUri))
+                    throw new InvalidOperationException(NativeApi.GetLastError(_engine));
+            }
+            else LoadPreparedDocument(html, upstreamRoot, documentPath);
             _loaded = true;
             for (var index = 0; index < 4; index++) SettleFrame();
         }
@@ -260,7 +288,12 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
         _disposed = true;
         _renderer.Dispose();
         _interop.Dispose();
-        if (_engine != IntPtr.Zero) NativeApi.EngineDestroy(_engine);
+        if (_engine != IntPtr.Zero)
+        {
+            if (_managedHostEngine) NativeWebSceneApi.EngineDestroy(_engine);
+            else NativeApi.EngineDestroy(_engine);
+        }
+        if (_navigationDocumentPath is not null) File.Delete(_navigationDocumentPath);
     }
 
     private void LoadPreparedDocument(string html, string upstreamRoot, string documentPath)
@@ -308,6 +341,7 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
 
         Execute($$"""
             globalThis.__webSceneDocumentBasePath = {{JsonSerializer.Serialize(documentDirectory)}};
+            globalThis.__webSceneWptExpectedDeviceScaleFactor = {{JsonSerializer.Serialize(_viewport.DeviceScaleFactor)}};
             const webSceneViewportRoot = document.body;
             const webSceneDocumentElement = document.createElement('html');
             const webSceneHead = document.createElement('head');
@@ -408,7 +442,8 @@ internal sealed unsafe class NativeWptEngineEnvironment : IWptEngineEnvironment
             Kind = 6,
             Sequence = ++_sequence,
             X = width,
-            Y = height
+            Y = height,
+            DeltaX = _viewport.DeviceScaleFactor
         });
 
     private void EnqueueText(Rune rune)
@@ -547,6 +582,9 @@ internal sealed unsafe class NativeSceneSnapshotRenderer : IDisposable
 
     internal NativeSceneSnapshotRenderer(double deviceScaleFactor)
         => _renderer.SetPresenterDeviceScaleFactor(deviceScaleFactor);
+
+    internal void SetWebTypefaceRegistry(NativeTextShaping.WebTypefaceRegistry? registry)
+        => _renderer.SetWebTypefaceRegistry(registry);
 
     internal void Apply(NativeSceneView* view)
     {

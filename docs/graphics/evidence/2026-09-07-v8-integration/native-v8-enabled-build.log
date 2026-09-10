@@ -1,0 +1,302 @@
+[1/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXCancellationRequest.cpp.o
+[2/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXConnectionState.cpp.o
+[3/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXBench.cpp.o
+[4/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXExponentialBackoff.cpp.o
+[5/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXDNSLookup.cpp.o
+[6/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXGzipCodec.cpp.o
+[7/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXGetFreePort.cpp.o
+[8/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXNetSystem.cpp.o
+[9/63] Building CXX object CMakeFiles/webscene_v8_snapshot_builder.dir/tools/v8_snapshot_builder.cpp.o
+[10/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSelectInterrupt.cpp.o
+[11/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXHttp.cpp.o
+[12/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSelectInterruptFactory.cpp.o
+[13/63] Linking CXX executable webscene_v8_snapshot_builder
+[14/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXHttpClient.cpp.o
+[15/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSelectInterruptPipe.cpp.o
+[16/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSetThreadName.cpp.o
+[17/63] Creating the WebScene V8 bootstrap snapshot
+snapshot_bytes=437848 v8=15.3.10-WebScene
+[18/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXHttpServer.cpp.o
+[19/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSelectInterruptEvent.cpp.o
+[20/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSocket.cpp.o
+[21/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSocketConnect.cpp.o
+[22/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSocketTLSOptions.cpp.o
+[23/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSocketFactory.cpp.o
+[24/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXStrCaseCompare.cpp.o
+[25/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSocketServer.cpp.o
+[26/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXUdpSocket.cpp.o
+[27/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXUrlParser.cpp.o
+[28/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXUuid.cpp.o
+[29/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXUserAgent.cpp.o
+[30/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocketCloseConstants.cpp.o
+[31/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocketPerMessageDeflate.cpp.o
+[32/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocket.cpp.o
+[33/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocketHttpHeaders.cpp.o
+[34/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocketPerMessageDeflateCodec.cpp.o
+[35/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocketHandshake.cpp.o
+[36/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocketPerMessageDeflateOptions.cpp.o
+[37/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocketProxyServer.cpp.o
+[38/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocketServer.cpp.o
+[39/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXSocketAppleSSL.cpp.o
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:176:22: warning: 'SSLHandshake' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  176 |             status = SSLHandshake(_sslContext);
+      |                      ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:1641:1: note: 'SSLHandshake' has been explicitly marked deprecated here
+ 1641 | SSLHandshake                            (SSLContextRef          context)
+      | ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:202:65: warning: 'kSSLClientSide' is deprecated: first deprecated in macOS 10.15 [-Wdeprecated-declarations]
+  202 |             _sslContext = SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
+      |                                                                 ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:218:5: note: 'kSSLClientSide' has been explicitly marked deprecated here
+  218 |     kSSLClientSide CF_ENUM_DEPRECATED(10_2, 10_15, 2_0, 13_0)
+      |     ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:202:81: warning: 'kSSLStreamType' is deprecated: first deprecated in macOS 10.15 [-Wdeprecated-declarations]
+  202 |             _sslContext = SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
+      |                                                                                 ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:223:5: note: 'kSSLStreamType' has been explicitly marked deprecated here
+  223 |     kSSLStreamType CF_ENUM_DEPRECATED(10_2, 10_15, 2_0, 13_0),
+      |     ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:202:27: warning: 'SSLCreateContext' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  202 |             _sslContext = SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
+      |                           ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:316:1: note: 'SSLCreateContext' has been explicitly marked deprecated here
+  316 | SSLCreateContext(CFAllocatorRef __nullable alloc, SSLProtocolSide protocolSide, SSLConnectionType connectionType)
+      | ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:204:13: warning: 'SSLSetIOFuncs' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  204 |             SSLSetIOFuncs(
+      |             ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:418:1: note: 'SSLSetIOFuncs' has been explicitly marked deprecated here
+  418 | SSLSetIOFuncs                           (SSLContextRef          context,
+      | ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:206:13: warning: 'SSLSetConnection' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  206 |             SSLSetConnection(_sslContext, (SSLConnectionRef)(long) _sockfd);
+      |             ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:657:1: note: 'SSLSetConnection' has been explicitly marked deprecated here
+  657 | SSLSetConnection                        (SSLContextRef                  context,
+      | ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:207:51: warning: 'kTLSProtocol12' is deprecated: first deprecated in macOS 10.15 [-Wdeprecated-declarations]
+  207 |             SSLSetProtocolVersionMin(_sslContext, kTLSProtocol12);
+      |                                                   ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecProtocolTypes.h:162:5: note: 'kTLSProtocol12' has been explicitly marked deprecated here
+  162 |     kTLSProtocol12 CF_ENUM_DEPRECATED(10_2, 10_15, 5_0, 13_0) = 8,
+      |     ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:207:13: warning: 'SSLSetProtocolVersionMin' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  207 |             SSLSetProtocolVersionMin(_sslContext, kTLSProtocol12);
+      |             ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:458:1: note: 'SSLSetProtocolVersionMin' has been explicitly marked deprecated here
+  458 | SSLSetProtocolVersionMin  (SSLContextRef      context,
+      | ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:210:17: warning: 'SSLSetPeerDomainName' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  210 |                 SSLSetPeerDomainName(_sslContext, host.c_str(), host.size());
+      |                 ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:686:1: note: 'SSLSetPeerDomainName' has been explicitly marked deprecated here
+  686 | SSLSetPeerDomainName            (SSLContextRef          context,
+      | ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:215:50: warning: 'kSSLSessionOptionBreakOnServerAuth' is deprecated: first deprecated in macOS 10.15 [-Wdeprecated-declarations]
+  215 |                 SSLSetSessionOption(_sslContext, kSSLSessionOptionBreakOnServerAuth, option);
+      |                                                  ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:99:2: note: 'kSSLSessionOptionBreakOnServerAuth' has been explicitly marked deprecated here
+   99 |         kSSLSessionOptionBreakOnServerAuth CF_ENUM_DEPRECATED(10_2, 10_15, 2_0, 13_0) = 0,
+      |         ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:215:17: warning: 'SSLSetSessionOption' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  215 |                 SSLSetSessionOption(_sslContext, kSSLSessionOptionBreakOnServerAuth, option);
+      |                 ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:384:1: note: 'SSLSetSessionOption' has been explicitly marked deprecated here
+  384 | SSLSetSessionOption                     (SSLContextRef          context,
+      | ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:247:9: warning: 'SSLClose' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  247 |         SSLClose(_sslContext);
+      |         ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:1731:1: note: 'SSLClose' has been explicitly marked deprecated here
+ 1731 | SSLClose                                        (SSLContextRef          context)
+      | ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:261:22: warning: 'SSLWrite' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  261 |             status = SSLWrite(_sslContext, buf, nbyte, &processed);
+      |                      ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:1670:1: note: 'SSLWrite' has been explicitly marked deprecated here
+ 1670 | SSLWrite                                        (SSLContextRef          context,
+      | ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled/_deps/webscene_ixwebsocket-src/ixwebsocket/IXSocketAppleSSL.cpp:291:22: warning: 'SSLRead' is deprecated: first deprecated in macOS 10.15 - No longer supported. Use Network.framework. [-Wdeprecated-declarations]
+  291 |             status = SSLRead(_sslContext, buf, nbyte, &processed);
+      |                      ^
+/Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Security.framework/Headers/SecureTransport.h:1689:1: note: 'SSLRead' has been explicitly marked deprecated here
+ 1689 | SSLRead                                         (SSLContextRef          context,
+      | ^
+14 warnings generated.
+[40/63] Building CXX object _deps/webscene_ixwebsocket-build/CMakeFiles/ixwebsocket.dir/ixwebsocket/IXWebSocketTransport.cpp.o
+[41/63] Linking CXX static library _deps/webscene_ixwebsocket-build/libixwebsocket.a
+[42/63] Building the pinned html5ever WebScene parser
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling siphasher v1.0.3
+   Compiling fastrand v2.5.0
+   Compiling libc v0.2.189
+   Compiling smallvec v1.15.2
+   Compiling parking_lot_core v0.9.12
+   Compiling new_debug_unreachable v1.0.6
+   Compiling cfg-if v1.0.4
+   Compiling scopeguard v1.2.0
+   Compiling phf_shared v0.13.1
+   Compiling precomputed-hash v0.1.1
+   Compiling lock_api v0.4.14
+   Compiling log v0.4.33
+   Compiling dtoa v1.0.11
+   Compiling tendril v0.5.1
+   Compiling dtoa-short v0.3.5
+   Compiling stable_deref_trait v1.2.1
+   Compiling itoa v1.0.18
+   Compiling servo_arc v0.4.3
+   Compiling phf_generator v0.13.1
+   Compiling bitflags v2.13.1
+   Compiling phf_codegen v0.13.1
+   Compiling rustc-hash v2.1.3
+   Compiling selectors v0.39.0
+   Compiling syn v2.0.119
+   Compiling string_cache_codegen v0.6.1
+   Compiling web_atoms v0.2.5
+   Compiling parking_lot v0.12.5
+   Compiling string_cache v0.9.0
+   Compiling phf_macros v0.13.1
+   Compiling cssparser-macros v0.7.0
+   Compiling derive_more-impl v2.1.1
+   Compiling phf v0.13.1
+   Compiling derive_more v2.1.1
+   Compiling cssparser v0.37.0
+   Compiling markup5ever v0.39.0
+   Compiling html5ever v0.39.0
+   Compiling webscene-html-parser v0.1.0 (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/html_parser)
+    Finished `release` profile [optimized] target(s) in 12.32s
+[43/63] Building CXX object CMakeFiles/webscene_native_engine.dir/native/webscene_css_parser.cpp.o
+[44/63] Building CXX object CMakeFiles/webscene_native_engine.dir/native/webscene_selector_parser.cpp.o
+[45/63] Building CXX object CMakeFiles/webscene_native_engine.dir/native/webscene_html_parser.cpp.o
+[46/63] Building CXX object CMakeFiles/webscene_html_parser_tests.dir/tests/html_parser_tests.cpp.o
+[47/63] Building CXX object CMakeFiles/webscene_native_engine.dir/native/webscene_native_websocket.cpp.o
+[48/63] Building CXX object CMakeFiles/webscene_html_parser_tests.dir/native/webscene_html_parser.cpp.o
+[49/63] Building CXX object CMakeFiles/webscene_css_parser_tests.dir/tests/css_parser_tests.cpp.o
+[50/63] Building CXX object CMakeFiles/webscene_css_parser_tests.dir/native/webscene_css_parser.cpp.o
+[51/63] Building CXX object CMakeFiles/webscene_selector_parser_tests.dir/tests/selector_parser_tests.cpp.o
+[52/63] Building CXX object CMakeFiles/webscene_selector_parser_tests.dir/native/webscene_selector_parser.cpp.o
+[53/63] Building CXX object CMakeFiles/webscene_native_engine.dir/native/webscene_native_engine.cpp.o
+[54/63] Linking CXX executable webscene_css_parser_tests
+[55/63] Linking CXX executable webscene_selector_parser_tests
+[56/63] Building CXX object CMakeFiles/webscene_native_engine.dir/native/webscene_native_dom.cpp.o
+In file included from /Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom.cpp:1082:
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:167:20: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  167 |             node.id});
+      |                    ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:208:20: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  208 |             node.id});
+      |                    ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:585:32: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  585 |                         node.id});
+      |                                ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:801:20: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  801 |             node.id});
+      |                    ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:813:20: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  813 |             node.id});
+      |                    ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1108:24: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1108 |                 node.id});
+      |                        ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1120:24: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1120 |                 node.id});
+      |                        ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1167:33: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1167 |             arrow_color, node.id});
+      |                                 ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1172:33: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1172 |             arrow_color, node.id});
+      |                                 ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1226:24: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1226 |                 node.id});
+      |                        ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1350:87: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1350 |             commands.push_back(webscene_scene_command{13U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                       ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1353:87: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1353 |             commands.push_back(webscene_scene_command{20U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                       ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1356:87: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1356 |             commands.push_back(webscene_scene_command{16U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                       ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1361:67: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1361 |                 node.layout.width, node.layout.height, 0U, node.id});
+      |                                                                   ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1495:83: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1495 |         commands.push_back(webscene_scene_command{13U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                   ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1612:83: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1612 |         commands.push_back(webscene_scene_command{20U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                   ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1615:83: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1615 |         commands.push_back(webscene_scene_command{16U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                   ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1620:63: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1620 |             node.layout.width, node.layout.height, 0U, node.id});
+      |                                                               ^
+18 warnings generated.
+[57/63] Building CXX object CMakeFiles/webscene_html_parser_tests.dir/native/webscene_native_dom.cpp.o
+In file included from /Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom.cpp:1082:
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:167:20: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  167 |             node.id});
+      |                    ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:208:20: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  208 |             node.id});
+      |                    ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:585:32: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  585 |                         node.id});
+      |                                ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:801:20: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  801 |             node.id});
+      |                    ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:813:20: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+  813 |             node.id});
+      |                    ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1108:24: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1108 |                 node.id});
+      |                        ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1120:24: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1120 |                 node.id});
+      |                        ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1167:33: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1167 |             arrow_color, node.id});
+      |                                 ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1172:33: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1172 |             arrow_color, node.id});
+      |                                 ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1226:24: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1226 |                 node.id});
+      |                        ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1350:87: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1350 |             commands.push_back(webscene_scene_command{13U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                       ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1353:87: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1353 |             commands.push_back(webscene_scene_command{20U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                       ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1356:87: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1356 |             commands.push_back(webscene_scene_command{16U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                       ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1361:67: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1361 |                 node.layout.width, node.layout.height, 0U, node.id});
+      |                                                                   ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1495:83: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1495 |         commands.push_back(webscene_scene_command{13U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                   ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1612:83: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1612 |         commands.push_back(webscene_scene_command{20U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                   ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1615:83: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1615 |         commands.push_back(webscene_scene_command{16U, 0U, 0, 0, 0, 0, 0U, node.id});
+      |                                                                                   ^
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/experiments/WebScene.NativeEngine.Probe/native/webscene_native_dom_scene.inc:1620:63: warning: missing field 'radius_top_left' initializer [-Wmissing-field-initializers]
+ 1620 |             node.layout.width, node.layout.height, 0U, node.id});
+      |                                                               ^
+18 warnings generated.
+[58/63] Linking CXX executable webscene_html_parser_tests
+[59/63] Building CXX object CMakeFiles/webscene_native_engine_tests.dir/native/webscene_native_dom.cpp.o
+[60/63] Building CXX object CMakeFiles/webscene_native_engine_tests.dir/tests/native_v8_runtime_tests.cpp.o
+[61/63] Building CXX object CMakeFiles/webscene_native_engine.dir/native/webscene_v8_runtime.cpp.o
+[62/63] Linking CXX shared library libwebscene_native_engine.dylib
+[63/63] Linking CXX executable webscene_native_engine_tests

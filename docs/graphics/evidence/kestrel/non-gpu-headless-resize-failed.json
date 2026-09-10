@@ -1,0 +1,105 @@
+{
+  "qualification": "failed",
+  "exitCode": 134,
+  "failure": "Post-report shutdown aborted: std::system_error: mutex lock failed: Invalid argument",
+  "nativeRevision": "88e48dca9ae877bd0a0a18f867021c8794ef05c2",
+  "nativeLibrarySha256": "c956fa1ba3210db331af13cd04aa726201557c7e4ab4e3b40b5412d1035cda44",
+  "command": "WEBSCENE_NATIVE_ENGINE_PATH=\"$PWD/artifacts/graphics-build/native-v8-enabled/libwebscene_native_engine.dylib\" dotnet run --project benchmarks/WebScene.NativeEngine.Benchmarks -c Release --no-build -- probe native-resize-cadence --seconds 5 --warmup-seconds 2 --hz 60 --composition",
+  "measurement": {
+    "schema": "webscene-native-resize-cadence-v2",
+    "measurementScope": "headless-cpu-draw-callback",
+    "physicalPresentationVerified": false,
+    "sourceKind": "deterministic-fixture",
+    "composition": true,
+    "certificationTelemetryEnabled": false,
+    "requestedHz": 60,
+    "warmupSeconds": 2,
+    "requestedSeconds": 5,
+    "elapsedMilliseconds": 5000.0402,
+    "submitted": 300,
+    "acceptedSubmissions": 300,
+    "appliedPairs": 300,
+    "publishedPairs": 150,
+    "coalescedPairs": 0,
+    "renderedFrames": 150,
+    "drawCallbackCompletions": 150,
+    "renderedFramesPerSecond": 29.999758801939233,
+    "drawCallbackCompletionsPerSecond": 30.0077325314807,
+    "layoutPasses": 897,
+    "layoutPassesPerAppliedResize": 2.99,
+    "publishedScenes": 150,
+    "publicationAttempts": 301,
+    "blockedPublications": 151,
+    "fullInvalidations": 150,
+    "unchangedRenderCallbacks": 0,
+    "droppedInputs": 0,
+    "processCpuMilliseconds": 2329.377,
+    "normalizedProcessCpuPercent": 46.58716543918987,
+    "lastCompositionMilliseconds": {
+      "diffApply": 1.957084,
+      "retainedDraw": 0.298375,
+      "skiaSubmit": 0.373667,
+      "callback": 0.374625
+    },
+    "lastResizeStageMilliseconds": {
+      "outerListeners": 0,
+      "frameListeners": 0,
+      "finalLayout": 0,
+      "observers": 0,
+      "totalDispatch": 1.946666,
+      "scenePublication": 0.459708
+    },
+    "queueMilliseconds": {
+      "average": 0.008671253333333333,
+      "maximum": 0.020167
+    },
+    "dispatchMilliseconds": {
+      "average": 2.2276397400000003,
+      "maximum": 4.06125
+    },
+    "publicationLatencyMilliseconds": {
+      "count": 299,
+      "average": 12.289368193979932,
+      "p50": 5.769167,
+      "p95": 21.440958,
+      "maximum": 22.447667
+    },
+    "publicationToRenderLatencyMilliseconds": {
+      "count": 148,
+      "average": 66.24723166216216,
+      "p50": 66.249833,
+      "p95": 67.320875,
+      "maximum": 68.003
+    },
+    "renderLatencyMilliseconds": {
+      "count": 295,
+      "average": 78.5424598779661,
+      "p50": 72.409292,
+      "p95": 88.043,
+      "maximum": 89.090875
+    },
+    "renderIntervalMilliseconds": {
+      "count": 149,
+      "average": 33.32384395973155,
+      "p50": 33.160416,
+      "p95": 34.786291,
+      "maximum": 35.796333
+    },
+    "drawCallbackIntervalMilliseconds": {
+      "count": 149,
+      "average": 33.3247438456376,
+      "p50": 33.160291,
+      "p95": 34.786417,
+      "maximum": 35.795625
+    },
+    "cpuCadenceGate": {
+      "maximumP95LatencyMilliseconds": 16.7,
+      "minimumFramesPerSecond": 58,
+      "maximumConsecutiveMissIntervalMilliseconds": 33.4,
+      "passed": false
+    },
+    "chromeReferenceComparison": null,
+    "certificationDiagnostics": "certification telemetry disabled at compile time"
+  },
+  "physicalPresentationVerified": false
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ResizeObserver follows the complete RAF batch</title>
+<div id="target" style="width:100px;height:20px"></div>
+<script>
+// Project-owned contract for HTML update-the-rendering ordering.
+const state = window.__webSceneWptState = {
+  complete:false, harness:null, results:[], errors:[], diagnostics:[]
+};
+const target = document.getElementById('target');
+const events = [];
+let armed = false, timestamp;
+function check(name, passed) {
+  state.results.push({name,status:passed?'PASS':'FAIL',
+    message:passed?null:JSON.stringify(events),stack:null});
+}
+const observer = new ResizeObserver(entries => {
+  if (!armed || entries[0].contentRect.width !== 150) return;
+  events.push('observer');
+  observer.disconnect();
+  check('Observer runs after the complete RAF batch',
+    events.join(',') === 'first,microtask,last,observer');
+  requestAnimationFrame(next => {
+    check('RAF requested by observer waits for another opportunity', next > timestamp);
+    state.harness = {status:state.results.some(r=>r.status!=='PASS')?1:0,
+      message:null,stack:null};
+    state.complete = true;
+  });
+});
+observer.observe(target);
+requestAnimationFrame(t => {
+  timestamp = t;
+  armed = true;
+  events.push('first');
+  target.style.width = '150px';
+  // A synchronous geometry read must not deliver the observer inside this batch.
+  target.getBoundingClientRect();
+  Promise.resolve().then(()=>events.push('microtask'));
+});
+requestAnimationFrame(()=>events.push('last'));
+</script>

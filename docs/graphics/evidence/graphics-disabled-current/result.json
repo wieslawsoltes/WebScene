@@ -1,0 +1,19 @@
+{
+  "sourceCommit": "10fec5a7a77461b3dde9edd112e6343bebe10e18",
+  "workingTreeNote": "Build includes existing uncommitted dialog CSS/test edits; these remain unstaged and were not part of this change.",
+  "settings": {
+    "buildType": "Release",
+    "V8": true,
+    "graphics": false
+  },
+  "buildCommand": "cmake --build artifacts/graphics-build/native-v8-disabled -j2",
+  "testCommand": "ctest --test-dir artifacts/graphics-build/native-v8-disabled --output-on-failure",
+  "tests": {
+    "passed": 13,
+    "failed": 0,
+    "seconds": 13.13
+  },
+  "librarySha256": "f04270ba42bd4977ad730ab6c9bcc1097b5890bb746f037dee29d3727673d02d",
+  "linkedLibraries": "artifacts/graphics-build/native-v8-disabled/libwebscene_native_engine.dylib:\n\t@rpath/libwebscene_native_engine.dylib (compatibility version 0.0.0, current version 0.0.0)\n\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 5026.5.4)\n\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)\n\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 5026.5.4)\n\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 61901.120.67)\n\t/usr/lib/libz.1.dylib (compatibility version 1.0.0, current version 1.2.12)\n\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2100.43.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n",
+  "scope": "Current macOS V8-enabled graphics-disabled build and tests, not clean checkout or non-GPU performance comparison"
+}

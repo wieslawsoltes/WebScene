@@ -1,0 +1,19 @@
+Test project /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-enabled
+    Start 1: webscene_html_parser_tests
+1/4 Test #1: webscene_html_parser_tests .......   Passed    0.01 sec
+    Start 2: webscene_css_parser_tests
+2/4 Test #2: webscene_css_parser_tests ........   Passed    0.01 sec
+    Start 3: webscene_selector_parser_tests
+3/4 Test #3: webscene_selector_parser_tests ...   Passed    0.01 sec
+    Start 4: webscene_native_engine_tests
+4/4 Test #4: webscene_native_engine_tests .....Subprocess terminated***Exception: 117.81 sec
+webscene_native_engine_tests: binary invocation did not complete
+
+
+75% tests passed, 1 tests failed out of 4
+
+Total Test time (real) = 117.85 sec
+
+The following tests FAILED:
+	  4 - webscene_native_engine_tests (Subprocess terminated)
+Errors while running CTest

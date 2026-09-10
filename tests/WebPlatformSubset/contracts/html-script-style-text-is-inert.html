@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8">
+<title>Stylesheet markup inside script text is inert</title>
+<link rel="help" href="https://html.spec.whatwg.org/multipage/parsing.html#script-data-state">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>svg{background:rgb(10,20,30)}button{position:static}</style>
+<script>
+const printPreviewMarkup='<style>svg{background:white}button{position:fixed}</style>';
+</script>
+<!-- <style>svg{background:red}</style> -->
+<template><style>svg{background:blue}</style></template>
+<svg id="icon" width="20" height="20"></svg><button id="control">Control</button>
+<script>
+test(()=>{
+ assert_equals(getComputedStyle(document.getElementById('icon')).backgroundColor,'rgb(10, 20, 30)');
+ assert_equals(getComputedStyle(document.getElementById('control')).position,'static');
+},'Script strings, comments and template contents do not activate stylesheets');
+</script>

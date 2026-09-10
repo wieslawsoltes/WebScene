@@ -1,0 +1,43 @@
+{
+  "physicalPresentationVerified": false,
+  "ratesAreNotFps": true,
+  "limitations": [
+    "Intervals include settling.",
+    "Runs differ in tracing overhead and background activity.",
+    "Counts do not measure display scanout or identify why callbacks are absent."
+  ],
+  "runs": [
+    {
+      "source": "pan-composition-timeline.json",
+      "intervalSecondsIncludingSettle": 1.8570006000000001,
+      "compositorCallbackRate": 51.696267626407874,
+      "renderedSceneRate": 34.46417841760525,
+      "submittedHostFrameRate": 33.38717284205509,
+      "applicationCallbackRate": 30.694658903179675
+    },
+    {
+      "source": "acceptance-to-draw-timeline.json",
+      "intervalSecondsIncludingSettle": 1.9112757999999999,
+      "compositorCallbackRate": 33.48548650069237,
+      "renderedSceneRate": 8.371371625173092,
+      "submittedHostFrameRate": 13.603478890906274,
+      "applicationCallbackRate": 13.603478890906274
+    },
+    {
+      "source": "unimported-scene-release.json",
+      "intervalSecondsIncludingSettle": 1.8539381000000001,
+      "compositorCallbackRate": 35.06050175030116,
+      "renderedSceneRate": 8.630277353920285,
+      "submittedHostFrameRate": 15.642377703980515,
+      "applicationCallbackRate": 15.642377703980515
+    },
+    {
+      "source": "acquisition-reasons-trace.json",
+      "intervalSecondsIncludingSettle": 1.8529947999999998,
+      "compositorCallbackRate": 39.93535222009258,
+      "renderedSceneRate": 10.79333843786286,
+      "submittedHostFrameRate": 17.809008422473717,
+      "applicationCallbackRate": 17.809008422473717
+    }
+  ]
+}

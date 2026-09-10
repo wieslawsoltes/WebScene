@@ -1,0 +1,66 @@
+{
+  "schema": "webscene-wpt-subset-result-v3",
+  "profile": "webscene-component-1",
+  "profileSha256": "fa57b9ef6dcafd4fdc06b60232197a33862b69f03cb67693f26bc7c6825c4b79",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "engine": "native",
+  "nativeEngineIdentity": "abi=3;sha256=0d7713fdf473573f0fb029115b11a61f7f874ad0fed3d9876a678797aeec9ba1",
+  "chromiumIdentity": null,
+  "startedAt": "2026-09-08T14:49:44.728732+00:00",
+  "duration": "00:00:00.1390755",
+  "selection": "required",
+  "summary": {
+    "tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "timedOut": 0,
+    "harnessErrors": 0,
+    "subtests": 5,
+    "subtestsPassed": 5,
+    "subtestsFailed": 0
+  },
+  "results": [
+    {
+      "path": "contracts/dialog-opening-lifecycle.html",
+      "type": "testharness",
+      "status": "PASS",
+      "duration": "00:00:00.1371428",
+      "message": null,
+      "subtests": [
+        {
+          "name": "show and showModal preserve mode and reject switching while open",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        },
+        {
+          "name": "showModal requires connection; show supports disconnected dialogs",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        },
+        {
+          "name": "beforetoggle can cancel opening or detach the dialog",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        },
+        {
+          "name": "modal focus uses autofocus and close restores background interaction",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        },
+        {
+          "name": "Removing open alone retains modal state; detachment releases it",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        }
+      ],
+      "artifacts": null,
+      "chromiumOracle": null
+    }
+  ]
+}

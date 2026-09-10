@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "dawn": {
+      "repository": "https://github.com/google/dawn.git",
+      "revision": "2ca8cbfe0f8275aa0f739e7b6b4345a16e2f0378",
+      "date": "2026-09-07T08:41:32Z",
+      "licenseFile": "LICENSE",
+      "licenseSha256": "0493f897193af1796d5054659f45ec7d4c5af648fa67a99f01d30e55cc805abc",
+      "headerPolicy": "Generate WebGPU C/C++ and Dawn extension headers from this exact checkout; distribute and verify with the installed monolithic library."
+    },
+    "angle": {
+      "repository": "https://github.com/google/angle.git",
+      "revision": "082d85ba19efba24d3c25108dc1f0cad9cf149f9",
+      "date": "2026-09-07T08:45:10Z",
+      "licenseFile": "LICENSE",
+      "licenseSha256": "bf4da21bd20bcfb5b60b7ecc67fa864a79be049e21d6178076887f178dd6c71a"
+    },
+    "webgpu-cts": {
+      "repository": "https://github.com/gpuweb/cts.git",
+      "revision": "de0f06a6e1ab4b4399359007e5b67fe07eecf163",
+      "date": "2026-09-01T01:23:30Z"
+    },
+    "webgl-cts": {
+      "repository": "https://github.com/KhronosGroup/WebGL.git",
+      "revision": "3b7a7538e880ab7ee7383b73fbfefb6a35179e7c",
+      "date": "2026-09-05T01:54:06Z"
+    },
+    "wpt": {
+      "repository": "https://github.com/web-platform-tests/wpt.git",
+      "revision": "f2666d25c2aa2e1a33cf553c0386c65482dbcdc9",
+      "date": "2026-09-07T08:37:10Z"
+    },
+    "depot-tools": {
+      "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+      "revision": "69a652ea05e450f84620f56957a801923186fda5"
+    }
+  },
+  "profiles": {
+    "win-x64": {
+      "dawnBackend": "D3D12",
+      "angleBackend": "D3D11",
+      "cpu": "x64"
+    },
+    "osx-arm64": {
+      "dawnBackend": "Metal",
+      "angleBackend": "Metal",
+      "cpu": "arm64"
+    },
+    "linux-x64": {
+      "dawnBackend": "Vulkan",
+      "angleBackend": "Vulkan",
+      "cpu": "x64"
+    }
+  },
+  "dawnCmake": {
+    "CMAKE_BUILD_TYPE": "Release",
+    "BUILD_SHARED_LIBS": "OFF",
+    "DAWN_FETCH_DEPENDENCIES": "ON",
+    "DAWN_ENABLE_INSTALL": "ON",
+    "DAWN_BUILD_MONOLITHIC_LIBRARY": "SHARED",
+    "DAWN_BUILD_SAMPLES": "OFF",
+    "DAWN_BUILD_TESTS": "OFF",
+    "DAWN_BUILD_PROTOBUF": "OFF",
+    "DAWN_BUILD_BENCHMARKS": "OFF",
+    "TINT_BUILD_TESTS": "OFF",
+    "TINT_BUILD_CMD_TOOLS": "OFF",
+    "TINT_BUILD_GLSL_VALIDATOR": "OFF",
+    "DAWN_USE_GLFW": "OFF",
+    "DAWN_ENABLE_D3D11": "OFF",
+    "DAWN_ENABLE_D3D12": "OFF",
+    "DAWN_ENABLE_METAL": "OFF",
+    "DAWN_ENABLE_VULKAN": "OFF",
+    "DAWN_ENABLE_DESKTOP_GL": "OFF",
+    "DAWN_ENABLE_OPENGLES": "OFF",
+    "DAWN_ENABLE_NULL": "OFF",
+    "DAWN_ENABLE_SWIFTSHADER": "OFF",
+    "DAWN_SUPPORTS_CXX_MODULES": "OFF"
+  },
+  "angleGn": {
+    "is_debug": false,
+    "is_component_build": false,
+    "symbol_level": 1,
+    "angle_build_tests": false,
+    "angle_enable_d3d11": false,
+    "angle_enable_metal": false,
+    "angle_enable_vulkan": false,
+    "angle_enable_gl": false,
+    "angle_enable_wgpu": false,
+    "angle_enable_null": false,
+    "angle_enable_swiftshader": false,
+    "use_remoteexec": false
+  },
+  "angleCustomVars": {
+    "checkout_angle_dawn_deps": false,
+    "checkout_angle_cl_deps": false,
+    "checkout_angle_restricted_traces": false
+  },
+  "linkage": {
+    "dawn": "Shared monolithic webgpu_dawn with WebGPU C exports only; private bundled dependencies must not collide with V8.",
+    "angle": "Shared EGL/GLESv2 with static internal dependencies; C ABI only.",
+    "windowsCrt": "Static /MT release, matching the native engine/V8; no cross-library ownership of CRT allocations."
+  },
+  "qualification": "Pins and settings are candidates until actual builds/probes pass on each RID. No software adapter counts as hardware."
+}

@@ -1,0 +1,218 @@
+[
+  {
+    "round": 0,
+    "operation": "shape_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 5.0962290999999995,
+    "managedBytesPerOperation": 1784.0128,
+    "cpuBitmap": true
+  },
+  {
+    "round": 0,
+    "operation": "shape_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 0.2909292,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 0,
+    "operation": "draw_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 7.3138584,
+    "managedBytesPerOperation": 2104,
+    "cpuBitmap": true
+  },
+  {
+    "round": 0,
+    "operation": "draw_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 2.7095791,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 1,
+    "operation": "draw_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 2.753475,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 1,
+    "operation": "draw_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 7.1130832999999996,
+    "managedBytesPerOperation": 2104,
+    "cpuBitmap": true
+  },
+  {
+    "round": 1,
+    "operation": "shape_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 0.28925,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 1,
+    "operation": "shape_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 4.9029958,
+    "managedBytesPerOperation": 1784.0056,
+    "cpuBitmap": true
+  },
+  {
+    "round": 2,
+    "operation": "shape_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 4.0875667,
+    "managedBytesPerOperation": 1784,
+    "cpuBitmap": true
+  },
+  {
+    "round": 2,
+    "operation": "shape_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 0.2092417,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 2,
+    "operation": "draw_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 7.0206375,
+    "managedBytesPerOperation": 2104,
+    "cpuBitmap": true
+  },
+  {
+    "round": 2,
+    "operation": "draw_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 2.1541709,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 3,
+    "operation": "draw_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 2.1295,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 3,
+    "operation": "draw_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 6.9091583,
+    "managedBytesPerOperation": 2104,
+    "cpuBitmap": true
+  },
+  {
+    "round": 3,
+    "operation": "shape_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 0.08505,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 3,
+    "operation": "shape_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 3.3211833,
+    "managedBytesPerOperation": 1784,
+    "cpuBitmap": true
+  },
+  {
+    "round": 4,
+    "operation": "shape_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 3.3064625,
+    "managedBytesPerOperation": 1784,
+    "cpuBitmap": true
+  },
+  {
+    "round": 4,
+    "operation": "shape_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 0.0806625,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 4,
+    "operation": "draw_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 6.7598,
+    "managedBytesPerOperation": 2104,
+    "cpuBitmap": true
+  },
+  {
+    "round": 4,
+    "operation": "draw_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 2.109125,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 5,
+    "operation": "draw_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 2.1088958,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 5,
+    "operation": "draw_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 5.9011292,
+    "managedBytesPerOperation": 2104,
+    "cpuBitmap": true
+  },
+  {
+    "round": 5,
+    "operation": "shape_cached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 0.0755667,
+    "managedBytesPerOperation": 0,
+    "cpuBitmap": true
+  },
+  {
+    "round": 5,
+    "operation": "shape_uncached",
+    "iterations": 10000,
+    "family": "Helvetica",
+    "microsecondsPerOperation": 3.260175,
+    "managedBytesPerOperation": 1784,
+    "cpuBitmap": true
+  }
+]

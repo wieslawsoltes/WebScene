@@ -1,0 +1,37 @@
+{
+  "schema": "webscene-native-retained-render-v1",
+  "capturedUtc": "2026-09-07T09:42:51.223761+00:00",
+  "options": {
+    "layerCount": 2048,
+    "visibleLayerCount": 32,
+    "iterations": 40,
+    "samples": 11,
+    "viewportWidth": 320,
+    "viewportHeight": 240
+  },
+  "correctness": {
+    "surfaceClearedBeforeEveryRender": true,
+    "sparseFrameSha256": "4455EE96B6129573493626BE4B4FD1A46B1A9817323D4E8C10844FC62022ADE1",
+    "sparseReplacementFrameSha256": "4455EE96B6129573493626BE4B4FD1A46B1A9817323D4E8C10844FC62022ADE1",
+    "visibleOnlyReferenceSha256": "4455EE96B6129573493626BE4B4FD1A46B1A9817323D4E8C10844FC62022ADE1",
+    "framesMatch": true
+  },
+  "sparse": {
+    "MedianNanosecondsPerRender": 12930,
+    "P95NanosecondsPerRender": 14527.5,
+    "MeanNanosecondsPerRender": 13138.181818181818,
+    "AllocatedBytesPerRender": 0
+  },
+  "dense": {
+    "MedianNanosecondsPerRender": 399582.5,
+    "P95NanosecondsPerRender": 406235,
+    "MeanNanosecondsPerRender": 394638.86363636365,
+    "AllocatedBytesPerRender": 0
+  },
+  "sparseWithReplacement": {
+    "MedianNanosecondsPerRender": 41145,
+    "P95NanosecondsPerRender": 44545,
+    "MeanNanosecondsPerRender": 41713.181818181816,
+    "AllocatedBytesPerRender": 3616
+  }
+}

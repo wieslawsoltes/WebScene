@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<link rel="match" href="positioned-height-percentage-paint-ref.html">
+<style>
+html,body { margin:0; }
+#host { position:relative; width:240px; height:160px; font-size:0; }
+#fill { position:absolute; inset:0; }
+#clip { height:100%; overflow:hidden; }
+#paint { height:100%; background:green; }
+</style>
+<div id="host"><span>anchor</span><div id="fill"><div id="clip"><div id="paint"></div></div></div></div>

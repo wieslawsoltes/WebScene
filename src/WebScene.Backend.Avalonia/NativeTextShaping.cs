@@ -50,6 +50,173 @@ public struct NativeTextMetrics
 
 public static class NativeTextShaping
 {
+    private static long _fontRegistrationVersion;
+    internal static long FontRegistrationVersion => Interlocked.Read(ref _fontRegistrationVersion);
+    private static readonly ShapedRunCache ShapedRuns = new(2048, 4 * 1024 * 1024);
+    private static readonly TextBlobCache TextBlobs = new();
+    // Cache the immutable native glyph container as well as HarfBuzz output.
+    // Draw coordinates and color are supplied at replay time. The short-run
+    // limit and LRU bound native font/blob ownership to a small working set.
+    internal sealed class TextBlobCache(int maximumEntries = 512) : IDisposable
+    {
+        private readonly record struct Key(int Face, string Text, float Size, float Scale,
+            float Skew, bool Bold, bool AutoHint, SKTextEncoding Encoding, FontRasterizationProfile Profile);
+        internal sealed class BorrowedBlob(SKTextBlob blob)
+        {
+            internal SKTextBlob Blob { get; } = blob;
+            internal int Readers;
+            internal bool Retired;
+        }
+        private sealed record Entry(Key Key, WeakReference<SKTypeface> Face, BorrowedBlob Value);
+        private readonly object _gate = new();
+        private readonly Dictionary<Key, LinkedListNode<Entry>> _entries = [];
+        private readonly LinkedList<Entry> _order = [];
+        private bool _disposed;
+
+        public bool Draw(SKCanvas canvas, SKShaper shaper, string text, SKShaper.Result shaped,
+            SKPaint paint, float x, float baseline, float deviceScale, NativeFontRasterizationMode? mode)
+        {
+            var borrowed = Acquire(shaper, text, shaped, paint, deviceScale, mode);
+            if (borrowed is null) return false;
+            try
+            {
+                canvas.DrawText(borrowed.Blob, x, baseline, paint);
+                return true;
+            }
+            finally
+            {
+                Release(borrowed);
+            }
+        }
+
+        internal BorrowedBlob? Acquire(SKShaper shaper, string text, SKShaper.Result shaped,
+            SKPaint paint, float deviceScale, NativeFontRasterizationMode? mode)
+        {
+            if (maximumEntries <= 0 || text.Length > 256 || shaped.Codepoints.Length > 512
+                || shaped.Codepoints.Length == 0 || shaped.Codepoints.Length != shaped.Points.Length)
+                return null;
+            var face = shaper.Typeface;
+            var key = new Key(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(face), text,
+                paint.TextSize, paint.TextScaleX, paint.TextSkewX, paint.FakeBoldText, paint.IsAutohinted, paint.TextEncoding,
+                ResolveFontRasterizationProfile(deviceScale, mode));
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                if (_entries.TryGetValue(key, out var found))
+                {
+                    if (found.Value.Face.TryGetTarget(out var previous) && ReferenceEquals(previous, face))
+                    {
+                        _order.Remove(found); _order.AddLast(found);
+                        found.Value.Value.Readers++;
+                        return found.Value.Value;
+                    }
+                    _entries.Remove(key); _order.Remove(found); Retire(found.Value.Value);
+                }
+                using var font = paint.ToFont();
+                font.Typeface = face;
+                ApplyFontRasterizationProfile(font, deviceScale, mode);
+                using var builder = new SKTextBlobBuilder();
+                var count = Math.Min(shaped.Codepoints.Length, shaped.Points.Length);
+                var run = builder.AllocatePositionedRun(font, count);
+                for (var index = 0; index < count; index++)
+                {
+                    run.GetGlyphSpan()[index] = (ushort)shaped.Codepoints[index];
+                    run.GetPositionSpan()[index] = shaped.Points[index];
+                }
+                var blob = builder.Build();
+                if (blob is null) return null;
+                if (_entries.Count == maximumEntries)
+                {
+                    var oldest = _order.First!;
+                    _entries.Remove(oldest.Value.Key); _order.RemoveFirst(); Retire(oldest.Value.Value);
+                }
+                var value = new BorrowedBlob(blob) { Readers = 1 };
+                _entries.Add(key, _order.AddLast(new Entry(key, new WeakReference<SKTypeface>(face), value)));
+                return value;
+            }
+        }
+
+        // Readers pin a blob across native drawing without holding the cache lock.
+        // Eviction releases cache ownership; the final reader disposes it.
+        private static void Retire(BorrowedBlob value)
+        {
+            value.Retired = true;
+            if (value.Readers == 0) value.Blob.Dispose();
+        }
+
+        internal void Release(BorrowedBlob value)
+        {
+            lock (_gate)
+            {
+                if (--value.Readers == 0 && value.Retired) value.Blob.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _disposed = true;
+                foreach (var entry in _order) Retire(entry.Value);
+                _entries.Clear();
+                _order.Clear();
+            }
+        }
+    }
+
+    // SKShaper's string overload depends on the immutable typeface, text,
+    // encoding, size and horizontal scale. Cache origin-relative glyph data;
+    // alignment, spacing, rasterization and draw position are applied later.
+    // Weak face references avoid extending a document web font's native life.
+    internal sealed class ShapedRunCache(int maximumEntries, long maximumBytes)
+    {
+        private readonly record struct Key(int Face, string Text, float Size, float Scale, SKTextEncoding Encoding);
+        private sealed record Entry(Key Key, WeakReference<SKTypeface> Face, SKShaper.Result Result, long Bytes);
+        private readonly object _gate = new();
+        private readonly Dictionary<Key, LinkedListNode<Entry>> _entries = [];
+        private readonly LinkedList<Entry> _order = [];
+        private long _bytes;
+        internal (int Count, long Bytes) Occupancy { get { lock (_gate) return (_entries.Count, _bytes); } }
+
+        internal SKShaper.Result Shape(SKShaper shaper, string text, SKPaint paint)
+        {
+            if (text.Length > 4096 || maximumEntries <= 0 || maximumBytes <= 0
+                || !float.IsFinite(paint.TextSize) || !float.IsFinite(paint.TextScaleX))
+                return shaper.Shape(text, 0, 0, paint);
+            var face = shaper.Typeface;
+            var key = new Key(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(face),
+                text, paint.TextSize, paint.TextScaleX, paint.TextEncoding);
+            lock (_gate)
+            {
+                if (_entries.TryGetValue(key, out var found)
+                    && found.Value.Face.TryGetTarget(out var cachedFace) && ReferenceEquals(face, cachedFace))
+                {
+                    _order.Remove(found); _order.AddLast(found);
+                    return found.Value.Result;
+                }
+            }
+            var result = shaper.Shape(text, 0, 0, paint);
+            var bytes = 128L + text.Length * 2L + result.Codepoints.Length * 4L
+                + result.Clusters.Length * 4L + result.Points.Length * 8L;
+            if (bytes > maximumBytes) return result;
+            lock (_gate)
+            {
+                if (_entries.Remove(key, out var previous))
+                { _order.Remove(previous); _bytes -= previous.Value.Bytes; }
+                while (_entries.Count >= maximumEntries || _bytes + bytes > maximumBytes)
+                {
+                    var oldest = _order.First!;
+                    _entries.Remove(oldest.Value.Key); _order.RemoveFirst(); _bytes -= oldest.Value.Bytes;
+                }
+                var entry = new Entry(key, new WeakReference<SKTypeface>(face), result, bytes);
+                _entries.Add(key, _order.AddLast(entry)); _bytes += bytes;
+            }
+            return result;
+        }
+    }
+
+    private static SKShaper.Result ShapeAtOrigin(SKShaper shaper, string text, SKPaint paint)
+        => ShapedRuns.Shape(shaper, text, paint);
     internal const string RasterizationModeEnvironmentVariable =
         "WEBSCENE_TEXT_RASTERIZATION";
     internal const uint TabularNumerals = 1u << 0;
@@ -105,54 +272,112 @@ public static class NativeTextShaping
     internal sealed class WebTypefaceRegistry : IDisposable
     {
         private readonly object _gate = new();
-        private readonly ConcurrentDictionary<string, WebTypefaceLease> _typefaces =
-            new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, FaceRegistration[]> _typefaces = new(StringComparer.OrdinalIgnoreCase);
+        private readonly bool _instantiate = VariableFontInstancingEnabled;
+        private int _references = 1;
+        private bool _ownerDisposed;
         private volatile bool _disposed;
+        internal WebTypefaceRegistry(bool? instantiate = null) => _instantiate = instantiate ?? VariableFontInstancingEnabled;
 
-        internal bool Register(string family, ReadOnlySpan<byte> data)
+        internal bool Register(string family, ReadOnlySpan<byte> data, int? minimumWeight = null, int? maximumWeight = null, SKFontStyleSlant? slant = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(family);
             if (data.IsEmpty) return false;
-
             var normalizedFamily = family.Trim().Trim('"', '\'');
             lock (_gate)
             {
-                ObjectDisposedException.ThrowIf(_disposed, this);
-                if (_typefaces.ContainsKey(normalizedFamily)) return true;
+                ObjectDisposedException.ThrowIf(_ownerDisposed, this);
                 var lease = AcquireWebTypeface(data);
                 if (lease is null) return false;
-                if (_typefaces.TryAdd(normalizedFamily, lease)) return true;
-                lease.Dispose();
+                var min = Math.Clamp(minimumWeight ?? (int)(lease.Shared.Axis?.Minimum ?? lease.Typeface.FontWeight), 1, 1000);
+                var max = Math.Clamp(maximumWeight ?? (int)(lease.Shared.Axis?.Maximum ?? lease.Typeface.FontWeight), min, 1000);
+                var faceSlant = slant ?? lease.Typeface.FontSlant;
+                _typefaces.TryGetValue(normalizedFamily, out var existing);
+                existing ??= [];
+                if (existing.Any(item => ReferenceEquals(item.Lease.Shared, lease.Shared) && item.Minimum == min && item.Maximum == max && item.Slant == faceSlant))
+                {
+                    lease.Dispose();
+                    return true;
+                }
+                _typefaces[normalizedFamily] = [.. existing, new(lease, min, max, faceSlant)];
+                Interlocked.Increment(ref _fontRegistrationVersion);
                 return true;
             }
         }
 
-        internal bool TryResolve(string family, out SKTypeface typeface)
+        internal bool TryResolve(string family, out SKTypeface typeface) => TryResolve(family, 400, out typeface);
+        internal bool TryResolve(string family, int weight, out SKTypeface typeface)
+            => TryResolve(family, weight, SKFontStyleSlant.Upright, out typeface);
+        internal bool TryResolve(string family, int weight, SKFontStyleSlant slant, out SKTypeface typeface)
         {
-            if (!_disposed && _typefaces.TryGetValue(family, out var lease))
+            if (!_disposed && _typefaces.TryGetValue(family, out var faces))
             {
-                typeface = lease.Typeface;
+                weight = Math.Clamp(weight, 1, 1000);
+                var selected = faces[0];
+                var best = int.MaxValue;
+                foreach (var face in faces)
+                {
+                    var candidate = Math.Clamp(weight, face.Minimum, face.Maximum);
+                    var rank = WeightRank(weight, candidate) + (face.Slant == slant ? 0 : 10000);
+                    // Later declarations win ties, as for overlapping @font-face rules.
+                    if (rank <= best) { selected = face; best = rank; }
+                }
+                typeface = _instantiate
+                    ? selected.Lease.Shared.Resolve(Math.Clamp(weight, selected.Minimum, selected.Maximum))
+                    : selected.Lease.Typeface;
                 return true;
             }
             typeface = null!;
             return false;
         }
 
-        internal bool Contains(string family)
-            => !_disposed && _typefaces.ContainsKey(family);
+        internal static int WeightRank(int requested, int candidate)
+        {
+            if (requested == candidate) return 0;
+            if (requested is >= 400 and <= 500)
+                return candidate >= requested && candidate <= 500 ? candidate - requested
+                    : candidate < requested ? 1000 + requested - candidate : 2000 + candidate - 500;
+            return requested < 400
+                ? candidate < requested ? requested - candidate : 1000 + candidate - requested
+                : candidate > requested ? candidate - requested : 1000 + requested - candidate;
+        }
 
+        internal bool Contains(string family) => !_disposed && _typefaces.ContainsKey(family);
+        internal IDisposable Retain()
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                _references++;
+                return new RegistryReference(this);
+            }
+        }
+        private void Release()
+        {
+            lock (_gate)
+            {
+                if (--_references != 0) return;
+                _disposed = true;
+                foreach (var faces in _typefaces.Values)
+                    foreach (var face in faces) face.Lease.Dispose();
+                _typefaces.Clear();
+                Interlocked.Increment(ref _fontRegistrationVersion);
+            }
+        }
         public void Dispose()
         {
             lock (_gate)
             {
-                if (_disposed) return;
-                _disposed = true;
-                foreach (var lease in _typefaces.Values)
-                {
-                    lease.Dispose();
-                }
-                _typefaces.Clear();
+                if (_ownerDisposed) return;
+                _ownerDisposed = true;
+                Release();
             }
+        }
+        private sealed record FaceRegistration(WebTypefaceLease Lease, int Minimum, int Maximum, SKFontStyleSlant Slant);
+        private sealed class RegistryReference(WebTypefaceRegistry registry) : IDisposable
+        {
+            private WebTypefaceRegistry? _registry = registry;
+            public void Dispose() => Interlocked.Exchange(ref _registry, null)?.Release();
         }
     }
 
@@ -162,7 +387,7 @@ public static class NativeTextShaping
         long Hits,
         long Misses);
 
-    internal static WebTypefaceRegistry CreateWebTypefaceRegistry() => new();
+    internal static WebTypefaceRegistry CreateWebTypefaceRegistry(bool? instantiate = null) => new(instantiate);
 
     public static WebTypefaceCacheMetrics GetWebTypefaceCacheMetrics()
     {
@@ -181,12 +406,15 @@ public static class NativeTextShaping
         ArgumentException.ThrowIfNullOrWhiteSpace(family);
         if (data.IsEmpty) return false;
 
-        using var fontData = SKData.CreateCopy(data);
-        var typeface = SKTypeface.FromData(fontData);
+        var typeface = DecodeWebTypeface(data);
         if (typeface is null) return false;
 
         var normalizedFamily = family.Trim().Trim('"', '\'');
-        if (WebTypefaces.TryAdd(normalizedFamily, typeface)) return true;
+        if (WebTypefaces.TryAdd(normalizedFamily, typeface))
+        {
+            Interlocked.Increment(ref _fontRegistrationVersion);
+            return true;
+        }
 
         typeface.Dispose();
         return true;
@@ -219,7 +447,7 @@ public static class NativeTextShaping
                      ',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             var family = rawFamily.Trim('"', '\'');
-            if (registry?.TryResolve(family, out var scopedTypeface) == true)
+            if (registry?.TryResolve(family, fontWeight, slant, out var scopedTypeface) == true)
             {
                 return scopedTypeface;
             }
@@ -697,10 +925,10 @@ public static class NativeTextShaping
         }
         if ((featureFlags & TabularNumerals) == 0)
         {
-            return shaper.Shape(text, paint).Width;
+            return ShapeAtOrigin(shaper, text, paint).Width;
         }
 
-        var tabularDigitWidth = shaper.Shape("0", paint).Width * tabularDigitScale;
+        var tabularDigitWidth = ShapeAtOrigin(shaper, "0", paint).Width * tabularDigitScale;
         var width = 0f;
         for (var index = 0; index < text.Length;)
         {
@@ -712,7 +940,7 @@ public static class NativeTextShaping
             }
             var start = index++;
             while (index < text.Length && text[index] is not (>= '0' and <= '9')) index++;
-            width += shaper.Shape(text[start..index], paint).Width;
+            width += ShapeAtOrigin(shaper, text[start..index], paint).Width;
         }
         return width;
     }
@@ -742,7 +970,7 @@ public static class NativeTextShaping
             registry,
             shaper.Typeface);
         if (!TextRunPositioner.IsEligible(in request)) return false;
-        var shaped = shaper.Shape(text, 0, 0, paint);
+        var shaped = ShapeAtOrigin(shaper, text, paint);
         if (shaped.Codepoints.Length == 0
             || shaped.Codepoints.Length != shaped.Points.Length)
         {
@@ -773,7 +1001,7 @@ public static class NativeTextShaping
 
         var result = SKRect.Empty;
         var hasBounds = false;
-        var tabularDigitWidth = shaper.Shape("0", paint).Width * tabularDigitScale;
+        var tabularDigitWidth = ShapeAtOrigin(shaper, "0", paint).Width * tabularDigitScale;
         var cursor = 0f;
         for (var index = 0; index < text.Length;)
         {
@@ -790,7 +1018,7 @@ public static class NativeTextShaping
                 var start = index++;
                 while (index < text.Length && text[index] is not (>= '0' and <= '9')) index++;
                 segment = text[start..index];
-                advance = shaper.Shape(segment, paint).Width;
+                advance = ShapeAtOrigin(shaper, segment, paint).Width;
             }
 
             var bounds = MeasureShapedTextRunBounds(
@@ -841,7 +1069,7 @@ public static class NativeTextShaping
         SKPaint paint,
         float horizontalAdvanceScale)
     {
-        var shaped = shaper.Shape(text, 0, 0, paint);
+        var shaped = ShapeAtOrigin(shaper, text, paint);
         if (shaped.Codepoints.Length == 0 || shaped.Points.Length == 0)
         {
             return SKRect.Empty;
@@ -934,7 +1162,7 @@ public static class NativeTextShaping
             return;
         }
 
-        var tabularDigitWidth = shaper.Shape("0", paint).Width * tabularDigitScale;
+        var tabularDigitWidth = ShapeAtOrigin(shaper, "0", paint).Width * tabularDigitScale;
         for (var index = 0; index < text.Length;)
         {
             if (text[index] is >= '0' and <= '9')
@@ -967,7 +1195,7 @@ public static class NativeTextShaping
                 horizontalAdvanceScale,
                 deviceScaleFactor,
                 rasterizationMode);
-            cursor += shaper.Shape(segment, paint).Width * horizontalAdvanceScale;
+            cursor += ShapeAtOrigin(shaper, segment, paint).Width * horizontalAdvanceScale;
         }
     }
 
@@ -1251,11 +1479,15 @@ public static class NativeTextShaping
         float letterSpacing = 0,
         float wordSpacing = 0)
     {
-        var result = shaper.Shape(text, 0, baseline, paint);
+        var result = ShapeAtOrigin(shaper, text, paint);
         if (result.Codepoints.Length == 0 || result.Points.Length == 0)
         {
             return;
         }
+
+        if (horizontalAdvanceScale == 1 && letterSpacing == 0 && wordSpacing == 0
+            && TextBlobs.Draw(canvas, shaper, text, result, paint, x, baseline, deviceScaleFactor, rasterizationMode))
+            return;
 
         using var font = paint.ToFont();
         font.Typeface = shaper.Typeface;
@@ -1277,7 +1509,7 @@ public static class NativeTextShaping
             positions[index] = new SKPoint(
                 x + result.Points[index].X * horizontalAdvanceScale
                     + spacingOffsets[index],
-                result.Points[index].Y);
+                baseline + result.Points[index].Y);
         }
 
         using var textBlob = builder.Build();
@@ -1456,6 +1688,30 @@ public static class NativeTextShaping
             ? 1.014f
             : 1f;
 
+    // Match the process-lifetime system font resolution policy used by Typefaces,
+    // but bound negative family probes so arbitrary CSS cannot grow this cache.
+    private static readonly ConcurrentDictionary<string, bool> InstalledFontFamilies =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly object InstalledFontFamilyGate = new();
+
+    private static bool IsInstalledFontFamily(string family)
+    {
+        if (InstalledFontFamilies.TryGetValue(family, out var installed)) return installed;
+        using var typeface = SKTypeface.FromFamilyName(family);
+        installed = typeface is not null && string.Equals(typeface.FamilyName, family,
+            StringComparison.OrdinalIgnoreCase);
+        lock (InstalledFontFamilyGate)
+        {
+            if (!InstalledFontFamilies.ContainsKey(family))
+            {
+                if (InstalledFontFamilies.Count >= 256) InstalledFontFamilies.Clear();
+                InstalledFontFamilies.TryAdd(family, installed);
+            }
+        }
+        return installed;
+    }
+
     internal static bool UsesMacSystemUiMetrics(
         string familyList,
         WebTypefaceRegistry? registry)
@@ -1482,9 +1738,7 @@ public static class NativeTextShaping
                 return false;
             }
 
-            using var installed = SKTypeface.FromFamilyName(family);
-            if (installed is not null
-                && string.Equals(installed.FamilyName, family, StringComparison.OrdinalIgnoreCase))
+            if (IsInstalledFontFamily(family))
             {
                 return false;
             }
@@ -1694,18 +1948,27 @@ public static class NativeTextShaping
             {
                 cached.ReferenceCount++;
                 Interlocked.Increment(ref _webTypefaceCacheHits);
-                return new WebTypefaceLease(contentHash, cached.Typeface);
+                return new WebTypefaceLease(contentHash, cached);
             }
 
-            using var fontData = SKData.CreateCopy(data);
-            var typeface = SKTypeface.FromData(fontData);
+            var typeface = DecodeWebTypeface(data);
             if (typeface is null) return null;
-            WebTypefaceCache.Add(
-                contentHash,
-                new SharedWebTypeface(typeface));
+            var shared = new SharedWebTypeface(typeface);
+            WebTypefaceCache.Add(contentHash, shared);
             Interlocked.Increment(ref _webTypefaceCacheMisses);
-            return new WebTypefaceLease(contentHash, typeface);
+            return new WebTypefaceLease(contentHash, shared);
         }
+    }
+
+    private static SKTypeface? DecodeWebTypeface(ReadOnlySpan<byte> data)
+    {
+        try
+        {
+            using var fontData = SKData.CreateCopy(NativeWebFontDecoder.IsCompressed(data)
+                ? NativeWebFontDecoder.Decode(data) : data);
+            return SKTypeface.FromData(fontData);
+        }
+        catch (System.IO.InvalidDataException) { return null; }
     }
 
     private static void ReleaseWebTypeface(string contentHash)
@@ -1716,22 +1979,110 @@ public static class NativeTextShaping
             cached.ReferenceCount--;
             if (cached.ReferenceCount > 0) return;
             WebTypefaceCache.Remove(contentHash);
-            cached.Typeface.Dispose();
+            cached.Dispose();
         }
     }
 
-    private sealed class SharedWebTypeface(SKTypeface typeface)
+    // Enabled by default; an explicit zero is the diagnostic rollback switch.
+    internal static readonly bool VariableFontInstancingEnabled =
+        ResolveVariableFontInstancingEnabled(Environment.GetEnvironmentVariable("WEBSCENE_VARIABLE_FONT_INSTANCING"));
+    internal static bool ResolveVariableFontInstancingEnabled(string? value) => value != "0";
+    internal readonly record struct VariableFontMetrics(long Conversions, long Hits, long Failures, double Milliseconds, int Instances, long Bytes);
+    private static long _instanceConversions, _instanceHits, _instanceFailures, _instanceTicks, _instanceBytes;
+    private static int _instanceCount;
+    internal static VariableFontMetrics GetVariableFontMetrics()
+    {
+        lock (WebTypefaceCacheGate)
+            return new(_instanceConversions, Interlocked.Read(ref _instanceHits), _instanceFailures,
+                _instanceTicks * 1000d / Stopwatch.Frequency, _instanceCount, _instanceBytes);
+    }
+    internal static (int PerFont, int Total, long Bytes) InstanceLimits = (64, 256, 64L * 1024 * 1024);
+    internal static Func<SKTypeface, float, byte[]> InstanceFactory = NativeVariableFontInstancer.Instantiate;
+
+    private sealed class SharedWebTypeface(SKTypeface typeface) : IDisposable
     {
         internal SKTypeface Typeface { get; } = typeface;
+        internal NativeVariableFontInstancer.WeightAxis? Axis { get; } = NativeVariableFontInstancer.ReadWeightAxis(typeface);
         internal int ReferenceCount { get; set; } = 1;
+        private readonly ConcurrentDictionary<float, SKTypeface> _variants = new();
+        private readonly List<SKTypeface> _ownedVariants = [];
+        private long _bytes;
+        private bool _saturated;
+        private bool _unavailable;
+        internal SKTypeface Resolve(int weight)
+        {
+            if (Axis is not { } axis) return Typeface;
+            var coordinate = Math.Clamp(weight, axis.Minimum, axis.Maximum);
+            if (_variants.TryGetValue(coordinate, out var found))
+            {
+                Interlocked.Increment(ref _instanceHits);
+                return found;
+            }
+            lock (WebTypefaceCacheGate)
+            {
+                if (_variants.TryGetValue(coordinate, out found)) return found;
+                if (_saturated || _unavailable) return Typeface;
+                var start = Stopwatch.GetTimestamp();
+                try
+                {
+                    if (_ownedVariants.Count >= InstanceLimits.PerFont || _instanceCount >= InstanceLimits.Total
+                        || _instanceBytes >= InstanceLimits.Bytes)
+                    {
+                        _saturated = true;
+                        throw new InvalidOperationException("Variable-font instance cache limit reached.");
+                    }
+                    _instanceConversions++;
+                    var bytes = InstanceFactory(Typeface, coordinate);
+                    if (_instanceBytes + bytes.Length > InstanceLimits.Bytes)
+                    {
+                        _saturated = true;
+                        throw new InvalidOperationException("Variable-font instance byte limit reached.");
+                    }
+                    using var data = SKData.CreateCopy(bytes);
+                    var result = SKTypeface.FromData(data)
+                        ?? throw new InvalidOperationException("Skia could not load the instantiated font.");
+                    if (result.GetTableSize(0x66766172) != 0 || result.GlyphCount != Typeface.GlyphCount)
+                    {
+                        result.Dispose();
+                        throw new InvalidOperationException("Font instantiation did not preserve a complete static face.");
+                    }
+                    _ownedVariants.Add(result);
+                    _bytes += bytes.Length;
+                    _instanceBytes += bytes.Length;
+                    _instanceCount++;
+                    _variants[coordinate] = result;
+                    return result;
+                }
+                catch (Exception error)
+                {
+                    if (error is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+                        _unavailable = true;
+                    _instanceFailures++;
+                    _variants[coordinate] = Typeface;
+                    Console.Error.WriteLine($"[WebScene font instancing] {Typeface.FamilyName} wght={coordinate}: {error.Message}");
+                    return Typeface;
+                }
+                finally { _instanceTicks += Stopwatch.GetTimestamp() - start; }
+            }
+        }
+        public void Dispose()
+        {
+            foreach (var variant in _ownedVariants) variant.Dispose();
+            _instanceCount -= _ownedVariants.Count;
+            _instanceBytes -= _bytes;
+            _ownedVariants.Clear();
+            _variants.Clear();
+            Typeface.Dispose();
+        }
     }
 
     private sealed class WebTypefaceLease(
         string contentHash,
-        SKTypeface typeface) : IDisposable
+        SharedWebTypeface shared) : IDisposable
     {
         private string? _contentHash = contentHash;
-        internal SKTypeface Typeface { get; } = typeface;
+        internal SharedWebTypeface Shared { get; } = shared;
+        internal SKTypeface Typeface => Shared.Typeface;
 
         public void Dispose()
         {

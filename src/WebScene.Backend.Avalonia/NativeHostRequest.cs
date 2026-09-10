@@ -88,6 +88,17 @@ internal static class NativeHostRequest
             var url = urlProperty.GetString() ?? string.Empty;
             if (TryDecodeDataUrl(url, out var contentType, out var bytes))
             {
+                // A canvas-backed Blob has no encoded bytes in the V8 realm;
+                // it must arrive with canvasNodeId so the host captures the
+                // retained compositor layer. Never offer a zero-byte PNG.
+                if (bytes.Length == 0
+                    && string.Equals(
+                        contentType,
+                        "image/png",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
                 download = new NativeDownloadRequest(
                     suggested,
                     contentType,

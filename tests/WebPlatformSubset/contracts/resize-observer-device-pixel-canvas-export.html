@@ -1,0 +1,168 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Device-pixel observations keep canvas export layers at one scale</title>
+<style>
+  body { margin: 0; }
+  #pane { display: block; width: 331px; height: 443px; }
+  #time-axis { display: block; width: 331px; height: 28px; }
+  iframe { display: block; width: 100px; height: 80px; border: 0; }
+</style>
+<body><canvas id="pane"></canvas><canvas id="time-axis"></canvas></body>
+<script>
+  // Project-owned WPT-style reduction. No TradingView code or network needed.
+  // Run unchanged at DPR 1 and 2; all dimensions are integer device pixels.
+  // https://www.w3.org/TR/resize-observer/#resize-observer-interface
+  const state = window.__webSceneWptState = {
+    complete: false, harness: null, results: [], errors: [], diagnostics: []
+  };
+  function record(name, passed, actual) {
+    state.results.push({ name, status: passed ? "PASS" : "FAIL",
+      message: passed ? null : JSON.stringify(actual), stack: null });
+  }
+  const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+  const observeNext = (target, change) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { observer.disconnect(); reject(new Error("ResizeObserver timed out")); }, 2000);
+    const observer = new ResizeObserver(entries => {
+      clearTimeout(timer);
+      observer.disconnect();
+      resolve(entries[0]);
+    });
+    observer.observe(target, { box: "device-pixel-content-box" });
+    if (change) change();
+  });
+  (async () => {
+    const dpr = devicePixelRatio;
+    const expectedDpr = window.__webSceneWptExpectedDeviceScaleFactor ?? dpr;
+    record("the DOM device scale matches the test profile",
+      (expectedDpr === 1 || expectedDpr === 2) && dpr === expectedDpr, { dpr, expectedDpr });
+    const pane = document.getElementById("pane");
+    async function checkExport(width, height, phase) {
+      const entry = await observeNext(pane, () => {
+        pane.style.width = width + "px";
+        pane.style.height = height + "px";
+      });
+      const size = value => ({ inlineSize: value.inlineSize, blockSize: value.blockSize });
+      const css = size(entry.contentBoxSize[0]);
+      const physical = size(entry.devicePixelContentBoxSize[0]);
+      record(phase + ": content size stays in CSS pixels",
+        css.inlineSize === width && css.blockSize === height, css);
+      record(phase + ": device content size uses physical pixels",
+        physical.inlineSize === width * dpr && physical.blockSize === height * dpr,
+        { dpr, css, physical });
+
+      // The pane trusts ResizeObserver; the detached export axis trusts DPR.
+      // Returning CSS sizes as physical sizes gives a 1x pane beside a 2x axis.
+      pane.width = physical.inlineSize;
+      pane.height = physical.blockSize;
+      const context = pane.getContext("2d");
+      context.fillStyle = "#00ff00";
+      context.fillRect(0, 0, pane.width, pane.height);
+      const axis = document.createElement("canvas");
+      axis.width = 70 * dpr;
+      axis.height = height * dpr;
+      const axisContext = axis.getContext("2d");
+      axisContext.fillStyle = "#0000ff";
+      axisContext.fillRect(0, 0, axis.width, axis.height);
+      const output = document.createElement("canvas");
+      const padding = 10 * dpr;
+      const timeCanvas = document.getElementById("time-axis");
+      const timeEntry = await observeNext(timeCanvas, () => { timeCanvas.style.width = width + "px"; });
+      timeCanvas.width = timeEntry.devicePixelContentBoxSize[0].inlineSize;
+      timeCanvas.height = timeEntry.devicePixelContentBoxSize[0].blockSize;
+      const timeAxis = timeCanvas.height;
+      const footer = 70 * dpr;
+      output.width = pane.width + axis.width + padding * 2;
+      output.height = pane.height + timeAxis + footer;
+      const outputContext = output.getContext("2d");
+      outputContext.drawImage(pane, padding, padding);
+      outputContext.drawImage(axis, padding + pane.width, padding);
+      outputContext.drawImage(timeCanvas, padding, padding + pane.height);
+      const footerTop = padding + pane.height + timeAxis;
+      record(phase + ": exported pane and axis share a pixel height",
+        pane.height === axis.height, { pane: pane.height, axis: axis.height });
+      record(phase + ": axis cannot spill into the export footer",
+        padding + axis.height <= footerTop, { axisBottom: padding + axis.height, footerTop });
+      record(phase + ": export dimensions scale uniformly",
+        output.width === (width + 90) * dpr && output.height === (height + 98) * dpr,
+        { width: output.width, height: output.height, dpr });
+      state.diagnostics.push(JSON.stringify({ phase, dpr, css, physical,
+        exportWidth: output.width, exportHeight: output.height }));
+      await frame();
+    }
+    await checkExport(331, 443, "initial constrained chart");
+    await checkExport(200, 120, "resized constrained chart");
+
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument;
+    doc.open();
+    doc.write('<!doctype html><body style="margin:0"><canvas id="inner" style="display:block;width:100px;height:60px"></canvas></body>');
+    doc.close();
+    const entry = await observeNext(doc.getElementById("inner"));
+    record("same-origin iframe inherits the host device scale",
+      iframe.contentWindow.devicePixelRatio === dpr, { outer: dpr, inner: iframe.contentWindow.devicePixelRatio });
+    record("iframe device content box is not a CSS-pixel alias",
+      entry.devicePixelContentBoxSize[0].inlineSize === 100 * dpr
+        && entry.devicePixelContentBoxSize[0].blockSize === 60 * dpr,
+      entry.devicePixelContentBoxSize[0]);
+
+    const box = document.createElement("div");
+    box.style.cssText = "width:100px;height:60px;padding:3px 5px;border:2px solid black;box-sizing:content-box";
+    document.body.appendChild(box);
+    const padded = await observeNext(box);
+    record("content and device boxes exclude padding and borders",
+      padded.contentBoxSize[0].inlineSize === 100 && padded.contentBoxSize[0].blockSize === 60
+        && padded.devicePixelContentBoxSize[0].inlineSize === 100 * dpr
+        && padded.devicePixelContentBoxSize[0].blockSize === 60 * dpr,
+      { cssWidth: padded.contentBoxSize[0].inlineSize, deviceWidth: padded.devicePixelContentBoxSize[0].inlineSize });
+    record("border box retains padding and borders",
+      padded.borderBoxSize[0].inlineSize === 114 && padded.borderBoxSize[0].blockSize === 70,
+      { width: padded.borderBoxSize[0].inlineSize, height: padded.borderBoxSize[0].blockSize });
+    record("contentRect uses content dimensions and padding-relative coordinates",
+      padded.contentRect.width === 100 && padded.contentRect.height === 60
+        && padded.contentRect.x === 5 && padded.contentRect.y === 3,
+      { width: padded.contentRect.width, height: padded.contentRect.height, x: padded.contentRect.x, y: padded.contentRect.y });
+
+    const deliveries = [];
+    const changing = new ResizeObserver(entries => deliveries.push(entries[0].borderBoxSize[0].inlineSize));
+    const settle = async () => { await frame(); await frame(); };
+    changing.observe(box, { box: "content-box" });
+    await settle();
+    box.style.padding = "7px 9px";
+    await settle();
+    record("padding-only changes do not notify a content-box observer",
+      deliveries.length === 1, deliveries.slice());
+    changing.observe(box, { box: "border-box" });
+    await settle();
+    box.style.padding = "9px 11px";
+    await settle();
+    record("re-observing with another box changes the delivery criterion",
+      JSON.stringify(deliveries) === "[114,122,126]", deliveries.slice());
+    changing.unobserve(box);
+    box.style.width = "110px";
+    await settle();
+    record("unobserve suppresses further box deliveries", deliveries.length === 3, deliveries.slice());
+    let invalidRejected = false;
+    try { changing.observe(box, { box: "invalid" }); } catch (error) { invalidRejected = error instanceof TypeError; }
+    record("invalid box options throw TypeError", invalidRejected, { invalidRejected });
+    changing.disconnect();
+    const fractionBox = document.createElement("div");
+    fractionBox.style.cssText = "width:100.25px;height:60.25px;padding:0;border:0;transform:scale(2)";
+    document.body.appendChild(fractionBox);
+    const fractional = await observeNext(fractionBox);
+    const device = fractional.devicePixelContentBoxSize[0];
+    record("fractional content snaps to integral device pixels without CSS transforms",
+      fractional.contentBoxSize[0].inlineSize === 100.25
+        && fractional.contentBoxSize[0].blockSize === 60.25
+        && Number.isInteger(device.inlineSize) && Number.isInteger(device.blockSize)
+        && Math.abs(device.inlineSize - 100.25 * dpr) < 1
+        && Math.abs(device.blockSize - 60.25 * dpr) < 1,
+      { cssWidth: fractional.contentBoxSize[0].inlineSize,
+        cssHeight: fractional.contentBoxSize[0].blockSize,
+        width: device.inlineSize, height: device.blockSize, dpr });
+  })().catch(error => record("contract completes", false, String(error))).finally(() => {
+    const failure = state.results.find(result => result.status !== "PASS");
+    state.harness = { status: failure ? 1 : 0, message: failure?.message || null, stack: null };
+    state.complete = true;
+  });
+</script>

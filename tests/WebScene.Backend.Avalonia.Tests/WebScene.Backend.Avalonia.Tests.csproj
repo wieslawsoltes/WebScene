@@ -7,13 +7,16 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../experiments/WebScene.GpuHost.Probe/KestrelDragWorkloadValidator.cs" Link="Probe/KestrelDragWorkloadValidator.cs" />
     <ProjectReference Include="..\..\src\WebScene.Core\WebScene.Core.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Diagnostics.Cdp\WebScene.Diagnostics.Cdp.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Fonts\Roboto\*" Link="Fonts\Roboto\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Avalonia.Skia" />
+    <PackageReference Include="Avalonia.Headless.XUnit" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">

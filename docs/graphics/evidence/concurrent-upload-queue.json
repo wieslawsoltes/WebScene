@@ -1,0 +1,33 @@
+{
+  "scope": "Native bounded command/upload queue; not V8 typed-array detachment or GPU execution qualification",
+  "sourceBaseCommit": "5154a48c358fb1b1de50668a8fe4b531f418883d",
+  "producers": 4,
+  "commandsPerProducer": 5000,
+  "capacity": 8,
+  "uploadBytesPerCommand": 32,
+  "totalUploadBytes": 640000,
+  "checks": [
+    "Global admission serials delivered in order",
+    "Per-producer command order preserved",
+    "Source mutation after admission does not affect queued payload",
+    "Payload remains stable across yields during consumer access",
+    "All commands delivered; queue depth returns to zero; high-water does not exceed capacity"
+  ],
+  "sanitizers": [
+    "AddressSanitizer",
+    "UndefinedBehaviorSanitizer",
+    "ThreadSanitizer"
+  ],
+  "sanitizerExitCodes": [
+    0,
+    0
+  ],
+  "buildTemplate": "clang++ -std=c++20 -g -O1 -fsanitize=<address,undefined or thread> -fno-omit-frame-pointer -pthread -I experiments/WebScene.NativeEngine.Probe/native experiments/WebScene.NativeEngine.Probe/tests/graphics_queue_tests.cpp -o /tmp/webscene-upload-queue-test",
+  "runCommand": "/tmp/webscene-upload-queue-test",
+  "ctestCommand": "ctest --test-dir artifacts/graphics-build/native-v8-enabled -R '^webscene_graphics_queue_tests$' --output-on-failure",
+  "ctest": {
+    "passed": 1,
+    "failed": 0,
+    "seconds": 0.37
+  }
+}

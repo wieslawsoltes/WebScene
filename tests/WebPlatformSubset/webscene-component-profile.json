@@ -9,6 +9,74 @@
   },
   "required": [
     {
+      "path": "contracts/dialog-opening-lifecycle.html",
+      "type": "testharness",
+      "capabilities": ["dialog-opening", "dialog-modal-focus", "dialog-beforetoggle"],
+      "evidence": ["kestrel-original-box-command"],
+      "reason": "Native dialog opening regression; does not assert complete ToggleEvent or popover interoperability."
+    },
+    {
+      "path": "contracts/youtube-embed-fallback.html",
+      "type": "testharness",
+      "capabilities": ["youtube-embed-fallback", "iframe-layout", "external-navigation"],
+      "evidence": ["stackwich-1296-release-notes"],
+      "reason": "WebScene-specific unsupported-media fallback contract, not standard browser playback conformance. Thumbnail/link must stay inside the authored iframe at compact and expanded sizes."
+    },
+    {
+      "path": "contracts/css-variable-font-weight.html",
+      "type": "testharness",
+      "capabilities": ["web-font-weight", "variable-font-instancing", "woff2-font", "canvas-text-metrics"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Actual variable outlines and advances must agree with independent static font weights. Instancing is enabled by default; WEBSCENE_VARIABLE_FONT_INSTANCING=0 is the diagnostic opt-out."
+    },
+    {
+      "path": "contracts/css-adjacent-block-margin-collapse.html",
+      "type": "testharness",
+      "capabilities": ["adjacent-block-margin-collapse", "flex-noncollapsing-margins"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Rich-text list bottom margin and the following preview top margin adjoin."
+    },
+    {
+      "path": "contracts/css-grid-gap-alias-flex.html",
+      "type": "testharness",
+      "capabilities": ["legacy-gap-alias", "flex-gap"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Webflow release headings use legacy grid-column-gap on a flex row."
+    },
+    {
+      "path": "contracts/css-margin-longhand-priority.html",
+      "type": "testharness",
+      "capabilities": ["margin-longhand-cascade", "auto-margin-alignment"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Important bottom margin on the last rich-text child must preserve horizontal centering."
+    },
+    {
+      "path": "contracts/css-unitless-line-height-inheritance.html",
+      "type": "testharness",
+      "capabilities": ["unitless-line-height", "inherited-font-metrics"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Release-note headings override font-size after a unitless line-height declaration."
+    },
+    {
+      "path": "contracts/css-root-rem-body-font.html",
+      "type": "testharness",
+      "capabilities": ["document-root-font", "root-relative-lengths"],
+      "evidence": ["stackwich-1298-release-notes"],
+      "reason": "Release-note list indent and page padding use rem, independent of body font size."
+    },
+    {
+      "path": "contracts/css-percentage-vertical-padding-aspect-ratio.html",
+      "type": "testharness",
+      "capabilities": ["percentage-padding-inline-basis", "absolute-aspect-ratio-wrapper"],
+      "evidence": ["stackwich-1296-release-notes"],
+      "reason": "Embedded preview wrappers reserve height using percentage padding even without video playback support."
+    },
+    { "path":"contracts/element-scroll-to-options.html", "type":"testharness", "capabilities":["element-scroll-to","element-scroll-alias","scroll-events"], "evidence":["stackwich-1291-back-to-top"] },
+    { "path":"contracts/css-container-rule-not-unconditional.html", "type":"testharness", "capabilities":["conditional-rule-isolation"], "evidence":["table-view-side-gap"] },
+    { "path":"contracts/css-logical-padding-calc.html", "type":"testharness", "capabilities":["logical-padding-calc"], "evidence":["table-view-title-alignment"] },
+    { "path":"contracts/css-sticky-table-header.html", "type":"testharness", "capabilities":["sticky-table-header","sticky-table-column"], "evidence":["table-view-date-header"] },
+    { "path":"contracts/stacking-static-nested-z-index.html", "type":"visual", "capabilities":["static-z-index-paint"], "evidence":["table-view-missing-date-borders"], "visualChecks":[{"color":"#0000ff","minimumPixels":700,"description":"The nested static box retains its blue border."}] },
+    {
       "path": "contracts/css-form-control-text-transform.html",
       "type": "reftest",
       "reference": "contracts/css-form-control-text-transform-ref.html",
@@ -41,6 +109,63 @@
       "evidence": ["public-release-list-responsive-layout"]
     },
     {
+      "path": "contracts/media-query-list-dynamic-viewport.html",
+      "type": "testharness",
+      "capabilities": ["live-media-query-list-matches", "media-query-list-change-event", "media-query-list-legacy-listener", "viewport-breakpoint-crossing", "breakpoint-change-idempotence", "media-query-list-listener-removal"],
+      "evidence": ["stackwich-1244-toolbar-overflow-navigation", "stackwich-1246-narrow-settings-back-navigation", "stackwich-1247-settings-fullscreen-resize", "stackwich-1248-go-to-dialog-responsive-sizing"],
+      "reason": "Browser-authorized reduction of TradingView's device breakpoint manager: retained MediaQueryList objects must update their matches snapshots, notify modern and legacy listeners exactly once when a host resize crosses a breakpoint, remain silent within a breakpoint, and stop notifying removed listeners."
+    },
+    {
+      "path": "contracts/responsive-toolbar-breakpoint-navigation.html",
+      "type": "testharness",
+      "capabilities": ["live-toolbar-breakpoint-state", "compact-overflow-navigation", "wide-compact-wide-resize"],
+      "evidence": ["stackwich-1244-toolbar-overflow-navigation"],
+      "reason": "Issue-shaped reduction of the chart toolbar's retained MediaQueryList listener. Narrowing an already-mounted toolbar must expose both overflow navigation controls and widening must restore the desktop state."
+    },
+    {
+      "path": "contracts/responsive-settings-back-navigation.html",
+      "type": "testharness",
+      "capabilities": ["live-settings-breakpoint-state", "compact-master-detail-navigation", "retained-category-content"],
+      "evidence": ["stackwich-1246-narrow-settings-back-navigation"],
+      "reason": "Issue-shaped reduction of compact settings master/detail navigation. After a live breakpoint crossing, Back must reveal the still-populated category list rather than an empty retained panel."
+    },
+    {
+      "path": "contracts/responsive-settings-property-grid.html",
+      "type": "testharness",
+      "capabilities": ["compact-grid-track-switch", "min-content-control-track", "wrapped-grid-row-growth"],
+      "evidence": ["stackwich-1246-compact-settings-property-grid"],
+      "reason": "Issue-shaped reduction of TradingView's compact property table. Once the 1fr/min-content column tracks are known, wrapped labels must contribute their used block size to auto rows instead of painting through following controls."
+    },
+    {
+      "path": "contracts/responsive-settings-fullscreen-resize.html",
+      "type": "testharness",
+      "capabilities": ["live-dialog-breakpoint-state", "fixed-inset-fullscreen", "open-dialog-resize"],
+      "evidence": ["stackwich-1247-settings-fullscreen-resize"],
+      "reason": "Issue-shaped reduction of resizing an already-open desktop dialog below its compact breakpoint. The outer fixed shell, not only its contents, must recompute to the viewport edges."
+    },
+    {
+      "path": "contracts/responsive-go-to-dialog-sizing.html",
+      "type": "testharness",
+      "capabilities": ["live-dialog-breakpoint-state", "compact-dialog-width", "overflow-range-recomputation"],
+      "evidence": ["stackwich-1248-go-to-dialog-responsive-sizing"],
+      "reason": "Issue-shaped reduction of the Go To dialog. A live narrow transition must replace desktop width and overflow state without leaving a phantom scrollbar."
+    },
+    {
+      "path": "contracts/go-to-tabs-overflow.html",
+      "type": "testharness",
+      "capabilities": ["stylesheet-math-box-shorthands", "indefinite-percentage-height", "phantom-scroll-range"],
+      "evidence": ["stackwich-1248-issuecomment-5511713642"],
+      "reason": "Production-shaped tab strip and calendar reduction: function-valued margins must preserve components and auto-parent percentage heights must not manufacture overflow."
+    },
+    {
+      "path": "contracts/css-webkit-scrollbar-authored-paint.html",
+      "type": "reftest",
+      "reference": "contracts/css-webkit-scrollbar-authored-paint-ref.html",
+      "capabilities": ["webkit-scrollbar-width", "webkit-scrollbar-track-paint", "webkit-scrollbar-thumb-paint", "scrollbar-content-box-border", "scrollbar-radius"],
+      "evidence": ["stackwich-1242-scrollbar-appearance-and-drag"],
+      "reason": "Exact-pixel browser-authorized reduction of TradingView's authored 5px scrollbar with a transparent track and content-box thumb border. Native interaction coverage separately verifies that the painted thumb is a draggable scroll control."
+    },
+    {
       "path": "contracts/computed-style-used-size.html",
       "type": "contract",
       "capabilities": ["computed-style", "inline-style-separation", "intrinsic-width", "min-max-width-precedence"],
@@ -51,6 +176,37 @@
       "type": "contract",
       "capabilities": ["column-flex-shrink", "overflow-scroll-extent", "footer-containment", "fixed-portal-auto-height", "percentage-max-height-containing-block", "justify-content-space-around", "replaced-input-intrinsic-width", "inherited-font-size", "inherited-line-height", "outer-box-shadow"],
       "evidence": ["hosted-component-settings-dialog", "hosted-component-save-layout-dialog", "hosted-component-go-to-date-dialog", "hosted-component-go-to-time-popup"]
+    },
+    {
+      "path": "contracts/css-fixed-portal-stacking-context.html",
+      "type": "contract",
+      "capabilities": ["fixed-stacking-context-hierarchy", "equal-z-index-source-order", "nested-fixed-portal-hit-testing", "portal-content-box-geometry", "solid-currentcolor-swatch"],
+      "evidence": ["hosted-component-settings-colour-palette"],
+      "reason": "Product-neutral reduction of a fixed portal mounted after an equal-z dialog. The descendant's local z-index remains scoped to its portal ancestor; it must not be flattened beneath the dialog. Geometry and currentColor assertions independently retain the palette size and solid swatch surface."
+    },
+    {
+      "path": "contracts/css-absolute-padding-box-origin.html",
+      "type": "reftest",
+      "reference": "contracts/css-absolute-padding-box-origin-ref.html",
+      "capabilities": ["absolute-padding-box-origin", "absolute-inset-stretch-negative-margin", "inline-formatting-positioned-descendant", "coincident-focus-border-alignment"],
+      "evidence": ["hosted-component-large-colour-control-focus-border"],
+      "reason": "Exact-pixel reduction of TradingView's inset-zero, auto-sized absolute focus box with negative margins inside a bordered inline control. The negative margins must enlarge the stretched border box from 32px to 34px so it shares the control's origin and far edges; a fixed-size fixture does not cover the product bug."
+    },
+    {
+      "path": "contracts/css-rounded-opaque-descendant-occlusion.html",
+      "type": "reftest",
+      "reference": "contracts/css-rounded-opaque-descendant-occlusion-ref.html",
+      "capabilities": ["rounded-opaque-descendant-occlusion", "coincident-rounded-background-compositing"],
+      "evidence": ["hosted-component-colour-control-opacity-swatch"],
+      "reason": "Exact-pixel reduction of an opaque colour layer covering an identically sized rounded opacity base. The result must match a single rounded colour surface without an antialiased halo from the covered ancestor."
+    },
+    {
+      "path": "contracts/css-hsl-pseudo-gradient-color-plane.html",
+      "type": "reftest",
+      "reference": "contracts/css-hsl-pseudo-gradient-color-plane-ref.html",
+      "capabilities": ["hsl-functional-color", "generated-pseudo-background-image", "linear-gradient-alpha-composition"],
+      "evidence": ["hosted-component-custom-colour-picker-saturation-value-plane"],
+      "reason": "Exact-pixel reduction of the custom colour picker's blank saturation/value plane. It requires the authored HSL hue to paint beneath independently retained ::before white-to-transparent and ::after black-to-transparent gradient layers; replacing pseudos with ordinary child layers in the reference prevents both paths from sharing the missing generated-background implementation."
     },
     {
       "path": "contracts/segmented-transform-origin.html",
@@ -79,6 +235,13 @@
       "capabilities": ["transition-longhands", "opacity-interpolation", "color-interpolation", "transition-delay", "transition-events", "transition-cancellation", "transition-reversal", "temporal-paint"],
       "evidence": ["product-neutral-hover-and-control-paint-motion"],
       "reason": "Required product-neutral temporal gate for automatically discoverable paint transitions; it samples forward and reversed intermediate frames and requires run/start/cancel/end event evidence without naming a product control."
+    },
+    {
+      "path": "contracts/logical-inset-transition-cadence.html",
+      "type": "contract",
+      "capabilities": ["logical-inset-transition", "left-transition", "top-transition", "percentage-inset-interpolation", "dense-intermediate-geometry", "host-frame-clock"],
+      "evidence": ["product-neutral-throttled-position-indicator-motion"],
+      "reason": "Required product-neutral cadence gate for a positioned indicator whose sparse JavaScript targets are smoothed by a logical inset and top transition. It requires multiple monotonic intermediate client-geometry samples before the final target."
     },
     {
       "path": "contracts/rotation-transition-cadence.html",
@@ -909,6 +1072,117 @@
   ],
   "candidate": [
     {
+      "path": "contracts/css-grid-flex-track-minimum.html",
+      "type": "testharness",
+      "capabilities": ["css-grid", "fractional-track-sizing", "minmax"],
+      "evidence": ["kestrel-unused-horizontal-grid-space"],
+      "reason": "Fractional track allocation must include its minimum, freeze constrained tracks and redistribute space. Local regression pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/css-grid-auto-row-shrink.html",
+      "type": "testharness",
+      "capabilities": ["css-grid", "automatic-minimum-size", "dynamic-layout"],
+      "evidence": ["kestrel-stale-canvas-height-after-resize"],
+      "reason": "Auto grid rows must shrink to definite available height when item minimums permit; preserve visible content and authored minimums. Local regression pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/css-border-functional-color-width.html",
+      "type": "testharness",
+      "capabilities": ["border-shorthand", "functional-color"],
+      "evidence": ["kestrel-white-layer-list"],
+      "reason": "Color-mix percentages must stay inside the color component instead of becoming border widths. Local regression pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/css-root-theme-interaction-recascade.html",
+      "type": "testharness",
+      "capabilities": ["css-custom-properties", "attribute-selector", "focus-pseudo-class"],
+      "evidence": ["kestrel-white-ui-investigation"],
+      "reason": "Reduced Kestrel dark/light theme and interaction recascade regression. This local contract does not establish upstream WPT or pixel presentation conformance."
+    },
+    {
+      "path": "contracts/scroll-static-absolute-containing-block.html",
+      "type": "testharness",
+      "capabilities": ["absolute-containing-block-scroll-offset", "static-overflow-descendant-overlay"],
+      "evidence": ["stackwich-1291-table-scroll-to-top"],
+      "reason": "An absolute overlay must not move with a static scrolling ancestor below its containing block. Candidate pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/stacking-positive-descendant-hit-test.html",
+      "type": "testharness",
+      "capabilities": ["stacking-hit-test-order", "positive-descendant-clipping"],
+      "evidence": ["stackwich-1293"],
+      "reason": "Verify interaction ownership alongside the visual stacking regression."
+    },
+    {
+      "path": "contracts/stacking-positive-descendant-not-ancestor.html",
+      "type": "visual",
+      "capabilities": ["positive-stacking-descendant-scope", "retained-canvas-dom-overlay"],
+      "evidence": ["stackwich-1293-table-view-probe"],
+      "visualChecks": [
+        {"color":"#ff0000","maximumPixels":0,"description":"The later overlay covers the sidebar SVG, despite its positive-z sibling."},
+        {"color":"#0000ff","minimumPixels":400,"maximumPixels":400,"description":"Only the elevated descendant is raised; its ancestor overflow clip is preserved."},
+        {"color":"#00ff00","minimumPixels":23600,"description":"The later overlay remains above normal sidebar and chart content."}
+      ],
+      "reason": "A positive-z child must not lift the whole z-index:auto sidebar above a later Table View overlay."
+    },
+    {
+      "path": "contracts/cssom-negative-size-assignment.html",
+      "type": "testharness",
+      "capabilities": ["cssom-size-range-validation"],
+      "evidence": ["stackwich-1290-live-probe", "chromium-oracle"],
+      "reason": "Negative virtualizer body heights must be ignored without replacing the last valid inline size."
+    },
+    {
+      "path": "contracts/scroll-max-height-virtual-table.html",
+      "type": "testharness",
+      "capabilities": ["max-height-scroll-preservation", "virtual-table-row-replacement"],
+      "evidence": ["stackwich-1290-blank-table-at-scroll-end"],
+      "reason": "Replacing the rendered table window must preserve scroll position while spacer rows retain its total extent. Candidate pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/dom-unsupported-editing-command.html",
+      "type": "testharness",
+      "capabilities": ["legacy-editing-command-negative-capability", "document-operation-arguments"],
+      "evidence": ["stackwich-1289-table-view-copy"],
+      "reason": "Unsupported commands must report false so component clipboard helpers can take their modern fallback. This does not claim legacy editing or clipboard command support. Keep candidate pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/dom-table-cell-element.html",
+      "type": "testharness",
+      "capabilities": ["table-cell-interface", "element-interface-branding", "iframe-dom-constructors", "delegated-cell-click"],
+      "evidence": ["stackwich-1289-table-view-copy"],
+      "reason": "Table View's delegated click handler requires real td/th interface branding in the chart iframe. Native input-to-clipboard handoff has separate host regression coverage. Candidate until cross-RID qualification."
+    },
+    {
+      "path": "contracts/positioned-height-percentage-paint.html",
+      "type": "reftest",
+      "reference": "contracts/positioned-height-percentage-paint-ref.html",
+      "capabilities": ["absolute-inset-definite-height", "percentage-height", "overflow-hidden-paint"],
+      "evidence": ["sandwich-tradingview-missing-toolbars-2026-09-03"],
+      "reason": "A percentage-height clip below an inline-context positioned host must not hide its painted descendants."
+    },
+    {
+      "path": "contracts/positioned-height-percentage-descendants.html",
+      "type": "testharness",
+      "capabilities": ["absolute-inset-definite-height", "percentage-height", "formatting-context-parity"],
+      "evidence": ["sandwich-tradingview-missing-toolbars-2026-09-03"],
+      "reason": "An inset-sized chart host must provide a definite height to descendants in inline, block and grid layout paths; preserve auto-height behavior."
+    },
+    {
+      "path": "contracts/console-no-author-code.html",
+      "type": "testharness",
+      "capabilities": ["console-methods", "console-safe-object-snapshots"],
+      "evidence": ["runtime-diagnostics-console-disabled-and-safe-capture"],
+      "reason": "Local browser contract for console methods and non-invasive raw object logging. Host telemetry delivery is separately covered by native and backend tests, not WPT. Candidate pending all-RID/browser qualification."
+    },
+    {
+      "path": "contracts/resize-observer-device-pixel-canvas-export.html",
+      "type": "contract",
+      "capabilities": ["resize-observer-device-pixel-content-box", "canvas-export-pixel-scale", "iframe-device-pixel-observation"],
+      "evidence": ["constrained-chart-copy-mixed-pixel-ratio-reduction"],
+      "reason": "The 1x control for the same contract in webscene-retina-canvas-export-profile.json. Observer-sized canvases must agree with DPR-sized export axes before and after a constrained resize. Keep candidate until cross-RID validation of both scales is complete."
+    },
+    {
       "path": "contracts/dom-iframe-hydrated-layout-replacement.html",
       "type": "contract",
       "capabilities": [
@@ -1006,6 +1280,20 @@
       "capabilities": ["percentage-height-flow-children", "logical-flow-offsets", "complete-scroll-overflow-extent", "final-child-scroll-alignment"],
       "evidence": ["bootstrap-v5.3.8-scrollspy-backward-scroll-reduction"],
       "reason": "Product-neutral reduction of bounded overflow navigation: consecutive percentage-height flow children resolve against a definite viewport, all contribute to scrollHeight, and the final child can align at the viewport boundary."
+    },
+    {
+      "path": "contracts/overflow-dynamic-panel-switch.html",
+      "type": "contract",
+      "capabilities": ["dom-subtree-panel-replacement", "overflow-extent-recomputation", "scroll-offset-clamp-layout-consistency", "nested-flex-scroll-viewport", "flex-row-gap", "cssom-inline-declaration-removal", "synchronous-cssom-geometry-flush", "resize-observer-post-layout-delivery", "resize-observer-layout-loop"],
+      "evidence": ["tradingview-settings-scales-and-lines-panel-switch-reduction"],
+      "reason": "Product-neutral reduction of a React-style tabbed dialog: repeated tall/short subtree replacement must clamp both scrollTop and descendant geometry in the same frame, recompute scrollHeight, preserve the authored row gap, keep the fixed footer inside the dialog, synchronously invalidate geometry when CSSOM removes an authored height before a clear-measure-restore pass, and deliver ResizeObserver after dynamic layout for observer-managed caps."
+    },
+    {
+      "path": "contracts/generated-content-flex-strut.html",
+      "type": "contract",
+      "capabilities": ["empty-generated-content-box", "generated-flex-item", "authored-cross-size", "grid-row-intrinsic-sizing"],
+      "evidence": ["tradingview-settings-property-table-row-spacing-reduction"],
+      "reason": "Product-neutral reduction of a CSS property table: an empty ::before pseudo-element remains a principal flex item, so its authored cross size establishes the control wrapper and implicit grid row cadence."
     },
     {
       "path": "contracts/document-create-event-init.html",
@@ -1811,6 +2099,19 @@
         }
       ],
       "reason": "Self-verifying reduction for two retained-path replay boundaries: geometry keeps the transform active when each segment is authored even if the transform changes before stroke(), and a full-circle arc appended to a non-empty subpath includes the required connecting line to its start point."
+    },
+    {
+      "path": "contracts/html-script-style-text-is-inert.html",
+      "type": "testharness",
+      "capabilities": [
+        "html-raw-text",
+        "stylesheet-discovery"
+      ],
+      "evidence": [
+        "kestrel-print-preview-style-leak"
+      ],
+      "reason": "Candidate passes through native document navigation, preserving parser raw-text/comment/template semantics. Prepared-markup regex loading cannot qualify this parsing regression.",
+      "nativeNavigation": true
     }
   ],
   "harnessBlocked": [],

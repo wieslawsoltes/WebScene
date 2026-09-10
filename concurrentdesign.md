@@ -1118,24 +1118,410 @@ single successful execution.
 
 ## Delivery Sequence
 
+Small improvements are valid roadmap items. Each must have either a
+statistically supported process-level result or an exact causal counter, plus
+neutral product benchmarks outside its target. Keep a per-change evidence
+ledger and rerun the cumulative candidate against the original milestone
+baseline after each accepted group. The 10% CPU/total-footprint and 15%
+incremental-footprint targets apply to the cumulative milestone, not to every
+individual change.
+
 1. Completed: add producer, waiter, memory-hit and shared-byte metrics.
 2. Completed: implement process-wide single-flight code-cache production.
 3. Completed: store ready cached-code data in bounded immutable shared buffers.
 4. Completed: add four-isolate cold compilation and resource-load tests.
 5. Completed: apply the coordinator pattern to resource fetches.
-6. In progress: the 0, 1, 2, 4 and 8 measurement path, per-engine native memory
-   telemetry, three-run cold baseline, native DOM attribution and bounded
-   node pool, compact attributes, parsed-CSS attribution/sharing,
-   retained-canvas topology, SVG-picture sharing and asynchronous low-memory
-   requests are implemented. Cold/warm eight-chart variants prove linear
-   retained-memory scaling but expose a simultaneous-resize throughput limit.
-   Attribute the remaining Skia/Avalonia surfaces and targeted native allocator
-   fragmentation, then profile and reduce the resize layout/render CPU cost.
-7. Evaluate background cached-code consumption.
-8. Prototype an isolate-pool mode only if measured per-isolate duplication
-   remains material.
-9. Consider cross-process locking only if real workloads show a meaningful
-   cold-start stampede between processes.
+6. Completed: the Sandwich consumer now has a deterministic 0, 1, 2, 4 and 8
+   measurement path, steady/pan/axis/resize scenarios, versioned artifacts,
+   exact macOS footprint sampling, repeated ABBA comparison and evidence-ledger
+   output. Independent isolates are the control; shared 2x2 and 1x4 profiles are
+   explicit experiment configurations.
+7. Completed: publish and record the WebScene 1.0.26 independent-isolate
+   0/1/2/4/8 baseline and four-chart steady/pan/axis/resize product matrix.
+   Steady physical footprint scales by about 46 MiB per additional chart from
+   two through eight charts. Real four-chart window resize exposes the primary
+   cadence gap at about 9 rendered frames per second per chart and 331-351 ms
+   p95 resize-publication latency.
+8. Rejected for production: two ABBA blocks show the two-shard/two-context
+   shared-isolate profile saves 4.85% physical footprint but costs 7.80% CPU.
+   Keep it as an experimental diagnostic only.
+9. Completed: capture a measurement-synchronized four-chart resize Time
+   Profiler trace. Of 87,576 weighted CPU samples, 51.8% have leaf frames in
+   the WebScene native dylib, 29.8% in system libraries (8.8% malloc), 7.9% in
+   managed/JIT or unmapped code and 5.1% in Skia. The main thread accounts for
+   14.3%, while four WebScene worker threads each account for about 16%.
+10. Completed: add an opt-in `RelWithDebInfo` runtime build that emits a dSYM,
+    symbolicate the four-chart resize trace, and extend trace summaries with
+    inclusive native frames, call edges and allocator callers. The
+    112,835-sample trace attributes 30.2% of total sampled CPU to recursive
+    `layout_children`, 30.0% to `ensure_layout`, 29.9% to `layout_child`, and
+    23.1% to resize dispatch. Allocator leaves represent 10.59%; WebScene's
+    first callers include layout node-pointer vectors and flex hash-map nodes.
+11. Rejected after proof: replace the intrinsic-size hash map with two
+    generation-stamped entries per DOM node. Correctness and footprint tests
+    passed, but two Release ABBA blocks measured CPU +1.98% (95% CI -2.84% to
+    +7.28%) and physical footprint +0.54% (-0.80% to +1.95%); internal work
+    also failed equivalence. The candidate was reverted.
+12. Rejected after proof: reuse `layout_items` directly instead of copying the
+    ordered-child vector. Correctness passed, but two 15 Hz resize ABBA blocks
+    measured an unproven CPU -2.18% (95% CI -10.69% to +7.32%) and a supported
+    RSS +6.72% (+2.33% to +12.14%); internal work also failed equivalence. The
+    candidate was reverted.
+13. Accepted after proof: reuse allocator blocks for recurring layout vectors
+    and flex hash maps through a lazy, bounded per-document PMR pool. The exact
+    797-node benchmark reduces allocation calls per layout from 3,221 to 269
+    (-91.65%) and requested bytes from 160,344 to 21,248 (-86.75%) with
+    identical geometry and 11,976 retained bytes. Two Release resize ABBA
+    blocks show neutral CPU/RSS/physical footprint and no supported cadence or
+    latency regression above 3%; native, WPT, race and package gates pass.
+14. Completed: capture a matched 103,416-sample post-change symbol trace.
+    Allocator leaves shift from 10.59% to 7.92%; flex hash-node allocation
+    disappears from the leading callers and mutable node-pointer deallocation
+    falls from 0.41% to 0.02%. Treat this as attribution rather than a Release
+    timing claim because the traces are separate runs.
+15. Accepted after proof: extend the bounded PMR scratch pool to table-row,
+    collapsed-select-option and generic intrinsic-item vectors. Against the accepted
+    pool predecessor, the deterministic 1,061-node fixture reduces allocation calls
+    per layout from 2,681 to 1,165 (-56.55%) and requested bytes from 107,056 to
+    48,016 (-55.15%), with identical geometry and no additional retained scratch.
+    Against the original 1.0.26 runtime, two cumulative Release resize ABBA blocks
+    measure CPU -10.75% (95% CI -15.41% to -5.85%), RSS +0.82% (-0.48% to
+    +2.13%), and physical footprint +0.21% (-0.98% to +1.44%). Work is equivalent,
+    no cadence regression above 3% is supported, and all correctness gates pass.
+16. Completed: capture and symbolicate a matched 62,471-sample cumulative trace.
+    Allocator leaves fall from 7.92% after the first pool change to 5.62%; the targeted
+    `const dom_node*` allocation/deallocation falls from 2.05% combined to 0.07%.
+    Improved owner-edge attribution resolves the remaining 0.39% mutable-node
+    allocation to `update_retained_canvas_paint_phase`.
+17. Accepted after proof: avoid copying a node's composed-child vector when every child
+    has the default z-index and no paint-order sort is needed. Against the accepted
+    cumulative predecessor, the 1,061-node exact fixture reduces allocation calls per
+    layout from 1,165 to 808 (-30.64%) and requested bytes from 48,016 to 39,536
+    (-17.66%), with identical geometry and no added retained scratch. Against original
+    1.0.26, two cumulative Release ABBA blocks measure CPU -8.93% (95% CI -17.70%
+    to +1.05%), RSS -0.56% (-1.75% to +0.65%), and physical footprint -0.64%
+    (-1.72% to +0.48%). Work is equivalent and no process or cadence regression above
+    3% is supported; the exact allocation reduction proves the small win.
+18. Completed: capture a 68,269-sample post-paint-order symbol trace. Allocator
+    leaves account for 5.12% of samples, and the typed `dom_node**` allocation edge
+    from `update_retained_canvas_paint_phase` is absent, validating the intended
+    boundary. The remaining typed layout callback construction/destruction edge is
+    about 0.22% and selects the next focused candidate; separate traces remain
+    attribution rather than Release timing evidence.
+19. Rejected by exact counter at this stage: transparent heterogeneous text-cache
+    lookup changed neither allocation calls nor requested bytes on the 1,061-node
+    intrinsic fixture (808 and 39,536, respectively), so it was reverted without
+    promotion. A later trace-aligned fixture re-evaluates this separate causal path.
+20. Accepted after proof: replace the inline text-run collector's self-recursive
+    `std::function<bool(dom_node&)>` with a generic self-recursive lambda. Against the
+    accepted paint-order predecessor, allocation calls fall from 808 to 616 (-23.76%)
+    and requested bytes from 39,536 to 28,784 (-27.20%), with identical geometry and
+    retained scratch. Native, 123-document/453-subtest WPT, 12,800-operation race and
+    package gates pass. Two cumulative Release ABBA blocks against original 1.0.26
+    measure CPU -5.05% (95% CI -14.07% to +5.15%), RSS -1.43% (-7.55% to +4.67%),
+    and physical footprint -0.51% (-1.71% to +0.66%). Work is equivalent and no
+    process or cadence regression above 3% is supported; the exact reduction proves
+    the small win.
+21. Completed: capture a 65,463-sample post-callback trace. Allocator leaves are 4.89%
+    and the targeted `std::function<bool(dom_node&)>` owner edge is absent. Remaining
+    typed layout edges include inline positioned-item and static-anchor/line geometry
+    vectors; the trace is attribution, not a symbol-build timing claim.
+22. Rejected by exact counter: replacing the sibling inline-bounds recursive
+    `std::function<bool(dom_node&, layout_rect&)>` changed neither calls nor bytes on
+    the existing fixture (616 and 28,784), so its timing-only signal was discarded and
+    the candidate reverted.
+23. Accepted after proof: move inline text-run, positioned-item, static-anchor and
+    line-alignment vectors into the same bounded document scratch pool. A new 1,013-node
+    wrapped/aligned inline-text fixture reduces calls per layout from 1,776 to 656
+    (-63.06%) and requested bytes from 46,640 to 21,552 (-53.79%), with identical
+    geometry and unchanged 20,192-byte retention. All correctness/package gates pass.
+    Against original 1.0.26, two cumulative Release ABBA blocks measure CPU -4.59%
+    (95% CI -12.73% to +4.47%), RSS -0.05% (-1.36% to +1.26%), and physical footprint
+    +0.45% (-0.56% to +1.50%). Work is equivalent and no supported process/cadence
+    regression above 3% exists; five verified exact reports make the decision `accept`.
+24. Completed: capture and symbolicate a 59,058-sample post-inline-scratch trace.
+    Allocator leaves are 4.73% of samples, down from 4.89% in the preceding separate
+    attribution run, and the targeted positioned-inline-item and line-geometry
+    allocator owner edges are absent. The leading layout-owned allocator boundary is
+    now text measurement; separate traces remain attribution rather than Release
+    timing evidence.
+25. Accepted after renewed proof: use transparent heterogeneous lookup for the text
+    measurement cache, constructing an owning key only on a miss. The trace-aligned
+    1,013-node inline fixture reduces allocation calls per layout from 656 to 584
+    (-10.98%) and requested bytes from 21,552 to 19,752 (-8.35%), with identical
+    `377393` geometry and unchanged 20,192-byte scratch retention. All correctness and
+    package gates pass. The initial two-block process result failed work equivalence,
+    so no run was discarded; extending the same resumed sequence to four ABBA blocks
+    makes generated-call rate equivalent at -0.67%. Against original 1.0.26, CPU is
+    -6.01% (95% CI -12.54% to +1.08%), RSS is a supported -4.73% (-8.46% to
+    -1.45%), and physical footprint is +0.54% (-0.30% to +1.37%). No supported
+    process or cadence regression above 3% exists, and six verified exact reports make
+    the decision `accept`.
+26. Completed: capture and symbolicate a 48,159-sample post-text-lookup trace.
+    Allocator leaves are 4.87% of samples. The targeted `measure_text` allocator owner
+    falls from 0.40% in the preceding separate trace to 0.008%, consistent with the
+    exact allocation result; this remains attribution rather than a timing claim.
+27. Accepted after proof: when inherited `text-transform` resolves to `none`, measure
+    the original string view directly instead of first constructing an owning mutable
+    copy; uppercase, lowercase and capitalize retain the existing transform path. The
+    1,013-node exact fixture reduces allocation calls from 584 to 512 (-12.33%) and
+    requested bytes from 19,752 to 17,952 (-9.11%), with identical `377393` geometry
+    and unchanged 20,192-byte scratch retention. All correctness/package gates pass.
+    The first two cumulative ABBA blocks reported supported CPU and RSS regressions, so
+    all eight runs were preserved and the sequence was resumed to four blocks. Across
+    all sixteen runs, CPU is +5.49% (95% CI -1.48% to +12.44%), RSS is +2.88%
+    (+0.69% to +5.55%), and physical footprint is +0.26% (-0.63% to +1.14%). Work
+    is equivalent; RSS worsens with statistical support but remains below the 3%
+    practical-regression threshold, and no process or cadence regression above that
+    threshold is supported. Seven verified exact reports make the decision `accept`.
+28. Completed: capture and symbolicate a 69,527-sample post-text-transform-copy trace.
+    Allocator leaves are 4.48% of samples. The broad `measure_text_width` owner remains
+    at 0.38%, showing that the exact-proven input copy was only one allocation under
+    that symbol. Inspection resolves the next cause as repeated owning return of the
+    inherited long font-family list; the trace remains attribution, not timing proof.
+29. Accepted after proof: return inherited font family as a view into stable node-style
+    storage instead of copying it for every layout and scene query. A dedicated
+    1,013-node fixture with a realistic long family list reduces allocation calls per
+    layout from 8,016 to 512 (-93.61%) and requested bytes from 498,208 to 17,952
+    (-96.40%), with identical `377393` geometry and unchanged 20,192-byte scratch
+    retention. The native suite's known fetch-origin setup race failed once, passed
+    three consecutive focused reruns, and the complete uninterrupted native/WPT/race/
+    consumer pipeline then passed. Two cumulative ABBA blocks against original 1.0.26
+    measure CPU +7.24% (95% CI -1.40% to +15.80%), RSS -4.52% (-8.86% to -0.64%),
+    and physical footprint +1.47% (+0.29% to +2.61%). Work is equivalent; physical
+    footprint worsens with support but remains below the 3% practical threshold, and no
+    process or cadence regression above that threshold is supported. Eight verified
+    exact reports make the decision `accept`.
+30. Completed: capture and symbolicate a 50,322-sample post-font-family-view trace.
+    Allocator leaves account for 4.16% of samples. The targeted broad
+    `measure_text_width` allocator owner falls from 0.38% in the preceding separate
+    trace to absent from the ranked owners, while the lower-level `measure_text` owner
+    falls from 0.029% to 0.018%. `canvas_save` is now the leading WebScene allocator
+    owner at 0.41%, so isolate it with a focused exact fixture before changing that
+    path. Continue comparing every accepted cumulative group with the original
+    baseline. The macOS Allocations template still fails to finalize and is not
+    accepted as evidence.
+31. Accepted after proof: reuse the fully synchronized `emitted_paint_state` for the
+    Canvas 2D save snapshot instead of reading and converting the same 18 JavaScript
+    properties twice. The focused V8 fixture validates all properties and line dash
+    after every restore and reduces exact property reads per save from 36 to 18
+    (-50%). Native 4/4, WPT 123/123 documents and 453/453 subtests, the 12,800-operation
+    race gate, and the consumer package gate pass. Two cumulative ABBA blocks against
+    original 1.0.26 measure CPU -14.62% (95% CI -20.72% to -8.73%), RSS -4.46%
+    (-8.35% to -0.97%), and physical footprint -0.55% (-1.62% to +0.56%). Work is
+    equivalent, no supported process or cadence regression above 3% exists, and nine
+    exact reports make the decision `accept`.
+32. Completed: capture and symbolicate a 64,270-sample post-canvas-save trace.
+    Allocator leaves fall from 4.16% to 3.89% across separate attribution runs, and
+    `canvas_save` falls from 207 ms / 0.411% to 4 ms / 0.0062% (-98.49% owner share).
+    The largest remaining owner is resize dispatch at 0.33%, but its allocations span
+    JavaScript event work and media-query index rebuilds. The next lower-risk typed
+    boundary is `append_scene` paint-order allocation at 0.17%; prove a bounded inline
+    paint-order candidate exactly before changing it.
+33. Accepted after proof: keep up to eight recursive `append_scene` paint entries in a
+    bounded inline array and retain the original reserved vector as the spill path for
+    larger sibling sets. The 1,013-node exact scene fixture preserves checksum 7,587.43
+    while reducing allocations per scene from 3,157 to 2,148 (-31.96%) and requested
+    bytes from 281,192 to 220,104 (-21.72%). All ten benchmark smokes, native 4/4,
+    WPT 123/123 documents and 453/453 subtests, race, and consumer gates pass. Two
+    cumulative ABBA blocks measure CPU -22.76% (95% CI -28.24% to -16.46%), RSS +0.46%
+    (-0.77% to +1.73%), and physical footprint +0.41% (-0.66% to +1.53%). Work is
+    equivalent, no supported process or cadence regression above 3% exists, and ten
+    exact reports make the decision `accept`.
+34. Completed: capture and symbolicate a 66,257-sample post-scene-paint-order trace.
+    Allocator leaves fall from 3.89% to 3.70% across separate attribution runs.
+    `append_scene` falls from 110 ms / 0.171% to 48 ms / 0.072%, while the exact
+    `local_paint_entry` allocation edge falls from 67 ms / 0.104% to zero samples.
+    Resize dispatch remains the largest broad owner at 0.35%. Its media-change path
+    clears and rebuilds selector indexes even though those indexes contain every rule
+    and are invariant when only `media_matches` changes; isolate that work with an
+    exact media-refresh fixture before changing it.
+35. Rejected after proof: a media-only refresh experiment recomputed root custom
+    properties without rebuilding selector indexes. The exact 256-rule fixture
+    eliminates 26,000 `index_css_rule` calls across 100 refreshes (-100%), preserves
+    100 root-variable refreshes and checksum 4,050, and improves informational mean
+    time by 62.96%. All correctness/package gates pass. However, two cumulative ABBA
+    blocks measure CPU +18.76% (95% CI +10.40% to +27.02%) and rendered FPS -5.00%
+    (-8.64% to -0.73%), both supported regressions. RSS +0.13% and physical footprint
+    +0.42% are neutral, and work is equivalent. Keep the full rebuild as production
+    default and retain the root-only path solely behind an off-by-default experiment.
+36. Completed: diagnose the rejected media-refresh result with a symbol-enabled
+    candidate package and 65,227-sample resize trace. The candidate's resize-dispatch
+    inclusive time is 10,172 ms versus 10,745 ms in the preceding accepted trace
+    (-5.3%), layout attribution is nearly identical, allocator leaves are 3.52%, and
+    WebScene accounts for 54.41% of samples. This does not support duplicate selector
+    indexing as the product regression's cause; retain the full rebuild and move to the
+    next typed leaf cluster.
+37. Accepted after renewed proof: replace the per-document intrinsic-size pointer/axis
+    hash table with a direct memo table indexed by stable native node ID. A
+    bounded front-cache variant was first rejected locally because only 4 of 2,248
+    lookups hit (0.18%). The direct cache eliminates all 2,248 and 4,376 hash lookups
+    per layout in the 1,013- and 1,061-node fixtures, records 112 and 620 direct hits,
+    preserves geometry checksums and allocation work, and improves informational p50
+    time by 8.85% and 21.55%. The portable storage shares one generation across its two
+    axes and costs 24 bytes per native ID while `dom_node` remains 992 bytes, below the
+    cross-library 1,024-byte maximum. Native 4/4, all 12 benchmark smokes, WPT 123/123
+    documents and 453/453 subtests, the 12,800-operation race gate, and the zero-warning
+    consumer build pass. Two cumulative ABBA blocks against original 1.0.26 measure CPU
+    -15.98% (95% CI -23.86% to -7.74%), RSS +0.50% (-0.81% to +1.85%), physical
+    footprint +0.14% (-1.07% to +1.39%), and rendered FPS +0.24% (-4.84% to +5.86%).
+    Work is equivalent, no supported process or cadence regression above 3% exists,
+    and all eleven exact reports pass. The direct cache is now the production default;
+    the old map remains available only as an explicit benchmark control. This current
+    cumulative result supersedes the earlier rejected pre-roadmap candidate for the
+    present codebase, but does not claim an isolated 15.98% contribution from this one
+    change. A separate two-block, eight-run product ABBA comparison against the accepted
+    inline cache measures CPU -0.18% (95% CI -2.85% to +2.57%), RSS +0.14% (-1.08% to
+    +1.40%), and physical footprint +0.79% (-0.25% to +1.85%). Exact work matches and
+    no supported process or cadence regression above 3% exists, accepting the portable
+    storage refactor without revising the cumulative performance claim.
+38. Completed: capture and symbolicate a 60,138-sample post-direct-cache trace.
+    Intrinsic-key-specific hash leaves fall from 1,309 ms / 2.01% in the preceding
+    separate trace to zero; generic `__constrain_hash` falls from 793 ms to 130 ms,
+    with the residual owned by other tables. `intrinsic_size` inclusive time falls
+    from 7,772 ms / 11.92% to 5,785 ms / 9.62%. The next largest WebScene leaf is
+    `compute_intrinsic_size` at 1,289 ms / 2.14%, including a typed allocation edge.
+39. Accepted after proof: express the table-row collector inside
+    `compute_intrinsic_size` as a generic self-recursive lambda instead of allocating
+    `std::function`. The exact 1,061-node fixture preserves checksum 259,651, the
+    1,024-byte node size, and 36,600 retained scratch bytes while reducing allocation
+    calls per layout from 616 to 604 (-1.95%) and requested bytes from 28,784 to 28,400
+    (-1.33%). Informational p50 improves 3.91% while p95 regresses 10.81%, so timing is
+    not evidence. Native 4/4, WPT 123/123 documents and 453/453 subtests, race, package,
+    consumer, and both new benchmark smokes pass. Two cumulative ABBA blocks measure
+    CPU -9.85% (95% CI -19.48% to +0.51%), RSS -0.25% (-1.49% to +1.02%), physical
+    footprint -0.64% (-1.71% to +0.44%), and rendered FPS -3.83% (-7.85% to +1.28%).
+    Work is equivalent, no supported process or cadence regression above 3% exists,
+    twelve exact reports pass, and the decision is `accept` as a proven small win.
+40. Accepted after proof: add a zero-footprint text-node fast path inside
+    `compute_intrinsic_size`. Diagnostic-only branch counters show 2,136 intrinsic
+    computations per inline layout: 896 text leaves (41.95%), 1,124 generic containers,
+    and 116 definite sizes. The fast path covers all 896 text leaves and bypasses 4,480
+    legacy tag comparisons per layout in both inline fixtures, with identical checksum
+    377,393, allocation calls, requested bytes, 1,024-byte nodes, and retained scratch.
+    Informational p50 changes by only -0.22% and -0.46%, so local timing is neutral.
+    Native 4/4, WPT 123/123 documents and 453/453 subtests, race, package, and consumer
+    gates pass. Two cumulative ABBA blocks measure CPU -13.75% (95% CI -21.39% to
+    -5.12%), RSS -0.30% (-1.65% to +1.05%), physical footprint -0.61% (-1.88% to
+    +0.68%), and rendered FPS +2.74% (-0.88% to +7.57%). Work is equivalent, no
+    supported process or cadence regression above 3% exists, thirteen exact reports
+    pass, and the decision is `accept`.
+41. Accepted after proof: avoid materializing a temporary intrinsic-item pointer vector
+    when a generic container has no inside list marker or generated pseudo-elements.
+    Diagnostic counters show that all 168-1,372 generic-container visits in the four
+    exact fixtures take this common path, eliminating 1,356-2,076 pointer copies per
+    layout. Geometry, allocation totals, 1,024-byte nodes, and retained scratch are
+    identical; separate-executable timing is mixed and informational. Native 4/4,
+    WPT 123/123 documents and 453/453 subtests, race, package, consumer, and all 19
+    benchmark smokes pass. Two cumulative ABBA blocks against original 1.0.26 measure
+    CPU -29.04% (95% CI -33.78% to -23.63%), RSS +0.25% (-0.98% to +1.50%), physical
+    footprint -0.95% (-2.06% to +0.24%), and rendered FPS +3.44% (-2.25% to +9.98%).
+    Work is equivalent, no supported process or cadence regression above 3% exists,
+    fourteen exact reports pass, and the decision is `accept`. This is a cumulative
+    product result, not an isolated 29.04% attribution to the pointer-copy removal.
+42. Completed without selecting a candidate: evaluate V8 background cached-code
+    consumption against four accepted product runs. Each run has four engines and 101
+    cached units per engine; one engine reads 792,568 persistent bytes and three reuse
+    the same process buffer. Total compilation/deserialization time across all four
+    engines is 7.48-47.63 ms, with a 12.88 ms median, and no compilation occurs during
+    the measured workload. Because the cache becomes available only after source/key
+    construction and compilation follows immediately, there is little independent work
+    to overlap; moving deserialization to a worker would not reduce total CPU by itself.
+    Reconsider only if startup-readiness profiling makes this a material critical path.
+43. Completed: capture and symbolicate a 45,447-sample post-direct-view resize
+    trace. WebScene accounts for 54.44%, system code 23.11%, managed code 10.83%,
+    and Skia 4.92%. Allocator leaves account for 4.15%. The eliminated generic
+    intrinsic-item pointer edge remains absent. The leading bounded allocation
+    owners are resize dispatch (0.216%), cascade application (0.183%), animation
+    frame delivery (0.128%), CSS indexing (0.108%), canvas paint-state emission
+    (0.103%), and intrinsic computation (0.092%). The intrinsic edge resolves to
+    SVG `viewBox` stream destruction, selecting a four-number direct parser as the
+    next exact experiment.
+44. Rejected after proof: direct positional-selector sibling scans eliminate all
+    229,152 temporary sibling vectors and 4,449,792 pointer copies in the exact
+    fixture, preserve 115,728 matches and 2,249,472 sibling visits, and improve
+    informational mean time by 29.98%. All correctness and package gates pass.
+    However, two product ABBA blocks measure presented FPS -5.61% (95% CI
+    -10.58% to -0.74%), a supported cadence regression above 3%; CPU, RSS, and
+    physical footprint are neutral and work is equivalent. Production retains
+    the accepted vector path. The direct scan remains only behind the off-by-default
+    `WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT` switch.
+45. Accepted after proof: replace only the traced intrinsic SVG `viewBox` stream
+    with a bounded four-number parser. The 257-node exact fixture performs 512
+    parses per layout and reduces stream constructions from 512 to zero while
+    preserving all 512 successes, checksum 89,219.3, zero allocation work,
+    1,024-byte nodes, and 152,856 bytes of retained scratch. Informational p50
+    and p95 both improve about 71.3%. Native 4/4, WPT 123/123 documents and
+    453/453 subtests, race, package, and consumer gates pass. Two incremental
+    ABBA blocks against the accepted direct-view build measure CPU +8.90% (95%
+    CI -2.18% to +20.97%), RSS +0.85% (-0.45% to +2.19%), and physical
+    footprint +0.97% (-0.20% to +2.21%). Work and cadence are equivalent, no
+    supported regression above 3% exists, and the decision is `accept` as a
+    proven small win. The process timing is neutral and is not claimed as an
+    application CPU improvement.
+46. Rejected after proof: retain ten V8 string values to bypass repeated UTF-8
+    conversion when Canvas paint state is unchanged. The exact 2,000-draw fixture
+    preserves 12,000 property probes, reduces UTF-8 conversions from 2,005 to 6
+    (-99.70%) and stack comparisons from 11,994 to zero, and records 11,994
+    cache hits. Informational mean/p50/p95 improve about 10-11%, and all
+    correctness/package gates pass. Two incremental product ABBA blocks measure
+    CPU +2.30% (95% CI -0.70% to +5.42%), RSS +0.47% (-0.85% to +1.79%), and
+    physical footprint +1.19% (+0.21% to +2.16%). Work is equivalent, but resize
+    publication p95 regresses 3.86% (95% CI +1.52% to +7.00%), violating the
+    cadence gate. Production retains direct comparison/conversion; the cache is
+    available only behind the off-by-default
+    `WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT` switch.
+47. Rejected after proof: make the CSS selector-index maps heterogeneous and use
+    a non-owning view for hot class-token lookups. The exact media-refresh fixture
+    preserves 26,000 index operations, 100 root-variable refreshes, 100 class
+    lookups, and checksum 4,050 while reducing owned lookup keys from 100 to zero
+    and copied key bytes from 5,100 to zero. All correctness/package gates pass.
+    Two incremental product ABBA blocks measure CPU +1.85% (95% CI -1.29% to
+    +5.14%), RSS -0.07% (-1.29% to +1.17%), and physical footprint -0.25%
+    (-1.21% to +0.71%). Work is equivalent, but presentation-interval p95
+    regresses 9.00% (95% CI +0.66% to +17.90%), violating the cadence gate.
+    Production retains owning lookup keys and the original map types; the view
+    path remains only behind the off-by-default
+    `WEBSCENE_NATIVE_ENGINE_CSS_CLASS_LOOKUP_VIEW_EXPERIMENT` switch.
+48. Accepted after proof: express the recursive inline-box bounds walker as a
+    generic self-recursive lambda instead of allocating `std::function`. The
+    1,013-node exact fixture preserves checksum 377,393, the 1,024-byte node
+    footprint, and 20,192 bytes of retained scratch while reducing allocations
+    per layout from 512 to 288 (-43.75%) and requested bytes from 17,952 to
+    7,200 (-59.89%). Informational p50/p95 improve by 0.65%/1.66%. Native 4/4,
+    WPT 123/123 documents and 453/453 subtests, race, package, consumer, and
+    paired benchmark gates pass. Two incremental product ABBA blocks measure
+    CPU -4.24% (95% CI -8.56% to +0.01%), RSS +0.18% (-1.11% to +1.47%), and
+    physical footprint +0.62% (-0.49% to +1.78%). Work is equivalent, no
+    regression above 3% is supported, and presentation-interval p95 improves
+    11.79% (95% CI -15.72% to -7.85%). The decision is `accept`; CPU remains
+    formally neutral because its interval narrowly crosses zero.
+49. Completed without selecting another scheduler candidate: the residual
+    animation-frame allocation owner is task/V8 callback lifetime rather than a
+    separable redundant native container. Shared 2x2 already trades a supported
+    +7.80% CPU regression for -4.85% physical footprint, and accepted cached-code
+    measurements put four-engine compilation/deserialization at a 12.88 ms median
+    outside the measured interaction interval. Moving deserialization to background
+    work would not reduce total CPU, and changing timer removal/order would alter
+    equal-deadline callback semantics. Retain independent workers and the existing
+    process-wide single-flight caches.
+50. Completed as a stop condition: do not add cross-process locking unless a real
+    multi-process cold-start workload demonstrates a material stampede. No current
+    benchmark does, so implementation would add coordination and failure modes without
+    a measured target.
+51. Completed final cumulative checkpoint: retain optimization 14 as the approved
+    review milestone. Its original-1.0.26 cumulative gate records CPU -29.04% with
+    neutral memory, equivalent work, no supported cadence regression, and fourteen
+    exact reports. Optimizations 15 and 16 remain implemented and exactly proven; their
+    combined #14-to-#16 gate is neutral and records `accept`. They are nevertheless
+    held from cumulative promotion because two independent original-to-#16 two-block
+    runs repeat a supported presentation-interval-p95 regression: +12.85% (95% CI
+    +8.49% to +17.05%) and +8.19% (+1.74% to +16.28%). Both runs retain supported CPU
+    improvements (-15.31% and -12.49%) and resize-publication improvements (-18.89%
+    and -14.63%), but the non-target cadence guard is binding. Stop the current roadmap
+    until a new post-milestone trace exposes a typed owner of roughly 0.1% or more, the
+    workload changes, a startup profile makes cached-code consumption material, or a
+    measured multi-process cold start proves a cache stampede.
 
 ## Decision
 

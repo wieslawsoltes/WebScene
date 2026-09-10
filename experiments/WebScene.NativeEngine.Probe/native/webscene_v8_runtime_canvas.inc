@@ -23,6 +23,7 @@
         auto* self = current(info.GetIsolate());
         auto* node = canvas_export_node(info);
         if (self == nullptr || node == nullptr) return;
+        self->document.retain_canvas_for_export(*node);
         self->record_feature(
             "canvas",
             "HTMLCanvasElement.toDataURL",
@@ -41,6 +42,7 @@
             || !info[0]->IsFunction()) {
             return;
         }
+        self->document.retain_canvas_for_export(*node);
         self->record_feature(
             "canvas",
             "HTMLCanvasElement.toBlob",
@@ -176,6 +178,7 @@
         fill_svg_path = 28,
         stroke_svg_path = 29,
         ellipse = 30,
+        draw_svg_image = 31,
         fill_style = 40,
         stroke_style = 41,
         line_width = 42,
@@ -227,6 +230,19 @@
             | canvas_paint_shadow
     };
 
+    enum canvas_paint_string_slot : size_t {
+        canvas_string_fill_style = 0U,
+        canvas_string_stroke_style = 1U,
+        canvas_string_line_cap = 2U,
+        canvas_string_line_join = 3U,
+        canvas_string_font = 4U,
+        canvas_string_text_align = 5U,
+        canvas_string_text_baseline = 6U,
+        canvas_string_image_smoothing_quality = 7U,
+        canvas_string_global_composite_operation = 8U,
+        canvas_string_shadow_color = 9U
+    };
+
     static void canvas_append_command(
         dom_node& node,
         canvas_command_kind kind,
@@ -242,6 +258,7 @@
             command.data.values[index++] = argument;
         }
         node.mutable_canvas().commands.push_back(command);
+        node.mutable_canvas().backing.publish_content();
     }
 
     static void canvas_append_resource_command(
@@ -261,6 +278,7 @@
             command.data.values[index++] = argument;
         }
         node.mutable_canvas().commands.push_back(command);
+        node.mutable_canvas().backing.publish_content();
     }
 
     static void canvas_append_line_dash_command(
@@ -276,6 +294,7 @@
             command.data.values[index + 1U] = segments[index];
         }
         node.mutable_canvas().commands.push_back(command);
+        node.mutable_canvas().backing.publish_content();
     }
 
     static uint32_t canvas_intern_string(dom_node& node, const std::string& value)
@@ -420,9 +439,13 @@
         auto& emitted = state.emitted_paint_state;
         const auto emit_string = [&](
             canvas_command_kind kind,
+            canvas_paint_string_slot slot,
             const char* name,
             const char* fallback,
             std::string& previous) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+            canvas_paint_string_property_probes.fetch_add(1U, std::memory_order_relaxed);
+#endif
             v8::Local<v8::Value> property;
             const auto has_string = info.This()->Get(
                     info.GetIsolate()->GetCurrentContext(),
@@ -430,6 +453,35 @@
                     .ToLocal(&property)
                 && property->IsString();
             if (!first) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT)
+                auto& cached = state.emitted_paint_state_string_values[slot];
+                if (has_string && !cached.IsEmpty()
+                    && property->StrictEquals(
+                        v8::Local<v8::String>::New(info.GetIsolate(), cached))) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+                    canvas_paint_cached_value_hits.fetch_add(1U, std::memory_order_relaxed);
+#endif
+                    return;
+                }
+                if (has_string && cached.IsEmpty()) {
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+                    canvas_paint_stack_comparisons.fetch_add(1U, std::memory_order_relaxed);
+#endif
+                    if (canvas_v8_string_equals(
+                            info.GetIsolate(),
+                            property.As<v8::String>(),
+                            previous)) {
+                        cached.Reset(info.GetIsolate(), property.As<v8::String>());
+                        return;
+                    }
+                }
+#else
+                static_cast<void>(slot);
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+                if (has_string) {
+                    canvas_paint_stack_comparisons.fetch_add(1U, std::memory_order_relaxed);
+                }
+#endif
                 if (has_string
                     && canvas_v8_string_equals(
                         info.GetIsolate(),
@@ -437,8 +489,14 @@
                         previous)) {
                     return;
                 }
+#endif
                 if (!has_string && previous == fallback) return;
             }
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STATE_BENCHMARK_COUNTERS)
+            if (has_string) {
+                canvas_paint_utf8_conversions.fetch_add(1U, std::memory_order_relaxed);
+            }
+#endif
             auto value = has_string
                 ? to_utf8(info.GetIsolate(), property)
                 : std::string(fallback);
@@ -449,6 +507,11 @@
                     canvas_intern_string(*state.node, value));
                 previous = std::move(value);
             }
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_PAINT_STRING_CACHE_EXPERIMENT)
+            auto& cached = state.emitted_paint_state_string_values[slot];
+            if (has_string) cached.Reset(info.GetIsolate(), property.As<v8::String>());
+            else cached.Reset();
+#endif
         };
         const auto emit_number = [&](
             canvas_command_kind kind,
@@ -465,6 +528,7 @@
         if ((mask & canvas_paint_fill) != 0U) {
             emit_string(
                 canvas_command_kind::fill_style,
+                canvas_string_fill_style,
                 "fillStyle",
                 "#000000",
                 emitted.fill_style);
@@ -472,14 +536,17 @@
         if ((mask & canvas_paint_stroke) != 0U) {
             emit_string(
                 canvas_command_kind::stroke_style,
+                canvas_string_stroke_style,
                 "strokeStyle",
                 "#000000",
                 emitted.stroke_style);
         }
         if ((mask & canvas_paint_line) != 0U) {
             emit_number(canvas_command_kind::line_width, "lineWidth", 1, emitted.line_width);
-            emit_string(canvas_command_kind::line_cap, "lineCap", "butt", emitted.line_cap);
-            emit_string(canvas_command_kind::line_join, "lineJoin", "miter", emitted.line_join);
+            emit_string(canvas_command_kind::line_cap, canvas_string_line_cap,
+                "lineCap", "butt", emitted.line_cap);
+            emit_string(canvas_command_kind::line_join, canvas_string_line_join,
+                "lineJoin", "miter", emitted.line_join);
             emit_number(
                 canvas_command_kind::miter_limit,
                 "miterLimit",
@@ -506,14 +573,17 @@
             }
         }
         if ((mask & canvas_paint_text) != 0U) {
-            emit_string(canvas_command_kind::font, "font", "10px sans-serif", emitted.font);
+            emit_string(canvas_command_kind::font, canvas_string_font,
+                "font", "10px sans-serif", emitted.font);
             emit_string(
                 canvas_command_kind::text_align,
+                canvas_string_text_align,
                 "textAlign",
                 "start",
                 emitted.text_align);
             emit_string(
                 canvas_command_kind::text_baseline,
+                canvas_string_text_baseline,
                 "textBaseline",
                 "alphabetic",
                 emitted.text_baseline);
@@ -532,6 +602,7 @@
             }
             emit_string(
                 canvas_command_kind::image_smoothing_quality,
+                canvas_string_image_smoothing_quality,
                 "imageSmoothingQuality",
                 "low",
                 emitted.image_smoothing_quality);
@@ -539,6 +610,7 @@
         if ((mask & canvas_paint_composite) != 0U) {
             emit_string(
                 canvas_command_kind::global_composite_operation,
+                canvas_string_global_composite_operation,
                 "globalCompositeOperation",
                 "source-over",
                 emitted.global_composite_operation);
@@ -546,6 +618,7 @@
         if ((mask & canvas_paint_shadow) != 0U) {
             emit_string(
                 canvas_command_kind::shadow_color,
+                canvas_string_shadow_color,
                 "shadowColor",
                 "rgba(0, 0, 0, 0)",
                 emitted.shadow_color);
@@ -662,8 +735,8 @@
         if (state == nullptr) return;
         canvas_emit_paint_state(info, *state);
         canvas_append_command(*state->node, canvas_command_kind::save);
+#if defined(WEBSCENE_NATIVE_ENGINE_CANVAS_SAVE_SNAPSHOT_CONTROL)
         canvas_snapshot snapshot;
-        snapshot.transform = state->transform;
         snapshot.fill_style = canvas_string_property(info, "fillStyle", "#000000");
         snapshot.stroke_style = canvas_string_property(info, "strokeStyle", "#000000");
         snapshot.global_composite_operation = canvas_string_property(info, "globalCompositeOperation", "source-over");
@@ -682,6 +755,13 @@
         snapshot.shadow_offset_x = canvas_number_property(info, "shadowOffsetX", 0);
         snapshot.shadow_offset_y = canvas_number_property(info, "shadowOffsetY", 0);
         snapshot.image_smoothing_enabled = canvas_boolean_property(info, "imageSmoothingEnabled", true);
+#else
+        // canvas_emit_paint_state has just synchronized every JS-visible paint
+        // property into emitted_paint_state. Reuse that exact snapshot instead
+        // of reading and converting all 18 properties a second time.
+        auto snapshot = state->emitted_paint_state;
+#endif
+        snapshot.transform = state->transform;
         snapshot.has_clip = state->has_clip;
         snapshot.line_dash = state->line_dash;
         state->stack.push_back(std::move(snapshot));
@@ -1594,8 +1674,15 @@
             return;
         }
         auto* source = unwrap_node(info[0].As<v8::Object>());
-        if (source == nullptr || source->tag != "canvas") return;
-        if (source == state->node) {
+        if (source == nullptr) return;
+        const auto source_is_canvas = source->tag == "canvas";
+        const auto& source_image = source->replaced_image();
+        const auto source_is_svg_image = source->tag == "img"
+            && source_image.complete
+            && !source_image.markup.empty()
+            && !source_image.view_box.empty();
+        if (!source_is_canvas && !source_is_svg_image) return;
+        if (source_is_canvas && source == state->node) {
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
             ++state->node->mutable_canvas().self_draw_image_calls;
 #endif
@@ -1606,8 +1693,14 @@
 #endif
 
         const auto context = info.GetIsolate()->GetCurrentContext();
-        const auto source_width = element_dimension(*source, "width", 300);
-        const auto source_height = element_dimension(*source, "height", 150);
+        const auto source_width = element_dimension(
+            *source,
+            "width",
+            source_is_svg_image ? source_image.natural_width : 300);
+        const auto source_height = element_dimension(
+            *source,
+            "height",
+            source_is_svg_image ? source_image.natural_height : 150);
         double source_x = 0;
         double source_y = 0;
         double source_draw_width = source_width;
@@ -1637,6 +1730,17 @@
         if (std::abs(source_draw_width) < 0.001 || std::abs(source_draw_height) < 0.001) return;
 
         canvas_emit_paint_state(info, *state, canvas_paint_draw_image);
+        if (source_is_svg_image) {
+            canvas_append_resource_command(
+                *state->node,
+                canvas_command_kind::draw_svg_image,
+                canvas_intern_string(
+                    *state->node,
+                    source_image.view_box + "\t" + source_image.markup),
+                {source_x, source_y, source_draw_width, source_draw_height,
+                 destination_x, destination_y, destination_width, destination_height});
+            return;
+        }
         canvas_append_resource_command(
             *state->node,
             canvas_command_kind::draw_canvas,
@@ -2544,6 +2648,45 @@
             js_string(isolate, "source-over")).Check();
     }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    void finish_gpu_rendering_opportunity(bool present) {
+        if(!gpu_rendering_opportunity||has_due_animation_frame_task())return;
+        gpu_rendering_opportunity=false;
+        for(auto& [key,canvas]:gpu_canvases) {
+            const auto submitted=canvas.context->has_current_texture();
+            canvas.context->end_frame(present);
+            if(submitted) {
+                // A reset inside this RAF batch may occur after frame admission.
+                // Its replacement output now owns the publication dependency.
+                canvas.bitmap_reset_awaiting_frame=false;
+                canvas.presentation_resize_pending=false;
+                canvas.node->mutable_canvas().gpu_presentation_image.reset();
+                auto& output=canvas.node->mutable_canvas().gpu_snapshot;
+                output.reset();
+                if(present) {
+                    auto ticket=canvas.provider->capture_latest_submission();
+                    if(ticket)output=std::make_shared<webscene::graphics::platform_dawn_scene_snapshot>(std::move(ticket));
+                    else {
+                        const auto& backing=canvas.node->canvas().backing;
+                        output=std::make_shared<webscene_failed_gpu_image_snapshot>(webscene::graphics::image_metadata{
+                            backing.identity(),0,backing.allocation_generation(),backing.content_serial(),
+                            0,0,backing.width(),backing.height()});
+                    }
+                    document.mark_scene_changed();
+                }
+            }
+        }
+        publish_ready_gpu_canvases();
+    }
+    void publish_ready_gpu_canvases() {
+        for(auto& [key,canvas]:gpu_canvases)while(auto image=canvas.provider->take_ready()) {
+            const auto metadata=image->describe();const auto& backing=canvas.node->canvas().backing;
+            if(metadata.canvas!=backing.identity()||metadata.allocation_generation!=backing.allocation_generation()||!backing.accepts_completed_content(metadata.content_serial))continue;
+            if(canvas.node->canvas().gpu_image&&canvas.node->canvas().gpu_image->value.describe().content_serial>metadata.content_serial)continue;
+            document.publish_gpu_canvas_image(*canvas.node,std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image)));
+        }
+    }
+#endif
     static void canvas_get_context(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -2556,6 +2699,45 @@
         const auto requested = info.Length() > 0
             ? to_utf8(info.GetIsolate(), info[0])
             : std::string{};
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+        if(requested=="webgpu"&&self->webgpu&&self->webgpu_interop==webscene::graphics::platform_canvas_interop&&!self->in_frame_context()) {
+            using namespace webscene::graphics;
+            auto& backing=node->mutable_canvas().backing;
+            if(backing.mode()!=canvas_context_mode::none&&backing.mode()!=canvas_context_mode::webgpu) {
+                info.GetReturnValue().SetNull();return;
+            }
+            const auto key=self->wrapper_key(*node);
+            const auto known=self->gpu_canvases.find(key);
+            if(known!=self->gpu_canvases.end()){info.GetReturnValue().Set(known->second.context->object());return;}
+            try {
+                auto context=info.GetIsolate()->GetCurrentContext();
+                auto exception=self->webgpu_dom_exception.Get(info.GetIsolate());
+                auto width=canvas_bitmap_dimension(*node,"width",300),height=canvas_bitmap_dimension(*node,"height",150);
+                if(backing.width()!=width||backing.height()!=height)backing.reset_bitmap(width,height);
+                auto provider=std::make_shared<platform_dawn_canvas_host>(64ULL*1024*1024,self->webgpu_wake);
+                auto host=make_platform_webgpu_canvas_host(provider,[self,node] {
+                    auto& backing=node->mutable_canvas().backing;backing.publish_content();
+                    image_metadata metadata;metadata.canvas=backing.identity();metadata.allocation_generation=backing.allocation_generation();
+                    metadata.content_serial=backing.content_serial();metadata.producer_timeline=self->gpu_canvas_timeline;metadata.producer_value=metadata.content_serial;
+                    return metadata;
+                });
+                host.invalidate=[self,node] {
+                    auto& canvas=node->mutable_canvas();canvas.backing.reset_bitmap(canvas.backing.width(),canvas.backing.height());canvas.gpu_image.reset();canvas.gpu_snapshot.reset();canvas.gpu_presentation_image.reset();
+                    const auto known=self->gpu_canvases.find(self->wrapper_key(*node));
+                    if(known!=self->gpu_canvases.end()) {
+                        known->second.presentation_resize_pending=false;
+                        known->second.presentation_generation_floor=canvas.backing.allocation_generation();
+                    }
+                    self->document.mark_scene_changed();
+                };
+                auto controller=std::make_unique<v8_webgpu_canvas_context>(info.GetIsolate(),context,info.This(),exception,width,height,std::move(host));
+                auto object=controller->object();
+                self->gpu_canvases.emplace(key,gpu_canvas_entry{node,std::move(provider),std::move(controller)});
+                backing.claim_context(canvas_context_mode::webgpu);
+                info.GetReturnValue().Set(object);return;
+            }catch(const std::exception&){info.GetIsolate()->ThrowException(v8::Exception::Error(js_string(info.GetIsolate(),"WebGPU canvas initialization failed")));return;}
+        }
+#endif
         if (requested != "2d") {
             self->record_feature(
                 "canvas",
@@ -2563,6 +2745,10 @@
                 "unsupported",
                 {},
                 "native-binding");
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+        if (!node->mutable_canvas().backing.claim_context(webscene::graphics::canvas_context_mode::two_d)) {
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
             return;
         }
@@ -2587,6 +2773,10 @@
         }
         auto local_context = info.GetIsolate()->GetCurrentContext();
         auto result = v8::Object::New(info.GetIsolate());
+        auto& backing=node->mutable_canvas().backing;
+        const auto width=canvas_bitmap_dimension(*node,"width",300);
+        const auto height=canvas_bitmap_dimension(*node,"height",150);
+        if (backing.width()!=width || backing.height()!=height) backing.reset_bitmap(width,height);
         auto state = std::make_unique<canvas_state>();
         state->node = node;
         auto* state_pointer = state.get();

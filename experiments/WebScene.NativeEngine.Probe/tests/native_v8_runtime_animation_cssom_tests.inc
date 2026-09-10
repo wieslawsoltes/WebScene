@@ -143,6 +143,83 @@ void test_inline_transition_longhands_survive_dynamic_parse_and_recascade(
         "inline transition longhands were lost or mis-cascaded: " + value);
 }
 
+void test_logical_inset_transition_smooths_throttled_pointer_updates(
+    webscene_engine* engine)
+{
+    execute_and_wait(engine, R"JS(
+        (() => {
+          document.body.innerHTML = `
+            <style>
+              html, body { margin: 0; width: 240px; height: 140px; }
+              #plane { position: fixed; left: 0; top: 0; width: 200px; height: 100px; }
+              #pointer {
+                position: absolute;
+                left: 0%; top: 0%; width: 10px; height: 10px;
+                transition: inset-inline-start .1s linear,
+                  inset-inline-start .1s linear, top .1s linear;
+              }
+            </style>
+            <div id="plane"><div id="pointer"></div></div>`;
+          globalThis.__insetTransitionEvents = [];
+          const pointer = document.getElementById('pointer');
+          for (const type of ['transitionrun', 'transitionstart', 'transitionend']) {
+            pointer.addEventListener(type, event =>
+              __insetTransitionEvents.push(`${type}:${event.propertyName}`));
+          }
+        })()
+    )JS", "logical-inset-transition-setup.js");
+    animation_frame_and_wait(engine, 2700.0, 7041U);
+    execute_and_wait(engine, R"JS(
+        (() => {
+          const pointer = document.getElementById('pointer');
+          pointer.style.left = '100%';
+          pointer.style.top = '100%';
+        })()
+    )JS", "logical-inset-transition-activate.js");
+    wait_for_animation_frame_demand(
+        engine,
+        true,
+        "logical inset transition did not request compositor frames");
+
+    animation_frame_and_wait(engine, 2750.0, 7042U);
+    const auto midpoint = evaluate(engine, R"JS(
+        (() => {
+          const rect = document.getElementById('pointer').getBoundingClientRect();
+          return {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            events: __insetTransitionEvents
+          };
+        })()
+    )JS", "logical-inset-transition-midpoint.js");
+    require(
+        midpoint.find(R"("left":100)") != std::string::npos
+            && midpoint.find(R"("top":50)") != std::string::npos
+            && midpoint.find("transitionstart:left") != std::string::npos
+            && midpoint.find("transitionstart:top") != std::string::npos,
+        "logical/physical inset aliases did not interpolate pointer geometry: "
+            + midpoint);
+
+    animation_frame_and_wait(engine, 2800.0, 7043U);
+    const auto completed = evaluate(engine, R"JS(
+        (() => {
+          const rect = document.getElementById('pointer').getBoundingClientRect();
+          return {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            events: __insetTransitionEvents
+          };
+        })()
+    )JS", "logical-inset-transition-complete.js");
+    require(
+        completed.find(R"("left":200)") != std::string::npos
+            && completed.find(R"("top":100)") != std::string::npos
+            && completed.find("transitionend:left") != std::string::npos
+            && completed.find("transitionend:top") != std::string::npos,
+        "logical inset transition did not finish at the throttled target: "
+            + completed);
+}
+
 void test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(
     webscene_engine* engine)
 {

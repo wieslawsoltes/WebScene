@@ -8,6 +8,10 @@ if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalI
     {
         switch (args[1].ToLowerInvariant())
         {
+            case "text-cache":
+                return TextCacheProbe.Run(probeArgs);
+            case "variable-font":
+                return VariableFontProbe.Run(probeArgs);
             case "generated-realtime-chart":
                 return await GeneratedRealtimeChartAcceptanceProbe.RunAsync(probeArgs);
             case "native-interop-race":
@@ -34,7 +38,7 @@ if (args.Length > 0 && string.Equals(args[0], "probe", StringComparison.OrdinalI
     }
 
     Console.Error.WriteLine(
-        "Unknown probe. Use one of: generated-realtime-chart, native-interop-race, " +
+        "Unknown probe. Use one of: text-cache, variable-font, generated-realtime-chart, native-interop-race, " +
         "native-runtime-work, native-dom-lookup, native-context-memory, native-lifecycle, " +
         "native-resize-cadence, native-inspector-disabled-performance, " +
         "native-retained-render, " +

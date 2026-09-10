@@ -1,0 +1,23 @@
+{
+  "sourceCommit": "39f62ce45920a6a4e220be13e8bde88e2ecfb097",
+  "sourceSha256": "a9c24f5d03309b41c158ea7781e39ab062a23f11f70a0a479bcda729f2455361",
+  "command": "ctest --test-dir artifacts/graphics-build/native-v8-enabled -R '^webscene_graphics_dawn_event_tests$' --output-on-failure",
+  "buildCommand": "cmake --build artifacts/graphics-build/native-v8-enabled --target webscene_graphics_dawn_event_tests -j4",
+  "result": {
+    "passed": 1,
+    "failed": 0,
+    "seconds": 0.5
+  },
+  "reviewedCoverage": [
+    "Dawn ForceLoss with pending mapping; owner completion becomes device_lost",
+    "Late native map callback cannot deliver the operation twice; occupied and native_pending counters return to zero",
+    "Destroyed device rejects stale service handle; independent device performs upload/map verification",
+    "Completion progress through native service pumping without UI or RAF"
+  ],
+  "limits": [
+    "ForceLoss is a Dawn diagnostic injection, not physical GPU reset",
+    "Independent-device survivor test covers explicit destruction, not forced loss",
+    "Does not establish end-to-end V8 promise and presenter image retirement on loss",
+    "No Windows/Linux hardware or full conformance qualification"
+  ]
+}

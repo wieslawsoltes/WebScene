@@ -53,13 +53,58 @@ public sealed class NativeEllipticalCornerRadiusTests
         Assert.Equal(new SKPoint(12, 12), radii.BottomLeft);
     }
 
+    [Fact]
+    public void OpaqueCoincidentRoundedFillOccludesCoveredFill()
+    {
+        SceneCommand[] commands =
+        [
+            Command(kind: 7, nodeId: 1, 3, 3, 3, 3, rgba: 0x000000ff),
+            Command(kind: 7, nodeId: 2, 3, 3, 3, 3, rgba: 0x089981ff)
+        ];
+
+        Assert.True(NativeCanvasSceneRenderer.BackgroundPaintIsFullyOccludedByLaterRoundedFill(commands, 0));
+    }
+
+    [Fact]
+    public void OpaqueRoundedFillOccludesCoincidentSvgBackgroundStack()
+    {
+        SceneCommand[] commands =
+        [
+            Command(kind: 10, nodeId: 1, 3, 3, 3, 3, rgba: 0x000000ff),
+            Command(kind: 6, nodeId: 1, 3, 3, 3, 3),
+            Command(kind: 10, nodeId: 2, 3, 3, 3, 3, rgba: 0x089981ff)
+        ];
+
+        Assert.True(NativeCanvasSceneRenderer.BackgroundPaintIsFullyOccludedByLaterRoundedFill(commands, 0));
+        Assert.True(NativeCanvasSceneRenderer.BackgroundPaintIsFullyOccludedByLaterRoundedFill(commands, 1));
+    }
+
+    [Fact]
+    public void TranslucentOrDifferentRoundedFillDoesNotOccludeCoveredFill()
+    {
+        SceneCommand[] translucent =
+        [
+            Command(kind: 7, nodeId: 1, 3, 3, 3, 3, rgba: 0x000000ff),
+            Command(kind: 7, nodeId: 2, 3, 3, 3, 3, rgba: 0x08998180)
+        ];
+        SceneCommand[] differentRadius =
+        [
+            Command(kind: 7, nodeId: 1, 3, 3, 3, 3, rgba: 0x000000ff),
+            Command(kind: 7, nodeId: 2, 2, 2, 2, 2, rgba: 0x089981ff)
+        ];
+
+        Assert.False(NativeCanvasSceneRenderer.BackgroundPaintIsFullyOccludedByLaterRoundedFill(translucent, 0));
+        Assert.False(NativeCanvasSceneRenderer.BackgroundPaintIsFullyOccludedByLaterRoundedFill(differentRadius, 0));
+    }
+
     private static SceneCommand Command(
         uint kind,
         uint nodeId,
         float topLeft,
         float topRight,
         float bottomRight,
-        float bottomLeft)
+        float bottomLeft,
+        uint rgba = 0)
         => new()
         {
             Kind = kind,
@@ -71,6 +116,7 @@ public sealed class NativeEllipticalCornerRadiusTests
             RadiusTopLeft = topLeft,
             RadiusTopRight = topRight,
             RadiusBottomRight = bottomRight,
-            RadiusBottomLeft = bottomLeft
+            RadiusBottomLeft = bottomLeft,
+            Rgba = rgba
         };
 }

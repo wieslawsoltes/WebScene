@@ -17,6 +17,11 @@ both build and publish outputs and fail if any required asset is absent.
 Release linkage also dead-strips unreachable native sections and restricts the
 dynamic export table to WebScene's public C ABI. Developer builds retain ordinary
 symbols unless `WEBSCENE_NATIVE_ENGINE_DENSE_LINK=ON` is selected explicitly.
+When adding a `WEBSCENE_API` function, also update the macOS
+`native/webscene_native_engine.exports` list. Architecture tests check the list
+against the complete public header on every CI platform, and package consumer
+tests resolve every declared function from each release binary. Export-list edits
+are linker dependencies, so incremental dense builds relink after such changes.
 Runtime packages compile with `WEBSCENE_NATIVE_ENGINE_CERTIFICATION=OFF`; feature
 inventories, diagnostic snapshots, native profiling state, and their hot-path
 counters are not shipped. Production packages do include the patched V8 Inspector

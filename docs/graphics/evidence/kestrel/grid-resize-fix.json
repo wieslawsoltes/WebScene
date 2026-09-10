@@ -1,0 +1,1048 @@
+{
+  "originalSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "problem": "Auto grid row held max-content height after its definite container shrank; grid item arrange also expanded the resolved row height as if indefinite.",
+  "specification": "https://drafts.csswg.org/css-grid-2/#algo-track-sizing",
+  "scope": "Single implicit or explicit auto row separates minimum contribution from max-content growth; resolved grid item stretch height is definite. Multi-row intrinsic sizing and full grid conformance remain outside this fix.",
+  "before": [
+    {
+      "window": [
+        980,
+        680
+      ],
+      "canvas": [
+        1110,
+        880
+      ],
+      "css": [
+        555,
+        440
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            175,
+            196,
+            555,
+            440
+          ],
+          "height": "440px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            196,
+            980,
+            375
+          ],
+          "height": "375px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1440,
+        900
+      ],
+      "canvas": [
+        1432,
+        1228
+      ],
+      "css": [
+        716,
+        614
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            222,
+            205,
+            716,
+            614
+          ],
+          "height": "614px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1440,
+            563
+          ],
+          "height": "563px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1100,
+        740
+      ],
+      "canvas": [
+        862,
+        1228
+      ],
+      "css": [
+        431,
+        614
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            195,
+            205,
+            431,
+            614
+          ],
+          "height": "614px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1100,
+            403
+          ],
+          "height": "403px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1280,
+        800
+      ],
+      "canvas": [
+        1112,
+        1228
+      ],
+      "css": [
+        556,
+        614
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            222,
+            205,
+            556,
+            614
+          ],
+          "height": "614px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1280,
+            463
+          ],
+          "height": "463px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    }
+  ],
+  "after": [
+    {
+      "window": [
+        980,
+        680
+      ],
+      "canvas": [
+        1110,
+        750
+      ],
+      "css": [
+        555,
+        375
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            175,
+            196,
+            555,
+            375
+          ],
+          "height": "375px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            196,
+            980,
+            375
+          ],
+          "height": "375px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1440,
+        900
+      ],
+      "canvas": [
+        1432,
+        1126
+      ],
+      "css": [
+        716,
+        563
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            222,
+            205,
+            716,
+            563
+          ],
+          "height": "563px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1440,
+            563
+          ],
+          "height": "563px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1100,
+        740
+      ],
+      "canvas": [
+        862,
+        806
+      ],
+      "css": [
+        431,
+        403
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            195,
+            205,
+            431,
+            403
+          ],
+          "height": "403px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1100,
+            403
+          ],
+          "height": "403px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1280,
+        800
+      ],
+      "canvas": [
+        1112,
+        926
+      ],
+      "css": [
+        556,
+        463
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            222,
+            205,
+            556,
+            463
+          ],
+          "height": "463px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1280,
+            463
+          ],
+          "height": "463px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    }
+  ],
+  "regressionBefore": {
+    "schema": "webscene-wpt-subset-result-v3",
+    "profile": "webscene-component-1",
+    "profileSha256": "eae039ff0f49b160b9eef5dd1d1c179462901da60f90f8d8516ec1911f37f826",
+    "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+    "runtime": "v8",
+    "engine": "native",
+    "nativeEngineIdentity": "abi=3;sha256=54407f543df10e7a6ec92dcc1d8f0cc8355dba0a73a5cdfb18b5f1eca87a43b5",
+    "chromiumIdentity": null,
+    "startedAt": "2026-09-08T09:02:36.488117+00:00",
+    "duration": "00:00:00.2895067",
+    "selection": "candidate",
+    "summary": {
+      "tests": 1,
+      "passed": 0,
+      "failed": 1,
+      "timedOut": 0,
+      "harnessErrors": 0,
+      "subtests": 3,
+      "subtestsPassed": 1,
+      "subtestsFailed": 2
+    },
+    "results": [
+      {
+        "path": "contracts/css-grid-auto-row-shrink.html",
+        "type": "testharness",
+        "status": "FAIL",
+        "duration": "00:00:00.2855252",
+        "message": "diagnostic: DIV#scroll-grid style=height: 160px;\ndiagnostic: DIV#zero-grid style=height: 160px;\ndiagnostic: activeElement=",
+        "subtests": [
+          {
+            "name": "Scrollable auto row grows and shrinks with definite grid height",
+            "status": "FAIL",
+            "message": "assert_equals: scroll row at 160 expected 160 but got 400",
+            "stack": "Error\n    at get_stack (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4802:21)\n    at new AssertionError (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4795:22)\n    at assert (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4779:19)\n    at assert_equals (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1598:9)\n    at assert_wrapper (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1518:30)\n    at Test.<anonymous> (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:4:73)\n    at Test.step (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:2869:25)\n    at test (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:633:30)\n    at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:2:1"
+          },
+          {
+            "name": "Explicit zero minimum permits row shrinking without losing authored minimum",
+            "status": "FAIL",
+            "message": "assert_equals: zero minimum row at 160 expected 160 but got 400",
+            "stack": "Error\n    at get_stack (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4802:21)\n    at new AssertionError (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4795:22)\n    at assert (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4779:19)\n    at assert_equals (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1598:9)\n    at assert_wrapper (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1518:30)\n    at Test.<anonymous> (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:8:73)\n    at Test.step (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:2869:25)\n    at test (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:633:30)\n    at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-3.js:6:1"
+          },
+          {
+            "name": "Visible overflow retains content-based automatic minimum",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      }
+    ]
+  },
+  "candidateGridAfter": {
+    "schema": "webscene-wpt-subset-result-v3",
+    "profile": "webscene-component-1",
+    "profileSha256": "eae039ff0f49b160b9eef5dd1d1c179462901da60f90f8d8516ec1911f37f826",
+    "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+    "runtime": "v8",
+    "engine": "native",
+    "nativeEngineIdentity": "abi=3;sha256=78cb8160904fc5a35997770383cabda2542ef619f8ac93197d726532fa62c6d0",
+    "chromiumIdentity": null,
+    "startedAt": "2026-09-08T09:05:44.771851+00:00",
+    "duration": "00:00:02.0495650",
+    "selection": "candidate",
+    "summary": {
+      "tests": 6,
+      "passed": 6,
+      "failed": 0,
+      "timedOut": 0,
+      "harnessErrors": 0,
+      "subtests": 15,
+      "subtestsPassed": 15,
+      "subtestsFailed": 0
+    },
+    "results": [
+      {
+        "path": "contracts/css-grid-auto-row-shrink.html",
+        "type": "testharness",
+        "status": "PASS",
+        "duration": "00:00:00.6671127",
+        "message": null,
+        "subtests": [
+          {
+            "name": "Scrollable auto row grows and shrinks with definite grid height",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "Explicit zero minimum permits row shrinking without losing authored minimum",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "Visible overflow retains content-based automatic minimum",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/css-grid-form-layout.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.1114907",
+        "message": null,
+        "subtests": [
+          {
+            "name": "one automatic middle track leaves equal fractional form tracks",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "minmax fractional CRUD columns share the available width",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "explicit row spans and column placement retain the authored cells",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/css-grid-column-subgrid-form-row.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.0969582",
+        "message": null,
+        "subtests": [
+          {
+            "name": "a spanning column subgrid inherits the parent form tracks",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/css-grid-display-contents-items.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.1007485",
+        "message": null,
+        "subtests": [
+          {
+            "name": "display contents rows do not generate grid item boxes",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "a definite grid end line aligns the header with flattened row cells",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "the row descendants occupy one compact parent-grid row",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "all flattened cells remain within the five-track grid",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/grid-auto-row-stretch-dir-radius.html",
+        "type": "reftest",
+        "status": "PASS",
+        "duration": "00:00:00.9727320",
+        "message": null,
+        "subtests": [],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/implicit-grid-and-compact-flex-controls.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.0972089",
+        "message": null,
+        "subtests": [
+          {
+            "name": "column auto-flow creates three equal implicit fractional tracks",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "an inline flex item is blockified and stretches in the cross axis",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "a three-column fractional grid preserves a nested nonshrinking suffix",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "a spaced flex summary keeps its numeric value on one line",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      }
+    ]
+  },
+  "requiredGridAfter": {
+    "schema": "webscene-wpt-subset-result-v3",
+    "profile": "webscene-component-1",
+    "profileSha256": "eae039ff0f49b160b9eef5dd1d1c179462901da60f90f8d8516ec1911f37f826",
+    "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+    "runtime": "v8",
+    "engine": "native",
+    "nativeEngineIdentity": "abi=3;sha256=78cb8160904fc5a35997770383cabda2542ef619f8ac93197d726532fa62c6d0",
+    "chromiumIdentity": null,
+    "startedAt": "2026-09-08T09:06:04.631373+00:00",
+    "duration": "00:00:01.3713778",
+    "selection": "required",
+    "summary": {
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "timedOut": 0,
+      "harnessErrors": 0,
+      "subtests": 9,
+      "subtestsPassed": 9,
+      "subtestsFailed": 0
+    },
+    "results": [
+      {
+        "path": "contracts/css-grid-gap-alias-flex.html",
+        "type": "testharness",
+        "status": "PASS",
+        "duration": "00:00:00.1560796",
+        "message": null,
+        "subtests": [
+          {
+            "name": "Grid row/column gap aliases preserve flex spacing and wrapping",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "CSSOM camel-case gridColumnGap sets the column-gap alias",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/responsive-settings-property-grid.html",
+        "type": "testharness",
+        "status": "PASS",
+        "duration": "00:00:00.1160675",
+        "message": null,
+        "subtests": [
+          {
+            "name": "compact 1fr/min-content settings rows use post-track wrapped block contributions",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "css/css-grid/alignment/grid-gutters-001.html",
+        "type": "reftest",
+        "status": "PASS",
+        "duration": "00:00:00.9997002",
+        "message": null,
+        "subtests": [],
+        "artifacts": null,
+        "chromiumOracle": null
+      },
+      {
+        "path": "contracts/css-grid-placement-cssom.html",
+        "type": "contract",
+        "status": "PASS",
+        "duration": "00:00:00.0968105",
+        "message": null,
+        "subtests": [
+          {
+            "name": "a one-line grid-area expands to four computed placement longhands",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "a four-line stylesheet grid-area preserves placement order",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "grid-row and grid-column expand their omitted ends to auto",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "grid placement longhands retain unitless integer values",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "an explicit placement longhand overrides its shorthand component",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          },
+          {
+            "name": "removing a grid placement shorthand restores auto longhands",
+            "status": "PASS",
+            "message": null,
+            "stack": null
+          }
+        ],
+        "artifacts": null,
+        "chromiumOracle": null
+      }
+    ]
+  },
+  "nativeTests": {
+    "engineSeconds": 10.93,
+    "gpuRuntimeSeconds": 1.81,
+    "passed": true
+  },
+  "limitations": [
+    "CSS/bitmap geometry and zero application errors verified, not physical frame-by-frame resize smoothness.",
+    "New contract remains candidate; no cross-RID qualification or new upstream WPT import claimed.",
+    "Grid fractional column sizing still leaves unused horizontal space; requires a separate regression and fix."
+  ]
+}

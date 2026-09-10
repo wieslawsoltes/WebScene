@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Logical inset transitions smooth throttled positioned updates</title>
+<style>
+  html, body { margin: 0; width: 260px; height: 160px; }
+  #plane { position: fixed; left: 20px; top: 20px; width: 200px; height: 100px; }
+  #pointer {
+    position: absolute;
+    left: 0%;
+    top: 0%;
+    width: 10px;
+    height: 10px;
+    background: #089981;
+    transition: inset-inline-start .1s linear,
+      inset-inline-start .1s linear, top .1s linear;
+  }
+</style>
+<div id="plane"><div id="pointer"></div></div>
+<script>
+  const state = window.__webSceneWptState = {
+    complete: false,
+    harness: null,
+    results: [],
+    errors: [],
+    diagnostics: []
+  };
+
+  function finish(error, samples) {
+    state.diagnostics = [JSON.stringify(samples)];
+    state.results.push({
+      name: "logical inset alias animates sparse pointer targets at frame cadence",
+      status: error ? "FAIL" : "PASS",
+      message: error ? String(error && error.message || error) : null,
+      stack: error && error.stack ? String(error.stack) : null
+    });
+    state.harness = error
+      ? { status: 1, message: state.results[0].message, stack: state.results[0].stack }
+      : { status: 0, message: null, stack: null };
+    state.complete = true;
+  }
+
+  requestAnimationFrame(start => {
+    const pointer = document.getElementById("pointer");
+    const plane = document.getElementById("plane");
+    const origin = plane.getBoundingClientRect();
+    const samples = [];
+    pointer.style.left = "100%";
+    pointer.style.top = "100%";
+
+    const sample = timestamp => {
+      try {
+        const rect = pointer.getBoundingClientRect();
+        samples.push({
+          elapsed: timestamp - start,
+          left: rect.left - origin.left,
+          top: rect.top - origin.top
+        });
+        if (timestamp - start < 150) {
+          requestAnimationFrame(sample);
+          return;
+        }
+        const intermediate = samples.filter(value =>
+          value.left > 1 && value.left < 199
+          && value.top > 1 && value.top < 99);
+        const distinct = new Set(intermediate.map(value =>
+          `${Math.round(value.left)}:${Math.round(value.top)}`));
+        if (distinct.size < 3) {
+          throw new Error("logical inset transition did not publish dense intermediate geometry");
+        }
+        for (let index = 1; index < samples.length; index++) {
+          if (samples[index].left + .01 < samples[index - 1].left
+              || samples[index].top + .01 < samples[index - 1].top) {
+            throw new Error("logical inset transition geometry was not monotonic");
+          }
+        }
+        const final = samples[samples.length - 1];
+        if (Math.abs(final.left - 200) > .5 || Math.abs(final.top - 100) > .5) {
+          throw new Error("logical inset transition did not reach its target");
+        }
+        finish(null, samples);
+      } catch (error) {
+        finish(error, samples);
+      }
+    };
+    requestAnimationFrame(sample);
+  });
+</script>
