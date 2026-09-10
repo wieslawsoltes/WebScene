@@ -1571,3 +1571,11 @@ to auto margins before alignment and avoids stretching auto-height items with
 vertical auto margins. The 10px child now sits at offset 30px in its 40px track;
 rebuilt contracts pass. Horizontal auto margins, min/max constraints and other
 grid arrange paths remain open.
+
+### Grid horizontal auto margins (2026-09-10)
+
+Explicit-track grid arrangement now allocates positive horizontal free space to
+auto margins and uses intrinsic width instead of stretch for auto-width items
+with horizontal auto margins. A native fixture verifies a 20px item with auto left
+margin moves to x+80 in its 100px track. Rebuilt contracts pass. Both-auto margins,
+intrinsic shrink-to-fit details and min/max constraints remain open coverage gaps.

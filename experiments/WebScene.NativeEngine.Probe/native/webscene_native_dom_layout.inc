@@ -2342,9 +2342,11 @@ void native_document::layout_children(dom_node& parent)
                     *child, child->style.margin_top, available_height, 0);
                 const auto margin_bottom = resolve_length(
                     *child, child->style.margin_bottom, available_height, 0);
+                const bool auto_horizontal_margin = child->style.margin_left_auto || child->style.margin_right_auto;
                 auto width = is_specified(child->style.width)
                     ? outer_authored_size(*child, true, available_width)
-                    : std::max(0.0F, available_width - margin_left - margin_right);
+                    : auto_horizontal_margin ? intrinsic_size(*child, true, available_width)
+                        : std::max(0.0F, available_width - margin_left - margin_right);
                 const auto alignment = child->style.align_self_specified
                     ? child->style.align_self : parent.style.align_items;
                 const bool auto_vertical_margin = child->style.margin_top_auto || child->style.margin_bottom_auto;
@@ -2369,8 +2371,11 @@ void native_document::layout_children(dom_node& parent)
                         (child->style.margin_bottom_auto ? 2.0F : 1.0F) : 0.0F)
                     : alignment == align_mode::center ? remaining_height * 0.5F
                     : alignment == align_mode::end ? remaining_height : 0.0F;
+                const auto horizontal_offset = child->style.margin_left_auto
+                    ? std::max(0.0F, available_width - margin_left - margin_right - width) /
+                        (child->style.margin_right_auto ? 2.0F : 1.0F) : 0.0F;
                 layout_child(*child, parent.layout, {
-                    column_offsets[item.column] + margin_left,
+                    column_offsets[item.column] + margin_left + horizontal_offset,
                     row_offsets[item.row] + margin_top + alignment_offset,
                     width,
                     height}, true); // The resolved grid area supplies the stretched block size.
