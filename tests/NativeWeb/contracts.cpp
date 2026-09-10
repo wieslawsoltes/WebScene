@@ -221,6 +221,18 @@ int main() {
   d.render(800, 600);
   check(d.bounds(d.find("zero-rowspan")).height == rowspan_box.height,
         "zero rowspan shrinks after native row removal");
+  auto css_cell_a = d.bounds(d.find("css-cell-a"));
+  auto css_cell_b = d.bounds(d.find("css-cell-b"));
+  check(css_cell_b.x >= css_cell_a.x + css_cell_a.width && css_cell_b.y == css_cell_a.y,
+        "CSS table display roles place div cells side by side");
+  d.attribute(d.find("css-table"), "class", "blocks");
+  d.render(800, 600);
+  check(d.bounds(d.find("css-cell-b")).y >= d.bounds(d.find("css-cell-a")).y + 10,
+        "dynamic block display removes table cell layout");
+  d.remove_attribute(d.find("css-table"), "class");
+  d.render(800, 600);
+  check(d.bounds(d.find("css-cell-b")).x == css_cell_b.x,
+        "CSS table display roles recover after mutation");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

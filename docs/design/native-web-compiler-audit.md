@@ -1458,3 +1458,11 @@ table roles already represented by native display_mode. Independent compiler
 coverage verifies case-insensitive syntax and each emitted enum. All 77 compiler
 tests pass. CSS-generated table structure, anonymous table boxes and dynamic role
 changes still need native geometry coverage; this records lowering support only.
+
+### CSS table roles and dynamic display (2026-09-10)
+
+A compiled div/table-row/table-cell fixture verifies side-by-side native cell
+placement. Class mutation switches all roles to block layout and stacks the cells;
+removing the class restores the original table geometry. Rebuilt contracts pass.
+This covers explicit CSS table structure; anonymous wrappers, inline-table baseline
+behavior and browser differential comparisons remain open.
