@@ -226,7 +226,7 @@ class CompilerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode,0,value)
 
     def test_translation_transform_profile(self):
-        for value in ['none','translate(10px)','translate(50%, -2px)','translateX(-50%)','translateY(7px)','TRANSLATEX(+.5e1PX)']:
+        for value in ['none','NONE','translate(10px)','translate(50%, -2px)','translateX(-50%)','translateY(7px)','TRANSLATEX(+.5e1PX)']:
             result,out=self.compile('<div></div>', 'div {transform:'+value+';}')
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn('set_translation(',out.read_text())

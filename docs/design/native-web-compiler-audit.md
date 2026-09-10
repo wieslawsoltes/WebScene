@@ -851,3 +851,11 @@ and shrinking restores the original offset without accumulation. Native contract
 pass. This proves dynamic geometry/input only, not compositor presentation timing,
 60fps resize or absence of host image stretching; those goal requirements remain
 unverified and unchanged.
+
+### Translation flow isolation (2026-09-10)
+
+Added a following block sibling to the compiled transform fixture. Native
+contracts verify its normal-flow position is unchanged when a vertical translation
+is applied and cleared. Also corrected transform:none keyword case handling;
+compiler coverage now includes NONE. Native contracts and all 53 compiler tests
+pass. Overflow/clipping, nested transforms and rendered stacking remain open.

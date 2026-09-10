@@ -419,7 +419,7 @@ static std::string assignments(const std::string &name,
     return "s.set_font_smoothing(" + quote(value) + ");";
   }
   if (name == "transform") {
-    if (value == "none") return "s.set_translation(" + length("0") + "," + length("0") + ",false);";
+    if (std::regex_match(value, std::regex("none", std::regex::icase))) return "s.set_translation(" + length("0") + "," + length("0") + ",false);";
     std::smatch match;
     if (std::regex_match(value, match, std::regex(R"(translate\(\s*([^(),]+?)(?:\s*,\s*([^(),]+?))?\s*\))", std::regex::icase))) {
       auto x = trim(match[1]), y = match[2].matched ? trim(match[2]) : "0";

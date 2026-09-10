@@ -188,11 +188,15 @@ int main() {
   d.pointer("pointerdown", d.bounds(translate_parent).x + 1, translated_area.y + 1);
   d.pointer("pointerup", d.bounds(translate_parent).x + 1, translated_area.y + 1);
   check(translated_hits == 1, "translation removes hit coverage from original left edge");
+  const auto sibling_flow_offset = d.bounds(d.find("translate-sibling")).y - d.bounds(translate_parent).y;
+  check(sibling_flow_offset == 10, "untranslated sibling follows source box height");
   d.attribute(translated, "class", "both");
   d.render(800, 10000);
   check(d.bounds(translated).x - d.bounds(translate_parent).x == 10 &&
         d.bounds(translated).y - d.bounds(translate_parent).y == 5,
         "two-axis percentage translate uses own width and height");
+  check(d.bounds(d.find("translate-sibling")).y - d.bounds(translate_parent).y == sibling_flow_offset,
+        "vertical transform does not move following sibling flow position");
   d.render(1600, 10000);
   check(d.bounds(translated).width == 40 &&
         d.bounds(translated).x - d.bounds(translate_parent).x == 20 &&
@@ -208,6 +212,8 @@ int main() {
   d.attribute(translated, "class", "reset");
   d.render(800, 600);
   check(d.bounds(translated).x == d.bounds(translate_parent).x, "transform none resets translation");
+  check(d.bounds(d.find("translate-sibling")).y - d.bounds(translate_parent).y == sibling_flow_offset,
+        "clearing transform preserves following sibling flow position");
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");
