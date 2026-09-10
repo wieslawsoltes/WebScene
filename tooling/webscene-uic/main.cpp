@@ -153,15 +153,16 @@ static std::string variable_code(const std::string &text) {
     auto token = text.substr(cursor, end - cursor);
     if (!std::regex_match(token, std::regex(R"((#[A-Za-z0-9]+|[A-Za-z_-][A-Za-z0-9_-]*|[+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?([A-Za-z]+|%)?))")))
       throw std::runtime_error("unsupported custom-value token: " + token);
-    if (token == "initial" || token == "inherit" || token == "unset" || token == "revert" || token == "revert-layer")
+    const auto keyword = ascii_keyword(token);
+    if (keyword == "initial" || keyword == "inherit" || keyword == "unset" || keyword == "revert" || keyword == "revert-layer")
       throw std::runtime_error("custom-property CSS-wide keywords are not supported yet");
     std::string typed_length = "std::nullopt", typed_color = "std::nullopt";
     const bool zero = std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")) && std::stof(token) == 0;
     if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh))", std::regex::icase)) || zero)
       typed_length = "webscene::native_web::length" + length(token);
     if (std::regex_match(token, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) ||
-        token == "transparent" || token == "black" || token == "white")
-      typed_color = std::to_string(native_document::parse_color(token)) + "u";
+        keyword == "transparent" || keyword == "black" || keyword == "white")
+      typed_color = std::to_string(native_document::parse_color(keyword)) + "u";
     append("{" + kind + "token," + quote(token) + ",{},false," + typed_length + "," + typed_color + "}");
     cursor = end;
   }

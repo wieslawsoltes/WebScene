@@ -1169,3 +1169,14 @@ uppercase/mixed-case generated rules with lowercase-function equivalents for
 width, margin, padding, gap, alignment, calc, grid and nested color fallbacks.
 All 64 compiler tests and native contracts pass. Escaped identifiers, richer
 custom-value token forms and CSS-wide custom-property semantics remain open.
+
+### Custom-value keyword classification (2026-09-10)
+
+Custom-value token classification now compares keywords case-insensitively while
+preserving token text. Uppercase/mixed-case CSS-wide keywords no longer bypass the
+existing unsupported diagnostic. Supported named colors (black, white,
+transparent) now acquire typed color data regardless of capitalization, fixing
+uppercase variable fallbacks that previously lacked color metadata. Independent
+regressions verify both rejection and emitted typed color values. All 65 compiler
+tests and native contracts pass. Full CSS-wide custom-property semantics, broader
+named colors and context-sensitive fallback handling remain open.

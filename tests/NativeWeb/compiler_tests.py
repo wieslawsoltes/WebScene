@@ -73,6 +73,16 @@ class CompilerTests(unittest.TestCase):
             rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
             self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
 
+    def test_custom_keyword_casing_and_color_typing(self):
+        for keyword in ['INITIAL','InHerit','UNSET','REVERT','REVERT-LAYER']:
+            result,_=self.compile('<div></div>', 'div { --Token:'+keyword+'; }')
+            self.assertNotEqual(result.returncode,0,keyword)
+            self.assertIn('CSS-wide keywords',result.stderr)
+        for token,rgba in [('WHITE',4294967295),('Black',255),('TRANSPARENT',0)]:
+            result,out=self.compile('<div></div>', 'div { color:var(--Color, '+token+'); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('"'+token+'",{},false,std::nullopt,'+str(rgba)+'u',out.read_text())
+
     def test_calc_rejects_invalid_length_products(self):
         for value in ['calc(10px / 0)', 'calc(10px * 2px)', 'calc(2 / 10px)']:
             result,_=self.compile('<div></div>', 'div { left:'+value+'; }')
