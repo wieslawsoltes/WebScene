@@ -52,3 +52,27 @@ original Kestrel HTML and CSS are consumed unmodified. Only application JS/TS is
 ported to C++; dynamic HTML strings in that logic become predefined compiled
 templates preserving their original structure. The simplified POC markup is not
 the intended final UI and must not become the compatibility target.
+
+## Embedded application resources
+
+Images, fonts and other static resources referenced by compiled views/styles must
+be embedded in the final application artifact, with executable-embedded resource
+bytes as the default native deployment model. Rendering must not depend on network
+requests or loose files from the source checkout. Preserve original HTML/CSS URLs:
+the compiler resolves them at build time and generates a resource table mapping
+logical URLs to embedded bytes, MIME types and source metadata.
+
+Resolve relative references against the originating HTML or stylesheet URL,
+including font-face sources and CSS image references. Deduplicate resource bytes,
+track them as build dependencies and diagnose missing assets at build time.
+Remote references require an explicit build-time vendoring/pinning step; do not
+silently fetch changing remote content during builds or fall back to the network
+at runtime. Preserve required third-party notices and embedding license terms.
+
+Native image/font loaders consume resource bytes through WebScene's resource
+provider seam; Foco integration must not force WebScene to depend on Foco-specific
+resource formats. Font registration and image decode/upload lifetimes remain
+explicit. Compression and lazy decoding may reduce memory without changing the
+no-network deployment guarantee. Verify packaged applications with network access
+unavailable and source directories absent. This is an accepted requirement;
+general resource embedding and font/image compiler support are not implemented yet.
