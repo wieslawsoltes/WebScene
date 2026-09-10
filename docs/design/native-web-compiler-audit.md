@@ -582,3 +582,17 @@ A build-path regression covers an unsupported declaration, pseudo-element select
 and malformed declaration. All 44 compiler tests and native contracts pass.
 Embedded style blocks and style attributes retain their previous approximate
 mapping and require HTML parser source spans before claiming exact locations.
+
+### HTML whitespace preservation (2026-09-10)
+
+The compiler previously discarded every whitespace-only text node, losing the
+separator between adjacent inline elements and whitespace-only preformatted
+content. It now emits all nonempty parsed text nodes; CSS whitespace processing
+remains the native engine's responsibility. This also preserves content for later
+white-space style changes rather than baking the initial style into construction.
+
+An independent compiler fixture verifies emitted separator and two-space nodes.
+Native contracts verify `text_content` is `A B` for adjacent spans and retains
+both spaces in a preformatted element. All 45 compiler tests and native contracts
+pass. These checks prove DOM preservation, not full inline shaping or rendered
+whitespace parity; those remain part of layout differential coverage.

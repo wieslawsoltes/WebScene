@@ -109,6 +109,10 @@ int main() {
   }
   document d;
   auto refs = compiled_ui::build(d);
+  check(d.text_content(d.find("inline-whitespace")) == "A B",
+        "compiled HTML preserves whitespace between inline elements");
+  check(d.text_content(d.find("preserved-whitespace")) == "  ",
+        "compiled HTML retains whitespace-only preformatted content");
   rule compiled_variable_probe;
   selector_part probe_root;
   probe_root.root = true;

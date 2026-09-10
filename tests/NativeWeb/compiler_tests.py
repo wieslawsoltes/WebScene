@@ -143,6 +143,13 @@ class CompilerTests(unittest.TestCase):
             self.assertEqual(result.returncode,1)
             self.assertIn(str(css.resolve())+location+': error:',result.stderr)
 
+    def test_preserves_whitespace_text_nodes(self):
+        result,out=self.compile('<div><span>A</span> <span>B</span></div><div>  </div>')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        self.assertRegex(generated, r'd\.text\(n[0-9]+," "\);')
+        self.assertRegex(generated, r'd\.text\(n[0-9]+,"  "\);')
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)

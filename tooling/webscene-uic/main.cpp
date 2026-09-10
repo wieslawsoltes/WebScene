@@ -950,7 +950,7 @@ struct compiler {
     if (n.tag == "#comment" || n.tag == "#doctype")
       return;
     if (n.tag == "#text") {
-      if (trim(n.text_content).empty())
+      if (n.text_content.empty())
         return;
       out << "d.text(" << parent << "," << quote(n.text_content) << ");\n";
       return;
