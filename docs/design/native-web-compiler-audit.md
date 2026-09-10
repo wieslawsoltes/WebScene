@@ -1388,3 +1388,12 @@ Native contracts switch the fixture to auto width, verify later-row content can
 expand the first column, then restore specified width and verify the 50px fixed
 column returns. Rebuilt contracts pass. Percentage definiteness and column-element
 precedence remain open table sizing cases.
+
+### Fixed table column precedence (2026-09-10)
+
+A regression reproduced a first-row 120px cell overriding an authored 60px col.
+The layout pass now records specified column widths independently from numeric
+width (so zero is distinguishable from auto), protects them from single-column
+cell sizing, and excludes them from unspecified-track excess distribution.
+The 60px regression and native contracts pass. Spanning cells crossing authored
+columns, percentage-column distribution and column-group widths remain open.

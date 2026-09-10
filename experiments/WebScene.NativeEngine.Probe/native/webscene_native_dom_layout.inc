@@ -596,6 +596,7 @@ void native_document::layout_children(dom_node& parent)
         }
 
         std::vector<float> authored_column_widths;
+        std::vector<bool> authored_columns_specified;
         const auto collect_column_widths = [&](const auto& self,
                                                const dom_node& node) -> void {
             for (const auto* child : composed_children(node)) {
@@ -613,6 +614,7 @@ void native_document::layout_children(dom_node& parent)
                 const auto width = is_specified(child->style.width)
                     ? resolve_length(*child, child->style.width, content.width, 0)
                     : 0.0F;
+                authored_columns_specified.insert(authored_columns_specified.end(), span, is_specified(child->style.width));
                 authored_column_widths.insert(
                     authored_column_widths.end(), span, width);
             }
@@ -646,9 +648,18 @@ void native_document::layout_children(dom_node& parent)
         std::vector<bool> fixed_columns(column_count, false);
         std::vector<bool> percentage_columns(column_count, false);
         std::vector<bool> specified_columns(column_count, false);
+        if (fixed_table_layout) {
+            for (size_t column = 0; column < authored_columns_specified.size(); ++column) {
+                specified_columns[column] = authored_columns_specified[column];
+                fixed_columns[column] = authored_columns_specified[column];
+            }
+        }
         for (const auto& row : rows) {
             if (fixed_table_layout && &row != &rows.front()) break;
             for (const auto& placement : row.cells) {
+                if (fixed_table_layout && placement.column_span == 1 &&
+                    placement.column < authored_columns_specified.size() &&
+                    authored_columns_specified[placement.column]) continue;
                 auto cell_width = fixed_table_layout ? 0.0F : intrinsic_size(
                     *placement.cell, true, track_available_width);
                 if (fixed_table_layout

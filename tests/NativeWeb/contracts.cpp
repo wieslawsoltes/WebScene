@@ -163,6 +163,8 @@ int main() {
   d.render(800, 600);
   check(d.bounds(d.find("fixed-first")).width == 50,
         "specified width restores fixed first-row sizing");
+  check(d.bounds(d.find("col-priority")).width == 60,
+        "fixed table column width takes priority over first-row cell");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
