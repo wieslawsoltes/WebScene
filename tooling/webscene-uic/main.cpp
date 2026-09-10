@@ -163,7 +163,13 @@ static std::string variable_code(const std::string &text) {
     if (std::regex_match(token, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) ||
         keyword == "transparent" || keyword == "black" || keyword == "white")
       typed_color = std::to_string(native_document::parse_color(keyword)) + "u";
-    append("{" + kind + "token," + quote(token) + ",{},false," + typed_length + "," + typed_color + "}");
+    std::string typed_fraction = "std::nullopt";
+    if (keyword.ends_with("fr") && css_number(keyword.substr(0, keyword.size() - 2))) {
+      const auto fraction = std::stof(keyword);
+      if (!std::isfinite(fraction)) throw std::runtime_error("non-finite custom fraction");
+      typed_fraction = number(fraction);
+    }
+    append("{" + kind + "token," + quote(token) + ",{},false," + typed_length + "," + typed_color + "," + typed_fraction + "}");
     cursor = end;
   }
   return result + "}";
@@ -322,6 +328,7 @@ static std::string variable_grid_code(const std::string &member, const std::stri
       code += "{auto values=s.evaluate(" + variable_code(token) + ");";
       code += "if(!values || values->empty()) valid=false;else for(const auto& value:*values){";
       code += "if(value.length && value.length->value>=0) tracks.push_back({*value.length,*value.length,0.0f,webscene::native_web::grid_track::sizing::fixed});";
+      code += "else if(value.fraction && *value.fraction>=0) tracks.push_back({{},{},*value.fraction,webscene::native_web::grid_track::sizing::fractional});";
       code += "else if(value.is_keyword(\"auto\")) tracks.push_back({});else valid=false;}}";
     } else {
       auto static_tracks = grid_tracks_code(token);

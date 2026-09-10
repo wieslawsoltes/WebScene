@@ -1211,3 +1211,13 @@ tests pass. This records verified existing behavior rather than new support.
 Variable grid tracks still accept only typed lengths and auto: fractional values
 in custom properties remain an identified lowering gap requiring typed metadata,
 not runtime string parsing.
+
+### Typed fractional grid variables (2026-09-10)
+
+Variable expressions/tokens now carry optional fractional-track metadata compiled
+from fr dimensions. Both variable evaluation paths preserve it, equality includes
+it, and grid lowering consumes nonnegative fractions directly without parsing
+runtime strings. A native fixture verifies var fallback 1FR/2fr divides a 300px
+grid into 100px/200px tracks. All 68 compiler tests and rebuilt native contracts
+pass. Dynamic invalidation/recovery and minmax expressions inside variable token
+sequences still need coverage/support; this closes simple fractional tokens only.

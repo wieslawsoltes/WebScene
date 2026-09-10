@@ -556,6 +556,8 @@ int main() {
     if ((command.kind == 17 || command.kind == 18) && command.node_id == d.find("variable-probe"))
       shadow_found = true;
   check(shadow_found, "compiled variable shadow reaches scene");
+  check(d.bounds(d.find("fraction-a")).width == 100, "compiled variable fractional first track");
+  check(d.bounds(d.find("fraction-b")).width == 200, "compiled variable fractional second track");
   check(d.bounds(d.find("grid-left")).width == 222, "compiled grid variable resolves");
   check(d.bounds(d.find("grid-right")).width == 252, "compiled grid preserves fixed track");
   check(d.bounds(d.find("variable-probe")).width == 222, "compiled var width resolves");

@@ -55,10 +55,11 @@ struct variable_token {
   std::string text;
   std::optional<webscene_native::css_length> length;
   std::optional<uint32_t> color;
+  std::optional<float> fraction;
   variable_token(const char *value) : text(value) {}
   variable_token(std::string value) : text(std::move(value)) {}
   variable_token(std::string value, std::optional<webscene_native::css_length> l,
-                 std::optional<uint32_t> c) : text(std::move(value)), length(l), color(c) {}
+                 std::optional<uint32_t> c, std::optional<float> f = {}) : text(std::move(value)), length(l), color(c), fraction(f) {}
   bool is_keyword(std::string_view keyword) const {
     if (text.size() != keyword.size()) return false;
     const auto lower = [](unsigned char c) { return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c; };
@@ -67,7 +68,7 @@ struct variable_token {
     return true;
   }
   bool operator==(const variable_token &other) const {
-    return text == other.text && color == other.color &&
+    return text == other.text && color == other.color && fraction == other.fraction &&
       length.has_value() == other.length.has_value() &&
       (!length || (length->value == other.length->value && length->unit == other.length->unit &&
                    length->pixel_offset == other.length->pixel_offset));
@@ -81,6 +82,7 @@ struct variable_expression {
   bool has_fallback{};
   std::optional<webscene_native::css_length> length;
   std::optional<uint32_t> color;
+  std::optional<float> fraction;
 };
 using variable_tokens = std::vector<variable_token>;
 using variable_result = std::optional<variable_tokens>;
@@ -92,7 +94,7 @@ inline variable_result evaluate_variables(const std::vector<variable_expression>
   variable_tokens output;
   for (const auto &expression : expressions) {
     if (expression.type == variable_expression::kind::token) {
-      output.emplace_back(expression.value, expression.length, expression.color);
+      output.emplace_back(expression.value, expression.length, expression.color, expression.fraction);
       continue;
     }
     auto found = variables.find(expression.value);
@@ -150,7 +152,7 @@ inline computed_variables compute_variables(const specified_variables &local,
       variable_tokens output;
       for (const auto &expression : expressions) {
         if (expression.type == variable_expression::kind::token) {
-          output.emplace_back(expression.value, expression.length, expression.color);
+          output.emplace_back(expression.value, expression.length, expression.color, expression.fraction);
           continue;
         }
         auto value = self(self, expression.value);
