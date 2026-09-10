@@ -380,16 +380,17 @@ int main() {
   }
   {
     const auto outlined = d.find("outline-audit");
-    const auto check_outline = [&](float offset) {
+    const auto check_outline = [&](float offset, uint32_t color = 0x2468acffu) {
       const auto &paint = d.render(800, 10000);
       const auto box = d.bounds(outlined);
       check(box.width == 20 && box.height == 20, "outline does not alter layout dimensions");
       check(std::any_of(paint.commands.begin(), paint.commands.end(), [&](const auto &c) {
-        return c.node_id == outlined && c.rgba == 0x2468acffu &&
+        return c.node_id == outlined && c.rgba == color &&
             c.x == box.x - offset - 2 && c.y == box.y - offset - 2;
       }), "outline paint follows signed offset");
     };
     check_outline(0);
+    d.attribute(outlined, "class", "current"); check_outline(0, 0x13579bffu);
     d.attribute(outlined, "class", "inset"); check_outline(-2);
     d.attribute(outlined, "class", "off");
     const auto &paint = d.render(800, 10000);

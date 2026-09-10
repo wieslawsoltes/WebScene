@@ -158,3 +158,10 @@ full Kestrel parity from this CSS inventory or a static diagnostic preview.
   verify outside/inset geometry, none, and restoration. Rounded outline radii
   incorporate signed offset; rounded pixel comparison, currentColor/default width,
   broader shorthand ordering and pseudo-element outline propagation remain pending.
+- Outline follow-through: typed shorthand evaluation now supports component
+  reordering, omitted color/width, thin/medium/thick and whole-value variables.
+  Duplicate literal components fail compilation; invalid substituted components
+  suppress the outline. Native currentColor resolves from the live foreground at
+  paint time. Compiler and native contracts pass, including mutation from explicit
+  color to default currentColor. Other outline styles, longhands and pseudo boxes
+  remain pending; original source-form rows retain their integration gate.

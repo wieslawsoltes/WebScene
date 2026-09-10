@@ -1177,8 +1177,10 @@ void native_document::append_scene(
                 border_left_rgba);
         }
     }
+    const auto outline_rgba = node.style.outline_current_color
+        ? resolved_foreground(node) : node.style.outline_rgba;
     if (paint_self && node.layout.width > 0 && node.layout.height > 0
-        && (node.style.outline_rgba & 0xFFU) != 0U) {
+        && (outline_rgba & 0xFFU) != 0U) {
         const auto outline = std::max(
             0.0F,
             resolve_length(node, node.style.outline_width, node.layout.width, 0));
@@ -1215,7 +1217,7 @@ void native_document::append_scene(
                 outline_y,
                 outline_width,
                 outline_height,
-                with_opacity(node.style.outline_rgba),
+                with_opacity(outline_rgba),
                 node.id,
                 outline_radii.top_left,
                 outline_radii.top_right,
@@ -1228,25 +1230,25 @@ void native_document::append_scene(
                 outline_box.y - outline,
                 outline_box.width + outline * 2.0F,
                 outline,
-                node.style.outline_rgba);
+                outline_rgba);
             append_border_rect(
                 outline_box.x + outline_box.width,
                 outline_box.y,
                 outline,
                 outline_box.height,
-                node.style.outline_rgba);
+                outline_rgba);
             append_border_rect(
                 outline_box.x - outline,
                 outline_box.y + outline_box.height,
                 outline_box.width + outline * 2.0F,
                 outline,
-                node.style.outline_rgba);
+                outline_rgba);
             append_border_rect(
                 outline_box.x - outline,
                 outline_box.y,
                 outline,
                 outline_box.height,
-                node.style.outline_rgba);
+                outline_rgba);
         }
     }
     // An empty overflow viewport still clips all of its contents. In

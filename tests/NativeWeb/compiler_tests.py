@@ -92,6 +92,14 @@ class CompilerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode,0)
             self.assertIn(message,result.stderr)
 
+    def test_outline_shorthand_order_and_defaults(self):
+        for value in ['solid', 'red solid', 'solid 2px', 'red 2px solid', 'thick solid currentColor', 'var(--Outline, solid red)']:
+            result,_=self.compile('<div></div>', 'div { outline:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for value in ['red blue solid', 'solid solid', '1px 2px solid']:
+            result,_=self.compile('<div></div>', 'div { outline:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_compiled_outline_and_offset(self):
         for css in ['outline:2px solid var(--Accent,red); outline-offset:-2px;', 'outline:none;', 'outline:0;']:
             result,_=self.compile('<div></div>', 'div {'+css+'}')

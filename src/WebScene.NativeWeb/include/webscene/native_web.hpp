@@ -205,13 +205,33 @@ public:
   void set_outline(const variable_result &tokens) {
     value_.outline_width = {};
     value_.outline_rgba = 0;
-    if (!tokens || tokens->size() != 3) return;
-    const auto &width = (*tokens)[0].length;
-    const auto &color = (*tokens)[2].color;
-    if (!width || width->unit == length_unit::automatic || width->unit == length_unit::percent || width->value < 0 ||
-        !(*tokens)[1].is_keyword("solid") || !color) return;
-    value_.outline_width = *width;
-    value_.outline_rgba = *color;
+    value_.outline_current_color = false;
+    if (!tokens || tokens->empty() || tokens->size() > 3) return;
+    length width{3, length_unit::pixels};
+    uint32_t color = 0;
+    bool have_width = false, have_color = false, have_style = false, visible = false, current = true;
+    for (const auto &token : *tokens) {
+      if (token.is_keyword("solid") || token.is_keyword("none")) {
+        if (have_style) return;
+        have_style = true; visible = token.is_keyword("solid");
+      } else if (token.color || token.is_keyword("currentcolor")) {
+        if (have_color) return;
+        have_color = true; current = !token.color; color = token.color.value_or(0);
+      } else {
+        if (have_width) return;
+        have_width = true;
+        if (token.is_keyword("thin")) width = {1, length_unit::pixels};
+        else if (token.is_keyword("medium")) width = {3, length_unit::pixels};
+        else if (token.is_keyword("thick")) width = {5, length_unit::pixels};
+        else if (token.length && token.length->unit != length_unit::automatic &&
+            token.length->unit != length_unit::percent && token.length->value >= 0) width = *token.length;
+        else return;
+      }
+    }
+    if (!visible) return;
+    value_.outline_width = width;
+    value_.outline_rgba = color;
+    value_.outline_current_color = current;
   }
   void set_box_shadow(const variable_result &tokens) {
     value_.box_shadow_present = false;
