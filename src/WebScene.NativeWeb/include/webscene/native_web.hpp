@@ -99,6 +99,7 @@ public:
     value_.word_spacing_specified = true;
   }
   void set_font_size(float value) { value_.font_size = value; }
+  void set_flex_wrap(bool value) { value_.flex_wrap = value; }
   void set_flex_grow(float value) { value_.flex_grow = value; }
   void set_flex_shrink(float value) { value_.flex_shrink = value; }
   void set_opacity(float value) { value_.opacity = value; }

@@ -291,6 +291,9 @@ int main() {
     document responsive;
     auto references = compiled_ui::build(responsive);
     responsive.render(1000, 301);
+    check(responsive.bounds(responsive.find("flex-a")).width == 100 &&
+          responsive.bounds(responsive.find("flex-b")).width == 200,
+          "compiled flex shorthand distributes free space");
     check(responsive.bounds(responsive.find("negation")).width == 20, "compiled negation matches absent attribute");
     responsive.attribute(responsive.find("negation"), "data-excluded", "");
     responsive.render(1000, 301);

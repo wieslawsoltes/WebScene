@@ -117,6 +117,14 @@ class CompilerTests(unittest.TestCase):
             self.assertIn('.parts.front()',out.read_text())
         result,_=self.compile('<div></div>', 'div:not(section > div) { width:10px; }')
         self.assertNotEqual(result.returncode,0)
+    def test_flex_shorthand(self):
+        for value in ['1','2','auto','none','initial','1 0 20px','1 30%','2 3']:
+            result,out=self.compile('<div></div>', 'div { flex:'+value+'; flex-wrap:wrap; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_flex_basis',out.read_text())
+        for value in ['-1','1 -2 0','1 1 -2px','1 2 3 4']:
+            result,_=self.compile('<div></div>', 'div { flex:'+value+'; }')
+            self.assertNotEqual(result.returncode,0)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

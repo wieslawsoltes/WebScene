@@ -243,6 +243,37 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "flex-wrap") {
+    if (value != "wrap" && value != "nowrap") throw std::runtime_error("compiled flex-wrap supports wrap and nowrap");
+    return "s.set_flex_wrap(" + std::string(value == "wrap" ? "true" : "false") + ");";
+  }
+  if (name == "flex") {
+    std::string grow = "1", shrink = "1", basis = "0%";
+    if (value == "none") { grow = "0"; shrink = "0"; basis = "auto"; }
+    else if (value == "auto") basis = "auto";
+    else if (value == "initial") { grow = "0"; basis = "auto"; }
+    else {
+      std::istringstream input(value);
+      std::vector<std::string> parts;
+      std::string part;
+      while (input >> part) parts.push_back(part);
+      auto numeric = [](const std::string &s) { return std::regex_match(s, std::regex(R"([0-9]+(?:\.[0-9]+)?)")); };
+      if (parts.empty() || parts.size() > 3) throw std::runtime_error("invalid flex shorthand");
+      if (parts.size() == 1 && !numeric(parts[0])) basis = parts[0];
+      else {
+        if (!numeric(parts[0])) throw std::runtime_error("flex grow requires a nonnegative number");
+        grow = parts[0];
+        if (parts.size() >= 2) {
+          if (numeric(parts[1])) shrink = parts[1];
+          else if (parts.size() == 2) basis = parts[1];
+          else throw std::runtime_error("flex shrink requires a nonnegative number");
+        }
+        if (parts.size() == 3) basis = parts[2];
+      }
+      if (basis.starts_with("-")) throw std::runtime_error("negative flex basis");
+    }
+    return assignments("flex-grow", grow) + assignments("flex-shrink", shrink) + assignments("flex-basis", basis);
+  }
   if (name == "overflow") {
     std::istringstream tokens(value);
     std::string x, y, extra;
