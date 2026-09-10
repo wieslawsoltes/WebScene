@@ -642,15 +642,16 @@ void native_document::layout_children(dom_node& parent)
             authored_column_widths.begin(),
             authored_column_widths.end(),
             columns.begin());
+        const bool fixed_table_layout = parent.style.table_layout_fixed && is_specified(parent.style.width);
         std::vector<bool> fixed_columns(column_count, false);
         std::vector<bool> percentage_columns(column_count, false);
         std::vector<bool> specified_columns(column_count, false);
         for (const auto& row : rows) {
-            if (parent.style.table_layout_fixed && &row != &rows.front()) break;
+            if (fixed_table_layout && &row != &rows.front()) break;
             for (const auto& placement : row.cells) {
-                auto cell_width = parent.style.table_layout_fixed ? 0.0F : intrinsic_size(
+                auto cell_width = fixed_table_layout ? 0.0F : intrinsic_size(
                     *placement.cell, true, track_available_width);
-                if (parent.style.table_layout_fixed
+                if (fixed_table_layout
                     && is_specified(placement.cell->style.width)) {
                     cell_width = resolve_length(
                         *placement.cell,
@@ -686,7 +687,7 @@ void native_document::layout_children(dom_node& parent)
         const auto intrinsic_width = std::accumulate(columns.begin(), columns.end(), 0.0F);
         if (!columns.empty() && track_available_width > intrinsic_width) {
             const auto excess = track_available_width - intrinsic_width;
-            if (parent.style.table_layout_fixed) {
+            if (fixed_table_layout) {
                 std::vector<size_t> distribution_columns;
                 for (size_t column = 0; column < columns.size(); ++column) {
                     if (!specified_columns[column]) distribution_columns.push_back(column);

@@ -1379,3 +1379,12 @@ that pass; auto mode retains its existing behavior. The regression now passes
 with the first cell at 50px, alongside native contracts. Column-element priority,
 auto-width tables, span distribution and browser differential tests remain open.
 The fix is in the shared native layout engine and may affect other hosts using it.
+
+### Fixed table auto-width qualification (2026-09-10)
+
+The fixed column-sizing path now requires a specified table width. With width:auto,
+the existing intrinsic sizing path remains active despite table-layout:fixed.
+Native contracts switch the fixture to auto width, verify later-row content can
+expand the first column, then restore specified width and verify the 50px fixed
+column returns. Rebuilt contracts pass. Percentage definiteness and column-element
+precedence remain open table sizing cases.

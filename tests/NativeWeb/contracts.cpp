@@ -155,6 +155,14 @@ int main() {
         "native colspan mutation restores compiled span");
   check(d.bounds(d.find("fixed-first")).width == 50,
         "fixed table keeps first row width despite later row width");
+  d.attribute(d.find("fixed-audit"), "class", "auto-width");
+  d.render(800, 600);
+  check(d.bounds(d.find("fixed-first")).width > 50,
+        "auto width table retains content sizing despite fixed keyword");
+  d.remove_attribute(d.find("fixed-audit"), "class");
+  d.render(800, 600);
+  check(d.bounds(d.find("fixed-first")).width == 50,
+        "specified width restores fixed first-row sizing");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
