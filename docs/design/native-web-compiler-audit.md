@@ -671,3 +671,14 @@ that a break separates adjacent spans vertically and native removal restores a
 shared line. All 46 compiler tests and native contracts pass. Consecutive/trailing
 breaks, mixed font baselines and browser-rendered comparisons remain part of the
 broader inline formatting audit.
+
+### Layout keyword casing (2026-09-10)
+
+Enum lowering now performs ASCII case-insensitive lookup for display,
+flex-direction, align-items, justify-content, position and box-sizing keywords.
+Previously valid uppercase spellings were rejected. Independent compiler tests
+verify uppercase property/value forms generate identical rule code to lowercase
+forms across all six families. All 47 compiler tests and native contracts pass.
+This normalization is confined to keyword lookup; custom-property names and
+case-sensitive strings are untouched. Other property grammars, function names,
+units and escaped keyword identifiers still need case-handling coverage.

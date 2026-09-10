@@ -659,7 +659,11 @@ static std::string assignments(const std::string &name,
           {"box-sizing",
            {"border_box", {{"border-box", "true"}, {"content-box", "false"}}}}};
   if (auto it = enums.find(name); it != enums.end()) {
-    auto val = it->second.second.find(value);
+    auto keyword = value;
+    std::ranges::transform(keyword, keyword.begin(), [](unsigned char c) {
+      return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : static_cast<char>(c);
+    });
+    auto val = it->second.second.find(keyword);
     if (val == it->second.second.end())
       throw std::runtime_error("unsupported " + name + ": " + value);
     auto m = it->second.first;

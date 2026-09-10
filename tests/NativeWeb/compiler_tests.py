@@ -159,6 +159,15 @@ class CompilerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode,0)
         self.assertIn('find/reveal support',result.stderr)
 
+    def test_layout_keywords_are_ascii_case_insensitive(self):
+        for name,value in [('display','inline-flex'),('flex-direction','column'),('align-items','flex-start'),('justify-content','space-between'),('position','absolute'),('box-sizing','border-box')]:
+            lower,out=self.compile('<div></div>', 'div {'+name+':'+value+';}')
+            self.assertEqual(lower.returncode,0,lower.stderr)
+            expected=[line for line in out.read_text().splitlines() if 'd.add_rule' in line]
+            upper,out=self.compile('<div></div>', 'div {'+name.upper()+':'+value.upper()+';}')
+            self.assertEqual(upper.returncode,0,upper.stderr)
+            self.assertEqual(expected,[line for line in out.read_text().splitlines() if 'd.add_rule' in line])
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)
