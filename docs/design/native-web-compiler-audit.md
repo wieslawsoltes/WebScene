@@ -915,3 +915,14 @@ Compiled fixture regressions verify child movement and upper/lower clamping;
 native contracts pass. Calls before initial layout do not flush layout. Default
 wheel scrolling, scroll events, smooth scrolling, RTL offsets and host interaction
 coverage remain open.
+
+### Native vertical wheel default action (2026-09-10)
+
+Wheel dispatch now performs default vertical scrolling after listeners unless
+preventDefault or document disposal cancels it. The nearest surviving ancestor
+that can move handles the delta; hidden-only containers are not wheel-scrollable.
+Ancestor IDs are captured before dispatch and revalidated to tolerate removal.
+Native contracts verify scrolling, cancellation and resumption after listener
+disposal. Contracts pass. Horizontal/delta-mode support, scroll events, overscroll
+policy, gesture momentum and host frame pacing remain open; current API deltas
+are treated as pixel distances.

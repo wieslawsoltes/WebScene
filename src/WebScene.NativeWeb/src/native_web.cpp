@@ -297,8 +297,19 @@ node_id document::focused() const {
 }
 void document::wheel(float x, float y, float delta_y) {
   state_->check();
+  if (!std::isfinite(delta_y)) throw std::invalid_argument("non-finite wheel delta");
   auto *node = state_->dom.hit_test(state_->dom.body(), x, y);
-  if (node) dispatch(node->id, "wheel", x, y, delta_y);
+  if (!node) return;
+  std::vector<node_id> ancestors;
+  for (auto *p = node; p; p = p->parent) ancestors.push_back(p->id);
+  if (!dispatch(node->id, "wheel", x, y, delta_y)) return;
+  for (auto id : ancestors) {
+    auto *current = state_->dom.find_by_native_id(id);
+    if (!current || !current->style.scroll_y_enabled) continue;
+    auto before = current->scroll_top;
+    scroll_to(id, current->scroll_left, before + delta_y);
+    if (current->scroll_top != before) break;
+  }
 }
 void document::pointer(std::string type, float x, float y, uint32_t buttons) {
   state_->check();

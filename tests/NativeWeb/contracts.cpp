@@ -291,6 +291,19 @@ int main() {
   d.scroll_to(scroll_container, 0, -10);
   d.render(800, 600);
   check(d.scroll_offset(scroll_container).second == 0, "native scroll clamps negative offset");
+  d.render(800, 10000);
+  auto scroll_area = d.bounds(scroll_container);
+  d.wheel(scroll_area.x + 1, scroll_area.y + 1, 12);
+  d.render(800, 10000);
+  check(d.scroll_offset(scroll_container).second == 12, "wheel defaults to nearest native scroll container");
+  {
+    auto cancel_wheel = d.on(scroll_content, "wheel", [](event& e) { e.prevent_default(); });
+    d.wheel(scroll_area.x + 1, scroll_area.y + 1, 9);
+    check(d.scroll_offset(scroll_container).second == 12, "preventDefault cancels native wheel scrolling");
+  }
+  d.wheel(scroll_area.x + 1, scroll_area.y + 1, -7);
+  check(d.scroll_offset(scroll_container).second == 5, "wheel resumes after listener disposal");
+  d.render(800, 600);
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");
