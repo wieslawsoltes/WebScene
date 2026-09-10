@@ -189,6 +189,20 @@ class CompilerTests(unittest.TestCase):
         result,out=self.compile('<div></div>', 'div {font-size:+.5e1PX;}')
         self.assertIn('s.set_font_size(5.0f)',out.read_text())
 
+    def test_length_property_ranges(self):
+        for name in ['width','height','min-width','max-height','padding','gap','flex-basis','border-radius']:
+            for value in ['-1px','-.5%','-2EM']:
+                result,_=self.compile('<div></div>', 'div {'+name+':'+value+';}')
+                self.assertNotEqual(result.returncode,0,name+':'+value)
+            result,_=self.compile('<div></div>', 'div {'+name+':-0px;}')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for name in ['padding','gap','border-radius']:
+            result,_=self.compile('<div></div>', 'div {'+name+':auto;}')
+            self.assertNotEqual(result.returncode,0,name)
+        for name in ['margin','left','right','top','bottom']:
+            result,_=self.compile('<div></div>', 'div {'+name+':-2px;}')
+            self.assertEqual(result.returncode,0,result.stderr)
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)

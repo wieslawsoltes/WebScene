@@ -706,3 +706,16 @@ Regression coverage exercises each property with valid numeric forms, overflow,
 unsupported relative units and separated units; font-size output is checked for
 its exact 5px value. All 49 compiler tests and native contracts pass. Relative
 units for these property profiles and broader keyword/function grammar remain open.
+
+### Literal length range validation (2026-09-10)
+
+Common literal length lowering now rejects negative dimensions, padding, gaps,
+flex basis and corner radii, and rejects auto for padding/gaps/radii. Shorthand
+expansion shares these checks. Signed zero remains valid; negative margins and
+positional offsets remain supported. Previously these invalid declarations could
+be accepted and delegated to engine clamping or auto behavior.
+
+Independent compiler regressions exercise pixels, percentages, uppercase relative
+units, signed zero, invalid auto and valid signed offsets. All 50 compiler tests
+and native contracts pass. Computed-value range semantics through variables/calc
+and browser-style invalid-declaration recovery remain separate open audit items.

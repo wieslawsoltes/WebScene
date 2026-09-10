@@ -581,7 +581,15 @@ static std::string assignments(const std::string &name,
   if (name == "grid-template-columns" || name == "grid-template-rows")
     return "s.set_" + member + "(" + grid_tracks_code(value) + ");";
   if (lengths.contains(name)) {
-    auto result = "s." + member + " = " + length(value) + ";";
+    const auto compiled = length(value);
+    const bool signed_length = name.starts_with("margin-") || name == "left" ||
+        name == "right" || name == "top" || name == "bottom";
+    if (!signed_length && value != "auto" && std::stof(value) < 0)
+      throw std::runtime_error("negative length is invalid for " + name);
+    if (value == "auto" && (name.starts_with("padding-") || name.ends_with("-gap") ||
+                           name.ends_with("-radius")))
+      throw std::runtime_error("auto is invalid for " + name);
+    auto result = "s." + member + " = " + compiled + ";";
     if (name.starts_with("margin-"))
       result +=
           "s." + member + "_auto = " + (value == "auto" ? "true;" : "false;");
