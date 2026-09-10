@@ -5,8 +5,10 @@ Runs unmodified Frameforge assets at upstream commit
 Avalonia 12 opt-in. Production WebScene retains Avalonia 11 defaults.
 
 This is not a working video editor yet. The WebGPU compositor initializes and
-loads the seven-clip demo project, but HTMLVideoElement decoding, Web Audio and
-GPUDevice.importExternalTexture are missing. IndexedDB persistence and
+loads the seven-clip demo project. Native HTML media decoding, retained video
+composition and Web Audio now pass the separate `--media-verify` AOT contract.
+GPUDevice.importExternalTexture and GPUQueue.copyExternalImageToTexture remain
+tracked in #40. IndexedDB persistence and
 MediaRecorder export are also unavailable. Do not interpret successful AOT
 compilation or a painted shell as playback acceptance.
 
@@ -33,6 +35,28 @@ ad-hoc signing, not notarization.
 required media capabilities are absent. It currently fails as expected. The AOT
 publish passes the reachable production trim/AOT warning check.
 
-Next compatibility work must implement real media decode/seek/playback events,
-frame lifetime and GPU external textures, audio graph/synchronization, and export
-with platform regression coverage. No application shims simulate these APIs.
+For media/audio acceptance, publish with `-p:JsonSerializerIsReflectionEnabledByDefault=false`
+and run:
+
+```sh
+python3 experiments/WebScene.Frameforge/verify-media.py \
+  --executable artifacts/frameforge-aot/publish/Frameforge \
+  --native-library /absolute/path/to/libwebscene_native_engine.dylib \
+  --assets artifacts/Frameforge
+```
+
+This verifies actual MIME/HEAD/range responses plus unchanged MediaEngine cut
+preparation, playback/pause, native meter/track behavior and worker waveforms.
+[Media design and coverage](../WebScene.NativeEngine.Probe/native/media/README.md)
+describes bounds and platform scope. Windows/Linux parity is #61/#62; full editor
+rendering, persistent storage, recording and release qualification remain in #53.
+No application shims simulate these APIs.
+
+### Interactive video sample
+
+Run the published executable with `--media-demo` to keep an interactive native
+video window open. It plays the original MP4 assets, with play/pause, seeking,
+mute and clip switching. Resize the window to inspect retained video composition.
+Use the same `FRAMEFORGE_ASSETS` and `WEBSCENE_TEST_NATIVE_LIBRARY` environment
+variables as the media verification harness. This sample does not require the
+full editor or external video WebGPU APIs.

@@ -91,7 +91,7 @@ internal sealed partial class AvaloniaResourceArchive
                 + "Use an empty WebScene resource cache for the capture run.");
         }
 
-        var content = Encoding.UTF8.GetBytes(resource.Content);
+        var content = resource.BinaryContent?.ToArray() ?? Encoding.UTF8.GetBytes(resource.Content);
         lock (_gate)
         {
             var key = TextKey(address, kind, context.Origin);
@@ -128,6 +128,7 @@ internal sealed partial class AvaloniaResourceArchive
             resource.DisplayName,
             resource.Directory)
         {
+            BinaryContent = kind == WebSceneResourceKind.Data ? resource.Content : (ReadOnlyMemory<byte>?)null,
             EntityTag = resource.EntityTag,
             LastModified = resource.LastModified,
             FreshUntil = resource.FreshUntil,

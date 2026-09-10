@@ -4,14 +4,15 @@
 #include <stdexcept>
 
 namespace webscene::media {
-audio_buffer decode_audio(std::span<const uint8_t> bytes, decode_limits limits, std::stop_token stop) {
+audio_buffer decode_audio(std::span<const uint8_t> bytes, decode_limits limits, std::stop_token stop, uint32_t target_sample_rate) {
     if (bytes.empty() || bytes.size() > limits.encoded_bytes)
         throw std::invalid_argument("Encoded audio size is outside the admitted limit");
     if (stop.stop_requested()) throw std::runtime_error("Audio decode cancelled");
-    auto config = ma_decoder_config_init(ma_format_f32, 0, 0);
+    if(target_sample_rate && (target_sample_rate<8000 || target_sample_rate>192000))throw std::invalid_argument("Invalid target audio sample rate");
+    auto config = ma_decoder_config_init(ma_format_f32, 0, target_sample_rate);
     ma_decoder decoder{};
     if (ma_decoder_init_memory(bytes.data(), bytes.size(), &config, &decoder) != MA_SUCCESS)
-        throw std::runtime_error("Unsupported or invalid audio data");
+        return decode_native_audio(bytes, limits, stop, target_sample_rate);
     struct cleanup { ma_decoder* value; ~cleanup() { ma_decoder_uninit(value); } } guard{&decoder};
     audio_buffer result{decoder.outputChannels, decoder.outputSampleRate, {}};
     if (!result.channels || result.channels > 32 || !result.sample_rate)

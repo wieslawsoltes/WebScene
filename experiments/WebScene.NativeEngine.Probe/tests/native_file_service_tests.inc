@@ -36,11 +36,19 @@ void test_native_file_service(webscene_engine* engine) {
       const bytes=new Uint8Array([99,0,1,255,65,99]);
       const blob=new Blob([bytes.subarray(1,5)],{type:'application/octet-stream'});
       const url=URL.createObjectURL(blob);
+      // A Blob can back both a native Save request and a binary fetch. Revoking
+      // its URL must invalidate future fetches without losing either byte copy.
+      fetch(url).then(r=>r.arrayBuffer()).then(b=>globalThis.savedBlobFetch=Array.from(new Uint8Array(b))).catch(e=>globalThis.savedBlobFetch=String(e));
       const a=document.createElement('a');a.href=url;a.download='../café.bin';a.click();URL.revokeObjectURL(url);
+      fetch(url).then(()=>globalThis.revokedBlobRejected=false,()=>globalThis.revokedBlobRejected=true);
     )JS","native-file-save.js");
     request=take();
     require(request->kind==2 && std::string(request->file.name)=="café.bin" && request->file.byte_count==4 && std::memcmp(request->file.bytes,bytes,4)==0,"Save bytes, typed array slice or name sanitization failed");
     const auto save_id=request->request_id;webscene_file_request_release_v1(request);
+    require(evaluate(engine,"JSON.stringify(globalThis.savedBlobFetch)==='[0,1,255,65]'","saved-blob-fetch.js")=="true",
+        "Native Save lost the binary Blob fetch payload");
+    require(evaluate(engine,"revokedBlobRejected","revoked-blob-fetch.js")=="true",
+        "Revoked native Save Blob URL remained fetchable");
     require(webscene_engine_complete_file_request_v1(engine,save_id,1,nullptr,0,nullptr),"Save cancellation failed");
     require(!webscene_engine_complete_file_request_v1(engine,0,0,nullptr,0,nullptr),"Invalid completion accepted");
     execute(engine,"(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([]));a.download='empty.bin';a.click();URL.revokeObjectURL(a.href);})()","empty-save.js");

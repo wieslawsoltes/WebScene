@@ -12,6 +12,7 @@ namespace webscene::graphics {
 // and consumer GPU completion; neither retain nor destruction synchronizes GPU work.
 class iosurface_color final {
     IOSurfaceRef surface_=nullptr;
+    std::shared_ptr<void> external_owner_;
     explicit iosurface_color(IOSurfaceRef surface):surface_(surface) {}
 public:
     ~iosurface_color() { if (surface_) CFRelease(surface_); }
@@ -19,6 +20,17 @@ public:
     iosurface_color& operator=(const iosurface_color&)=delete;
     IOSurfaceRef borrowed_handle() const noexcept { return surface_; }
     size_t allocation_bytes() const noexcept { return IOSurfaceGetAllocSize(surface_); }
+
+    // Keep the decoder's CVPixelBuffer lease, not merely its IOSurface. The
+    // decoder pool may recycle pixels as soon as the pixel buffer is released.
+    static std::shared_ptr<iosurface_color> adopt_bgra8(CVPixelBufferRef pixel, std::shared_ptr<void> owner) {
+        if (!pixel || !owner || CVPixelBufferGetPixelFormatType(pixel)!=kCVPixelFormatType_32BGRA) return {};
+        auto surface=CVPixelBufferGetIOSurface(pixel);
+        if (!surface) return {};
+        auto result=std::shared_ptr<iosurface_color>(new iosurface_color(nullptr));
+        CFRetain(surface); result->surface_=surface; result->external_owner_=std::move(owner);
+        return result;
+    }
 
     // BGRA8 is the negotiated Dawn/Metal-to-CGL diagnostic format. Other formats
     // require explicit negotiation, not reinterpretation of these storage bytes.

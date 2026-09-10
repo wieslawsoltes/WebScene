@@ -1308,7 +1308,7 @@ void native_document::layout_children(dom_node& parent)
             // Replaced inline elements contribute their intrinsic box, even
             // without CSS width/height. Flattening them into text runs loses
             // the box entirely (canvas fallback children are not its contents).
-            if (node.tag == "canvas" || node.tag == "img" || node.tag == "svg"
+            if (node.tag == "canvas" || node.tag == "video" || node.tag == "img" || node.tag == "svg"
                 || node.tag == "input" || node.tag == "select" || node.tag == "textarea")
                 return false;
             // Inline-block and inline-table descendants are atomic inline
@@ -2628,7 +2628,7 @@ void native_document::layout_children(dom_node& parent)
     const auto contains_replaced_content = [&](const auto& self,
                                                 const dom_node& candidate) -> bool {
         if (candidate.tag == "svg" || candidate.tag == "img"
-            || candidate.tag == "canvas" || candidate.tag == "input"
+            || candidate.tag == "canvas" || candidate.tag == "video" || candidate.tag == "input"
             || candidate.tag == "select" || candidate.tag == "textarea") {
             return true;
         }
@@ -3725,7 +3725,7 @@ float native_document::min_content_inline_size(
         return constrain(padding + widest_segment);
     }
     if (node.tag == "input" || node.tag == "select" || node.tag == "textarea"
-        || node.tag == "img" || node.tag == "svg" || node.tag == "canvas") {
+        || node.tag == "img" || node.tag == "svg" || node.tag == "canvas" || node.tag == "video") {
         return intrinsic_size(node, true, available);
     }
 
@@ -4131,11 +4131,15 @@ float native_document::compute_intrinsic_size(
         // applied to the wrapper and used to size its portaled listbox.
         return constrain(columns * measure_text_width("0", node) + padding);
     }
-    if (node.tag == "svg" || node.tag == "img" || node.tag == "canvas") {
+    if (node.tag == "svg" || node.tag == "img" || node.tag == "canvas" || node.tag == "video") {
 #if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
         ++intrinsic_size_branch_counts_for_benchmark[5];
 #endif
         const auto attribute = node.attributes.find(horizontal ? "width" : "height");
+        if (node.tag == "video" && attribute == node.attributes.end()) {
+            const auto& backing=node.canvas().backing;
+            return constrain(static_cast<float>(horizontal?backing.width():backing.height())+padding);
+        }
         if (node.tag == "canvas" && attribute == node.attributes.end()) {
             return constrain((horizontal ? 300.0F : 150.0F) + padding);
         }
@@ -4490,6 +4494,28 @@ void native_document::layout_child(
     layout_rect assigned,
     bool assigned_height_is_definite)
 {
+    // A video's decoded size is intrinsic, not its used CSS height. Resolve
+    // auto height from the final content width before transforms and parent flow
+    // placement; otherwise width:100% stretches a native-resolution-tall image.
+    if (child.tag == "video" && !is_specified(child.style.height)
+        && !child.attributes.contains("height") && !assigned_height_is_definite) {
+        const auto& backing = child.canvas().backing;
+        if (backing.width() > 0 && backing.height() > 0) {
+            const auto horizontal_edges =
+                resolve_length(child, child.style.padding_left, assigned.width, 0)
+                + resolve_length(child, child.style.padding_right, assigned.width, 0)
+                + resolve_length(child, child.style.border_left_width, assigned.width, 0)
+                + resolve_length(child, child.style.border_right_width, assigned.width, 0);
+            const auto vertical_edges =
+                resolve_vertical_padding(child, child.style.padding_top, assigned.height, 0)
+                + resolve_vertical_padding(child, child.style.padding_bottom, assigned.height, 0)
+                + resolve_length(child, child.style.border_top_width, assigned.height, 0)
+                + resolve_length(child, child.style.border_bottom_width, assigned.height, 0);
+            assigned.height = std::max(0.0F, assigned.width - horizontal_edges)
+                * static_cast<float>(backing.height()) / static_cast<float>(backing.width())
+                + vertical_edges;
+        }
+    }
     // A CSS transform changes the painted and hit-test box, not the space the
     // element occupies in its parent's flow. Percentage translations resolve
     // against the transformed element's own border box.
@@ -4619,10 +4645,29 @@ void native_document::layout_child(
             child.layout.height,
             0);
         const auto previous_height = child.layout.height;
-        child.layout.height = std::max(
-            child.layout.height,
-            content_bottom - child.layout.y + padding_bottom + border_bottom);
-        if (child.layout.height > previous_height + 0.01F) {
+        const auto final_content_height = content_bottom - child.layout.y
+            + padding_bottom + border_bottom;
+        // Ordinary auto-height blocks follow their laid-out children, including
+        // replaced content whose used height shrinks after resolving its width.
+        // Keeping the provisional intrinsic height leaves a native-size blank
+        // area below responsive video and pushes following controls offscreen.
+        const auto recompute_auto_block = child.style.display == display_mode::block
+            && !has_visible_text(child.text_content)
+            && !pseudo_generates_box(child.style.before_pseudo())
+            && !pseudo_generates_box(child.style.after_pseudo());
+        const auto minimum_height = is_specified(child.style.min_height)
+            ? resolve_length(child, child.style.min_height, containing_block.height, 0)
+            : 0.0F;
+        child.layout.height = recompute_auto_block
+            ? std::max(minimum_height, final_content_height)
+            : std::max(child.layout.height, final_content_height);
+        if (recompute_auto_block && child.layout.height < previous_height - 0.01F) {
+            // Recompute overflow against the settled viewport. The provisional
+            // content height also participates in scroll extents; retaining it
+            // creates an empty scroll range after responsive content shrinks.
+            layout_children(child);
+        }
+        if (std::abs(child.layout.height - previous_height) > 0.01F) {
             // layout_children() established scroll geometry from the
             // provisional auto height. Wrapped content can then grow this box
             // without changing its public client/scroll metrics, leaving a

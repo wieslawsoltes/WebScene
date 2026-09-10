@@ -8,6 +8,17 @@
         const auto input_dispatch_started = measures_input_dispatch
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
+        // The host can advance its clock after the worker's loop-entry sample
+        // but before this input is dequeued. Start input-triggered transitions
+        // on that clock, rather than immediately expiring them on the next loop.
+        // Observing the timeline does not release RAF or publish another frame.
+        if (measures_input_dispatch) {
+            const auto host_timestamp = observed_host_timestamp_microseconds_.load(
+                std::memory_order_acquire);
+            if (host_timestamp != 0U) {
+                document_.signal_animation_frame(static_cast<double>(host_timestamp) / 1000.0);
+            }
+        }
         switch (event.kind) {
         case WEBSCENE_INPUT_POINTER_MOVE:
         case WEBSCENE_INPUT_POINTER_DOWN:

@@ -22,6 +22,7 @@ internal sealed class StudioApp : Application
             var root = Environment.GetEnvironmentVariable("FRAMEFORGE_ASSETS")
                 ?? Path.Combine(AppContext.BaseDirectory, "Assets");
             _server = new AssetServer(root);
+            Console.WriteLine("Asset origin: " + _server.Origin);
             var view = new NativeWebSceneView(true, url => url.StartsWith(_server.Origin, StringComparison.Ordinal));
             long errors = 0;
             view.JavaScriptException += e => { Interlocked.Increment(ref errors); Console.Error.WriteLine($"JavaScript: {e.Message}\n{e.Stack}"); };
@@ -38,9 +39,27 @@ internal sealed class StudioApp : Application
             {
                 try
                 {
-                    await view.LoadAsync(_server.Origin + "index.html",
+                    var mediaVerify = Environment.GetCommandLineArgs().Contains("--media-verify");
+                    var mediaDemo = Environment.GetCommandLineArgs().Contains("--media-demo");
+                    if (mediaDemo) window.Title = "Video in WebScene";
+                    await view.LoadAsync(_server.Origin + (mediaVerify ? "__webscene-media-verify.html" : mediaDemo ? "__webscene-media-demo.html" : "index.html"),
                         Environment.GetEnvironmentVariable("WEBSCENE_TEST_NATIVE_LIBRARY")
-                        ?? Path.Combine(AppContext.BaseDirectory, "libwebscene_native_engine.dylib"));
+                        ?? Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "webscene_native_engine.dll" : OperatingSystem.IsMacOS() ? "libwebscene_native_engine.dylib" : "libwebscene_native_engine.so"));
+                    if (mediaDemo) return;
+                    if (mediaVerify)
+                    {
+                        for (var i = 0; i < 120; i++)
+                        {
+                            if (await view.EvaluateTextAsync("globalThis.mediaVerification?.complete===true") == "true") break;
+                            await Task.Delay(500);
+                        }
+                        Console.WriteLine("Media verification: " + await view.EvaluateTextAsync("JSON.stringify(globalThis.mediaVerification)"));
+                        var passed = await view.EvaluateTextAsync("globalThis.mediaVerification?.passed===true");
+                        Console.WriteLine($"Rendered scenes: {view.CapturePerformanceSnapshot().Surface.RenderedScenes}");
+                        await view.DisposeAsync();
+                        desktop.Shutdown(passed == "true" && Interlocked.Read(ref errors) == 0 ? 0 : 1);
+                        return;
+                    }
                     await Task.Delay(5000);
                     await view.EvaluateTextAsync("globalThis.frameforge?.ready?.catch(e=>{globalThis.__frameforgeStartupError=String(e.stack||e.message||e);})");
                     if (Environment.GetCommandLineArgs().Contains("--verify")) await Task.Delay(15000);
@@ -99,6 +118,14 @@ internal sealed class AssetServer : IDisposable
         try
         {
             var relative = Uri.UnescapeDataString(context.Request.Url!.AbsolutePath).TrimStart('/');
+            if (relative is "__webscene-media-verify.html" or "__webscene-media-demo.html")
+            {
+                context.Response.ContentType = "text/html; charset=utf-8";
+                var bytes = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, relative == "__webscene-media-demo.html" ? "media-demo.html" : "media-verify.html"));
+                context.Response.ContentLength64 = bytes.Length;
+                await context.Response.OutputStream.WriteAsync(bytes);
+                return;
+            }
             var path = Path.GetFullPath(Path.Combine(_root, relative.Length == 0 ? "index.html" : relative));
             if (!path.StartsWith(_root, StringComparison.Ordinal) || !File.Exists(path))
             { context.Response.StatusCode = 404; return; }
@@ -110,11 +137,61 @@ internal sealed class AssetServer : IDisposable
                 ".json" or ".aureon" => "application/json",
                 ".wgsl" => "text/plain; charset=utf-8",
                 ".svg" => "image/svg+xml",
+                ".mp4" or ".m4v" => "video/mp4",
+                ".mov" => "video/quicktime",
+                ".wav" => "audio/wav",
+                ".mp3" => "audio/mpeg",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
                 _ => "application/octet-stream"
             };
-            var bytes = await File.ReadAllBytesAsync(path);
-            context.Response.ContentLength64 = bytes.Length;
-            await context.Response.OutputStream.WriteAsync(bytes);
+            if (context.Request.HttpMethod is not ("GET" or "HEAD"))
+            { context.Response.StatusCode = 405; return; }
+            await using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            long start = 0, end = input.Length - 1;
+            context.Response.Headers["Accept-Ranges"] = "bytes";
+            var range = context.Request.Headers["Range"];
+            if (range is not null)
+            {
+                var valid = range.StartsWith("bytes=", StringComparison.Ordinal);
+                var parts = valid ? range[6..].Split('-') : [];
+                valid &= parts.Length == 2;
+                if (valid && parts[0].Length == 0)
+                {
+                    valid = long.TryParse(parts[1], out var suffix) && suffix > 0;
+                    if (valid) start = Math.Max(0, input.Length - suffix);
+                }
+                else if (valid)
+                {
+                    valid = long.TryParse(parts[0], out start) && start >= 0;
+                    if (parts[1].Length != 0)
+                    {
+                        valid &= long.TryParse(parts[1], out var requestedEnd);
+                        end = Math.Min(end, requestedEnd);
+                    }
+                }
+                if (!valid || start > end || start >= input.Length)
+                {
+                    context.Response.StatusCode = 416;
+                    context.Response.Headers["Content-Range"] = $"bytes */{input.Length}";
+                    return;
+                }
+                context.Response.StatusCode = 206;
+                context.Response.Headers["Content-Range"] = $"bytes {start}-{end}/{input.Length}";
+            }
+            var remaining = Math.Max(0, end - start + 1);
+            context.Response.ContentLength64 = remaining;
+            if (context.Request.HttpMethod == "HEAD") return;
+            input.Position = start;
+            var buffer = new byte[65536];
+            while (remaining > 0)
+            {
+                var count = await input.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)));
+                if (count == 0) throw new EndOfStreamException("Media file changed during response.");
+                await context.Response.OutputStream.WriteAsync(buffer.AsMemory(0, count));
+                remaining -= count;
+            }
         }
         catch (Exception e) { Console.Error.WriteLine($"Asset server: {e.Message}"); }
         finally { context.Response.Close(); }

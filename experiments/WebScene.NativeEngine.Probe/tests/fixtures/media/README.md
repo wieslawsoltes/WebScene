@@ -12,3 +12,5 @@ The name denotes a frame-ordered motion fixture; it has no burned-in timecode.
 FFmpeg is a fixture-generation tool only, not a WebScene runtime dependency.
 Tests decode different timestamps and verify changed pixels and native frame
 ownership. Generated stereo PCM fixtures in the test verify exact channel values.
+
+`flash-click.mp4` is a generated three-second 64x48/30fps H.264/AAC fixture: a white frame and 10ms/1kHz tone at each integer second, black/silence otherwise. It contains no third-party content. Native tests compare decoded frame timestamps with actual mixed/recorded PCM onset, with a 10ms tolerance; this measures pipeline timestamps, not physical speaker/display latency.

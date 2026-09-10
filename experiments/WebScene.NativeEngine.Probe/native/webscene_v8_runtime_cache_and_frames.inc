@@ -1749,7 +1749,7 @@
                 }
                 toJSON() { return this.toString(); }
                 static createObjectURL(blob) { return __webSceneCreateObjectUrl(blob); }
-                static revokeObjectURL(url) { __webSceneRevokeObjectUrl(url); }
+                static revokeObjectURL(url) { __webSceneRevokeObjectUrl(String(url)); }
               }
               class WebSceneDOMException extends Error {
                 constructor(message = '', name = 'Error') {

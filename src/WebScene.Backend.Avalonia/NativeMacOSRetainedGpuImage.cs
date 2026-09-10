@@ -70,7 +70,7 @@ internal sealed class NativeMacOSRetainedGpuImage : INativeRetainedGpuImage
     {
         Check(lease);
         if (IsRetiring) throw new InvalidOperationException("A retiring GPU image cannot be drawn again.");
-        lease.SkCanvas.DrawImage(_image!, destination, paint);
+        NativeGpuImageSampling.Draw(lease.SkCanvas, _image!, destination, paint);
     }
     public void Retire(ISkiaSharpApiLease lease)
     {

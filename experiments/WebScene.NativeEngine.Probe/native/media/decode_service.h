@@ -16,23 +16,25 @@ class decode_service {
     std::condition_variable wake_;
     std::deque<std::function<void(std::stop_token)>> pending_;
     bool closing_{};
+    std::function<void()> notify_;
     std::jthread worker_;
     template<class Result, class Work> std::future<Result> submit(Work work) {
         auto promise = std::make_shared<std::promise<Result>>();
         auto future = promise->get_future();
         std::lock_guard lock(mutex_);
         if (closing_ || pending_.size() >= 8) throw std::runtime_error("Media decode queue unavailable");
-        pending_.push_back([promise, work = std::move(work)](std::stop_token stop) mutable {
+        pending_.push_back([this, promise, work = std::move(work)](std::stop_token stop) mutable {
             try {
                 if (stop.stop_requested()) throw std::runtime_error("Media service closed");
                 promise->set_value(work(stop));
             } catch (...) { promise->set_exception(std::current_exception()); }
+            if(notify_)notify_();
         });
         wake_.notify_one();
         return future;
     }
 public:
-    decode_service() : worker_([this](std::stop_token stop) {
+    explicit decode_service(std::function<void()> notify = {}) : notify_(std::move(notify)), worker_([this](std::stop_token stop) {
         for (;;) {
             std::function<void(std::stop_token)> work;
             {
@@ -53,10 +55,10 @@ public:
         worker_.request_stop(); wake_.notify_all();
         if (worker_.joinable()) worker_.join();
     }
-    std::future<audio_buffer> audio(std::shared_ptr<const encoded_source> source, decode_limits limits = {}) {
+    std::future<audio_buffer> audio(std::shared_ptr<const encoded_source> source, decode_limits limits = {}, uint32_t target_sample_rate = 0) {
         if (!source) throw std::invalid_argument("Missing media source");
-        return submit<audio_buffer>([source = std::move(source), limits](std::stop_token stop) {
-            return decode_audio(source->bytes, limits, stop);
+        return submit<audio_buffer>([source = std::move(source), limits, target_sample_rate](std::stop_token stop) {
+            return decode_audio(source->bytes, limits, stop, target_sample_rate);
         });
     }
     std::future<video_frame> video(std::shared_ptr<const encoded_source> source, double seconds, decode_limits limits = {}) {

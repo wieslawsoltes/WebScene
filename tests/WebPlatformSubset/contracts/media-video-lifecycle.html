@@ -1,0 +1,43 @@
+<!doctype html><meta charset="utf-8">
+<script>
+window.__webSceneWptState={complete:false,harness:null,results:[],errors:[],diagnostics:[]};
+const contracts=[];
+function promise_test(test,name){contracts.push({test,name});}
+function assert_true(value){if(!value)throw Error('Expected true');}
+function assert_false(value){assert_true(!value);}
+function assert_equals(a,b){if(!Object.is(a,b))throw Error('Expected '+b+', got '+a);}
+function assert_array_equals(a,b){assert_equals(JSON.stringify(a),JSON.stringify(b));}
+function assert_approx_equals(a,b,t){if(Math.abs(a-b)>t)throw Error('Expected approximately '+b+', got '+a);}
+function assert_throws_js(type,f){try{f();}catch(e){assert_true(e instanceof type);return;}throw Error('Expected exception');}
+function assert_throws_dom(name,f){try{f();}catch(e){assert_equals(e.name,name);return;}throw Error('Expected DOMException');}
+async function promise_rejects_js(t,type,promise){let failed=false;try{await promise;}catch(e){failed=true;assert_true(e instanceof type);}assert_true(failed);}
+setTimeout(async()=>{for(const {test,name} of contracts){const cleanup=[];try{await Promise.race([test({add_cleanup:f=>cleanup.push(f)}),new Promise((_,reject)=>setTimeout(()=>reject(Error('Contract timeout')),5000))]);__webSceneWptState.results.push({name,status:'PASS',message:null,stack:null});}catch(e){__webSceneWptState.results.push({name,status:'FAIL',message:String(e),stack:e.stack});}finally{for(const f of cleanup)await f();}}__webSceneWptState.harness={status:__webSceneWptState.results.some(r=>r.status!=='PASS')?1:0,message:null,stack:null};__webSceneWptState.complete=true;},0);
+</script>
+<script>
+promise_test(async t=>{
+ const video=document.createElement('video');video.style.width='128px';video.style.height='96px';video.muted=true;document.body.appendChild(video);t.add_cleanup(()=>{video.removeAttribute('src');video.remove();});
+ const event=name=>new Promise((resolve,reject)=>{video.addEventListener(name,resolve,{once:true});video.addEventListener('error',()=>reject(Error(video.error.message)),{once:true});});
+ let ready=event('canplay');video.src='resources/media/numbered-motion.mp4';await ready;
+ assert_true(video instanceof HTMLVideoElement);assert_equals(video.videoWidth,64);assert_equals(video.videoHeight,48);assert_approx_equals(video.duration,2,.05);
+ // Auto height follows decoded aspect ratio at the resolved CSS width.
+ video.style.height='auto';
+ for(const width of [320,160,480]){
+  video.style.width=width+'px';
+  const box=video.getBoundingClientRect();assert_approx_equals(box.width,width,.1);assert_approx_equals(box.height,width*48/64,.1);
+ }
+ const wrapper=document.createElement('div');document.body.appendChild(wrapper);wrapper.appendChild(video);t.add_cleanup(()=>wrapper.remove());
+ video.style.width='100%';video.style.display='block';
+ for(const width of [400,32,200,16,600]){
+  wrapper.style.width=width+'px';
+  const box=video.getBoundingClientRect();assert_approx_equals(box.width,width,.1);assert_approx_equals(box.height,width*48/64,.1);
+  assert_approx_equals(wrapper.getBoundingClientRect().height,box.height,.1);
+  assert_approx_equals(wrapper.scrollHeight,Math.round(box.height),1);
+ }
+ video.style.height='96px';video.style.width='128px';
+ assert_approx_equals(video.getBoundingClientRect().height,96,.1);
+ let seek=event('seeked');for(let i=0;i<40;i++)video.currentTime=i%2?.25:1.5;await seek;assert_false(video.seeking);assert_equals(video.currentTime,.25);assert_equals(video.played.length,0);
+ seek=event('seeked');video.currentTime=video.duration;await seek;assert_equals(video.currentTime,video.duration);
+ video.currentTime=.5;ready=event('canplay');video.src='resources/media/numbered-motion.mp4';await ready;assert_equals(video.currentTime,0);assert_false(video.seeking);
+ await video.play();await new Promise(resolve=>setTimeout(resolve,100));video.pause();assert_true(video.currentTime>0);assert_true(video.played.length>0);
+},'Real H.264 dimensions, responsive aspect ratio, rapid seek coalescing, end seek, source replacement and playback');
+</script>

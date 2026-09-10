@@ -1,3 +1,11 @@
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+#include "media/media_session.h"
+#include "media/audio_graph.h"
+#include "media/decode_service.h"
+#if defined(__APPLE__)
+#include "graphics/iosurface_canvas_images.h"
+#endif
+#endif
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
 #include "graphics/platform_webgpu_canvas.h"
 #endif
@@ -1271,6 +1279,13 @@ struct v8_dom_runtime::implementation final {
             body,
             content_type};
         const auto local_context = info.GetIsolate()->GetCurrentContext();
+        if(specifier.starts_with("blob:")) {
+            auto resolver=v8::Promise::Resolver::New(local_context).ToLocalChecked();
+            auto found=self->object_url_binary.find(specifier);
+            if(found==self->object_url_binary.end()||found->second.origin!=resource_origin(base))resolver->Reject(local_context,v8::Exception::TypeError(js_string(info.GetIsolate(),"Blob URL is unavailable for this origin"))).Check();
+            else {auto value=v8::Object::New(info.GetIsolate());auto bytes=v8::ArrayBuffer::New(info.GetIsolate(),found->second.bytes.size());if(!found->second.bytes.empty())std::memcpy(bytes->GetBackingStore()->Data(),found->second.bytes.data(),found->second.bytes.size());value->CreateDataProperty(local_context,js_string(info.GetIsolate(),"body"),bytes).Check();value->CreateDataProperty(local_context,js_string(info.GetIsolate(),"url"),js_dom_string(info.GetIsolate(),specifier)).Check();resolver->Resolve(local_context,value).Check();}
+            info.GetReturnValue().Set(resolver->GetPromise());return;
+        }
         if (self->pending_fetches.size() >= maximum_pending_fetches) {
             info.GetIsolate()->ThrowException(v8::Exception::Error(
                 js_string(info.GetIsolate(), "Too many pending fetch requests")));
@@ -3200,7 +3215,7 @@ struct v8_dom_runtime::implementation final {
         install_console(local_context, global);
         install_host_bridge(local_context);
 
-        constexpr std::string_view crypto_source = R"JS(
+        constexpr std::string_view crypto_source_parts[] = {R"JS(
             class WebSceneBlob {
               constructor(parts = [], options = {}) {
                 __webSceneRecordWebApi(
@@ -3211,7 +3226,7 @@ struct v8_dom_runtime::implementation final {
                 for (const part of parts) {
                   let bytes;
                   if (part instanceof WebSceneBlob) {
-                    bytes = part._bytes;
+                    bytes=part._bytes;
                   } else if (part instanceof ArrayBuffer) {
                     bytes = new Uint8Array(part);
                   } else if (ArrayBuffer.isView(part)) {
@@ -3233,11 +3248,9 @@ struct v8_dom_runtime::implementation final {
                 this._text = Array.from(parts, String).join('');
               }
               toString() { return this._text; }
-              async text() { return new TextDecoder().decode(this._bytes); }
-              async arrayBuffer() { return this._bytes.slice().buffer; }
-              slice(start=0, end=this.size, type='') {
-                return new WebSceneBlob([this._bytes.slice(start,end)], {type});
-              }
+              text() { return Promise.resolve(new TextDecoder().decode(this._bytes)); }
+              arrayBuffer() { return Promise.resolve(this._bytes.slice().buffer); }
+              slice(start=0,end=this.size,type='') {return new WebSceneBlob([this._bytes.slice(start,end)],{type});}
             }
             globalThis.File = class File extends WebSceneBlob {
               constructor(parts, name, options={}) {
@@ -3362,6 +3375,7 @@ struct v8_dom_runtime::implementation final {
                 if (form !== undefined) {
                   if (!(form instanceof HTMLFormElement)) throw new TypeError('FormData requires an HTMLFormElement');
                   const isSubmit = control => control && ((control.tagName === 'BUTTON' && (!control.type || control.type === 'submit')) ||
+        )JS", R"JS(
                     (control.tagName === 'INPUT' && ['submit', 'image'].includes(control.type)));
                   if (submitter !== null) {
                     if (!(submitter instanceof HTMLElement) || !isSubmit(submitter)) throw new TypeError('FormData submitter must be a submit button');
@@ -3482,7 +3496,7 @@ struct v8_dom_runtime::implementation final {
               }
               toJSON() { return this.toString(); }
               static createObjectURL(blob) { return __webSceneCreateObjectUrl(blob); }
-              static revokeObjectURL(url) { __webSceneRevokeObjectUrl(url); }
+              static revokeObjectURL(url) { __webSceneRevokeObjectUrl(String(url)); }
             }
             class WebSceneDOMException extends Error {
               constructor(message = '', name = 'Error') {
@@ -3499,6 +3513,7 @@ struct v8_dom_runtime::implementation final {
                   InUseAttributeError: 10,
                   InvalidStateError: 11,
                   SyntaxError: 12,
+        )JS", R"JS(
                   InvalidModificationError: 13,
                   NamespaceError: 14,
                   InvalidAccessError: 15,
@@ -3536,7 +3551,9 @@ struct v8_dom_runtime::implementation final {
                 }
               }, configurable: true }
             });
-        )JS";
+        )JS"};
+        std::string crypto_source;
+        for (const auto part : crypto_source_parts) crypto_source.append(part);
         auto crypto_script = v8::Script::Compile(
             local_context,
             js_string(isolate, std::string(crypto_source).c_str())).ToLocalChecked();
@@ -3556,8 +3573,12 @@ struct v8_dom_runtime::implementation final {
         install_editor_web_platform_globals(local_context);
         install_tree_walker_platform(local_context);
         install_custom_elements_platform(local_context);
+        local_context->Global()->Set(local_context,js_string(isolate,"__webSceneRevokeObjectUrl"),v8::Function::New(local_context,revoke_object_url).ToLocalChecked()).Check();
         install_fetch_globals(local_context);
         install_intersection_observer_polyfill(local_context);
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        install_media_globals(local_context);
+#endif
     }
 
     void install_fetch_globals(v8::Local<v8::Context> local_context)
@@ -3616,7 +3637,7 @@ struct v8_dom_runtime::implementation final {
 
             class WebSceneResponse {
               constructor(body = '', options = {}) {
-                this._body = String(body ?? '');
+                this._body = body instanceof ArrayBuffer ? new Uint8Array(body.slice(0)) : ArrayBuffer.isView(body) ? new Uint8Array(body.buffer.slice(body.byteOffset,body.byteOffset+body.byteLength)) : body instanceof Blob ? body._bytes.slice() : new TextEncoder().encode(String(body ?? ''));
                 this.bodyUsed = false;
                 this.status = Number(options.status ?? 200);
                 this.statusText = String(options.statusText ?? 'OK');
@@ -3631,10 +3652,18 @@ struct v8_dom_runtime::implementation final {
                   return Promise.reject(new TypeError('Response body already used'));
                 }
                 this.bodyUsed = true;
-                return Promise.resolve(this._body);
+                return Promise.resolve(new TextDecoder().decode(this._body));
               }
               json() {
                 return this.text().then(value => JSON.parse(value));
+              }
+              arrayBuffer() {
+                if(this.bodyUsed)return Promise.reject(new TypeError('Response body already used'));
+                this.bodyUsed=true;return Promise.resolve(this._body.slice().buffer);
+              }
+              blob() {
+                if(this.bodyUsed)return Promise.reject(new TypeError('Response body already used'));
+                this.bodyUsed=true;return Promise.resolve(new Blob([this._body],{type:this.headers.get('content-type')||''}));
               }
               clone() {
                 if (this.bodyUsed) throw new TypeError('Response body already used');
@@ -3665,7 +3694,7 @@ struct v8_dom_runtime::implementation final {
               }
             }
 
-            function webSceneFetch(input, options = {}) {
+            function webSceneFetchInternal(input, options = {}) {
               const request = new WebSceneRequest(input, options);
               if ((request.method === 'GET' || request.method === 'HEAD')
                   && request.body !== null) {
@@ -3729,6 +3758,17 @@ struct v8_dom_runtime::implementation final {
               } catch (error) {
                 return Promise.reject(error);
               }
+            }
+
+            function webSceneFetch(input, options = {}) {
+              const signal=options.signal ?? input?.signal;
+              if(!signal)return webSceneFetchInternal(input,options);
+              if(signal.aborted)return Promise.reject(signal.reason ?? new DOMException('Fetch aborted','AbortError'));
+              return new Promise((resolve,reject)=>{
+                const abort=()=>reject(signal.reason ?? new DOMException('Fetch aborted','AbortError'));
+                signal.addEventListener('abort',abort,{once:true});
+                webSceneFetchInternal(input,options).then(resolve,reject).finally(()=>signal.removeEventListener('abort',abort));
+              });
             }
 
             class WebSceneXMLHttpRequest {
@@ -4207,6 +4247,7 @@ struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_clone.inc"
 #include "webscene_v8_runtime_modules.inc"
 #include "webscene_v8_runtime_workers.inc"
+#include "webscene_v8_runtime_media.inc"
 #include "webscene_v8_runtime_navigation.inc"
     // Keep these fragments in one translation unit: their order and direct
     // visibility preserve the runtime's existing release code generation.
@@ -4615,6 +4656,9 @@ void v8_dom_runtime::signal_animation_frame(double timestamp_ms)
         ? timestamp_ms
         : std::chrono::duration<double, std::milli>(now.time_since_epoch()).count();
     impl_->last_animation_frame_timestamp_ms = timestamp;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    impl_->signal_media_presentation(timestamp);
+#endif
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     // Admit a new RAF batch only when configured canvases can obtain storage.
     // Existing current textures still need their rendering opportunity to end.
@@ -4657,6 +4701,9 @@ bool v8_dom_runtime::pump_animation_frame_task()
     v8::HandleScope handle_scope(impl_->isolate);
     auto local_context = impl_->context.Get(impl_->isolate);
     v8::Context::Scope context_scope(local_context);
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    impl_->drain_media();
+#endif
     const bool result=impl_->drain_animation_frame_task()&&impl_->promote_pending_promise_error();
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     impl_->finish_gpu_rendering_opportunity(result);
@@ -4679,6 +4726,12 @@ uint8_t v8_dom_runtime::host_animation_frame_demand() const noexcept
         : uint8_t{0U};
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
     for(const auto& [key,canvas]:impl_->gpu_canvases)if(canvas.context->has_current_texture()){demand|=1U;break;}
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    // Media requires continuous host opportunities even while its JS RAF is
+    // already admitted/running. Otherwise that brief gap suppresses a refresh.
+    for (const auto& [key, binding] : impl_->media_bindings)
+        if (binding->control->playing.load()) { demand |= 1U; break; }
 #endif
     if (impl_->is_text_control(impl_->active_element)
         && impl_->active_element->mutable_form_control().input_focused) {
@@ -4841,6 +4894,12 @@ bool v8_dom_runtime::pump_task()
 
 bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    if(impl_->media_work_ready.load(std::memory_order_acquire))return true;
+#if defined(__APPLE__)
+    if(impl_->media_images_ready&&impl_->media_images_ready->ready.load(std::memory_order_acquire))return true;
+#endif
+#endif
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
     if (impl_->graphics && impl_->graphics->has_ready_work()) return true;
 #if (defined(__APPLE__) || defined(_WIN32))

@@ -306,6 +306,7 @@ cmake_args=(
   -B "$build_dir"
   -DCMAKE_BUILD_TYPE="$cmake_build_type"
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON
+  -DWEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA=ON
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS="$graphics_cmake"
   -DWEBSCENE_GRAPHICS_SDK_ROOT="$graphics_sdk"
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON
@@ -406,6 +407,11 @@ if [[ "$v8_snapshot" == bootstrap \
   echo "Native engine build did not produce its bootstrap snapshot sidecars." >&2
   exit 1
 fi
+miniaudio_license="$build_dir/webscene-miniaudio-LICENSE"
+if [[ ! -f "$miniaudio_license" ]]; then
+  echo "Miniaudio license is missing from the media-enabled native build." >&2
+  exit 1
+fi
 ixwebsocket_license="$build_dir/_deps/webscene_ixwebsocket-src/LICENSE.txt"
 if [[ ! -f "$ixwebsocket_license" ]]; then
   echo "IXWebSocket license was not found at '$ixwebsocket_license'." >&2
@@ -426,6 +432,8 @@ pack_args=(
   "-p:WebSceneNativeEngineRid=$rid"
   "-p:WebSceneNativeEnginePath=$native_path"
   "-p:WebSceneNativeEngineIcuDataPath=$icu_data"
+  "-p:WebSceneNativeEngineMedia=true"
+  "-p:WebSceneNativeEngineMiniaudioLicensePath=$miniaudio_license"
   "-p:WebSceneNativeEngineV8LicensePath=$v8_license"
   "-p:WebSceneNativeEngineIcuLicensePath=$icu_license"
   "-p:WebSceneNativeEngineIXWebSocketLicensePath=$ixwebsocket_license"
@@ -480,6 +488,16 @@ WEBSCENE_VARIABLE_FONT_INSTANCING=1 dotnet run \
   --native-library "$package_native_path" \
   --native-cache-directory "$build_dir/code-cache" \
   --output "$build_dir/wpt-results"
+
+media_profiles=(webscene-media-runtime-profile.json)
+if [[ "$expected_kernel" == Darwin ]]; then
+  media_profiles+=(webscene-macos-video-runtime-profile.json)
+fi
+for profile in "${media_profiles[@]}"; do
+  dotnet run --project "$repo_root/tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj" \
+    -c Release -- --manifest "$repo_root/tests/WebPlatformSubset/$profile" --selection required \
+    --native-library "$package_native_path" --output "$build_dir/$profile-results"
+done
 
 WEBSCENE_TEST_NATIVE_LIBRARY="$package_native_path" \
   WEBSCENE_VARIABLE_FONT_INSTANCING=1 \

@@ -1928,6 +1928,13 @@
             info.GetIsolate(), self->enqueue_host_request(local_context, request)));
     }
 
+    static void revoke_object_url(const v8::FunctionCallbackInfo<v8::Value>& info) {
+        auto* self=current(info.GetIsolate());if(!self||!info.Length())return;
+        auto url=to_utf8(info.GetIsolate(),info[0]);auto found=self->object_url_binary.find(url);
+        if(found!=self->object_url_binary.end()&&found->second.origin==resource_origin(self->current_base_address())){
+            self->object_url_file_data.erase(url);self->object_url_binary.erase(found);self->object_urls.erase(url);self->object_url_download_payloads.erase(url);self->object_url_canvas_node_ids.erase(url);
+        }
+    }
     static void create_object_url(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -1935,6 +1942,7 @@
         std::string download_payload;
         native_file_data file_bytes;
         bool has_file_bytes=false;
+        std::string binary_payload;
         uint32_t canvas_node_id = 0;
         if (info.Length() > 0 && info[0]->IsObject()) {
             auto local_context = info.GetIsolate()->GetCurrentContext();
@@ -1967,6 +1975,7 @@
                     file_bytes.mime=type;
                     if(view->ByteLength()) file_bytes.bytes.assign(bytes,bytes+view->ByteLength());
                 }
+                if(view->ByteLength())binary_payload.assign(reinterpret_cast<const char*>(bytes),view->ByteLength());
                 const auto is_textual = type.starts_with("text/")
                     || type == "application/xhtml+xml"
                     || type == "application/xml"
@@ -1984,6 +1993,7 @@
         const auto url = "blob:webscene-native/" + std::to_string(self->next_object_url_id++);
         if(has_file_bytes) self->object_url_file_data[url]=std::move(file_bytes);
         self->object_urls[url] = std::move(payload);
+        self->object_url_binary[url]={std::move(binary_payload),resource_origin(self->current_base_address())};
         if (!download_payload.empty()) {
             self->object_url_download_payloads[url] = std::move(download_payload);
         }
@@ -2281,14 +2291,4 @@
         }
 #endif
         if (capture) self->diagnostics->publish(std::move(record));
-    }
-
-    static void revoke_object_url(const v8::FunctionCallbackInfo<v8::Value>& info) {
-        if(info.Length()==0) return;
-        auto* self=current(info.GetIsolate());
-        const auto url=to_utf8(info.GetIsolate(),info[0]);
-        self->object_urls.erase(url);
-        self->object_url_download_payloads.erase(url);
-        self->object_url_file_data.erase(url);
-        self->object_url_canvas_node_ids.erase(url);
     }

@@ -163,6 +163,8 @@
     // the authored Blob text, while an <a download> activation needs the exact
     // byte payload and MIME type. Keep both representations under the same URL.
     std::unordered_map<std::string, std::string> object_url_download_payloads;
+    struct binary_object_url {std::string bytes,origin;};
+    std::unordered_map<std::string,binary_object_url> object_url_binary;
     // Canvas.toBlob() intentionally carries no encoded bytes. Preserve its
     // retained canvas identity across URL.createObjectURL() so an anchor
     // download can ask the desktop compositor for the exact PNG pixels.

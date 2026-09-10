@@ -1,0 +1,25 @@
+{
+  "profile": "webscene-macos-video-runtime-1",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "deviceScaleFactor": 2
+  },
+  "required": [
+    {
+      "path": "contracts/media-video-lifecycle.html",
+      "type": "contract",
+      "nativeNavigation": true,
+      "capabilities": [
+        "html-media-elements",
+        "native-macos-video"
+      ],
+      "reason": "macOS native H.264 provider contract; unsupported platforms must not run or report video conformance."
+    }
+  ],
+  "candidate": [],
+  "harnessBlocked": [],
+  "excluded": []
+}

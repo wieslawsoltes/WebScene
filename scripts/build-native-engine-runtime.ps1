@@ -206,6 +206,7 @@ $buildDir = if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
 & cmake -S (Join-Path $repoRoot "experiments/WebScene.NativeEngine.Probe") -B $buildDir `
     -A $(if ($cpu -eq "arm64") { "ARM64" } else { "x64" }) `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON `
+    -DWEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA=ON `
     "-DWEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=$graphicsCMake" `
     "-DWEBSCENE_GRAPHICS_SDK_ROOT=$GraphicsSdk" `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON `
@@ -243,6 +244,8 @@ if ($LASTEXITCODE -ne 0) { throw "Native WebScene engine tests failed." }
 
 $nativePath = Join-Path $buildDir "Release/webscene_native_engine.dll"
 if (-not (Test-Path $nativePath)) { throw "Native engine build did not produce '$nativePath'." }
+$miniaudioLicense = Join-Path $buildDir "webscene-miniaudio-LICENSE"
+if (-not (Test-Path $miniaudioLicense)) { throw "Miniaudio license is missing from the media-enabled native build." }
 $ixWebSocketLicense = Join-Path $buildDir "_deps/webscene_ixwebsocket-src/LICENSE.txt"
 $mbedTlsLicense = Join-Path $buildDir "_deps/webscene_mbedtls-src/LICENSE"
 if (-not (Test-Path $ixWebSocketLicense)) {
@@ -258,6 +261,8 @@ $packArguments = @(
     "-p:WebSceneNativeEngineRid=$Rid",
     "-p:WebSceneNativeEnginePath=$nativePath",
     "-p:WebSceneNativeEngineIcuDataPath=$icuData",
+    "-p:WebSceneNativeEngineMedia=true",
+    "-p:WebSceneNativeEngineMiniaudioLicensePath=$miniaudioLicense",
     "-p:WebSceneNativeEngineV8LicensePath=$v8License",
     "-p:WebSceneNativeEngineIcuLicensePath=$icuLicense",
     "-p:WebSceneNativeEngineIXWebSocketLicensePath=$ixWebSocketLicense",
@@ -315,6 +320,11 @@ try {
         --native-cache-directory (Join-Path $buildDir "code-cache") `
         --output (Join-Path $buildDir "wpt-results")
     if ($LASTEXITCODE -ne 0) { throw "Required native compatibility profile failed." }
+
+    & dotnet run --project (Join-Path $repoRoot "tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj") `
+        -c Release -- --manifest (Join-Path $repoRoot "tests/WebPlatformSubset/webscene-media-runtime-profile.json") `
+        --selection required --native-library $packageNativePath --output (Join-Path $buildDir "media-contracts")
+    if ($LASTEXITCODE -ne 0) { throw "Required native media/audio contracts failed." }
 
     $previousNativeEnginePath = $env:WEBSCENE_NATIVE_ENGINE_PATH
     $previousTestNativeLibrary = $env:WEBSCENE_TEST_NATIVE_LIBRARY
