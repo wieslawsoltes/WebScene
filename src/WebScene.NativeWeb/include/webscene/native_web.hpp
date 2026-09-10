@@ -149,6 +149,27 @@ public:
     value_.border_bottom_rgba = color;
     value_.border_bottom_current_color = current;
   }
+  void set_box_shadow(const variable_result &tokens) {
+    value_.box_shadow_present = false;
+    if (!tokens || tokens->size() < 3 || tokens->size() > 5) return;
+    // First supported shadow grammar: x y [blur [spread]] color.
+    // Typed payloads were parsed by the compiler, never by this writer.
+    const auto &color = tokens->back().color;
+    if (!color) return;
+    float values[4]{};
+    for (size_t i = 0; i + 1 < tokens->size(); ++i) {
+      const auto &length = (*tokens)[i].length;
+      if (!length || length->unit != length_unit::pixels) return;
+      values[i] = length->value;
+    }
+    if (values[2] < 0) return;
+    value_.box_shadow_offset_x = values[0];
+    value_.box_shadow_offset_y = values[1];
+    value_.box_shadow_blur_radius = values[2];
+    value_.box_shadow_spread_radius = values[3];
+    value_.box_shadow_rgba = *color;
+    value_.box_shadow_present = true;
+  }
   void set_background_rgba(uint32_t value) { value_.background_rgba = value; }
   void set_foreground_rgba(uint32_t value) { value_.foreground_rgba = value; }
   void set_font_weight(int32_t value) { value_.font_weight = value; }

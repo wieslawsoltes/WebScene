@@ -91,6 +91,13 @@ class CompilerTests(unittest.TestCase):
             self.assertIn('set_border_left_width',out.read_text())
         result,_=self.compile('<div></div>', 'div { border:1px dashed red; }')
         self.assertNotEqual(result.returncode,0)
+    def test_outer_shadow(self):
+        for value in ['none','0 30px 100px #0007','var(--shadow)','0 4px 10px var(--color)']:
+            result,out=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_box_shadow',out.read_text())
+        result,_=self.compile('<div></div>', 'div { box-shadow:inset 0 0 1px #fff; }')
+        self.assertNotEqual(result.returncode,0)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

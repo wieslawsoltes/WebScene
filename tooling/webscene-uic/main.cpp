@@ -242,6 +242,15 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "box-shadow") {
+    if (value == "none") return "s.set_box_shadow(std::nullopt);";
+    if (value.find("inset") != std::string::npos)
+      throw std::runtime_error("native compiled inset shadows are not supported yet");
+    if (value.find("var(") == std::string::npos &&
+        !std::regex_match(value, std::regex(R"((?:-?[0-9]+(?:\.[0-9]+)?px|0)\s+(?:-?[0-9]+(?:\.[0-9]+)?px|0)(?:\s+(?:[0-9]+(?:\.[0-9]+)?px|0))?(?:\s+(?:-?[0-9]+(?:\.[0-9]+)?px|0))?\s+(?:#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{4}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})|transparent|black|white))")))
+      throw std::runtime_error("box-shadow requires x y [blur [spread]] color");
+    return "s.set_box_shadow(s.evaluate(" + variable_code(value) + "));";
+  }
   if (name == "border" || name == "border-left" || name == "border-top" || name == "border-right" || name == "border-bottom") {
     std::string width = "3px", style = "none", color = "currentColor";
     if (value == "0") width = "0";

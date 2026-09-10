@@ -90,6 +90,11 @@ int main() {
   auto target = refs.named("target"), other = refs.named("other");
   const auto &initial_scene = d.render(800, 600);
   check(d.bounds(d.body()).x == 3, "root style applies to HTML element");
+  bool shadow_found = false;
+  for (const auto &command : initial_scene.commands)
+    if ((command.kind == 17 || command.kind == 18) && command.node_id == d.find("variable-probe"))
+      shadow_found = true;
+  check(shadow_found, "compiled variable shadow reaches scene");
   check(d.bounds(d.find("grid-left")).width == 222, "compiled grid variable resolves");
   check(d.bounds(d.find("grid-right")).width == 252, "compiled grid preserves fixed track");
   check(d.bounds(d.find("variable-probe")).width == 222, "compiled var width resolves");
