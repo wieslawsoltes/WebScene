@@ -91,3 +91,9 @@ layouts with checked strides and offsets. Coordinate packing subtracts the scene
 origin in double precision before conversion to floats; a large-coordinate test
 verifies sub-unit detail is retained. GPU pipelines, scene styling and upload/
 submission still need implementation; this module alone does not render a frame.
+
+Native scene assembly now applies layer visibility, selection colors, line styles,
+lineweights, locked opacity and wireframe/shaded/xray modes to GPU upload data.
+Tests cover display-mode primitive counts, selection, opacity and hidden layers.
+Production entity expansion and geometry caching are not yet connected; scene
+assembly currently processes the drawing's direct entities.
