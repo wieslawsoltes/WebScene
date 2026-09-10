@@ -8,7 +8,34 @@
 #include "webscene_css_transitions.h"
 #include "webscene_css_layout_values.h"
 #include "webscene_css_pseudo_values.h"
+#include "webscene_css_stylesheet_sink.h"
 #include <iostream>
+
+struct stylesheet_test_host {
+    struct rule {
+        std::string selector;
+        std::vector<webscene_native::css::css_declaration> declarations;
+        std::vector<std::string> media;
+        std::string address;
+    };
+    std::vector<rule> rules;
+    std::vector<std::string> keyframe_selectors;
+    std::vector<std::string> unsupported;
+    bool inventory_media_query(const std::string&) { return true; }
+    void record_feature(std::string_view, const std::string& name,
+        std::string_view classification, const std::string&, std::string_view) {
+        if(classification=="unsupported") unsupported.push_back(name);
+    }
+    void append_parsed_css_style_rule(std::string selector,
+        std::vector<webscene_native::css::css_declaration> declarations,
+        const std::vector<std::string>& media,const std::string& address) {
+        rules.push_back({std::move(selector),std::move(declarations),media,address});
+    }
+    void append_css_syntax_keyframe(webscene_native::css::css_opacity_keyframes&,
+        std::string selector,const std::vector<webscene_native::css::css_declaration>&) {
+        keyframe_selectors.push_back(std::move(selector));
+    }
+};
 int main() {
     using webscene_native::css::parse_declarations;
     const auto values=parse_declarations(R"CSS(
@@ -287,5 +314,23 @@ int main() {
     apply_generated("content","none");
     apply_generated("border","none");
     if(generated.generated || !generated.content.empty() || generated.border_left_width.value!=0) return 67;
+    stylesheet_test_host stylesheet_host;
+    const std::string stylesheet_address="embedded:styles.css";
+    webscene_native::css::stylesheet_sink stylesheet_sink(stylesheet_host,stylesheet_address,1024);
+    const auto stylesheet_parsed=webscene_native::stream_css_syntax_stylesheet(R"CSS(
+      .base { color: red; }
+      @media (min-width: 600px) {
+        @media (orientation: landscape) { .wide { color: blue !important; } }
+      }
+      @supports selector(:focus-visible) { .focus { outline: 2px solid; } }
+      @container card (width > 10px) { .excluded { color: green; } }
+      @keyframes pulse { from { opacity: 0; } to { opacity: 1; } }
+      .last { content: "a;b"; }
+    )CSS",stylesheet_sink);
+    if(!stylesheet_parsed || !stylesheet_sink.complete() || stylesheet_host.rules.size()!=4 ||
+       stylesheet_host.rules[1].media.size()!=2 || !stylesheet_host.rules[1].declarations[0].important ||
+       stylesheet_host.rules[3].selector!=".last" || stylesheet_host.rules[3].address!=stylesheet_address ||
+       stylesheet_host.keyframe_selectors.size()!=2 || stylesheet_sink.keyframes().size()!=1 ||
+       stylesheet_sink.keyframes()[0].first!="pulse" || stylesheet_host.unsupported.size()!=1) return 68;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

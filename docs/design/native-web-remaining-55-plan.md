@@ -481,3 +481,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   elliptical-corner-radii regressions pass. Existing content grammar, logical
   direction, paint and typography limits remain; pseudo rule orchestration and
   compiled application integration are not yet complete.
+
+- Stylesheet ingestion extraction: the existing Rust parser event adapter now
+  lives in webscene_css_stylesheet_sink.h, parameterized by native storage,
+  capability-inventory and diagnostic callbacks. Runtime parsing uses this same
+  adapter. The V8-free service test verifies ordinary rules, nested media ancestry,
+  important declarations, supported supports conditions, exclusion of container
+  rules, keyframe routing and source addresses. Runtime media-query-list,
+  host-clock-keyframes and iframe-dynamic-recascade regressions pass. Existing
+  at-rule limitations are deliberately retained; this adapter does not implement
+  cascade layers, container conditions or a complete native stylesheet owner.
