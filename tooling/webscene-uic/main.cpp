@@ -1217,9 +1217,16 @@ struct compiler {
       }
       if (n.tag == "link") {
         auto rel = n.attributes.find("rel"), href = n.attributes.find("href");
-        if (rel == n.attributes.end() || rel->second != "stylesheet" ||
-            href == n.attributes.end())
+        if (rel == n.attributes.end() || href == n.attributes.end())
           throw std::runtime_error("only local stylesheet links supported");
+        std::istringstream relationships(ascii_keyword(rel->second));
+        std::string relationship;
+        bool stylesheet_link = false;
+        while (relationships >> relationship) {
+          if (relationship == "stylesheet") stylesheet_link = true;
+          else throw std::runtime_error("unsupported stylesheet link relationship: " + relationship);
+        }
+        if (!stylesheet_link) throw std::runtime_error("only local stylesheet links supported");
         auto p = fs::weakly_canonical(source.parent_path() / href->second);
         dependencies.push_back(p);
         auto saved = content;

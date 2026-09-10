@@ -340,6 +340,20 @@ class CompilerTests(unittest.TestCase):
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn('123.0f',output.read_text())
 
+    def test_stylesheet_rel_token_grammar(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        (root/'view.css').write_text('body { width:123px; }')
+        for rel in ['STYLESHEET', ' stylesheet ', 'StyleSheet stylesheet', '\tstylesheet\n']:
+            source.write_text('<html><head><link rel="'+rel+'" href="view.css"></head><body></body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('123.0f',output.read_text())
+        source.write_text('<html><head><link rel="alternate stylesheet" href="view.css"></head><body></body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('unsupported stylesheet link relationship: alternate',result.stderr)
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'

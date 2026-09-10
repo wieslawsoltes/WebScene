@@ -1314,3 +1314,12 @@ empty type and case-insensitive text/css remain active. Tests verify inactive
 content is not parsed/read and active CSS still lowers. All 73 compiler tests
 pass. This implements initial compiled activation only: runtime stylesheet
 activation, alternate stylesheet sets and stylesheet DOM objects remain open.
+
+### Stylesheet relationship token grammar (2026-09-10)
+
+Link rel recognition now handles case-insensitive whitespace-separated stylesheet
+tokens, including duplicates. Unsupported relationship tokens receive a specific
+diagnostic rather than being treated as active stylesheet semantics. Tests cover
+case, spaces/tabs/newlines, duplicates and explicit alternate rejection. All 74
+compiler tests pass. Alternate stylesheet selection and other link relationships
+remain unsupported; this closes token grammar for ordinary stylesheet links.
