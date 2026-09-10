@@ -11,6 +11,23 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_module_output(self):
+        result,out=self.compile('<button id="go">Hello</button>')
+        self.assertEqual(result.returncode,0,result.stderr)
+        module=out.with_suffix('.cppm')
+        command=[UIC,out.with_name('view.html'),module,'--module','app.views.main']
+        result=subprocess.run(command,capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        text=module.read_text()
+        self.assertIn('export module app.views.main;',text)
+        self.assertIn('export namespace compiled_ui',text)
+        self.assertNotIn('#pragma once',text)
+        subprocess.run(command,check=True)
+        self.assertEqual(text,module.read_text())
+        for name in ['', '.app', 'app.', 'app..view', '3app', 'app;bad']:
+            result=subprocess.run(command[:-1]+[name],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0,name)
+            self.assertIn('Invalid module name',result.stderr)
     def test_compiled_values_and_determinism(self):
         result,out=self.compile('<button id="go">Hello &amp; goodbye</button>','#go { width: 20px; color: #123456; }')
         self.assertEqual(result.returncode,0,result.stderr);text=out.read_text();self.assertIn('Hello & goodbye',text);self.assertIn('20.0f',text)

@@ -35,7 +35,7 @@ function(webscene_compile_html_module target input module_name)
 endfunction()
 add_executable(native_web_smoke "${WEBSCENE_ROOT}/samples/NativeWeb/smoke.cpp")
 target_link_libraries(native_web_smoke PRIVATE webscene_native_web)
-webscene_compile_html(native_web_smoke "${WEBSCENE_ROOT}/samples/NativeWeb/Main.html")
+webscene_compile_html_module(native_web_smoke "${WEBSCENE_ROOT}/samples/NativeWeb/Main.html" webscene.sample.ui)
 add_test(NAME native_web_smoke COMMAND native_web_smoke)
 
 set(FOCO_SOURCE_DIR "" CACHE PATH "Optional FocoUI checkout for the macOS Native Web application")

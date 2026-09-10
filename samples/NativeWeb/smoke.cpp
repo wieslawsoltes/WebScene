@@ -1,4 +1,5 @@
-#include "native_web_smoke_ui.hpp"
+#include <webscene/native_web.hpp>
+import webscene.sample.ui;
 #include "app.hpp"
 #include <chrono>
 #include <iostream>
