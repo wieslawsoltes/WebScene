@@ -2,6 +2,7 @@
 #include "webscene_css_selectors.h"
 #include "webscene_css_matching.h"
 #include "webscene_css_query.h"
+#include "webscene_css_rule_operations.h"
 #include <iostream>
 int main() {
     using webscene_native::css::parse_declarations;
@@ -131,5 +132,28 @@ int main() {
        !host.css_selector_matches(exempt,"button.secondary")) return 30;
     host.set_interaction(nullptr,nullptr,false);
     if(host.css_selector_matches(exempt,"button:focus")) return 31;
+    std::vector<webscene_native::css::css_rule> rules;
+    const auto add_rule=[&](std::string selector,uint32_t specificity,std::string value,bool important) {
+        auto payload=std::make_shared<webscene_native::css::css_rule_payload>();
+        payload->selector=std::move(selector);payload->specificity=specificity;
+        payload->declarations.push_back({"--theme",std::move(value),important});
+        rules.push_back({payload});
+    };
+    add_rule(":root",10,"red",true);
+    add_rule("html",1,"blue",false);
+    add_rule(":root",10,"green",true);
+    std::vector<size_t> candidates{2,0,1};
+    webscene_native::css::sort_candidates(rules,candidates);
+    if(candidates!=std::vector<size_t>{1,0,2}) return 32;
+    std::unordered_map<std::string,std::string> variables;
+    std::unordered_set<std::string> important;
+    webscene_native::css::rebuild_root_variables(rules,variables,important);
+    if(variables["--theme"]!="green" || !important.contains("--theme")) return 33;
+    rules[2].media_matches=false;
+    webscene_native::css::rebuild_root_variables(rules,variables,important);
+    if(variables["--theme"]!="red") return 34;
+    rules[0].shadow_scope_root_id=1;
+    webscene_native::css::rebuild_root_variables(rules,variables,important);
+    if(variables["--theme"]!="blue" || important.contains("--theme")) return 35;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

@@ -4319,20 +4319,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_MEDIA_REFRESH_BENCHMARK_COUNTERS)
         media_refresh_root_variable_refreshes.fetch_add(1U, std::memory_order_relaxed);
 #endif
-        css_variables.clear();
-        important_css_variables.clear();
-        for (const auto& rule : css_rules) {
-            if (!rule.media_matches || rule.shadow_scope_root_id != 0U
-                || (rule.selector() != ":root" && rule.selector() != "html")) continue;
-            for (const auto& declaration : rule.declarations()) {
-                if (!declaration.name.starts_with("--")) continue;
-                if (!declaration.important
-                    && important_css_variables.contains(declaration.name)) continue;
-                css_variables[declaration.name] = declaration.value;
-                if (declaration.important) important_css_variables.insert(declaration.name);
-                else important_css_variables.erase(declaration.name);
-            }
-        }
+        css::rebuild_root_variables(css_rules,css_variables,important_css_variables);
     }
 
     void rebuild_css_rule_indexes_and_root_variables()

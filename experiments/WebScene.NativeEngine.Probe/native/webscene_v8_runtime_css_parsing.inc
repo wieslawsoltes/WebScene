@@ -1169,20 +1169,7 @@
     }
 
     void sort_css_candidates(std::vector<size_t>& candidates) const
-    {
-        // Declarations are applied in ascending precedence; later declarations
-        // therefore replace earlier ones while equal specificity retains source order.
-        std::sort(
-            candidates.begin(),
-            candidates.end(),
-            [this](size_t left, size_t right) {
-                const auto left_specificity = css_rules[left].specificity();
-                const auto right_specificity = css_rules[right].specificity();
-                return left_specificity != right_specificity
-                    ? left_specificity < right_specificity
-                    : left < right;
-            });
-    }
+    { css::sort_candidates(css_rules,candidates); }
 
     bool refresh_css_media_matches()
     {

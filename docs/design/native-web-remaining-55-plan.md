@@ -392,3 +392,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   runtime pointer/positional/iframe regressions pass. The host borrows its document
   and is intended for its owning thread; its state must be updated by the app/host.
   Stylesheet cascade/style application and app integration remain unfinished.
+
+- Cascade primitives: specificity/source-order sorting and root custom-property
+  rebuilding now use shared functions in webscene_css_rule_operations.h. The
+  runtime delegates without changing its root-variable policy. Native tests cover
+  specificity, source ties, important overrides, media exclusion and shadow scope.
+  Service and runtime iframe/shadow/positional regressions pass. Per-element
+  inheritance, substitution, declaration application and invalidation are still
+  required; these primitives do not constitute a standalone cascade.
