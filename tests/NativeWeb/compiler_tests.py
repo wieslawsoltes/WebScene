@@ -225,6 +225,15 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div>Text</div>', 'div {font-weight:'+value+';}')
             self.assertNotEqual(result.returncode,0,value)
 
+    def test_translation_transform_profile(self):
+        for value in ['none','translateX(-50%)','translateY(7px)','TRANSLATEX(+.5e1PX)']:
+            result,out=self.compile('<div></div>', 'div {transform:'+value+';}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_translation(',out.read_text())
+        for value in ['translateX(auto)','translateY(2)','translateX(1px) rotate(2deg)','translateX(1px,2px)']:
+            result,_=self.compile('<div></div>', 'div {transform:'+value+';}')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)

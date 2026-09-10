@@ -824,3 +824,12 @@ own width and class-applied none resets it. All 52 compiler tests and native
 contracts pass. Transform lists, variables, rotation/scale lowering, transformed
 hit testing and rendered stacking comparisons remain open; this is not full
 transform-family closure.
+
+### Translation input and grammar regression (2026-09-10)
+
+The compiled translation fixture now verifies pointer targeting at its displaced
+right edge and absence of targeting at its original left edge. Native contracts
+pass. Compiler tests cover signed percentages/pixels, case variants and rejection
+of auto, nonzero unitless values, unsupported transform lists and excess arguments;
+all 53 compiler tests pass. This verifies simple translated hit geometry, not
+nested transforms, clipping or rendered stacking-context parity.

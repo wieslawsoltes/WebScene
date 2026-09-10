@@ -178,6 +178,16 @@ int main() {
         "removing margin longhand preserves shorthand auto state");
   auto translated = d.find("translated"), translate_parent = d.find("translate-parent");
   check(d.bounds(translated).x - d.bounds(translate_parent).x == 10, "compiled percentage translation uses own width");
+  d.render(800, 10000);
+  int translated_hits = 0;
+  auto translated_subscription = d.on(translated, "pointerdown", [&](event&) { ++translated_hits; });
+  auto translated_area = d.bounds(translated);
+  d.pointer("pointerdown", translated_area.x + translated_area.width - 1, translated_area.y + 1);
+  d.pointer("pointerup", translated_area.x + translated_area.width - 1, translated_area.y + 1);
+  check(translated_hits == 1, "translated element receives pointer at displaced right edge");
+  d.pointer("pointerdown", d.bounds(translate_parent).x + 1, translated_area.y + 1);
+  d.pointer("pointerup", d.bounds(translate_parent).x + 1, translated_area.y + 1);
+  check(translated_hits == 1, "translation removes hit coverage from original left edge");
   d.attribute(translated, "class", "reset");
   d.render(800, 600);
   check(d.bounds(translated).x == d.bounds(translate_parent).x, "transform none resets translation");
