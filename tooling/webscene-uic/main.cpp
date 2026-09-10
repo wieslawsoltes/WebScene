@@ -956,7 +956,7 @@ struct compiler {
       return;
     }
     static const std::set<std::string> tags = {
-        "body", "main",   "section", "div", "span", "p",      "h1",     "h2",
+        "body", "main",   "section", "div", "span", "br", "p",      "h1",     "h2",
         "svg", "g", "text", "tspan", "path", "polygon", "rect", "circle", "ellipse", "line", "polyline", "h3",   "button", "canvas",  "ul",  "li",   "header", "footer", "nav"};
     if (preview && (n.tag == "script" || n.tag == "noscript")) { warning("skipped " + n.tag); return; }
     if (!tags.contains(n.tag)) {

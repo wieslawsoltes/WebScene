@@ -110,6 +110,12 @@ int main() {
   document d;
   auto refs = compiled_ui::build(d);
   d.render(800, 600);
+  check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
+        "compiled br moves following inline content to a new line");
+  d.remove(d.find("explicit-break"));
+  d.render(800, 600);
+  check(std::abs(d.bounds(d.find("after-break")).y - d.bounds(d.find("before-break")).y) < 0.01f,
+        "removing compiled br restores a shared inline line");
   auto hidden_probe = d.find("hidden-probe");
   check(d.bounds(hidden_probe).height == 0, "compiled hidden attribute suppresses layout");
   d.remove_attribute(hidden_probe, "hidden");

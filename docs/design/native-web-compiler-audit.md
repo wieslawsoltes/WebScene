@@ -662,3 +662,12 @@ Native contracts verify the compiled element has no layout height, removing the
 attribute restores its 17px height, and reapplying hidden suppresses it again.
 All 46 compiler tests and native contracts pass. Find/reveal and focus cleanup
 on hidden-state changes remain open.
+
+### Compiled explicit line breaks (2026-09-10)
+
+Strict HTML compilation now accepts `br`, constructing the existing native element
+without translating it to another layout primitive. A compiled fixture verifies
+that a break separates adjacent spans vertically and native removal restores a
+shared line. All 46 compiler tests and native contracts pass. Consecutive/trailing
+breaks, mixed font baselines and browser-rendered comparisons remain part of the
+broader inline formatting audit.
