@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24)
+cmake_minimum_required(VERSION 3.28)
 project(WebSceneNativeWeb LANGUAGES CXX)
 include(CTest)
 set(CMAKE_CXX_STANDARD 20)
@@ -74,6 +74,12 @@ if(BUILD_TESTING)
  webscene_compile_html(native_web_contracts "${WEBSCENE_ROOT}/tests/NativeWeb/Contracts.html")
  add_test(NAME native_web_contracts COMMAND native_web_contracts)
  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+ add_library(kestrel_native STATIC)
+ target_sources(kestrel_native PUBLIC FILE_SET CXX_MODULES BASE_DIRS "${WEBSCENE_ROOT}/samples/NativeKestrel/native" FILES
+   "${WEBSCENE_ROOT}/samples/NativeKestrel/native/math.cppm"
+   "${WEBSCENE_ROOT}/samples/NativeKestrel/native/drawing.cppm"
+   "${WEBSCENE_ROOT}/samples/NativeKestrel/native/camera.cppm"
+   "${WEBSCENE_ROOT}/samples/NativeKestrel/native/geometry.cppm")
  add_executable(kestrel_native_geometry "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_geometry.cpp")
  add_executable(kestrel_native_mesh "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_mesh.cpp")
  add_test(NAME kestrel_native_geometry COMMAND kestrel_native_geometry "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_geometry_reference.json")
@@ -82,6 +88,9 @@ if(BUILD_TESTING)
  add_test(NAME kestrel_native_drawing COMMAND kestrel_native_drawing)
  add_executable(kestrel_native_math "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_math.cpp")
  add_executable(kestrel_native_camera "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_camera.cpp")
+ foreach(component geometry mesh drawing math camera)
+   target_link_libraries(kestrel_native_${component} PRIVATE kestrel_native)
+ endforeach()
  add_test(NAME kestrel_native_math COMMAND kestrel_native_math)
  add_test(NAME kestrel_native_camera COMMAND ${Python3_EXECUTABLE} "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_camera_test.py" $<TARGET_FILE:kestrel_native_camera>)
  add_test(NAME native_web_compiler COMMAND ${Python3_EXECUTABLE} "${WEBSCENE_ROOT}/tests/NativeWeb/compiler_tests.py" $<TARGET_FILE:webscene-uic>)
