@@ -11,8 +11,8 @@ The port is not yet runnable. `native/math.hpp` and `native/camera.hpp` port the
 geometry math, triangulation and camera operations from src/math.js. Camera tests
 compare 154 values against the pinned upstream implementation; additional native
 tests cover transforms, concave/vertical triangulation and intersection behavior.
-The drawing model/history/persistence, geometry and renderer,
-commands, UI templates and the other application modules remain to be ported.
+The renderer, commands, UI templates and other application modules remain to be
+ported; drawing and geometry coverage is described below.
 This directory is not a claim of Kestrel feature parity.
 
 `native/drawing.hpp` ports the core drawing/project representation, layer rules,
@@ -27,3 +27,15 @@ Project data uses vendored nlohmann JSON 3.12.0 (MIT). Header SHA-256:
 `aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63`.
 This is project serialization only; HTML remains compiled into predefined views
 and templates.
+
+`native/geometry.hpp` ports curve tessellation (including rational splines and
+bulged polylines) and box, cylinder, cone, sphere and torus construction. Reference
+tests compare 365 curve vertices and five meshes, including exact face topology,
+against the pinned upstream JavaScript implementation. JavaScript is only the
+reference oracle; these native tests do not execute it. General entity geometry,
+text/dimensions, solid operations and the GPU renderer remain outstanding.
+
+Shared UI markup must use standard HTML `<template>` elements. Browser code can
+clone their content; native code instantiates compiler-generated construction
+functions. Dynamic content must not introduce runtime HTML parsing in the native
+application. Browser JavaScript and native C++ application logic remain separate.
