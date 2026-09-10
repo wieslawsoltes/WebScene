@@ -354,6 +354,18 @@ class CompilerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode,0)
         self.assertIn('unsupported stylesheet link relationship: alternate',result.stderr)
 
+    def test_input_directories_are_rejected(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        directory=root/'styles.css';directory.mkdir()
+        source.write_text('<html><head><link rel="stylesheet" href="styles.css"></head><body></body></html>')
+        for command in [[UIC,source,output], [UIC,'--check-css',directory], [UIC,directory,output]]:
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('not a regular file:',result.stderr)
+            self.assertIn(directory.name,result.stderr)
+            self.assertFalse(output.exists())
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'

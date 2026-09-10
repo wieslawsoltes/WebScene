@@ -1323,3 +1323,11 @@ diagnostic rather than being treated as active stylesheet semantics. Tests cover
 case, spaces/tabs/newlines, duplicates and explicit alternate rejection. All 74
 compiler tests pass. Alternate stylesheet selection and other link relationships
 remain unsupported; this closes token grammar for ordinary stylesheet links.
+
+### Input file diagnostics (2026-09-10)
+
+The shared compiler input reader now requires a regular file, reads binary bytes,
+and reports stream failures with the source path. Regression coverage checks a
+directory supplied as HTML, as linked CSS and to --check-css; each fails without
+output. All 75 compiler tests pass. This verifies directory rejection; simulated
+mid-read I/O faults and atomic artifact publication remain untested.

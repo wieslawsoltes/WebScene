@@ -15,10 +15,18 @@
 using namespace webscene_native;
 namespace fs = std::filesystem;
 static std::string read(const fs::path &path) {
-  std::ifstream f(path);
+  if (!fs::is_regular_file(path))
+    throw std::runtime_error("input is not a regular file: " + path.string());
+  std::ifstream f(path, std::ios::binary);
   if (!f)
     throw std::runtime_error("cannot read " + path.string());
-  return {std::istreambuf_iterator<char>(f), {}};
+  try {
+    std::string result{std::istreambuf_iterator<char>(f), {}};
+    if (f.bad()) throw std::runtime_error("stream read failed");
+    return result;
+  } catch (const std::exception &) {
+    throw std::runtime_error("failed reading " + path.string());
+  }
 }
 static std::string quote(std::string_view value) {
   std::ostringstream out;
