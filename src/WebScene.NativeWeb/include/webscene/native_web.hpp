@@ -20,6 +20,8 @@ using grid_track = webscene_native::node_style::grid_data::track;
 class style {
   friend class document;
   webscene_native::node_style &value_;
+  length border_widths_[4]{{3,length_unit::pixels},{3,length_unit::pixels},{3,length_unit::pixels},{3,length_unit::pixels}};
+  bool border_visible_[4]{};
   const computed_variables &variables_;
   explicit style(webscene_native::node_style &value, const computed_variables &variables)
       : value_(value), variables_(variables) {}
@@ -99,6 +101,38 @@ public:
   void set_margin_top_auto(bool value) { value_.margin_top_auto = value; }
   void set_margin_right_auto(bool value) { value_.margin_right_auto = value; }
   void set_margin_bottom_auto(bool value) { value_.margin_bottom_auto = value; }
+  void set_border_left_width(length width) {
+    border_widths_[0] = width;
+    value_.border_left_width = border_visible_[0] ? width : length{0,length_unit::pixels};
+  }
+  void set_border_left_solid(bool visible) {
+    border_visible_[0] = visible;
+    value_.border_left_width = visible ? border_widths_[0] : length{0,length_unit::pixels};
+  }
+  void set_border_top_width(length width) {
+    border_widths_[1] = width;
+    value_.border_top_width = border_visible_[1] ? width : length{0,length_unit::pixels};
+  }
+  void set_border_top_solid(bool visible) {
+    border_visible_[1] = visible;
+    value_.border_top_width = visible ? border_widths_[1] : length{0,length_unit::pixels};
+  }
+  void set_border_right_width(length width) {
+    border_widths_[2] = width;
+    value_.border_right_width = border_visible_[2] ? width : length{0,length_unit::pixels};
+  }
+  void set_border_right_solid(bool visible) {
+    border_visible_[2] = visible;
+    value_.border_right_width = visible ? border_widths_[2] : length{0,length_unit::pixels};
+  }
+  void set_border_bottom_width(length width) {
+    border_widths_[3] = width;
+    value_.border_bottom_width = border_visible_[3] ? width : length{0,length_unit::pixels};
+  }
+  void set_border_bottom_solid(bool visible) {
+    border_visible_[3] = visible;
+    value_.border_bottom_width = visible ? border_widths_[3] : length{0,length_unit::pixels};
+  }
   void set_border_left_color(uint32_t color, bool current = false) {
     value_.border_left_rgba = color;
     value_.border_left_current_color = current;

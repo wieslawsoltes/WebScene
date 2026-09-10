@@ -84,6 +84,13 @@ class CompilerTests(unittest.TestCase):
             for side in ['left','top','right','bottom']:
                 self.assertIn('set_border_'+side+'_color',out.read_text())
             self.assertNotIn('parse_',out.read_text())
+    def test_solid_border_shorthand(self):
+        for value in ['0','none','1px solid var(--line)','3px solid #c69a66']:
+            result,out=self.compile('<div></div>', 'div { border:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_border_left_width',out.read_text())
+        result,_=self.compile('<div></div>', 'div { border:1px dashed red; }')
+        self.assertNotEqual(result.returncode,0)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

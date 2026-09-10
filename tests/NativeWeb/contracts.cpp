@@ -93,7 +93,7 @@ int main() {
   check(d.bounds(d.find("grid-left")).width == 222, "compiled grid variable resolves");
   check(d.bounds(d.find("grid-right")).width == 252, "compiled grid preserves fixed track");
   check(d.bounds(d.find("variable-probe")).width == 222, "compiled var width resolves");
-  check(d.bounds(d.find("variable-probe")).height == 12, "compiled var fallback resolves");
+  check(d.bounds(d.find("variable-probe")).height == 13, "compiled var fallback plus top border resolves");
   d.attribute(d.root(), "data-theme", "light");
   d.render(800, 600);
   check(d.bounds(d.find("grid-left")).width == 195, "compiled grid variable updates with theme");

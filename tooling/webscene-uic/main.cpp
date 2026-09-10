@@ -242,6 +242,36 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "border" || name == "border-left" || name == "border-top" || name == "border-right" || name == "border-bottom") {
+    std::string width = "3px", style = "none", color = "currentColor";
+    if (value == "0") width = "0";
+    else if (value != "none") {
+      std::smatch match;
+      if (!std::regex_match(value, match, std::regex(R"(([0-9]+(?:\.[0-9]+)?px|0)\s+(solid)\s+(.+))")))
+        throw std::runtime_error("border shorthand currently requires width solid color, 0 or none");
+      width = match[1]; style = match[2]; color = match[3];
+    }
+    std::string code;
+    for (const std::string side : {"left", "top", "right", "bottom"}) {
+      if (name != "border" && name != "border-" + side) continue;
+      auto base = "border-" + side;
+      // Scope each color expression to keep temporary names independent.
+      code += "{" + assignments(base + "-width", width) + assignments(base + "-style", style) + assignments(base + "-color", color) + "}";
+    }
+    return code;
+  }
+  for (const std::string side : {"left", "top", "right", "bottom"}) {
+    if (name == "border-" + side + "-width") {
+      if (value != "0" && (!value.ends_with("px") || value.starts_with("-")))
+        throw std::runtime_error("border width currently requires nonnegative px");
+      return "s.set_border_" + side + "_width(" + length(value) + ");";
+    }
+    if (name == "border-" + side + "-style") {
+      if (value != "solid" && value != "none" && value != "hidden")
+        throw std::runtime_error("native compiled borders currently support solid, none and hidden");
+      return "s.set_border_" + side + "_solid(" + (value == "solid" ? "true" : "false") + ");";
+    }
+  }
   if (name == "border-color" || name == "border-left-color" || name == "border-top-color" ||
       name == "border-right-color" || name == "border-bottom-color") {
     std::string code;
