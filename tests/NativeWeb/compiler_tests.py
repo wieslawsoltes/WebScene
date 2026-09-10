@@ -408,6 +408,22 @@ class CompilerTests(unittest.TestCase):
         for value in ['-1','1 -2 0','1 1 -2px','1 2 3 4']:
             result,_=self.compile('<div></div>', 'div { flex:'+value+'; }')
             self.assertNotEqual(result.returncode,0)
+    def test_font_numeric_forms_and_family_case(self):
+        for value in ['.5px/1.2 MixedCaseFont', '+5e-1PX/+1.2 MixedCaseFont',
+                      '.5px/NORMAL MixedCaseFont', '0/-0 MixedCaseFont']:
+            result,out=self.compile('<div></div>', 'div { font:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_font_family("MixedCaseFont")',out.read_text())
+        for value in ['-1px MixedCaseFont', '1px/-1 MixedCaseFont',
+                      '1e999px MixedCaseFont', '1px/1e999 MixedCaseFont',
+                      '1 MixedCaseFont', '1.px MixedCaseFont']:
+            result,_=self.compile('<div></div>', 'div { font:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+        for value in ['0','-0','+0','0e1']:
+            result,out=self.compile('<div></div>', 'div { line-height:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_line_height(-3.0f)',out.read_text())
+
     def test_font_shorthand(self):
         for value in ['inherit','10px Consolas,"SFMono-Regular",monospace','10px/19px Consolas,monospace','10px/1.5 monospace']:
             result,out=self.compile('<div></div>', 'div { font:'+value+'; }')

@@ -501,7 +501,7 @@ static std::string assignments(const std::string &name,
       return "s.set_font_size(-1.0f);s.set_font_weight(0);s.set_font_family(\"\");s.set_line_height(-1.0f);";
     std::smatch match;
     if (!std::regex_match(value, match,
-        std::regex(R"(([0-9]+(?:\.[0-9]+)?px)(?:\s*/\s*([0-9]+(?:\.[0-9]+)?(?:px)?|normal))?\s+(.+))")))
+        std::regex(R"(([+-]?(?:[0-9]*\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?(?:px)?)(?:\s*/\s*([+-]?(?:[0-9]*\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?(?:px)?|normal))?\s+(.+))", std::regex::icase)))
       throw std::runtime_error("font shorthand currently requires px-size[/line-height] family or inherit");
     auto family = trim(match[3]);
     if (family.empty()) throw std::runtime_error("font shorthand requires a family");
@@ -772,10 +772,15 @@ static std::string assignments(const std::string &name,
            ";";
   }
   if (name == "line-height") {
+    value = ascii_keyword(value);
     if (value == "inherit" || value == "unset") return "s.set_line_height(-1.0f);";
     if (value == "normal") return "s.set_line_height(-2.0f);";
-    if (std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")))
-      return "s.set_line_height(" + number(-3 - std::stof(value)) + ");";
+    if (css_number(value)) {
+      const float factor = std::stof(value);
+      if (!std::isfinite(factor) || factor < 0)
+        throw std::runtime_error("invalid line-height factor");
+      return "s.set_line_height(" + number(-3 - factor) + ");";
+    }
     return "s.set_line_height(" + number(pixel_length(value, true)) + ");";
   }
   if (name == "letter-spacing" || name == "word-spacing") {

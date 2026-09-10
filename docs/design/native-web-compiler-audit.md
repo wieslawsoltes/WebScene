@@ -1122,3 +1122,16 @@ checks strict failure on the second element and the same location in preview.
 All 60 compiler tests and native contracts pass. This provides an owner location,
 not the exact attribute/property span; multiline attributes and decoded source
 mapping remain part of the open diagnostics gate.
+
+### Font shorthand numeric forms (2026-09-10)
+
+The existing size/line-height/family font shorthand now accepts signed numeric
+forms, leading decimals, exponents, unitless zero and case-insensitive px/normal.
+Family spelling is preserved. Longhand lowering validates size and line-height
+ranges; unitless line-height uses the shared CSS number grammar, including
+negative zero as a factor rather than accidentally treating it as a pixel value.
+Tests cover valid forms, retained family case, invalid negative/overflow values
+and zero-factor representation. All 61 compiler tests and native contracts pass.
+Optional font style/variant/weight/stretch fields, relative sizes, percentages and
+full shorthand reset semantics remain open; this closes numeric consistency for
+the existing shorthand subset only.
