@@ -1360,3 +1360,12 @@ verify it adopts the first column's width, then restore colspan=2 and verify the
 original width returns. Rebuilt contracts pass. This establishes live span
 mutation for the simple fixture only; complex spans, row groups and browser
 parity remain open.
+
+### Table-layout property lowering (2026-09-10)
+
+Added a supported native style writer for the existing fixed-table-layout flag
+and compiler lowering for table-layout:auto/fixed with case-insensitive keywords.
+Compiler regressions verify both generated values and invalid keyword rejection.
+All 76 compiler tests and rebuilt native contracts pass. Fixed-layout geometry,
+first-row sizing and overflow comparisons remain necessary; existing table
+contracts exercise auto layout and do not prove those behaviors.

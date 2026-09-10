@@ -366,6 +366,14 @@ class CompilerTests(unittest.TestCase):
             self.assertIn(directory.name,result.stderr)
             self.assertFalse(output.exists())
 
+    def test_table_layout_lowering(self):
+        for value,expected in [('auto','false'),('fixed','true'),('FIXED','true')]:
+            result,out=self.compile('<table><tr><td></td></tr></table>', 'table { table-layout:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_table_layout_fixed('+expected+')',out.read_text())
+        result,_=self.compile('<table></table>', 'table { table-layout:bogus; }')
+        self.assertNotEqual(result.returncode,0)
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'

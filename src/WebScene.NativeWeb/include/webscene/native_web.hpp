@@ -42,6 +42,7 @@ public:
     auto found = variables_.find(name);
     return found == variables_.end() ? nullptr : &found->second;
   }
+  void set_table_layout_fixed(bool fixed) { value_.table_layout_fixed = fixed; }
   void set_grid_template_columns(std::vector<grid_track> tracks) {
     auto &grid = value_.mutable_grid();
     grid.subgrid_columns = false;

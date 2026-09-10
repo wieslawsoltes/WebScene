@@ -537,6 +537,11 @@ static std::string assignments(const std::string &name,
         assignments("line-height", match[2].matched ? match[2].str() : "normal") +
         assignments("font-family", family) + "s.set_font_weight(400);";
   }
+  if (name == "table-layout") {
+    const auto keyword = ascii_keyword(value);
+    if (keyword != "auto" && keyword != "fixed") throw std::runtime_error("table-layout requires auto or fixed");
+    return "s.set_table_layout_fixed(" + std::string(keyword == "fixed" ? "true" : "false") + ");";
+  }
   if (name == "flex-wrap") {
     if (value != "wrap" && value != "nowrap") throw std::runtime_error("compiled flex-wrap supports wrap and nowrap");
     return "s.set_flex_wrap(" + std::string(value == "wrap" ? "true" : "false") + ");";
