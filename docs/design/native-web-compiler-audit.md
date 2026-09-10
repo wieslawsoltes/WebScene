@@ -991,3 +991,14 @@ instead of the expected 40px. Retained standalone reproduction in
 `tests/NativeWeb/audit/Whitespace.html`; it is not registered as a passing test.
 Next investigate literal-versus-variable behavior and native text measurement;
 do not claim whitespace variable rendering closure from successful compilation.
+
+### Preformatted newline layout fix (2026-09-10)
+
+The preserved newline reproduction is now covered by passing native contracts:
+A/newline/B under variable PRE measures 40px with 20px line height; invalidating
+the variable restores normal whitespace and 20px height. Two native paths were
+collapsing preformatted text: wrap_text_lines and flattened inline fragment layout.
+Both now preserve preformatted line segments and explicit newlines. Contracts pass.
+Pre-wrap/pre-line/break-spaces, tabs, trailing-newline edge cases, mixed inline
+styles and pixel comparisons still need coverage; this closes the recorded
+preformatted two-line failure, not the whole whitespace family.

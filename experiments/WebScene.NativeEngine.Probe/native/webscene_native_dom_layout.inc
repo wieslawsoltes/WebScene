@@ -1429,6 +1429,29 @@ void native_document::layout_children(dom_node& parent)
                 auto* run = text_runs[run_index];
                 const auto allow_wrap = resolved_white_space_wraps(*run);
                 const auto transformed_text = resolved_text_transform(*run, run->text_content);
+                std::string_view whitespace;
+                for (auto* ancestor = run; ancestor; ancestor = ancestor->parent) {
+                    if (ancestor->style.textual().white_space.empty()) continue;
+                    whitespace = ancestor->style.textual().white_space;
+                    break;
+                }
+                if (whitespace == "pre") {
+                    size_t start = 0;
+                    for (size_t i = 0; i <= transformed_text.size(); ++i) {
+                        if (i < transformed_text.size() && transformed_text[i] != '\n') continue;
+                        auto segment = transformed_text.substr(start, i - start);
+                        if (!segment.empty()) append_fragment(*run, segment, measure_text_width(segment, *run));
+                        if (i < transformed_text.size()) {
+                            current_line_height = std::max(current_line_height, resolved_line_height(*run, resolved_font_size(*run)));
+                            start_new_line();
+                        }
+                        start = i + 1;
+                    }
+                    pending_space = false;
+                    pending_space_run = nullptr;
+                    static_anchors[run_index + 1U] = {content.x + cursor_x, content.y + cursor_y, 0, current_line_height};
+                    continue;
+                }
                 std::string word;
                 const auto flush_word = [&] {
                     if (word.empty()) return;

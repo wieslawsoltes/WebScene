@@ -387,6 +387,11 @@ int main() {
   d.render(800, 10000);
   check(contains_painted_text("CASEAUDITPROBE"), "variable text transform fallback recovers after mutation");
   d.render(800, 600);
+  auto whitespace_variable = d.find("whitespace-variable");
+  check(d.bounds(whitespace_variable).height == 40, "preformatted variable newline creates two lines");
+  d.attribute(whitespace_variable, "class", "invalid");
+  d.render(800, 600);
+  check(d.bounds(whitespace_variable).height == 20, "invalid whitespace inherits normal collapse");
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");
