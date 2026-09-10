@@ -646,8 +646,9 @@ void native_document::layout_children(dom_node& parent)
         std::vector<bool> percentage_columns(column_count, false);
         std::vector<bool> specified_columns(column_count, false);
         for (const auto& row : rows) {
+            if (parent.style.table_layout_fixed && &row != &rows.front()) break;
             for (const auto& placement : row.cells) {
-                auto cell_width = intrinsic_size(
+                auto cell_width = parent.style.table_layout_fixed ? 0.0F : intrinsic_size(
                     *placement.cell, true, track_available_width);
                 if (parent.style.table_layout_fixed
                     && is_specified(placement.cell->style.width)) {

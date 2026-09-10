@@ -153,6 +153,8 @@ int main() {
   d.render(800, 600);
   check(d.bounds(span_cell).width == table_span.width,
         "native colspan mutation restores compiled span");
+  check(d.bounds(d.find("fixed-first")).width == 50,
+        "fixed table keeps first row width despite later row width");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

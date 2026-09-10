@@ -1369,3 +1369,13 @@ Compiler regressions verify both generated values and invalid keyword rejection.
 All 76 compiler tests and rebuilt native contracts pass. Fixed-layout geometry,
 first-row sizing and overflow comparisons remain necessary; existing table
 contracts exercise auto layout and do not prove those behaviors.
+
+### Fixed table first-row sizing defect (2026-09-10)
+
+A native fixture failed when a fixed 200px table's first cell requested 50px and
+a later-row cell requested 150px: the later row expanded the column. Fixed mode
+now considers only first-row cell sizing and ignores intrinsic text sizing in
+that pass; auto mode retains its existing behavior. The regression now passes
+with the first cell at 50px, alongside native contracts. Column-element priority,
+auto-width tables, span distribution and browser differential tests remain open.
+The fix is in the shared native layout engine and may affect other hosts using it.
