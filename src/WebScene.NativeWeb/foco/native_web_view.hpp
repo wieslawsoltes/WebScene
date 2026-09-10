@@ -108,6 +108,11 @@ public:
     refresh();
   }
   void pointer_event_received(foco::pointer_event &e) override {
+    if(e.kind==foco::pointer_event_kind::wheel){
+      document.wheel(e.position.x-bounds().x,e.position.y-bounds().y,
+                     -e.wheel_delta*(e.wheel_is_precise?1.f:48.f));
+      refresh();e.handled=true;return;
+    }
     auto type = e.kind == foco::pointer_event_kind::pressed    ? "pointerdown"
                 : e.kind == foco::pointer_event_kind::released ? "pointerup"
                                                                : "pointermove";

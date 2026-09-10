@@ -167,7 +167,7 @@ subscription document::on(node_id node, std::string type,
   state_->listeners.emplace(id, listener{node, std::move(type), std::move(cb)});
   return subscription(state_, id);
 }
-bool document::dispatch(node_id target, std::string type, float client_x, float client_y) {
+bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y) {
   auto &n = state_->node(target);
   std::vector<node_id> path;
   for (auto *p = &n; p; p = p->parent)
@@ -175,6 +175,7 @@ bool document::dispatch(node_id target, std::string type, float client_x, float 
   event e{std::move(type), target};
   e.client_x = client_x;
   e.client_y = client_y;
+  e.delta_y = delta_y;
   for (auto id : path) {
     if (!state_->alive)
       return false;
@@ -229,6 +230,11 @@ void document::focus(node_id id) {
 node_id document::focused() const {
   state_->check();
   return state_->focus;
+}
+void document::wheel(float x, float y, float delta_y) {
+  state_->check();
+  auto *node = state_->dom.hit_test(state_->dom.body(), x, y);
+  if (node) dispatch(node->id, "wheel", x, y, delta_y);
 }
 void document::pointer(std::string type, float x, float y) {
   state_->check();

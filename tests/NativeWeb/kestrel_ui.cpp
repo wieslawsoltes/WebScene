@@ -68,4 +68,7 @@ int main() {
   document.dispatch(document.find("redo"), "click");
   if (app.model.data["entities"].size() != entity_count + 1)
     throw std::runtime_error("Line redo failed");
+  auto old_zoom=app.camera.zoom;
+  document.wheel(bounds.x+100,bounds.y+100,-120);
+  if(app.camera.zoom<=old_zoom)throw std::runtime_error("Wheel zoom failed");
 }

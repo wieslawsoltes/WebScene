@@ -1,6 +1,8 @@
 module;
 #include "../third_party/nlohmann/json.hpp"
 #include <optional>
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 #include <webscene/native_web.hpp>
@@ -155,6 +157,12 @@ public:
         }));
     subscriptions.push_back(document.on(view.named("app"), "pointerup",
                                         [this](auto &) { dragging = false; }));
+    subscriptions.push_back(document.on(view.named("viewport"),"wheel",[this](auto &event){
+      auto bounds=document.bounds(document.find("viewport"));
+      camera.resize(bounds.width,bounds.height);
+      camera.zoom_at(std::exp(std::clamp(-double(event.delta_y)*.0014,-.6,.6)),event.client_x-bounds.x,event.client_y-bounds.y);
+      render_dirty=true;event.prevent_default();
+    }));
     refresh();
   }
   controller(const controller &) = delete;

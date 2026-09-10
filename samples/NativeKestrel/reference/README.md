@@ -17,3 +17,10 @@ properties and theme selectors, grid/minmax, attribute selectors, SVG icons,
 input/select controls, overflow, typography, pseudo-elements and media queries.
 Main.html/Main.css one directory above remain an integration scaffold until
 these original structures and dynamic templates are ported and verified.
+
+Compiler probe (unchanged files, 2026-09-10):
+`webscene-uic reference/index.html output.cppm --module kestrel.original`
+currently rejects `:root` in style.css. Fixing this requires preserving the HTML
+root and its `data-theme` attributes in compiled documents, not aliasing `:root`
+to body. Root custom properties and attribute-based theme rules are the next
+connected compatibility work. This probe is not a claim that later rules compile.
