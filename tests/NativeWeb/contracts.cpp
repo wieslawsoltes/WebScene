@@ -440,6 +440,25 @@ int main() {
     }), "solid style mutation clears dashed paint");
     d.remove_attribute(dashed,"class"); d.render(800,600);
   }
+  {
+    const auto id=d.find("gradient-audit");
+    const auto verify=[&](uint32_t color) {
+      const auto &paint=d.render(800,10000);
+      auto it=std::find_if(paint.commands.begin(),paint.commands.end(),[&](const auto &c) {
+        return c.node_id==id && (c.kind==44 || c.kind==46);
+      });
+      check(it!=paint.commands.end(),"compiled gradient emits typed header");
+      if (it!=paint.commands.end()) {
+        check(it->flags==2 && it->stroke_width==125,"compiled gradient angle and stop count");
+        ++it;
+        check(it!=paint.commands.end() && it->kind==45 && it->rgba==color && it->x==0,
+              "compiled gradient evaluates live variable color");
+      }
+    };
+    verify(0xff0000ffu);
+    d.attribute(id,"class","changed"); verify(0x008000ffu);
+    d.remove_attribute(id,"class"); d.render(800,600);
+  }
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

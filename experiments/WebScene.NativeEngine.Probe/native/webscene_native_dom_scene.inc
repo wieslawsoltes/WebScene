@@ -933,6 +933,19 @@ void native_document::append_scene(
         [](unsigned char character) {
             return static_cast<char>(std::tolower(character));
         });
+    if (paint_self && background_image.linear_colors.size() >= 2 && node.layout.width > 0 && node.layout.height > 0) {
+        commands.push_back(webscene_scene_command{
+            paint_box_in_foreground ? 46U : 44U,
+            static_cast<uint32_t>(background_image.linear_colors.size()),
+            node.layout.x, node.layout.y, node.layout.width, node.layout.height,
+            0U, node.id, radii.top_left, radii.top_right, radii.bottom_right,
+            radii.bottom_left, background_image.linear_angle});
+        for (size_t i=0; i<background_image.linear_colors.size(); ++i) {
+            commands.push_back(webscene_scene_command{45U, 0U,
+                static_cast<float>(i) / (background_image.linear_colors.size()-1), 0, 0, 0,
+                background_image.linear_colors[i], node.id});
+        }
+    }
     if (paint_self
         && (background_image_value_lower.starts_with("linear-gradient(") || background_image_value_lower.starts_with("radial-gradient("))
         && node.layout.width > 0

@@ -89,8 +89,8 @@ regression and integrated evidence; update this ledger with evidence as work lan
 | 15 | `backdrop-filter:blur(3px)` | P | Open |
 | 16 | `backdrop-filter:blur(9px)` | P | Open |
 | 17 | `background:color-mix(in srgb,var(--active) 63%,var(--panel))` | P | Implemented; native paint checks pass; integrated comparison pending |
-| 18 | `background:linear-gradient(125deg,var(--panel2),var(--panel))` | P | Open |
-| 19 | `background:linear-gradient(145deg,var(--panel2),var(--panel))` | P | Open |
+| 18 | `background:linear-gradient(125deg,var(--panel2),var(--panel))` | P | Implemented for source form; compiler/native/Foco tests pass; integration pending |
+| 19 | `background:linear-gradient(145deg,var(--panel2),var(--panel))` | P | Implemented for source form; compiler/native/Foco tests pass; integration pending |
 | 20 | `border-collapse:collapse` | L | Open |
 | 21 | `border:1px dashed #65c5a4` | P | Implemented; compiler/native/Foco raster tests pass; integration pending |
 | 22 | `border:2px dashed var(--accent)` | P | Implemented; compiler/native/Foco raster tests pass; integration pending |
@@ -204,3 +204,34 @@ full Kestrel parity from this CSS inventory or a static diagnostic preview.
   coverage verifies a 25% variable red mix emits ff000040 in an inset shadow.
   Compiler (104 tests) and native contracts pass. Nested custom-property function
   trees beyond this direct shadow component remain pending.
+
+- Typed linear-gradient source forms now emit angle and RGBA stop records rather
+  than CSS strings. Native contracts verify angle, stop count and live custom-color
+  mutation; Foco raster tests verify direction, bounds and malformed-payload safety.
+  Compiler (105 tests), native contracts and Foco paint tests pass. Current lowering
+  supports equally spaced colors and degree angles; explicit stop positions,
+  side/corner directions and broader gradient syntax remain pending. This is not
+  full gradient parity or closure of the integrated comparison gate.
+
+## Parser reuse decision (user clarification)
+
+The compiler already links the existing Rust cssparser and selectors library
+through the shared parser bridge. The Rust DeclarationParser adapter currently
+returns declaration value strings, not a complete typed property-value model.
+The 55 diagnostics must not be described as 55 missing Rust parser features.
+
+Before adding further property-specific compiler parsing, classify each gap as
+compiler exposure, shared value interpretation, or native/host behavior. Extract
+existing runtime property interpretation into a V8-independent shared layer where
+possible; have the compiler serialize typed values/expressions from that layer.
+Ordinary parsed WebScene content should use the same interpretation and native
+style APIs. Keep parser code in build tools for native-only applications.
+
+Existing gradient handling illustrates the boundary: runtime cascade retains the
+CSS image string and Foco's draw_dom_gradient interprets that string at paint time.
+Reusing Rust syntax parsing alone cannot turn that path into parser-free compiled
+paint. Move interpretation ahead of rendering and converge both producers on typed
+paint records. Avoid growing a second independently maintained property grammar
+in tooling/webscene-uic/main.cpp. Variable-dependent values must retain typed
+expression structure, rather than freezing theme-dependent computed styles at build
+time. Tests must compare parsed and compiled paths as well as native rendering.

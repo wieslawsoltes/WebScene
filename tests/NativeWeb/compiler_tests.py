@@ -904,6 +904,15 @@ class CompilerTests(unittest.TestCase):
         for color in ['#12','#12345','#1234567','#ggg']:
             result,_=self.compile('<p>Hello</p>', 'p { color: '+color+'; }')
             self.assertNotEqual(result.returncode,0)
+    def test_typed_linear_gradients(self):
+        for angle in ['125deg','145deg','-90deg']:
+            result,out=self.compile('<div></div>','div { --a:red; --b:blue; background:linear-gradient('+angle+',var(--a),var(--b)); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_linear_gradient(',out.read_text())
+            self.assertNotIn('linear-gradient(',out.read_text())
+        for value in ['linear-gradient(red)','linear-gradient(hello,red,blue)','linear-gradient(90deg,red 20%,blue)']:
+            result,_=self.compile('<div></div>','div { background:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
     def test_module_output(self):
         result,out=self.compile('<button id="go">Hello</button>')
         self.assertEqual(result.returncode,0,result.stderr)

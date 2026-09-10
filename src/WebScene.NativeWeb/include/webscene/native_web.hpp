@@ -273,6 +273,12 @@ public:
     value_.box_shadow_present = true;
     value_.box_shadow_inset = inset;
   }
+  void set_linear_gradient(float angle, std::vector<uint32_t> colors) {
+    auto &image = value_.mutable_background_image();
+    image.image_value = "none";
+    image.linear_angle = angle;
+    image.linear_colors = std::move(colors);
+  }
   void reset_background() { value_.background_rgba = 0; value_.clear_background_image(); }
   void set_background_rgba(uint32_t value) { value_.background_rgba = value; }
   void set_foreground_rgba(uint32_t value) { value_.foreground_rgba = value; }

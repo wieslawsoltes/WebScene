@@ -129,6 +129,10 @@ typedef struct webscene_scene_header {
     uint64_t content_hash;
 } webscene_scene_header;
 
+// DOM kinds 44/46 are typed linear gradients (background/foreground).
+// flags is the number of immediately following kind-45 stop records;
+// stroke_width is the CSS angle in degrees. Each stop carries offset in x
+// and color in rgba. Stop records are payload, never independent draws.
 // DOM kinds 40/41 are dashed rounded strokes; 42/43 are dashed lines
 // (background/foreground pairs). stroke_width carries the width in CSS pixels.
 // Shadow kinds 17/18: flags bit 0 selects an inverse rounded hole;

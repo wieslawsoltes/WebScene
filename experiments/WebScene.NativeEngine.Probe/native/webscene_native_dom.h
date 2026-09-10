@@ -245,6 +245,8 @@ struct node_style final {
     }
 
     struct background_image_data final {
+        float linear_angle{180};
+        std::vector<uint32_t> linear_colors;
         std::string image_value{"none"};
         std::string image_markup;
         std::string image_view_box;

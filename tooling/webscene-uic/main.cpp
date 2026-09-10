@@ -505,6 +505,34 @@ static std::string compiled_mix_code(const std::string &value) {
 }
 static std::string assignments(const std::string &name,
                                std::string value) {
+  if ((name == "background" || name == "background-image") &&
+      ascii_keyword(value).starts_with("linear-gradient(")) {
+    if (!value.ends_with(')')) throw std::runtime_error("invalid linear gradient");
+    auto parts = component_values(value.substr(16, value.size()-17), ',');
+    float angle = 180;
+    if (!parts.empty() && ascii_keyword(parts.front()).ends_with("deg")) {
+      auto number = parts.front().substr(0,parts.front().size()-3);
+      if (!css_number(number)) throw std::runtime_error("invalid gradient angle");
+      angle = std::stof(number);
+      if (!std::isfinite(angle)) throw std::runtime_error("invalid gradient angle");
+      angle = std::fmod(angle,360.f);
+      parts.erase(parts.begin());
+    }
+    if (parts.size()<2) throw std::runtime_error("linear gradient requires two or more colors");
+    std::string code = "std::vector<uint32_t> colors;bool valid=true;";
+    for (const auto &part : parts) {
+      if (ascii_keyword(part).starts_with("color-mix("))
+        code += "{" + compiled_mix_code(part) + "if(mixed) colors.push_back(*mixed);else valid=false;}";
+      else {
+        if (!ascii_keyword(part).starts_with("var(") && !compiled_color(part))
+          throw std::runtime_error("compiled gradient stop requires a color without explicit position");
+        code += "{auto c=s.evaluate(" + variable_code(part) +
+            ");if(c && c->size()==1 && c->front().color) colors.push_back(*c->front().color);else valid=false;}";
+      }
+    }
+    if (name == "background") code += "s.reset_background();";
+    return code + "s.set_linear_gradient(" + std::to_string(angle) + "f,valid?std::move(colors):std::vector<uint32_t>{});";
+  }
   if (name == "outline-offset") {
     const auto compiled = length(value);
     if (value == "auto" || value.ends_with('%')) throw std::runtime_error("outline-offset requires a length");
