@@ -35,6 +35,8 @@ struct css_syntax_rule final {
 struct css_syntax_metrics final {
     uint64_t duration_ns{0};
     uint64_t parse_error_count{0};
+    uint32_t first_error_line{0};
+    uint32_t first_error_column{0};
     uint64_t parser_allocation_count{0};
     uint64_t parser_peak_bytes{0};
     uint64_t parser_retained_bytes{0};

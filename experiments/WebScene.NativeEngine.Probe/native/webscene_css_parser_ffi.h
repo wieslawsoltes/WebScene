@@ -25,6 +25,8 @@ struct webscene_css_sink_vtable final {
 
 struct webscene_css_stream_result final {
     uint32_t status;
+    uint32_t first_error_line;
+    uint32_t first_error_column;
     uint64_t parse_error_count;
     uint64_t rule_count;
     uint64_t declaration_count;

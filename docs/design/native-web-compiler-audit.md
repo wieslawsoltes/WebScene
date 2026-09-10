@@ -560,3 +560,15 @@ default adapter, and the internal Rust/C callback signatures are updated togethe
 A multiline regression checks a media rule at 2:1, a nested pseudo-element rule
 at 3:3 and an import rule at 5:1. All 42 compiler tests and native contracts pass.
 Syntax-error locations and mapping embedded CSS back into HTML remain open.
+
+### Syntax-error locations and ABI guard (2026-09-10)
+
+CSS streaming results preserve the first parser error location alongside the total
+error count. `--check-css` reports that location rather than an empty generic
+stylesheet error. A two-error declaration fixture verifies the first location
+(2:9) and count (2). All 43 compiler tests and native contracts pass.
+
+The internal CSS streaming ABI is now version 2, covering the located callbacks
+and extended result structure; the C++ wrapper rejects stale version-1 libraries.
+This reports parser-detected syntax errors only. Full error lists, semantic source
+locations during normal compilation, and inline CSS-to-HTML mapping remain open.

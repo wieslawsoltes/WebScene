@@ -1168,8 +1168,13 @@ struct compiler {
 // Success checks CSS support only; it does not certify HTML or runtime parity.
 static int check_css(const fs::path &path) {
   auto css = parse_css_syntax_stylesheet(read(path));
-  if (!css || css.metrics.parse_error_count)
-    throw std::runtime_error("invalid CSS stylesheet: " + css.error);
+  if (!css) throw std::runtime_error("invalid CSS stylesheet: " + css.error);
+  if (css.metrics.parse_error_count) {
+    std::cerr << path.string() << ':' << css.metrics.first_error_line << ':'
+              << css.metrics.first_error_column << ": error: invalid CSS syntax ("
+              << css.metrics.parse_error_count << " parse errors)\n";
+    return 1;
+  }
   std::map<std::string, std::set<std::string>> errors;
   auto check = [&](const std::string &context, auto action, const std::string &owner = "") {
     try { action(); }

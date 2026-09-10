@@ -124,6 +124,15 @@ class CompilerTests(unittest.TestCase):
         source.write_text('div { display:grid; grid-template-columns:repeat(3,1fr); }')
         result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
+    def test_css_syntax_error_location(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        source=pathlib.Path(folder.name)/'invalid.css'
+        source.write_text('div {\n  broken;\n  also-broken;\n}\n')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,1)
+        self.assertIn(str(source)+':2:9: error: invalid CSS syntax',result.stderr)
+        self.assertIn('2 parse errors',result.stderr)
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)

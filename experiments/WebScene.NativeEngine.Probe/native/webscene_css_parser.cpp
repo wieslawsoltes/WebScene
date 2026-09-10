@@ -101,7 +101,7 @@ css_syntax_parse_result stream_parse(
     Parse parse_native)
 {
     css_syntax_parse_result output;
-    if (webscene_css_stream_abi_version() != 1U) {
+    if (webscene_css_stream_abi_version() != 2U) {
         output.error = "cssparser streaming ABI version mismatch";
         return output;
     }
@@ -115,6 +115,8 @@ css_syntax_parse_result stream_parse(
     output.metrics.duration_ns = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(finished - started).count());
     output.metrics.parse_error_count = parsed.parse_error_count;
+    output.metrics.first_error_line = parsed.first_error_line;
+    output.metrics.first_error_column = parsed.first_error_column;
     output.metrics.parser_allocation_count = parsed.rust_allocation_count;
     output.metrics.parser_peak_bytes = parsed.rust_peak_bytes;
     output.metrics.parser_retained_bytes = parsed.rust_retained_bytes;

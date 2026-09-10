@@ -785,6 +785,8 @@ mod css_syntax {
     #[derive(Clone, Copy, Default)]
     pub struct CssStreamResult {
         status: u32,
+        first_error_line: u32,
+        first_error_column: u32,
         parse_error_count: u64,
         rule_count: u64,
         declaration_count: u64,
@@ -798,6 +800,7 @@ mod css_syntax {
         callbacks: CssSinkVTable,
         context: *mut c_void,
         errors: std::rc::Rc<Cell<u64>>,
+        first_error: std::rc::Rc<Cell<Option<cssparser::SourceLocation>>>,
         callback_failed: std::rc::Rc<Cell<bool>>,
         rule_count: std::rc::Rc<Cell<u64>>,
         declaration_count: std::rc::Rc<Cell<u64>>,
@@ -1090,9 +1093,11 @@ mod css_syntax {
         parser: CssStreamingParser,
     ) {
         let errors = parser.state.errors.clone();
+        let first_error = parser.state.first_error.clone();
         let mut body_parser = CssStreamingDeclarationListParser { parser };
         for item in RuleBodyParser::new(input, &mut body_parser) {
-            if item.is_err() {
+            if let Err((error, _)) = item {
+                if first_error.get().is_none() { first_error.set(Some(error.location)); }
                 errors.set(errors.get() + 1);
             }
         }
@@ -1100,8 +1105,10 @@ mod css_syntax {
 
     fn parse_css_stream_rule_list<'i>(input: &mut Parser<'i, '_>, mut parser: CssStreamingParser) {
         let errors = parser.state.errors.clone();
+        let first_error = parser.state.first_error.clone();
         for item in StyleSheetParser::new(input, &mut parser) {
-            if item.is_err() {
+            if let Err((error, _)) = item {
+                if first_error.get().is_none() { first_error.set(Some(error.location)); }
                 errors.set(errors.get() + 1);
             }
         }
@@ -1132,6 +1139,7 @@ mod css_syntax {
             callbacks,
             context,
             errors: std::rc::Rc::new(Cell::new(0)),
+            first_error: std::rc::Rc::new(Cell::new(None)),
             callback_failed: std::rc::Rc::new(Cell::new(false)),
             rule_count: std::rc::Rc::new(Cell::new(0)),
             declaration_count: std::rc::Rc::new(Cell::new(0)),
@@ -1145,6 +1153,8 @@ mod css_syntax {
             } else {
                 STATUS_OK
             },
+            first_error_line: state.first_error.get().map_or(0, |l| l.line + 1),
+            first_error_column: state.first_error.get().map_or(0, |l| l.column),
             parse_error_count: state.errors.get(),
             rule_count: state.rule_count.get(),
             declaration_count: state.declaration_count.get(),
@@ -1156,7 +1166,7 @@ mod css_syntax {
 
     #[no_mangle]
     pub extern "C" fn webscene_css_stream_abi_version() -> u32 {
-        1
+        2
     }
 
     #[no_mangle]
