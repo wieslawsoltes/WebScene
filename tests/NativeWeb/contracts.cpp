@@ -806,6 +806,12 @@ int main() {
         "escaped and Unicode custom names share decoded native identity");
   d.remove_attribute(d.find("calc-parent"), "class");
   d.render(800, 600);
+  d.attribute(d.find("calc-parent"), "class", "delimiter-offset");
+  d.render(800, 600);
+  check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 38,
+        "escaped commas and parentheses retain reference identity through inheritance");
+  d.remove_attribute(d.find("calc-parent"), "class");
+  d.render(800, 600);
   check(d.bounds(d.find("zero-variable")).width == 0,
         "unitless exponent zero retains length semantics after variable substitution");
   bool font_found = false;

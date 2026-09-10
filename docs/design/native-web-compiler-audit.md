@@ -1689,3 +1689,15 @@ ending in an escaped spelling of café resolves to the expected 34px inset.
 The specialized color-mix regex still has its narrower ASCII input grammar;
 escaped punctuation inside var() scanning and broader custom-value token trees
 remain open. Identifier support outside this var() path is not implied complete.
+
+### Escaped delimiters in variable references (2026-09-10)
+
+The var() boundary scanner incorrectly treated escaped commas/parentheses in
+custom-property names as syntax. A new regression failed on an escaped comma
+before the change. Scanning now skips escaped punctuation before counting groups
+or finding the fallback separator; the build-time tokenizer still decodes and
+validates the name. Compiler coverage exercises escaped comma, both parentheses
+and backslash. Native contracts verify an inherited chain using comma and closing
+parenthesis names selects 38px rather than the 9px fallback. All 85 compiler tests
+and native contracts pass. This fixes var() framing only: shared component-value
+scanners and specialized color-mix parsing still need the same token-aware audit.

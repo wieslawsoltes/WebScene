@@ -143,6 +143,10 @@ static std::string variable_code(const std::string &text) {
       size_t start = cursor + 4, end = start, comma = std::string::npos;
       int depth = 1;
       for (; end < text.size(); ++end) {
+        // Escaped punctuation belongs to the identifier, not the var() frame.
+        // Hex escape digits cannot themselves act as delimiters; decoding is
+        // handled by the CSS tokenizer below.
+        if (text[end] == '\\' && end + 1 < text.size()) { ++end; continue; }
         if (text[end] == '(') ++depth;
         if (text[end] == ')' && --depth == 0) break;
         if (text[end] == ',' && depth == 1 && comma == std::string::npos) comma = end;
