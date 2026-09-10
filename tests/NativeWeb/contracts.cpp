@@ -136,6 +136,22 @@ int main() {
         d.bounds(gap_third).y - d.bounds(gap_first).y == 10, "invalid variable gap resets both axes");
   d.remove_attribute(variable_gap, "class");
   d.render(800, 600);
+  d.attribute(variable_gap, "class", "longhand");
+  d.render(800, 600);
+  check(d.bounds(gap_second).x - d.bounds(gap_first).x == 21 &&
+        d.bounds(gap_third).y - d.bounds(gap_first).y == 13,
+        "variable column-gap fallback overrides shorthand without changing row gap");
+  for (const auto* invalid_class : {"longhand multi", "longhand negative"}) {
+    d.attribute(variable_gap, "class", invalid_class);
+    d.render(800, 600);
+    check(d.bounds(gap_second).x - d.bounds(gap_first).x == 10 &&
+          d.bounds(gap_third).y - d.bounds(gap_first).y == 13,
+          "invalid gap longhand resets only its axis and does not use var fallback");
+  }
+  d.remove_attribute(variable_gap, "class");
+  d.render(800, 600);
+  check(d.bounds(gap_second).x - d.bounds(gap_first).x == 17,
+        "removing gap longhand restores shorthand");
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");

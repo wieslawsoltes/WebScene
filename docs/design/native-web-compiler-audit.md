@@ -751,3 +751,12 @@ A compiled fixed-track grid regression verifies distinct row/column spacing and
 whole-shorthand reset after a negative custom-property mutation. All 50 compiler
 tests and native contracts pass. Longhand interaction coverage, normal keyword,
 calc and multicolumn initial-gap semantics remain open.
+
+### Gap longhand cascade regression (2026-09-10)
+
+Extended native grid coverage verifies column-gap variable fallback overrides only
+its shorthand axis. Existing multi-token and negative variable values reset the
+column gap to zero while retaining the row gap, without incorrectly selecting the
+var fallback. Removing the longhand's class restores shorthand spacing. The native
+contract suite passes. This closes the previously missing longhand interaction
+regression for typed length gaps; normal/calc/multicolumn semantics remain open.
