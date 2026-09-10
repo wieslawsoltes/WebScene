@@ -279,6 +279,18 @@ int main() {
   check(d.bounds(translated).x == d.bounds(translate_parent).x, "transform none resets translation");
   check(d.bounds(d.find("translate-sibling")).y - d.bounds(translate_parent).y == sibling_flow_offset,
         "clearing transform preserves following sibling flow position");
+  auto scroll_container = d.find("native-scroll"), scroll_content = d.find("scroll-content");
+  d.scroll_to(scroll_container, 0, 15);
+  d.render(800, 600);
+  check(d.scroll_offset(scroll_container).second == 15 &&
+        d.bounds(scroll_content).y == d.bounds(scroll_container).y - 15,
+        "native scroll API moves compiled content");
+  d.scroll_to(scroll_container, 0, 1000);
+  d.render(800, 600);
+  check(d.scroll_offset(scroll_container).second == 40, "native scroll clamps to content extent");
+  d.scroll_to(scroll_container, 0, -10);
+  d.render(800, 600);
+  check(d.scroll_offset(scroll_container).second == 0, "native scroll clamps negative offset");
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");

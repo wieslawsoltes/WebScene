@@ -295,6 +295,9 @@ public:
   void set_text(node_id, std::string);
   void attribute(node_id, std::string name, std::string value);
   void remove_attribute(node_id, std::string_view name);
+  // Uses the most recent rendered layout and computed overflow values.
+  void scroll_to(node_id, float x, float y);
+  std::pair<float, float> scroll_offset(node_id) const;
   std::optional<std::string> attribute(node_id, std::string_view name) const;
   node_id parent(node_id) const;
   void remove(node_id);

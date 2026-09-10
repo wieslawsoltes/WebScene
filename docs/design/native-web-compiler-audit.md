@@ -905,3 +905,13 @@ A mixed visible/hidden compiled fixture verifies outside targeting is excluded
 and scene clipping remains present. Native contracts pass. The visible/clip
 combination requires genuinely axis-specific clipping rather than the current
 single clip flag and remains an engine/scene audit gap.
+
+### Native programmatic scrolling (2026-09-10)
+
+Added scroll_to and scroll_offset APIs for C++ document authoring. Scroll requests
+use the latest rendered layout, reject non-finite inputs, clamp to content extent,
+permit hidden/auto/scroll containers and invalidate layout when offsets change.
+Compiled fixture regressions verify child movement and upper/lower clamping;
+native contracts pass. Calls before initial layout do not flush layout. Default
+wheel scrolling, scroll events, smooth scrolling, RTL offsets and host interaction
+coverage remain open.

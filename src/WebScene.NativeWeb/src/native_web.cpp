@@ -139,6 +139,23 @@ void document::attribute(node_id id, std::string name, std::string value) {
   n.attributes[std::move(name)] = std::move(value);
   state_->dom.mark_dirty();
 }
+void document::scroll_to(node_id id, float x, float y) {
+  if (!std::isfinite(x) || !std::isfinite(y)) throw std::invalid_argument("non-finite scroll offset");
+  auto &n = state_->node(id);
+  const auto permitted = [](overflow_mode mode) {
+    return mode == overflow_mode::hidden || mode == overflow_mode::automatic || mode == overflow_mode::scroll;
+  };
+  x = permitted(n.style.overflow_x) ? std::clamp(x, 0.0f, std::max(0.0f, n.scroll_content_width - n.scroll_viewport_width)) : 0;
+  y = permitted(n.style.overflow_y) ? std::clamp(y, 0.0f, std::max(0.0f, n.scroll_content_height - n.scroll_viewport_height)) : 0;
+  if (n.scroll_left == x && n.scroll_top == y) return;
+  n.scroll_left = x;
+  n.scroll_top = y;
+  state_->dom.mark_dirty();
+}
+std::pair<float, float> document::scroll_offset(node_id id) const {
+  const auto &n = state_->node(id);
+  return {n.scroll_left, n.scroll_top};
+}
 void document::remove_attribute(node_id id, std::string_view name) {
   auto &n = state_->node(id);
   if (!n.attributes.erase(std::string(name))) return;
