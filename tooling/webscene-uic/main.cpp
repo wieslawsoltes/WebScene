@@ -122,6 +122,33 @@ static std::string variable_code(const std::string &text) {
   return result + "}";
 }
 // Build-time track lowering: emitted applications receive typed values only.
+// Lower additive length expressions into typed native operations. Parsing is
+// confined to this compiler; generated code evaluates values, not CSS strings.
+static std::string compiled_length_expression(std::string value) {
+  value = trim(value);
+  if (value.starts_with("calc(") && value.ends_with(')'))
+    value = trim(value.substr(5, value.size() - 6));
+  int depth = 0;
+  for (size_t i = value.size(); i-- > 0;) {
+    if (value[i] == ')') ++depth;
+    else if (value[i] == '(') --depth;
+    else if (depth == 0 && (value[i] == '+' || value[i] == '-') && i > 0 && i + 1 < value.size() &&
+             std::isspace(static_cast<unsigned char>(value[i-1])) &&
+             std::isspace(static_cast<unsigned char>(value[i+1]))) {
+      auto a = compiled_length_expression(value.substr(0,i));
+      auto b = compiled_length_expression(value.substr(i+1));
+      return "[&]()->std::optional<webscene::native_web::length>{auto a=" + a + ";auto b=" + b +
+          ";if(!a||!b)return std::nullopt;return webscene::native_web::add_compiled_lengths(*a,*b," +
+          (value[i]=='-' ? "true" : "false") + ");}()";
+    }
+  }
+  if (value.starts_with("var("))
+    return "[&]()->std::optional<webscene::native_web::length>{auto v=s.evaluate(" + variable_code(value) +
+        ");if(v&&v->size()==1)return (*v)[0].length;return std::nullopt;}()";
+  if (value == "auto") throw std::runtime_error("auto is not a calc length");
+  return "std::optional<webscene::native_web::length>{webscene::native_web::length" + length(value) + "}";
+}
+
 static std::string grid_track_code(std::string value) {
   value = trim(value);
   const std::string prefix = "webscene::native_web::grid_track::sizing::";
@@ -256,6 +283,10 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (value.starts_with("calc(") && (name == "left" || name == "right" || name == "top" || name == "bottom")) {
+    return "auto result=" + compiled_length_expression(value) + ";s.set_" + name +
+        "(result.value_or(webscene::native_web::length" + length("auto") + "));";
+  }
   if (name == "inset" && value.find("var(") != std::string::npos) {
     return "auto v=s.evaluate(" + variable_code(value) + ");"
         "bool valid=v && !v->empty() && v->size()<=4;"

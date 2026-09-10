@@ -408,3 +408,19 @@ rejection of auto and rejection of mixed relative units that cannot be represent
 Native contract tests pass. No CSS text is parsed by this helper. This is the
 runtime arithmetic foundation only: the compiler does not yet lower calc into it.
 General mixed-unit expressions require a richer representation and remain open.
+
+### Positional calc lowering (2026-09-10)
+
+The compiler now lowers additive/subtractive calc expressions for left/right/top/
+bottom into typed native arithmetic, including variable operands and fallbacks.
+Native layout tests verify `calc(50% - 20px)` in a 200px containing block and
+`calc(var(--missing-offset, 5px) + 10px)`. Compiler and native contract suites pass.
+Fresh corpus count: **58 distinct unsupported constructs** (397 rules, 1475
+ declarations). No runtime CSS parsing is introduced.
+
+This is partial calc support: multiplication/division, ordinary grouped arithmetic,
+additional consuming properties and expressions mixing two relative units remain
+open. Unrepresentable evaluated sums currently become auto through the positional
+consumer; strict compilation must eventually diagnose statically unsupported unit
+combinations rather than treating them as implemented CSS. Do not close the
+expression family based on the two removed corpus diagnostics.

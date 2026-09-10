@@ -187,6 +187,9 @@ int main() {
         "compiled SVG text anchor reaches serialized text");
   check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end()).find("antialiased") != std::string::npos,
         "compiled inherited font smoothing reaches native text scene");
+  check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 80 &&
+        d.bounds(d.find("calc-child")).y == d.bounds(d.find("calc-parent")).y + 15,
+        "compiled calc retains percentage and variable fallback arithmetic");
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;
