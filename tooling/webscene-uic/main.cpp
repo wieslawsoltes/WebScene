@@ -242,6 +242,29 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "border-color" || name == "border-left-color" || name == "border-top-color" ||
+      name == "border-right-color" || name == "border-bottom-color") {
+    std::string code;
+    bool variable = value.find("var(") != std::string::npos;
+    std::string color, current;
+    if (variable) {
+      code = "auto v=s.evaluate(" + variable_code(value) + ");";
+      color = "(v && v->size()==1 && (*v)[0].color ? *(*v)[0].color : 0u)";
+      current = "!(v && v->size()==1 && (*v)[0].color)";
+    } else if (value == "currentColor" || value == "currentcolor" || value == "initial" || value == "unset") {
+      color = "0u"; current = "true";
+    } else {
+      if (value == "inherit") throw std::runtime_error("inherited border color is not supported yet");
+      // Reuse strict color validation, but retain currentColor as a dependency.
+      assignments("color", value);
+      color = std::to_string(native_document::parse_color(value)) + "u";
+      current = "false";
+    }
+    for (const std::string side : {"left", "top", "right", "bottom"})
+      if (name == "border-color" || name == "border-" + side + "-color")
+        code += "s.set_border_" + side + "_color(" + color + "," + current + ");";
+    return code;
+  }
   if (value.find("var(") != std::string::npos) {
     if (name == "grid-template-columns" || name == "grid-template-rows")
       return variable_grid_code(member, value);

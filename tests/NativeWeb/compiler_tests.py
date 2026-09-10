@@ -77,6 +77,13 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn('s.evaluate(',out.read_text())
         self.assertNotIn('parse_',out.read_text())
+    def test_border_color_lowering(self):
+        for value in ['#c69a6655','transparent','currentColor','var(--accent)']:
+            result,out=self.compile('<div></div>', 'div { border-color:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            for side in ['left','top','right','bottom']:
+                self.assertIn('set_border_'+side+'_color',out.read_text())
+            self.assertNotIn('parse_',out.read_text())
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

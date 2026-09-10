@@ -99,6 +99,22 @@ public:
   void set_margin_top_auto(bool value) { value_.margin_top_auto = value; }
   void set_margin_right_auto(bool value) { value_.margin_right_auto = value; }
   void set_margin_bottom_auto(bool value) { value_.margin_bottom_auto = value; }
+  void set_border_left_color(uint32_t color, bool current = false) {
+    value_.border_left_rgba = color;
+    value_.border_left_current_color = current;
+  }
+  void set_border_top_color(uint32_t color, bool current = false) {
+    value_.border_top_rgba = color;
+    value_.border_top_current_color = current;
+  }
+  void set_border_right_color(uint32_t color, bool current = false) {
+    value_.border_right_rgba = color;
+    value_.border_right_current_color = current;
+  }
+  void set_border_bottom_color(uint32_t color, bool current = false) {
+    value_.border_bottom_rgba = color;
+    value_.border_bottom_current_color = current;
+  }
   void set_background_rgba(uint32_t value) { value_.background_rgba = value; }
   void set_foreground_rgba(uint32_t value) { value_.foreground_rgba = value; }
   void set_font_weight(int32_t value) { value_.font_weight = value; }
