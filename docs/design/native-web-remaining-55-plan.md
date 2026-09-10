@@ -400,3 +400,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Service and runtime iframe/shadow/positional regressions pass. Per-element
   inheritance, substitution, declaration application and invalidation are still
   required; these primitives do not constitute a standalone cascade.
+
+- Parsed CSS variable resolver extraction: webscene_css_variables.h now provides
+  the existing runtime substitution path to native callers. The runtime delegates
+  to it; compiled-only styles retain their typed evaluator. Native tests verify
+  ancestor/root lookup, nested fallback, repeated references and mutation; runtime
+  dimension-variable-compatibility, dimension-inheritance and iframe cascade tests
+  pass. This is behavior-preserving reuse, not full variable compliance: cycle
+  semantics, quote/token awareness and the fixed expansion bound remain limitations
+  of this existing resolver. Declaration application/cascade integration remains open.

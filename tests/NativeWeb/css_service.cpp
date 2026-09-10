@@ -3,6 +3,7 @@
 #include "webscene_css_matching.h"
 #include "webscene_css_query.h"
 #include "webscene_css_rule_operations.h"
+#include "webscene_css_variables.h"
 #include <iostream>
 int main() {
     using webscene_native::css::parse_declarations;
@@ -155,5 +156,15 @@ int main() {
     rules[0].shadow_scope_root_id=1;
     webscene_native::css::rebuild_root_variables(rules,variables,important);
     if(variables["--theme"]!="blue" || important.contains("--theme")) return 35;
+    using webscene_native::css::resolve_value;
+    variables["--size"]="12px";
+    fieldset.style.mutable_custom_properties().values["--size"]="20px";
+    if(resolve_value(exempt,"var(--size)",variables)!="20px" ||
+       resolve_value(select,"var(--size)",variables)!="12px" ||
+       resolve_value(exempt,"var(--absent, var(--size))",variables)!="20px") return 36;
+    legend.style.mutable_custom_properties().values["--size"]="8px";
+    if(resolve_value(exempt,"calc(var(--size) + var(--size))",variables)!="calc(8px + 8px)") return 37;
+    legend.style.mutable_custom_properties().values["--size"]="9px";
+    if(resolve_value(exempt,"var(--size)",variables)!="9px") return 38;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
