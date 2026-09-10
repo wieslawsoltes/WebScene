@@ -1,3 +1,4 @@
+#include "webscene_css_state.h"
 #include "webscene/native_web.hpp"
 #include "webscene_css_parser.h"
 #include "webscene_html_parser.h"

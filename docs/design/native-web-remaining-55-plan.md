@@ -287,3 +287,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   shared-shadow-values and iframe-replacement-layout tests both pass. This resolves
   the build failure noted above and preserves a usable ordinary-runtime reference
   for shared CSS extraction. It does not change the delivery profile decision.
+
+- CSS service extraction: stylesheet declarations, compiled selector structures,
+  immutable rule payloads, keyframe storage and movable cascade state now live in
+  webscene_css_state.h, independent of V8. The existing runtime uses aliases to
+  those shared types; its payload cache retains its existing ownership. The
+  compiler build includes the header to verify the V8-free tool boundary. This
+  does not yet switch compiler lowering to runtime cascade execution. Both builds,
+  compiler/native contracts, shared-shadow-values and iframe-dynamic-recascade
+  tests pass. Next extraction boundaries are selector matching, property application
+  and cascade/invalidation services, followed by a native-document integration test.
