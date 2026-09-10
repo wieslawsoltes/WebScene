@@ -760,3 +760,15 @@ column gap to zero while retaining the row gap, without incorrectly selecting th
 var fallback. Removing the longhand's class restores shorthand spacing. The native
 contract suite passes. This closes the previously missing longhand interaction
 regression for typed length gaps; normal/calc/multicolumn semantics remain open.
+
+### Variable margin lowering (2026-09-10)
+
+Margin shorthand and longhands now evaluate typed lengths or auto, accepting
+negative lengths and updating both side values and native auto flags. Invalid
+computed values reset affected sides to zero and clear auto flags. Shorthand
+validation covers the whole one-to-four-token value before expansion.
+
+Native regression verifies block centering via variable auto margins, transition
+to a negative left margin without stale auto state, and invalid-value reset.
+All 50 compiler tests and native contracts pass. Margin longhand cascade tests,
+case-insensitive variable auto, calc and collapsing-margin parity remain open.

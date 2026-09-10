@@ -373,6 +373,18 @@ static std::string assignments(const std::string &name,
         "s.set_bottom(side(valid && v->size()>2?2:0));"
         "s.set_left(side(valid && v->size()>3?3:valid && v->size()>1?1:0));";
   }
+  if ((name == "margin" || (name.starts_with("margin-") && lengths.contains(name))) && value.find("var(") != std::string::npos) {
+    std::string code = "auto v=s.evaluate(" + variable_code(value) + ");bool valid=v && !v->empty() && v->size()<=" + (name == "margin" ? "4;" : "1;") +
+        "if(valid) for(const auto& t:*v) valid=valid && (t.length || t.text==\"auto\");";
+    const std::vector<std::string> sides{"top", "right", "bottom", "left"};
+    const std::vector<std::string> indices{"0", "valid && v->size()>1?1:0", "valid && v->size()>2?2:0", "valid && v->size()>3?3:valid && v->size()>1?1:0"};
+    for (size_t i=0; i<sides.size(); ++i) {
+      if (name != "margin" && name != "margin-" + sides[i]) continue;
+      auto index = name == "margin" ? indices[i] : "0";
+      code += "{auto i=" + index + ";s.set_margin_" + sides[i] + "(valid ? (*v)[i].length.value_or(webscene::native_web::length" + length("0") + ") : webscene::native_web::length" + length("0") + ");s.set_margin_" + sides[i] + "_auto(valid && (*v)[i].text==\"auto\");}";
+    }
+    return code;
+  }
   if (((name.starts_with("padding-") && lengths.contains(name)) || name == "row-gap" || name == "column-gap") && value.find("var(") != std::string::npos) {
     return "auto v=s.evaluate(" + variable_code(value) + ");s.set_" + member +
         "(v && v->size()==1 && (*v)[0].length && (*v)[0].length->value>=0 ? *(*v)[0].length : webscene::native_web::length" + length("0") + ");";

@@ -152,6 +152,14 @@ int main() {
   d.render(800, 600);
   check(d.bounds(gap_second).x - d.bounds(gap_first).x == 17,
         "removing gap longhand restores shorthand");
+  auto variable_margin = d.find("variable-margin"), margin_container = d.find("margin-container");
+  check(d.bounds(variable_margin).x - d.bounds(margin_container).x == 40, "variable auto margins center a block");
+  d.attribute(variable_margin, "class", "shift");
+  d.render(800, 600);
+  check(d.bounds(variable_margin).x - d.bounds(margin_container).x == -5, "signed variable margin clears auto flags");
+  d.attribute(variable_margin, "class", "invalid");
+  d.render(800, 600);
+  check(d.bounds(variable_margin).x == d.bounds(margin_container).x, "invalid variable margin resets to zero");
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");
