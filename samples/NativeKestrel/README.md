@@ -187,3 +187,20 @@ and y=971–1000 respectively, reaching the viewport bottom at both sizes. Previ
 140 pixels were left unused because final size assignment discarded the minimum
 already included in free-space accounting. Row and column regression fixtures
 cover an explicit zero flex basis with a nonzero minimum.
+
+### Native GPU in the original UI preview
+
+When native WebGPU targets are enabled, `FocoKestrelPreview` attaches the existing
+C++ Kestrel viewport to the original `scene` canvas through Foco's host-frame
+callback and GPU image adapter. It renders a demonstration mesh and grid; wheel
+input updates the native camera. Canvas sizing is supplied by native application
+logic, replacing the resize behavior in `renderer.js`, without editing the original
+HTML or CSS. Ribbon templates remain compiled C++ modules.
+
+This is still a diagnostic UI preview: unsupported CSS is reported and omitted,
+most original commands are not wired, and the displayed document labels and
+renderer-status text are still static. It is not the complete Kestrel port.
+
+Visual check: native grid/mesh output fills the original viewport after sizing.
+The current GPU attachment paints above the viewport's HTML overlays, hiding its
+controls and view cube. Correct DOM/GPU composition ordering remains required.

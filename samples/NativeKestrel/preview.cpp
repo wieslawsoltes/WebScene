@@ -2,15 +2,61 @@
 #include <foco/app_builder.hpp>
 #include <iostream>
 #include <array>
+#include <functional>
+#include <cmath>
+#include <algorithm>
+#ifdef KESTREL_PREVIEW_GPU
+#include "native_gpu_image.hpp"
+#include "native_webgpu_surface.h"
+#include "third_party/nlohmann/json.hpp"
+#include <memory>
+#endif
 import kestrel.original.preview;
 import kestrel.preview.tabs;
 import kestrel.preview.groups;
+#ifdef KESTREL_PREVIEW_GPU
+import kestrel.viewport;
+#endif
+class preview_window final : public foco::window {
+public:
+  std::function<void()> frame;
+  bool requires_host_frames() const noexcept override { return bool(frame); }
+  bool advance_host_frame(double) override { if (frame) frame(); return false; }
+};
 class preview_app final : public foco::application {
-  foco::ref<foco::window> window;
+  foco::ref<preview_window> window;
   foco::ref<webscene::foco_host::view> view;
   std::array<webscene::native_web::node_id,6> tabs{};
   std::vector<webscene::native_web::subscription> handlers;
   std::vector<webscene::native_web::node_id> ribbon_roots;
+#ifdef KESTREL_PREVIEW_GPU
+  kestrel::drawing model;
+  std::unique_ptr<kestrel::viewport> viewport;
+  uint32_t gpu_width{}, gpu_height{};
+  uint64_t gpu_serial{};
+  bool gpu_dirty{true};
+  void tick() {
+    auto node = view->document.find("scene");
+    auto bounds = view->document.bounds(node);
+    if (bounds.width < 1 || bounds.height < 1) return;
+    auto w = static_cast<uint32_t>(bounds.width);
+    auto h = static_cast<uint32_t>(bounds.height);
+    if (!viewport) {
+      viewport = std::make_unique<kestrel::viewport>(node, w, h);
+      viewport->options.style = kestrel::display_style::shaded_edges;
+    }
+    if (w != gpu_width || h != gpu_height) {
+      viewport->resize(w, h);
+      gpu_width = w; gpu_height = h; gpu_dirty = true;
+    }
+    if (auto image = viewport->poll()) {
+      ++gpu_serial;
+      view->set_gpu_image(node, w, h, gpu_serial,
+          webscene::foco_host::make_gpu_image(node, gpu_serial, std::move(image)));
+    }
+    if (gpu_dirty && viewport->submit(model)) gpu_dirty = false;
+  }
+#endif
   void select_tab(size_t selected) {
     for (auto root : ribbon_roots) view->document.remove(root);
     const std::array<const char*,6> names{"Home","Insert","Annotate","Model","View","Manage"};
@@ -24,10 +70,11 @@ class preview_app final : public foco::application {
     view->refresh();
   }
 public:
+  ~preview_app() { if (window) window->frame = {}; }
   foco::result<void> started(foco::application_lifetime &base) override {
     auto *lifetime = dynamic_cast<foco::windowed_application_lifetime *>(&base);
     if (!lifetime) return foco::error{foco::error_code::invalid_argument,"Desktop required"};
-    window = foco::make_ref<foco::window>();
+    window = foco::make_ref<preview_window>();
     window->set_title("Kestrel original HTML/CSS — diagnostic preview (unsupported features omitted)");
     window->set_width(1280); window->set_height(800);
     view = foco::make_ref<webscene::foco_host::view>();
@@ -43,6 +90,38 @@ public:
     }
     select_tab(0);
     window->add_child(view);
+#ifdef KESTREL_PREVIEW_GPU
+    // renderer.js sizes both canvases to the viewport during resize. Keep that
+    // application behavior in native code; the original stylesheet is unchanged.
+    for (auto id : {"scene", "overlay"}) {
+      webscene::native_web::rule sizing;
+      sizing.inline_target = view->document.find(id);
+      sizing.declarations.push_back({false, +[](webscene::native_web::style &style) {
+        style.set_width({100, webscene::native_web::length_unit::percent});
+        style.set_height({100, webscene::native_web::length_unit::percent});
+      }});
+      view->document.add_rule(std::move(sizing));
+    }
+    view->refresh();
+    model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
+    handlers.push_back(view->document.on(view->document.find("viewport"), "wheel",
+        [this](auto &event) {
+          if (!viewport) return;
+          auto bounds = view->document.bounds(view->document.find("scene"));
+          viewport->camera.zoom_at(
+              std::exp(std::clamp(-double(event.delta_y) * .0014, -.6, .6)),
+              event.client_x - bounds.x, event.client_y - bounds.y);
+          gpu_dirty = true;
+          event.prevent_default();
+        }));
+    window->frame = [this, lifetime] {
+      try { tick(); }
+      catch (const std::exception &error) {
+        std::cerr << "Native preview viewport: " << error.what() << '\n';
+        lifetime->shutdown(5);
+      }
+    };
+#endif
     return window->show(*lifetime);
   }
 };
