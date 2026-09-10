@@ -51,7 +51,7 @@ static std::string trim(std::string value) {
 }
 static std::string length(const std::string &value) {
   static const std::regex valid(
-      R"(^(-?[0-9]+(\.[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh)?|auto)$)");
+      R"(^([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)(px|%|em|rem|vw|vh|dvw|dvh)?|auto)$)");
   if (!std::regex_match(value, valid) ||
       (value != "auto" && value.back() >= '0' && value.back() <= '9' &&
        std::stof(value) != 0))
@@ -103,7 +103,7 @@ static std::string variable_code(const std::string &text) {
     if (token == "initial" || token == "inherit" || token == "unset" || token == "revert" || token == "revert-layer")
       throw std::runtime_error("custom-property CSS-wide keywords are not supported yet");
     std::string typed_length = "std::nullopt", typed_color = "std::nullopt";
-    if (std::regex_match(token, std::regex(R"(-?[0-9]+(\.[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh))")) || token == "0")
+    if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)(px|%|em|rem|vw|vh|dvw|dvh))")) || token == "0")
       typed_length = "webscene::native_web::length" + length(token);
     if (std::regex_match(token, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) ||
         token == "transparent" || token == "black" || token == "white")
@@ -549,7 +549,7 @@ static std::string assignments(const std::string &name,
   if (name == "line-height") {
     if (value == "inherit" || value == "unset") return "s.set_line_height(-1.0f);";
     if (value == "normal") return "s.set_line_height(-2.0f);";
-    if (std::regex_match(value, std::regex(R"([0-9]+(\.[0-9]+)?)")))
+    if (std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+))")))
       return "s.set_line_height(" + number(-3 - std::stof(value)) + ");";
     if (!value.ends_with("px") || value.starts_with("-"))
       throw std::runtime_error("line-height requires normal, nonnegative px or multiplier");
@@ -582,7 +582,7 @@ static std::string assignments(const std::string &name,
     return "s.set_font_weight(0);";
   if (name == "font-weight" || name == "opacity" || name == "flex-grow" ||
       name == "flex-shrink") {
-    if (!std::regex_match(value, std::regex(R"([0-9]+(\.[0-9]+)?)")))
+    if (!std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+))")))
       throw std::runtime_error("invalid numeric value");
     auto v = std::stof(value);
     if ((name == "opacity" && v > 1) ||

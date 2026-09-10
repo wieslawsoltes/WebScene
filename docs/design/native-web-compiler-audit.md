@@ -152,3 +152,20 @@ generic native element: text
 skipped noscript
 skipped script
 ```
+
+## Closure log
+
+### Numeric grammar: leading decimals (2026-09-10)
+
+Implemented signed leading-decimal lengths (`.5px`, `+.5px`, `-.25px`) and
+leading-decimal scalar values (`opacity:.8`). Length token recognition in compiled
+custom-property expressions uses the same expanded grammar. Regression fixture:
+`tests/NativeWeb/Contracts.html` (`numeric-length`); native contract assertions
+verify generated dimensions. Compiler and native contract suites pass.
+
+Fresh corpus result: 397 rules, 1475 declarations, **69 distinct unsupported
+constructs**, down from the preserved 80-construct baseline. Numeric grammar is
+not closed: exponent notation and property-specific range/normalization behavior
+still require review. The `color:var(` diagnostic also remains open; a scan of the
+original source found no unclosed `color:var(...)` declaration, so declaration
+extraction/serialization needs investigation before classifying it as bad input.
