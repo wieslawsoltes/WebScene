@@ -975,12 +975,14 @@ struct compiler {
     if (node.parser_line) { location = node.parser_line; column = 1; }
     else if (!node.tag.starts_with("#")) locate("<" + node.tag);
   }
-  void declarations(const css_syntax_output &css, const css_syntax_rule &r) {
+  void declarations(const css_syntax_output &css, const css_syntax_rule &r,
+                    const dom_node *inline_owner = nullptr) {
     out << "{";
     bool emitted = false;
     for (size_t j = 0; j < r.declaration_count; ++j) {
       const auto &d = css.declarations.at(r.first_declaration + j);
-      if (stylesheet_locations) { location = d.source_line; column = d.source_column; }
+      if (inline_owner) locate_node(*inline_owner);
+      else if (stylesheet_locations) { location = d.source_line; column = d.source_column; }
       else locate(d.name);
       try {
         std::string code;
@@ -1086,7 +1088,7 @@ struct compiler {
         r.first_declaration = 0;
         r.declaration_count = css.declarations.size();
         out << "d.add_rule({{},";
-        declarations(css, r);
+        declarations(css, r, &n);
         out << ",0,1e9f," << local << "});\n";
         continue;
       }

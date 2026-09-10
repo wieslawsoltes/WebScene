@@ -1112,3 +1112,13 @@ metadata pass could retain unrelated locations. One regression checks all four
 rejection paths after repeated valid siblings and verifies no output is emitted.
 All 59 compiler tests and native contracts pass. The column remains an element
 line anchor; exact authored spans and attribute diagnostics remain open.
+
+### Inline declaration owner anchoring (2026-09-10)
+
+Inline declaration lowering now receives its owning node and retains that node's
+parser-line anchor for errors and preview warnings. It no longer searches the
+whole HTML source for the first matching property name. A repeated-width fixture
+checks strict failure on the second element and the same location in preview.
+All 60 compiler tests and native contracts pass. This provides an owner location,
+not the exact attribute/property span; multiline attributes and decoded source
+mapping remain part of the open diagnostics gate.

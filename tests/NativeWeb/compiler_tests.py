@@ -181,6 +181,18 @@ class CompilerTests(unittest.TestCase):
             self.assertIn(message,result.stderr)
             self.assertFalse(output.exists())
 
+    def test_inline_errors_anchor_to_owning_element(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        source.write_text('<html><body>\n<div style="width:1px">first</div>\n<div style="width:bogus">second</div>\n</body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn(str(source)+':3:1: error:',result.stderr)
+        self.assertFalse(output.exists())
+        preview=subprocess.run([UIC,source,output,'--preview'],capture_output=True,text=True)
+        self.assertEqual(preview.returncode,0,preview.stderr)
+        self.assertIn(str(source)+':3:1: warning: preview: width: bogus:',preview.stderr)
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'
