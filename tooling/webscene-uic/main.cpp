@@ -450,9 +450,14 @@ static std::string assignments(const std::string &name,
     return "s.set_svg_text_anchor(" + quote(value) + ");";
   }
   if (name == "stroke-width") {
-    if (!std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%)?)")))
+    value = ascii_keyword(value);
+    const auto suffix = value.ends_with("px") ? size_t{2} : value.ends_with('%') ? size_t{1} : size_t{0};
+    const auto numeric = value.substr(0, value.size() - suffix);
+    if (!css_number(numeric))
       throw std::runtime_error("stroke-width requires a nonnegative number, px or percentage");
-    if (!std::isfinite(std::stof(value))) throw std::runtime_error("non-finite stroke-width");
+    const auto width = std::stof(numeric);
+    if (!std::isfinite(width) || width < 0)
+      throw std::runtime_error("invalid stroke-width range");
     return "s.set_svg_stroke_width(" + quote(value) + ");";
   }
   if (name == "fill" || name == "stroke") {

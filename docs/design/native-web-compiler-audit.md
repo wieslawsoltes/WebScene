@@ -1135,3 +1135,16 @@ and zero-factor representation. All 61 compiler tests and native contracts pass.
 Optional font style/variant/weight/stretch fields, relative sizes, percentages and
 full shorthand reset semantics remain open; this closes numeric consistency for
 the existing shorthand subset only.
+
+### SVG stroke-width numeric validation (2026-09-10)
+
+Stroke-width now uses the shared CSS number grammar and explicit nonnegative
+range validation, accepts negative zero and case-insensitive PX, and normalizes
+unit spelling before passing it to the existing native API. Independent tests
+cover signed/exponent forms, percentages, negative ranges, malformed units and
+overflow. All 62 compiler tests and native contracts pass.
+
+The current SVG style API still stores stroke width as text. Numeric acceptance
+is not evidence of a fully preprocessed SVG pipeline: typed SVG lengths, compiled
+path data, inherited percentage resolution and rendered parity remain open under
+the paint/SVG gate. This work changes compiler validation only.

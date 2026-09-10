@@ -408,6 +408,15 @@ class CompilerTests(unittest.TestCase):
         for value in ['-1','1 -2 0','1 1 -2px','1 2 3 4']:
             result,_=self.compile('<div></div>', 'div { flex:'+value+'; }')
             self.assertNotEqual(result.returncode,0)
+    def test_stroke_width_numeric_grammar(self):
+        for value in ['.5', '+5e-1', '1E+1PX', '-0', '-0px', '25%']:
+            result,out=self.compile('<svg></svg>', 'svg { stroke-width:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_svg_stroke_width("'+value.lower()+'")',out.read_text())
+        for value in ['-1', '-.5px', '-1%', '1e999', '1.', '1 px', '1em', 'NaN', '1%%']:
+            result,_=self.compile('<svg></svg>', 'svg { stroke-width:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_font_numeric_forms_and_family_case(self):
         for value in ['.5px/1.2 MixedCaseFont', '+5e-1PX/+1.2 MixedCaseFont',
                       '.5px/NORMAL MixedCaseFont', '0/-0 MixedCaseFont']:
