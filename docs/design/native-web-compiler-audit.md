@@ -896,3 +896,12 @@ viewport. The scene retains a zero-height clip, descendant geometry remains
 allocated, outside pointer targeting is suppressed, and restoring the height
 restores targeting. Native contracts pass. This checks retained-scene/input
 behavior, not renderer pixel output or animated height transitions.
+
+### Computed overflow axes (2026-09-10)
+
+Native cascade now stores normalized overflow axis values as well as deriving
+clipping/scroll flags, so downstream layout/scene consumers see computed values.
+A mixed visible/hidden compiled fixture verifies outside targeting is excluded
+and scene clipping remains present. Native contracts pass. The visible/clip
+combination requires genuinely axis-specific clipping rather than the current
+single clip flag and remains an engine/scene audit gap.

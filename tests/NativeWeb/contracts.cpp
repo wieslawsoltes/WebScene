@@ -225,6 +225,13 @@ int main() {
   d.render(800, 10000);
   click_clip(15);
   check(clipped_hits == 3, "restoring clip height restores descendant targeting");
+  d.attribute(clip_parent, "class", "mixed");
+  d.render(800, 10000);
+  click_clip(25);
+  check(clipped_hits == 3, "visible overflow computes to auto beside hidden axis");
+  check(std::any_of(clip_scene.commands.begin(), clip_scene.commands.end(), [&](const auto& command) {
+    return command.node_id == clip_parent && command.kind == 12;
+  }), "mixed visible-hidden overflow retains scene clip");
   int translated_hits = 0;
   auto translated_subscription = d.on(translated, "pointerdown", [&](event&) { ++translated_hits; });
   auto translated_area = d.bounds(translated);
