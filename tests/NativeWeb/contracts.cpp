@@ -193,6 +193,18 @@ int main() {
   check(d.bounds(translated).x - d.bounds(translate_parent).x == 10 &&
         d.bounds(translated).y - d.bounds(translate_parent).y == 5,
         "two-axis percentage translate uses own width and height");
+  d.render(1600, 10000);
+  check(d.bounds(translated).width == 40 &&
+        d.bounds(translated).x - d.bounds(translate_parent).x == 20 &&
+        d.bounds(translated).y - d.bounds(translate_parent).y == 5,
+        "percentage translation re-resolves after viewport-driven element resize");
+  translated_area = d.bounds(translated);
+  d.pointer("pointerdown", translated_area.x + translated_area.width - 1, translated_area.y + 1);
+  d.pointer("pointerup", translated_area.x + translated_area.width - 1, translated_area.y + 1);
+  check(translated_hits == 2, "translated hit geometry follows resized element");
+  d.render(800, 10000);
+  check(d.bounds(translated).width == 20 && d.bounds(translated).x - d.bounds(translate_parent).x == 10,
+        "percentage translation returns without accumulated offsets");
   d.attribute(translated, "class", "reset");
   d.render(800, 600);
   check(d.bounds(translated).x == d.bounds(translate_parent).x, "transform none resets translation");

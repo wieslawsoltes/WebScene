@@ -841,3 +841,13 @@ one-argument form supplying zero Y. Native regression checks percentages resolve
 against each axis of the element's own box; compiler tests reject excess arguments,
 missing commas and auto. All 53 compiler tests and native contracts pass. Function
 lists, calc/variables and broader transform composition remain open.
+
+### Translation resize semantics (2026-09-10)
+
+The compiled translation fixture now has viewport-relative width. Native contracts
+verify widening the viewport doubles its width and percentage X offset while Y
+retains its own-height basis, pointer targeting follows the resized geometry,
+and shrinking restores the original offset without accumulation. Native contracts
+pass. This proves dynamic geometry/input only, not compositor presentation timing,
+60fps resize or absence of host image stretching; those goal requirements remain
+unverified and unchanged.
