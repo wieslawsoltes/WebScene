@@ -1506,3 +1506,10 @@ fixture verifies center overrides parent start alignment and changing to auto
 restores parent alignment. All 77 compiler tests and rebuilt contracts pass.
 Baseline, stretch, grid alignment, logical directions and CSS-wide values still
 need dedicated semantic coverage; this closes the basic flex override path.
+
+### Align-self stretch/end mutation (2026-09-10)
+
+Native contracts switch the flex child to stretch with auto height and verify
+it fills the 40px cross axis. Switching to end restores its explicit 10px height
+and positions it 30px from the parent's top. Rebuilt contracts pass. Baseline,
+column-direction and grid alignment remain separate coverage gaps.

@@ -272,6 +272,17 @@ int main() {
   d.render(800, 600);
   check(d.bounds(d.find("self-child")).y == d.bounds(d.find("self-parent")).y,
         "align-self auto returns to parent alignment");
+  d.attribute(d.find("self-child"), "class", "stretch");
+  d.render(800, 600);
+  check(d.bounds(d.find("self-child")).height == 40,
+        "align-self stretch fills cross axis when height is auto");
+  d.attribute(d.find("self-child"), "class", "end");
+  d.render(800, 600);
+  check(d.bounds(d.find("self-child")).height == 10 &&
+        d.bounds(d.find("self-child")).y == d.bounds(d.find("self-parent")).y + 30,
+        "align-self end restores explicit height at cross-axis end");
+  d.remove_attribute(d.find("self-child"), "class");
+  d.render(800, 600);
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
