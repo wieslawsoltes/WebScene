@@ -41,4 +41,17 @@ int main() {
     layer["visible"] = false;
   if (kestrel::build_scene(drawing, {}).entity_count != 0)
     throw std::runtime_error("Hidden layer rendered");
+  kestrel::camera camera;
+  camera.target = {1000, 2000, 3000};
+  camera.update();
+  auto uniforms = kestrel::make_camera_uniforms(
+      camera, camera.target, 800, 600, {kestrel::display_style::shaded, true});
+  if (uniforms.viewport != std::array<float, 4>{800, 600, 1, 1} ||
+      uniforms.eye[3] != 1)
+    throw std::runtime_error("Camera uniform mismatch");
+  auto expected =
+      kestrel::multiply(camera.combined, kestrel::translation(camera.target));
+  for (size_t i = 0; i < 16; ++i)
+    if (uniforms.mvp[i] != static_cast<float>(expected[i]))
+      throw std::runtime_error("Camera relative matrix mismatch");
 }

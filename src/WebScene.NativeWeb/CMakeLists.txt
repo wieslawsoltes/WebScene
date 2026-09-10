@@ -89,7 +89,8 @@ if(BUILD_TESTING)
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/drawing.cppm"
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/camera.cppm"
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/geometry.cppm"
-   "${WEBSCENE_ROOT}/samples/NativeKestrel/native/render_data.cppm")
+   "${WEBSCENE_ROOT}/samples/NativeKestrel/native/render_data.cppm"
+   "${WEBSCENE_ROOT}/samples/NativeKestrel/native/shaders.cppm")
  add_executable(kestrel_native_render_data "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_render_data.cpp")
  target_link_libraries(kestrel_native_render_data PRIVATE kestrel_native)
  add_test(NAME kestrel_native_render_data COMMAND kestrel_native_render_data)

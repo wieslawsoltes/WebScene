@@ -11,6 +11,7 @@ module;
 #include <vector>
 export module kestrel.render_data;
 export import kestrel.geometry;
+export import kestrel.camera;
 
 export namespace kestrel {
 // Matches renderer.js line-instance and triangle-vertex shader layouts.
@@ -149,5 +150,28 @@ inline render_scene build_scene(const drawing &document, vec3 origin,
           {t, text_color, e.at("type") == "DIMENSION", selected});
   }
   return scene;
+}
+
+struct camera_uniforms {
+  std::array<float, 16> mvp;
+  std::array<float, 4> eye, viewport;
+};
+static_assert(sizeof(camera_uniforms) == 96);
+static_assert(offsetof(camera_uniforms, eye) == 64);
+static_assert(offsetof(camera_uniforms, viewport) == 80);
+inline camera_uniforms make_camera_uniforms(const camera &camera, vec3 origin,
+                                            float width, float height,
+                                            render_options options = {}) {
+  camera_uniforms out;
+  auto relative = multiply(camera.combined, translation(origin));
+  for (size_t i = 0; i < relative.size(); ++i)
+    out.mvp[i] = static_cast<float>(relative[i]);
+  auto eye = camera.eye - origin;
+  out.eye = {static_cast<float>(eye.x), static_cast<float>(eye.y),
+             static_cast<float>(eye.z), 1};
+  out.viewport = {width, height,
+                  options.style == display_style::wireframe ? 0.f : 1.f,
+                  options.light_theme ? 1.f : 0.f};
+  return out;
 }
 } // namespace kestrel

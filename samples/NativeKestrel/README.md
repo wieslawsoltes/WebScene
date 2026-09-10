@@ -97,3 +97,8 @@ lineweights, locked opacity and wireframe/shaded/xray modes to GPU upload data.
 Tests cover display-mode primitive counts, selection, opacity and hidden layers.
 Production entity expansion and geometry caching are not yet connected; scene
 assembly currently processes the drawing's direct entities.
+
+The original WGSL line/mesh shader source is embedded in `kestrel.shaders`, with
+no JavaScript dependency. Camera uniforms now match its 96-byte layout and use
+the origin-relative MVP and eye position. Native packing tests pass; creating
+and validating GPU pipelines with these shaders is still pending.
