@@ -60,6 +60,66 @@ static std::string length(const std::string &value) {
          ", static_cast<webscene::native_web::length_unit>(" +
          std::to_string(int(v.unit)) + "), " + number(v.pixel_offset) + "}";
 }
+// Build-time track lowering: emitted applications receive typed values only.
+static std::string grid_track_code(std::string value) {
+  value = trim(value);
+  const std::string prefix = "webscene::native_web::grid_track::sizing::";
+  if (value == "auto" || value == "min-content")
+    return "{{}, {}, 0.0f, " + prefix +
+           (value == "auto" ? "automatic" : "min_content") + "}";
+  if (std::regex_match(value, std::regex(R"([0-9]+(\.[0-9]+)?fr)")))
+    return "{{}, {}, " + number(std::stof(value)) + ", " + prefix +
+           "fractional}";
+  if (value.starts_with("minmax(") && value.ends_with(")")) {
+    auto comma = value.find(',');
+    if (comma == value.npos || value.find(',', comma + 1) != value.npos)
+      throw std::runtime_error("invalid grid minmax: " + value);
+    auto minimum = trim(value.substr(7, comma - 7));
+    auto maximum = trim(value.substr(comma + 1, value.size() - comma - 2));
+    if (minimum.starts_with("-") || maximum.starts_with("-"))
+      throw std::runtime_error("negative grid minmax track: " + value);
+    bool fraction =
+        std::regex_match(maximum, std::regex(R"([0-9]+(\.[0-9]+)?fr)"));
+    return "{" + length(minimum) + ", " +
+           (fraction ? length("auto") : length(maximum)) + ", " +
+           number(fraction ? std::stof(maximum) : 0) + ", " + prefix +
+           "minmax}";
+  }
+  if (!value.empty() && value.front() == '-')
+    throw std::runtime_error("negative grid track: " + value);
+  return "{" + length(value) + ", " + length(value) + ", 0.0f, " + prefix +
+         "fixed}";
+}
+static std::string grid_tracks_code(const std::string &value) {
+  if (value == "none")
+    return "{}";
+  std::string result = "{", token;
+  int depth = 0;
+  auto flush = [&] {
+    if (token.empty())
+      return;
+    if (result.size() > 1)
+      result += ",";
+    result += grid_track_code(token);
+    token.clear();
+  };
+  for (char c : value) {
+    if (c == '(')
+      ++depth;
+    if (c == ')' && --depth < 0)
+      throw std::runtime_error("unbalanced grid track");
+    if (std::isspace(static_cast<unsigned char>(c)) && depth == 0)
+      flush();
+    else
+      token += c;
+  }
+  if (depth != 0)
+    throw std::runtime_error("unbalanced grid track");
+  flush();
+  if (result.size() == 1)
+    throw std::runtime_error("empty grid track list");
+  return result + "}";
+}
 static std::string assignments(const std::string &name,
                                const std::string &value) {
   static const std::set<std::string> lengths = {"width",
@@ -89,6 +149,8 @@ static std::string assignments(const std::string &name,
                                                 "border-bottom-right-radius"};
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
+  if (name == "grid-template-columns" || name == "grid-template-rows")
+    return "s.set_" + member + "(" + grid_tracks_code(value) + ");";
   if (lengths.contains(name)) {
     auto result = "s." + member + " = " + length(value) + ";";
     if (name.starts_with("margin-"))
@@ -129,8 +191,8 @@ static std::string assignments(const std::string &name,
     return assignments("row-gap", a) + assignments("column-gap", b);
   }
   if (name == "background" || name == "background-color" || name == "color") {
-    if (!std::regex_match(value,
-                          std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) &&
+    if (!std::regex_match(value, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|["
+                                            "0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) &&
         value != "transparent" && value != "black" && value != "white")
       throw std::runtime_error("color profile requires #rgb, #rgba, #rrggbb, "
                                "#rrggbbaa, black, white or transparent");
@@ -147,6 +209,9 @@ static std::string assignments(const std::string &name,
              {"inline", "inline_flow"},
              {"inline-block", "inline_block"},
              {"flex", "flex"},
+             {"inline-flex", "inline_flex"},
+             {"grid", "grid"},
+             {"inline-grid", "inline_grid"},
              {"none", "none"}}}},
           {"flex-direction",
            {"direction", {{"row", "row"}, {"column", "column"}}}},
@@ -192,8 +257,10 @@ static std::string assignments(const std::string &name,
            ";";
   }
   if (name == "font-family") {
-    if (value.empty()) throw std::runtime_error("Empty font family");
-    return "s.set_font_family(" + quote(value == "inherit" || value == "unset" ? "" : value) + ");";
+    if (value.empty())
+      throw std::runtime_error("Empty font family");
+    return "s.set_font_family(" +
+           quote(value == "inherit" || value == "unset" ? "" : value) + ");";
   }
   if (name == "font-size") {
     if (!value.ends_with("px"))
@@ -228,15 +295,21 @@ static std::string selector_code(const selector_syntax_selector &sel) {
     while (p < input.size()) {
       if (input[p] == '[') {
         // The selector parser validates CSS syntax first. This profile supports
-        // presence and exact equality, retaining explicit diagnostics for others.
+        // presence and exact equality, retaining explicit diagnostics for
+        // others.
         std::smatch match;
         auto remaining = input.substr(p);
-        static const std::regex attribute(R"attr(^\[([a-zA-Z_][a-zA-Z0-9_-]*)(?:\s*=\s*(?:"([^"\\]*)"|'([^'\\]*)'|([a-zA-Z0-9_-]+)))?\s*\])attr");
+        static const std::regex attribute(
+            R"attr(^\[([a-zA-Z_][a-zA-Z0-9_-]*)(?:\s*=\s*(?:"([^"\\]*)"|'([^'\\]*)'|([a-zA-Z0-9_-]+)))?\s*\])attr");
         if (!std::regex_search(remaining, match, attribute))
-          throw std::runtime_error("unsupported attribute selector: " + sel.serialized);
+          throw std::runtime_error("unsupported attribute selector: " +
+                                   sel.serialized);
         bool equals = match[2].matched || match[3].matched || match[4].matched;
-        auto value = match[2].matched ? match[2].str() : match[3].matched ? match[3].str() : match[4].str();
-        attributes.push_back("{" + quote(match[1].str()) + "," + quote(value) + "," + (equals ? "true" : "false") + "}");
+        auto value = match[2].matched   ? match[2].str()
+                     : match[3].matched ? match[3].str()
+                                        : match[4].str();
+        attributes.push_back("{" + quote(match[1].str()) + "," + quote(value) +
+                             "," + (equals ? "true" : "false") + "}");
         p += match.length();
         continue;
       }
@@ -281,10 +354,11 @@ static std::string selector_code(const selector_syntax_selector &sel) {
       result += quote(classes[j]);
     }
     result += "}," + std::string(focus ? "true" : "false") + "," +
-              (hover ? "true" : "false") + "," + std::to_string(int(relation)) + "," + (root ? "true" : "false") +
-              ",{";
+              (hover ? "true" : "false") + "," + std::to_string(int(relation)) +
+              "," + (root ? "true" : "false") + ",{";
     for (size_t j = 0; j < attributes.size(); ++j) {
-      if (j) result += ",";
+      if (j)
+        result += ",";
       result += attributes[j];
     }
     result += "}}";
@@ -301,7 +375,7 @@ struct compiler {
   std::vector<fs::path> dependencies;
   unsigned count{};
   bool in_template{};
-  std::vector<std::pair<std::string, const dom_node*>> templates;
+  std::vector<std::pair<std::string, const dom_node *>> templates;
   void locate(std::string_view text) {
     auto at = content.find(text);
     location =
@@ -363,7 +437,8 @@ struct compiler {
   }
   void node(const dom_node &n, const std::string &parent) {
     if (n.tag == "template") {
-      if (in_template) throw std::runtime_error("nested compiled templates are not supported");
+      if (in_template)
+        throw std::runtime_error("nested compiled templates are not supported");
       return; // Inert; emitted as an instantiation function.
     }
     if (n.tag == "#comment" || n.tag == "#doctype")
@@ -411,7 +486,8 @@ struct compiler {
           !k.starts_with("aria-") && !k.starts_with("data-"))
         throw std::runtime_error("unsupported attribute: " + k);
       if (in_template && k == "id")
-        throw std::runtime_error("template elements use data-ref instead of document-global id");
+        throw std::runtime_error(
+            "template elements use data-ref instead of document-global id");
       if (k == "id" || (in_template && k == "data-ref")) {
         if (!ids.insert(v).second)
           throw std::runtime_error("duplicate id: " + v);
@@ -453,8 +529,9 @@ struct compiler {
         auto id = n.attributes.find("id");
         if (id == n.attributes.end() || id->second.empty())
           throw std::runtime_error("compiled template requires a nonempty id");
-        for (const auto& entry : templates)
-          if (entry.first == id->second) throw std::runtime_error("duplicate template: " + id->second);
+        for (const auto &entry : templates)
+          if (entry.first == id->second)
+            throw std::runtime_error("duplicate template: " + id->second);
         templates.emplace_back(id->second, &n);
         return;
       }
@@ -490,7 +567,8 @@ struct compiler {
     if (!body)
       throw std::runtime_error("document has no body");
     for (const auto &[key, value] : body->parent->attributes)
-      out << "d.attribute(d.root()," << quote(key) << "," << quote(value) << ");\n";
+      out << "d.attribute(d.root()," << quote(key) << "," << quote(value)
+          << ");\n";
     node(*body, "d.body()");
     for (size_t i = 0; i < names.size(); ++i)
       prefix << "webscene::native_web::node_id element_" << i << "{};\n";
@@ -508,38 +586,56 @@ struct compiler {
       prefix << names[i].second;
     }
     prefix << "};\n}\n";
-    prefix << "struct template_view {\n"
-              "std::vector<webscene::native_web::node_id> roots;\n"
-              "std::vector<std::pair<std::string_view,webscene::native_web::node_id>> references;\n"
-              "webscene::native_web::node_id named(std::string_view name) const {\n"
-              "for(auto [key,value]:references) if(key==name) return value; return 0; }\n};\n"
-              "inline template_view instantiate(webscene::native_web::document& d, "
-              "webscene::native_web::node_id parent, std::string_view name) {\n";
-    for (const auto& [name, element] : templates) {
+    prefix
+        << "struct template_view {\n"
+           "std::vector<webscene::native_web::node_id> roots;\n"
+           "std::vector<std::pair<std::string_view,webscene::native_web::node_"
+           "id>> references;\n"
+           "webscene::native_web::node_id named(std::string_view name) const "
+           "{\n"
+           "for(auto [key,value]:references) if(key==name) return value; "
+           "return 0; }\n};\n"
+           "inline template_view instantiate(webscene::native_web::document& "
+           "d, "
+           "webscene::native_web::node_id parent, std::string_view name) {\n";
+    for (const auto &[name, element] : templates) {
       in_template = true;
-      ids.clear(); names.clear(); out.str(""); out.clear();
+      ids.clear();
+      names.clear();
+      out.str("");
+      out.clear();
       std::vector<std::string> roots;
       if (element->template_contents) {
-        for (auto* child : element->template_contents->children) {
+        for (auto *child : element->template_contents->children) {
           if (child->tag == "template")
-            throw std::runtime_error("nested compiled templates are not supported");
+            throw std::runtime_error(
+                "nested compiled templates are not supported");
           if (child->tag == "#text" && !trim(child->text_content).empty())
-            throw std::runtime_error("template root text must be wrapped in an element");
+            throw std::runtime_error(
+                "template root text must be wrapped in an element");
           auto before = count;
           node(*child, "parent");
-          if (count != before) roots.push_back("n" + std::to_string(before + 1));
+          if (count != before)
+            roots.push_back("n" + std::to_string(before + 1));
         }
       }
-      prefix << "if(name==" << quote(name) << ") {\n" << out.str() << "return {{";
-      for (size_t i=0;i<roots.size();++i) { if(i) prefix << ","; prefix << roots[i]; }
+      prefix << "if(name==" << quote(name) << ") {\n"
+             << out.str() << "return {{";
+      for (size_t i = 0; i < roots.size(); ++i) {
+        if (i)
+          prefix << ",";
+        prefix << roots[i];
+      }
       prefix << "},{";
-      for (size_t i=0;i<names.size();++i) {
-        if(i) prefix << ",";
+      for (size_t i = 0; i < names.size(); ++i) {
+        if (i)
+          prefix << ",";
         prefix << "{" << quote(names[i].first) << "," << names[i].second << "}";
       }
       prefix << "}};\n}\n";
     }
-    prefix << "throw std::invalid_argument(\"Unknown compiled template\");\n}\n}\n";
+    prefix << "throw std::invalid_argument(\"Unknown compiled "
+              "template\");\n}\n}\n";
     fs::create_directories(fs::absolute(output).parent_path());
     std::ofstream f(output);
     if (!f)
@@ -568,7 +664,8 @@ struct compiler {
 };
 int main(int argc, char **argv) {
   if (argc != 3 && argc != 5) {
-    std::cerr << "usage: webscene-uic input.html output [--module module.name]\n";
+    std::cerr
+        << "usage: webscene-uic input.html output [--module module.name]\n";
     return 2;
   }
   compiler c;
@@ -580,12 +677,16 @@ int main(int argc, char **argv) {
       module_name = argv[4];
       bool start = true;
       for (unsigned char ch : module_name) {
-        if (ch == '.' && !start) { start = true; continue; }
+        if (ch == '.' && !start) {
+          start = true;
+          continue;
+        }
         if (!(std::isalpha(ch) || ch == '_' || (!start && std::isdigit(ch))))
           throw std::runtime_error("Invalid module name");
         start = false;
       }
-      if (start) throw std::runtime_error("Invalid module name");
+      if (start)
+        throw std::runtime_error("Invalid module name");
     }
     c.compile(argv[1], argv[2], module_name);
     return 0;

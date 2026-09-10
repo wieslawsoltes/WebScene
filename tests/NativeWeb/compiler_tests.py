@@ -11,6 +11,18 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_grid_tracks_compile_without_runtime_parsing(self):
+        result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:222px minmax(250px, 1fr) 252px; grid-template-rows:auto 1fr; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        self.assertIn('set_grid_template_columns',generated)
+        self.assertIn('grid_track::sizing::minmax',generated)
+        self.assertIn('grid_track::sizing::fractional',generated)
+        self.assertNotIn('parse_',generated)
+        self.assertNotIn('250px',generated)
+        for tracks in ['-1px 1fr', 'minmax(1px)', 'bogus', '1fr -2px']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
+            self.assertNotEqual(result.returncode,0,tracks)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

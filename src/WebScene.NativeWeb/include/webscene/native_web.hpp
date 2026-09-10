@@ -13,6 +13,7 @@ using flex_direction = webscene_native::flex_direction;
 using align_mode = webscene_native::align_mode;
 using justify_mode = webscene_native::justify_mode;
 using position_mode = webscene_native::position_mode;
+using grid_track = webscene_native::node_style::grid_data::track;
 // Supported compiled-style writer. Generated code never accesses engine fields.
 // A writer is borrowed only for the duration of declaration application.
 class style {
@@ -21,6 +22,19 @@ class style {
   explicit style(webscene_native::node_style &value) : value_(value) {}
 
 public:
+  void set_grid_template_columns(std::vector<grid_track> tracks) {
+    auto &grid = value_.mutable_grid();
+    grid.subgrid_columns = false;
+    grid.two_columns = tracks.size() > 1;
+    grid.template_columns = std::move(tracks);
+  }
+  void set_grid_template_rows(std::vector<grid_track> tracks) {
+    auto &grid = value_.mutable_grid();
+    grid.fractional_rows = false;
+    for (const auto &track : tracks)
+      grid.fractional_rows |= track.fraction > 0;
+    grid.template_rows = std::move(tracks);
+  }
   void set_width(length value) { value_.width = value; }
   void set_height(length value) { value_.height = value; }
   void set_min_width(length value) { value_.min_width = value; }
@@ -54,7 +68,9 @@ public:
   void set_border_bottom_right_radius(length value) {
     value_.border_bottom_right_radius = value;
   }
-  void set_font_family(std::string value) { value_.mutable_textual().font_family = std::move(value); }
+  void set_font_family(std::string value) {
+    value_.mutable_textual().font_family = std::move(value);
+  }
   void set_font_size(float value) { value_.font_size = value; }
   void set_flex_grow(float value) { value_.flex_grow = value; }
   void set_flex_shrink(float value) { value_.flex_shrink = value; }
@@ -156,7 +172,8 @@ public:
   subscription on(node_id, std::string type, std::function<void(event &)>);
   // Returns false when a listener prevents the default action or disposes the
   // document.
-  bool dispatch(node_id, std::string type, float client_x = 0, float client_y = 0, float delta_y = 0);
+  bool dispatch(node_id, std::string type, float client_x = 0,
+                float client_y = 0, float delta_y = 0);
   void pointer(std::string type, float x, float y);
   void wheel(float x, float y, float delta_y);
   void focus(node_id);

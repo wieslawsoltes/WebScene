@@ -12,16 +12,20 @@ int main() {
   document d;
   auto refs = compiled_ui::build(d);
   check(d.root() != d.body(), "HTML root differs from body");
-  check(d.find("html-root") == d.root(), "compiled HTML root attributes preserved");
+  check(d.find("html-root") == d.root(),
+        "compiled HTML root attributes preserved");
   auto target = refs.named("target"), other = refs.named("other");
   const auto &initial_scene = d.render(800, 600);
   check(d.bounds(d.body()).x == 3, "root style applies to HTML element");
   d.attribute(d.root(), "data-theme", "light");
-  d.render(800,600);
-  check(d.bounds(d.body()).x == 7, "theme attribute mutation updates root style");
+  d.render(800, 600);
+  check(d.bounds(d.body()).x == 7,
+        "theme attribute mutation updates root style");
   d.attribute(d.root(), "data-theme", "dark");
-  d.render(800,600);
-  check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end()).find("Arial, sans-serif") != std::string::npos, "compiled font family reaches renderer");
+  d.render(800, 600);
+  check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end())
+                .find("Arial, sans-serif") != std::string::npos,
+        "compiled font family reaches renderer");
   check(d.bounds(target).width == 60, "important beats inline");
   check(d.bounds(other).width == 30, "child selector");
   d.attribute(target, "class", "");
@@ -111,5 +115,41 @@ int main() {
     disposed = true;
   }
   check(disposed, "disposed document");
+  {
+    document grid_document;
+    auto grid = grid_document.element(grid_document.body(), "div");
+    grid_document.attribute(grid, "id", "workbench");
+    auto left = grid_document.element(grid, "div");
+    auto center = grid_document.element(grid, "div");
+    auto right = grid_document.element(grid, "div");
+    rule layout;
+    selector_part part;
+    part.id = "workbench";
+    layout.match.parts.push_back(part);
+    layout.declarations.push_back(
+        {false, +[](style &s) {
+           s.set_display(display_mode::grid);
+           s.set_grid_template_columns(
+               {{{222, length_unit::pixels},
+                 {222, length_unit::pixels},
+                 0,
+                 grid_track::sizing::fixed},
+                {{250, length_unit::pixels}, {}, 1, grid_track::sizing::minmax},
+                {{252, length_unit::pixels},
+                 {252, length_unit::pixels},
+                 0,
+                 grid_track::sizing::fixed}});
+         }});
+    grid_document.add_rule(std::move(layout));
+    grid_document.render(1000, 600);
+    check(std::abs(grid_document.bounds(left).width - 222) < 1,
+          "compiled grid left track");
+    check(std::abs(grid_document.bounds(right).width - 252) < 1,
+          "compiled grid right track");
+    auto old_width = grid_document.bounds(center).width;
+    grid_document.render(1200, 600);
+    check(std::abs(grid_document.bounds(center).width - old_width - 200) < 1,
+          "compiled grid fractional track responds to resize");
+  }
   std::cout << "Native Web contracts passed\n";
 }
