@@ -780,6 +780,18 @@ int main() {
         d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 130,
         "compiled calc re-resolves its percentage basis after viewport resize");
   d.render(800, 600);
+  d.attribute(d.find("calc-child"), "class", "literal");
+  d.render(800, 600);
+  check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 40 &&
+        d.bounds(d.find("calc-child")).y == d.bounds(d.find("calc-parent")).y + 14,
+        "literal nested calc shorthand uses typed arithmetic");
+  d.render(1200, 600);
+  check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 65,
+        "literal nested calc shorthand preserves percentage resize semantics");
+  d.remove_attribute(d.find("calc-child"), "class");
+  d.render(800, 600);
+  check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 80,
+        "removing nested calc override restores the variable expression");
   check(d.bounds(d.find("zero-variable")).width == 0,
         "unitless exponent zero retains length semantics after variable substitution");
   bool font_found = false;

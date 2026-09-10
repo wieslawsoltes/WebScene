@@ -1646,3 +1646,17 @@ reports the actual style declaration at line 3, column 14 rather than the commen
 at line 2, column 12. All 81 compiler tests pass. Same-line comment/attribute
 ambiguity is explicitly unresolved; full token-origin offsets remain the required
 closure mechanism, not additional substring heuristics.
+
+### Nested literal calc shorthand audit (2026-09-10)
+
+Verified existing inset lowering independently of variable-containing expressions.
+New compiler coverage accepts nested groups/functions, mixed-case CALC, literal
+scalar multiplication/division and four-component calc shorthands; dimensional
+products and division by zero are rejected. Generated output contains typed
+add_compiled_lengths operations. Native class mutation checks top=14px and
+left=(50%-20px)/2: the left offset changes from 40px to 65px as the containing
+width changes from 200px to 300px, then removing the override restores the prior
+variable expression. Compiler (82 tests) and native contracts pass. No production
+change was needed. This establishes the exercised nested extraction/precedence
+cases; general custom-value function trees and nonliteral scalar expressions
+remain open and are not implied supported by this result.

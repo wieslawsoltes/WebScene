@@ -88,6 +88,17 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { left:'+value+'; }')
             self.assertNotEqual(result.returncode,0,value)
 
+    def test_inset_nested_calc_without_variables(self):
+        for value in ['calc(2 * (50% - (15px + 5px)) / 2) 0',
+                      '0 CALC(10px + calc(2px * 3)) auto',
+                      'calc(1px + 2px) calc(3px + 4px) calc(5px + 6px) calc(7px + 8px)']:
+            result,out=self.compile('<div></div>', 'div { position:absolute; inset:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('add_compiled_lengths',out.read_text())
+        for value in ['calc(10px / 0) 0', 'calc(2px * 3px) auto']:
+            result,_=self.compile('<div></div>', 'div { inset:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_inset_shorthand(self):
         for value,expected in [('1px',[1,1,1,1]),('1px 2px',[1,2,1,2]),
                                ('1px 2px 3px',[1,2,3,2]),('1px 2px 3px 4px',[1,2,3,4])]:
