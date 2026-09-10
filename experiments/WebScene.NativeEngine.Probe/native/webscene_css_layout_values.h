@@ -391,4 +391,100 @@ bool apply_flex_value(dom_node& node,const std::string& name,const std::string& 
         } else { return false; }
         return true;
 }
+inline display_mode parse_display_mode(std::string_view value)
+{
+    if (value == "flex") return display_mode::flex;
+    if (value == "inline-flex") return display_mode::inline_flex;
+    if (value == "grid") return display_mode::grid;
+    if (value == "inline-grid") return display_mode::inline_grid;
+    if (value == "table") return display_mode::table;
+    if (value == "inline-table") return display_mode::inline_table;
+    if (value == "table-row-group") return display_mode::table_row_group;
+    if (value == "table-header-group") return display_mode::table_header_group;
+    if (value == "table-footer-group") return display_mode::table_footer_group;
+    if (value == "table-row") return display_mode::table_row;
+    if (value == "table-cell") return display_mode::table_cell;
+    if (value == "table-column-group") return display_mode::table_column_group;
+    if (value == "table-column") return display_mode::table_column;
+    if (value == "table-caption") return display_mode::table_caption;
+    if (value == "contents") return display_mode::contents;
+    if (value == "inline") return display_mode::inline_flow;
+    if (value == "inline-block") return display_mode::inline_block;
+    if (value == "list-item") return display_mode::list_item;
+    if (value == "none") return display_mode::none;
+    return display_mode::block;
+}
+
+template<typename Decision,typename Protected>
+bool apply_structure_value(native_document& document,dom_node& node,
+    const std::string& name,const std::string& value,Decision& decision,Protected&& is_inline)
+{
+    if (name == "border-spacing"
+            && !is_inline(inline_table_border_model)) {
+            std::istringstream stream(value);
+            std::string horizontal;
+            std::string vertical;
+            stream >> horizontal >> vertical;
+            if (horizontal.empty()) {
+                decision.classification = "invalid-authoring";
+            } else {
+                auto& table = node.style.mutable_table();
+                table.border_spacing_horizontal = native_document::parse_length(horizontal);
+                table.border_spacing_vertical = native_document::parse_length(
+                    vertical.empty() ? horizontal : vertical);
+            }
+        } else if (name == "border-collapse"
+            && !is_inline(inline_table_border_model)) {
+            if (value == "collapse" || value == "separate") {
+                node.style.mutable_table().border_collapsed = value == "collapse";
+            } else {
+                decision.classification = "unsupported";
+                decision.semantic_slice = "collapse and separate keywords";
+            }
+        } else if (name == "display" && !is_inline(inline_display)) {
+            node.style.display = parse_display_mode(value);
+        } else if (name == "table-layout") {
+            node.style.table_layout_fixed = value == "fixed";
+            if (value != "fixed" && value != "auto") {
+                decision.classification = "unsupported";
+                decision.semantic_slice = "auto and fixed keywords";
+            }
+        } else if (name == "position" && !is_inline(inline_position)) {
+            const auto explicit_document_element = node.tag == "html"
+                && node.parent == &document.body();
+            node.style.position = value == "inherit" && node.parent != nullptr
+                    && !explicit_document_element
+                ? node.parent->style.position
+                : value == "absolute" ? position_mode::absolute
+                : value == "fixed" ? position_mode::fixed
+                : value == "sticky" ? position_mode::sticky
+                : value == "relative" ? position_mode::relative
+                : position_mode::normal;
+        } else if (name == "float" && !is_inline(inline_float)) {
+            node.style.floating = value == "left" ? float_mode::left
+                : value == "right" ? float_mode::right
+                : float_mode::none;
+            decision.classification = "partially-supported";
+            decision.semantic_slice =
+                "left/right block floats sharing a bounded formatting-context line";
+        } else if (name == "z-index" && !is_inline(inline_z_index)) {
+            if (value == "inherit") {
+                const auto explicit_document_element = node.tag == "html"
+                    && node.parent == &document.body();
+                if (!explicit_document_element && node.parent != nullptr) {
+                    node.style.z_index = node.parent->style.z_index;
+                    node.style.z_index_auto = node.parent->style.z_index_auto;
+                } else {
+                    node.style.z_index = 0;
+                    node.style.z_index_auto = true;
+                }
+            } else {
+                node.style.z_index_auto = value == "auto" || value == "initial"
+                    || value == "unset";
+                node.style.z_index = node.style.z_index_auto
+                    ? 0 : std::atoi(value.c_str());
+            }
+        } else { return false; }
+        return true;
+}
 } // namespace webscene_native::css

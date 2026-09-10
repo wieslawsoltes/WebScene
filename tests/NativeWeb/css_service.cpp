@@ -515,5 +515,23 @@ int main(int argc,char** argv) {
        std::abs(flexible_column.layout.width-400)>.1f) return 98;
     grid_document.layout(700,100);
     if(std::abs(flexible_column.layout.width-600)>.1f) return 99;
+    const auto structure=[&](webscene_native::dom_node& node,const std::string& name,const std::string& value) {
+        return webscene_native::css::apply_structure_value(grid_document,node,name,value,grid_result,unprotected);
+    };
+    structure(fixed_column,"display","none");
+    grid_document.layout(700,100);
+    if(std::abs(flexible_column.layout.width-700)>.1f) return 100;
+    grid_root.style.position=webscene_native::position_mode::fixed;
+    grid_root.style.z_index=12;
+    grid_root.style.z_index_auto=false;
+    structure(flexible_column,"position","inherit");
+    structure(flexible_column,"z-index","inherit");
+    if(flexible_column.style.position!=webscene_native::position_mode::fixed ||
+       flexible_column.style.z_index!=12 || flexible_column.style.z_index_auto) return 101;
+    structure(flexible_column,"z-index","auto");
+    structure(flexible_column,"border-spacing","3px 7px");
+    structure(flexible_column,"border-collapse","collapse");
+    if(!flexible_column.style.z_index_auto || !flexible_column.style.table().border_collapsed ||
+       flexible_column.style.table().border_spacing_vertical.value!=7) return 102;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

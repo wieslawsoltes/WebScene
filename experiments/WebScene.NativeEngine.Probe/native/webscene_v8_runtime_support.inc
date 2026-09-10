@@ -457,29 +457,7 @@ void configure_startup_snapshot(v8::Isolate::CreateParams&) {}
 constexpr bool bootstrap_snapshot_enabled = false;
 #endif
 
-display_mode parse_display_mode(std::string_view value)
-{
-    if (value == "flex") return display_mode::flex;
-    if (value == "inline-flex") return display_mode::inline_flex;
-    if (value == "grid") return display_mode::grid;
-    if (value == "inline-grid") return display_mode::inline_grid;
-    if (value == "table") return display_mode::table;
-    if (value == "inline-table") return display_mode::inline_table;
-    if (value == "table-row-group") return display_mode::table_row_group;
-    if (value == "table-header-group") return display_mode::table_header_group;
-    if (value == "table-footer-group") return display_mode::table_footer_group;
-    if (value == "table-row") return display_mode::table_row;
-    if (value == "table-cell") return display_mode::table_cell;
-    if (value == "table-column-group") return display_mode::table_column_group;
-    if (value == "table-column") return display_mode::table_column;
-    if (value == "table-caption") return display_mode::table_caption;
-    if (value == "contents") return display_mode::contents;
-    if (value == "inline") return display_mode::inline_flow;
-    if (value == "inline-block") return display_mode::inline_block;
-    if (value == "list-item") return display_mode::list_item;
-    if (value == "none") return display_mode::none;
-    return display_mode::block;
-}
+display_mode parse_display_mode(std::string_view value) { return css::parse_display_mode(value); }
 
 std::string_view display_mode_name(display_mode value)
 {

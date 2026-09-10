@@ -588,3 +588,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   declaration dispatch and document cascade remain unfinished.
   Runtime compact-go-to-grid, tradingview-symbol-search-grid,
   dynamic-percentage-flex-list and dimension-inheritance regressions pass.
+
+- Structural declaration extraction: display parsing and display, table spacing/
+  collapse/layout, positioning, float and z-index application now use shared native
+  helpers. Native layout tests verify display:none releases flex space, inherited
+  position/z-index values and table style metadata. Runtime property-table spacing,
+  compact table, fixed dialog and dimension-inheritance regressions pass. Existing
+  keyword/float/table coverage limitations remain; full cascade and application
+  integration are not complete.
