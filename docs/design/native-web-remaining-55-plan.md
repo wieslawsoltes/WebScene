@@ -165,3 +165,10 @@ full Kestrel parity from this CSS inventory or a static diagnostic preview.
   paint time. Compiler and native contracts pass, including mutation from explicit
   color to default currentColor. Other outline styles, longhands and pseudo boxes
   remain pending; original source-form rows retain their integration gate.
+- Shadow host prerequisite: Foco's DOM packet renderer ignored existing kinds
+  17/18 (outer shadows). Added ordered/background/foreground handling and Skia mask
+  blur. Raster tests verify both variants paint opaque centers and blurred exterior
+  alpha. The Native Web Foco configuration now builds/runs that host paint suite
+  as native_web_foco_paint; it passes. This fixes existing outer-shadow delivery;
+  inset shadow geometry/commands are still pending. A stale standalone Foco build
+  was not used for validation; tests ran against current Native Web dependencies.
