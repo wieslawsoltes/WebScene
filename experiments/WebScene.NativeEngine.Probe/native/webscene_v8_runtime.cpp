@@ -21,6 +21,7 @@
 
 #include "webscene_native_dom.h"
 #include "webscene_native_style_defaults.h"
+#include "webscene_shadow_value.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"

@@ -235,3 +235,48 @@ paint records. Avoid growing a second independently maintained property grammar
 in tooling/webscene-uic/main.cpp. Variable-dependent values must retain typed
 expression structure, rather than freezing theme-dependent computed styles at build
 time. Tests must compare parsed and compiled paths as well as native rendering.
+
+- Reuse audit: collapsed table borders currently suppress spacing in native layout,
+  but no shared-edge border conflict resolver was found in the native layout/scene
+  implementation. Row 20 remains open; exposing border_collapsed alone would not
+  satisfy its behavior gate.
+- Shared shadow interpretation: extracted typed component validation and native
+  style application into webscene_shadow_value.h. Both compiled variable evaluation
+  and runtime CSS shadow tokenization now use that builder. This removes duplicate
+  ordering/default-color logic and gives runtime content the same inset/currentColor
+  semantics as compiled content. The runtime tokenizer remains separate; shared
+  typed property parsing is not complete. Multiple shadows remain unsupported.
+- Updated original-stylesheet audit after typed gradients: 397 rules, 1475
+  declarations, 43 distinct unsupported constructs (baseline 55). This measures
+  compiler acceptance only, not integrated visual parity or feature completion.
+
+## Delivery alternative under consideration
+
+Recommendation following the user's CSS-runtime question: retain compiled HTML
+and predefined templates, C++ application code and embedded resources, but extract
+and reuse WebScene's CSS runtime as the first delivery path. Parse bundled original
+CSS at startup; do not add runtime HTML parsing or require V8. This deliberately
+relaxes the original no-runtime-CSS-parser requirement and is a proposed change,
+not a claim that the existing acceptance gate has already been met.
+
+First prove a V8-free CSS service against the same native document used by compiled
+HTML. Preserve selectors, cascade, variables, media predicates, pseudo styles,
+invalidation and animation scheduling. The existing cascade is largely native C++
+but lives as methods of the V8 runtime implementation and depends on its state.
+Extraction is real engineering work; adding the Rust parser library alone is not
+sufficient. Validate original Kestrel CSS without omission before extending the
+application port. Shared native/Foco rendering gaps still require implementation.
+
+Later optimize by serializing the shared parser's stylesheet representation at
+build time, retaining runtime cascade and dynamic values. This avoids maintaining
+an independent CSS implementation and can ultimately remove startup parsing.
+Full standards-compliant CSS compilation is not close merely because the
+Kestrel-specific unsupported-construct count is falling.
+
+Shared-shadow validation: compiler/native contracts and the focused V8 runtime
+scene test pass. The runtime test verifies both existing outer shadow geometry
+and inset/currentColor paint. Its standalone harness needed an execute bootstrap
+because evaluate alone does not activate native scene publication. Inline recascade
+now preserves inset/currentColor flags, and shadow resets clear all shared fields.
+The runtime test build used Inspector enabled; the Inspector-disabled build exposed
+an existing unguarded call to cancel_detached_frame_context_tasks, still unresolved.

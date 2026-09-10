@@ -465,12 +465,7 @@
         const std::string& authored_value,
         bool& complete)
     {
-        style.box_shadow_present = false;
-        style.box_shadow_offset_x = 0;
-        style.box_shadow_offset_y = 0;
-        style.box_shadow_blur_radius = 0;
-        style.box_shadow_spread_radius = 0;
-        style.box_shadow_rgba = 0;
+        shadow_value_builder::clear(style);
         complete = true;
 
         const auto value = trim_css(authored_value);
@@ -488,11 +483,6 @@
             }
         }
         const auto shadow = trim_css(std::string_view(value).substr(0, first_shadow_end));
-        if (shadow.find("inset") != std::string::npos) {
-            complete = false;
-            return false;
-        }
-
         std::vector<std::string> tokens;
         size_t token_start = std::string::npos;
         parenthesis_depth = 0;
@@ -510,36 +500,23 @@
             }
         }
 
-        std::vector<float> lengths;
-        auto color = 0x000000FFU;
-        auto color_seen = false;
+        shadow_value_builder builder;
         for (const auto& token : tokens) {
             const auto lower = lower_html_name(token);
+            if (lower == "inset") { builder.inset(); continue; }
+            if (lower == "currentcolor") { builder.color(std::nullopt); continue; }
             const auto starts_numeric = !token.empty()
                 && (std::isdigit(static_cast<unsigned char>(token.front()))
                     || token.front() == '.' || token.front() == '-' || token.front() == '+');
-            const auto color_token = token.starts_with('#')
-                || lower.starts_with("rgb(") || lower.starts_with("rgba(")
-                || lower == "transparent" || (!starts_numeric && lower != "inset");
-            if (color_token) {
-                color = native_document::parse_color(token);
-                color_seen = true;
+            if (!starts_numeric) {
+                builder.color(native_document::parse_color(token));
             } else {
                 const auto length = native_document::parse_length(token);
                 if (length.unit != length_unit::pixels) complete = false;
-                lengths.push_back(length.value);
+                builder.length(length);
             }
         }
-        if (lengths.size() < 2U || lengths.size() > 4U) return false;
-
-        style.box_shadow_offset_x = lengths[0];
-        style.box_shadow_offset_y = lengths[1];
-        style.box_shadow_blur_radius = lengths.size() > 2U
-            ? std::max(0.0F, lengths[2]) : 0.0F;
-        style.box_shadow_spread_radius = lengths.size() > 3U ? lengths[3] : 0.0F;
-        style.box_shadow_rgba = color_seen ? color : 0x000000FFU;
-        style.box_shadow_present = (style.box_shadow_rgba & 0xFFU) != 0U;
-        return true;
+        return builder.apply(style);
     }
 
     void apply_pseudo_css_declaration(
@@ -1916,6 +1893,8 @@
                 reset.box_shadow_spread_radius = previous.box_shadow_spread_radius;
                 reset.box_shadow_rgba = previous.box_shadow_rgba;
                 reset.box_shadow_present = previous.box_shadow_present;
+                reset.box_shadow_inset = previous.box_shadow_inset;
+                reset.box_shadow_current_color = previous.box_shadow_current_color;
             }
             if (is_inline(inline_transform)) {
                 reset.transform_translate_x = previous.transform_translate_x;
@@ -2658,10 +2637,10 @@
             auto complete = true;
             if (!apply_box_shadow_value(node.style, value, complete)) {
                 decision.classification = "unsupported";
-                decision.semantic_slice = "outer shadows with two to four pixel lengths";
+                decision.semantic_slice = "single inset or outer shadow with two to four pixel lengths";
             } else if (!complete) {
                 decision.classification = "partially-supported";
-                decision.semantic_slice = "first outer shadow with pixel lengths";
+                decision.semantic_slice = "first shadow with pixel lengths";
             }
         } else if (name == "background-image"
             && !is_inline(inline_background_image)) {
@@ -3115,12 +3094,7 @@
         }
         if ((node.style.inline_property_mask & inline_box_sizing) == 0U) node.style.border_box = false;
         if ((node.style.inline_property_mask & inline_box_shadow) == 0U) {
-            node.style.box_shadow_offset_x = 0;
-            node.style.box_shadow_offset_y = 0;
-            node.style.box_shadow_blur_radius = 0;
-            node.style.box_shadow_spread_radius = 0;
-            node.style.box_shadow_rgba = 0;
-            node.style.box_shadow_present = false;
+            shadow_value_builder::clear(node.style);
         }
         if ((node.style.inline_property_mask & inline_background) == 0U) {
             node.style.background_rgba = 0;

@@ -1,6 +1,7 @@
 #pragma once
 #include "webscene_native_dom.h"
 #include "compiled_variables.hpp"
+#include "webscene_shadow_value.h"
 #include <functional>
 #include <memory>
 #include <thread>
@@ -242,37 +243,16 @@ public:
     value_.outline_current_color = current;
   }
   void set_box_shadow(const variable_result &tokens) {
-    value_.box_shadow_present = false;
-    value_.box_shadow_inset = false;
-    if (!tokens || tokens->empty()) return;
-    bool inset = false, have_color = false, closed_lengths = false;
-    std::optional<uint32_t> color;
-    size_t count = 0;
-    float values[4]{};
-    for (const auto &token : *tokens) {
-      if (token.is_keyword("inset")) {
-        if (inset) return;
-        inset = true; if (count) closed_lengths = true;
-      } else if (token.color || token.is_keyword("currentcolor")) {
-        if (have_color) return;
-        have_color = true; color = token.color;
-        if (count) closed_lengths = true;
-      } else {
-        if (closed_lengths || count == 4 || !token.length || token.length->unit != length_unit::pixels) return;
-        values[count++] = token.length->value;
-      }
+    webscene_native::shadow_value_builder builder;
+    if (tokens) for (const auto &token : *tokens) {
+      if (token.is_keyword("inset")) builder.inset();
+      else if (token.color || token.is_keyword("currentcolor")) builder.color(token.color);
+      else if (token.length) builder.length(*token.length);
+      else builder.invalidate();
     }
-    if (count < 2) return;
-    if (values[2] < 0) return;
-    value_.box_shadow_offset_x = values[0];
-    value_.box_shadow_offset_y = values[1];
-    value_.box_shadow_blur_radius = values[2];
-    value_.box_shadow_spread_radius = values[3];
-    value_.box_shadow_rgba = color.value_or(0);
-    value_.box_shadow_current_color = !color;
-    value_.box_shadow_present = true;
-    value_.box_shadow_inset = inset;
+    builder.apply(value_);
   }
+
   void set_linear_gradient(float angle, std::vector<uint32_t> colors) {
     auto &image = value_.mutable_background_image();
     image.image_value = "none";

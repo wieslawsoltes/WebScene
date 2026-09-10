@@ -125,6 +125,16 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "shared-shadow-values") {
+            auto* focused_engine=webscene_engine_create(0);
+            require(focused_engine != nullptr,"shadow test engine creation failed");
+            resize(focused_engine,800,600,1U);
+            wait_for_consumed_inputs(focused_engine,1U,"shadow test viewport resize was not consumed");
+            execute(focused_engine,"void 0","shared-shadow-bootstrap.js");
+            test_outer_box_shadow_reaches_elevated_scene(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "async-save-publication") { test_async_save_acknowledgement_publishes_without_pointer_input(); return 0; }
         if (selected == "youtube-embed") { test_youtube_embed_fallback(); return 0; }
         if (selected == "table-cell-copy") { test_table_cell_click_copies_text_to_host(); return 0; }
