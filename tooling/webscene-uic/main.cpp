@@ -233,28 +233,35 @@ static std::string grid_track_code(std::string value) {
   if (value == "auto" || value == "min-content")
     return "{{}, {}, 0.0f, " + prefix +
            (value == "auto" ? "automatic" : "min_content") + "}";
-  if (std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?fr)")))
-    return "{{}, {}, " + number(std::stof(value)) + ", " + prefix +
-           "fractional}";
+  auto track_length = [](const std::string &text) {
+    auto compiled = length(text);
+    if (text != "auto" && std::stof(text) < 0)
+      throw std::runtime_error("negative grid track: " + text);
+    return compiled;
+  };
+  auto fraction_value = [](const std::string &text) {
+    auto numeric = text.substr(0, text.size() - 2);
+    if (!css_number(numeric)) throw std::runtime_error("invalid grid fraction");
+    auto value = std::stof(numeric);
+    if (!std::isfinite(value) || value < 0) throw std::runtime_error("invalid grid fraction range");
+    return value;
+  };
+  if (value.ends_with("fr"))
+    return "{{}, {}, " + number(fraction_value(value)) + ", " + prefix + "fractional}";
   if (value.starts_with("minmax(") && value.ends_with(")")) {
     auto comma = value.find(',');
     if (comma == value.npos || value.find(',', comma + 1) != value.npos)
       throw std::runtime_error("invalid grid minmax: " + value);
     auto minimum = trim(value.substr(7, comma - 7));
     auto maximum = trim(value.substr(comma + 1, value.size() - comma - 2));
-    if (minimum.starts_with("-") || maximum.starts_with("-"))
-      throw std::runtime_error("negative grid minmax track: " + value);
-    bool fraction =
-        std::regex_match(maximum, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?fr)"));
-    return "{" + length(minimum) + ", " +
-           (fraction ? length("auto") : length(maximum)) + ", " +
-           number(fraction ? std::stof(maximum) : 0) + ", " + prefix +
+    const bool fraction = maximum.ends_with("fr");
+    return "{" + track_length(minimum) + ", " +
+           (fraction ? length("auto") : track_length(maximum)) + ", " +
+           number(fraction ? fraction_value(maximum) : 0) + ", " + prefix +
            "minmax}";
   }
-  if (!value.empty() && value.front() == '-')
-    throw std::runtime_error("negative grid track: " + value);
-  return "{" + length(value) + ", " + length(value) + ", 0.0f, " + prefix +
-         "fixed}";
+  const auto fixed = track_length(value);
+  return "{" + fixed + ", " + fixed + ", 0.0f, " + prefix + "fixed}";
 }
 static std::string grid_tracks_code(const std::string &value, bool in_repeat = false) {
   if (ascii_keyword(value) == "none")

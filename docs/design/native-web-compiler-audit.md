@@ -1190,3 +1190,13 @@ Independent regressions compare uppercase and lowercase generated track rules,
 and reject zero, decimal/exponent integer spellings and duplicate signs. All 66
 compiler tests and native contracts pass. This does not add named grid lines,
 auto-repeat, additional intrinsic sizing or escaped identifiers.
+
+### Grid numeric range validation (2026-09-10)
+
+Grid fixed/minmax length bounds now validate numeric sign instead of rejecting
+any leading minus character, so negative zero is accepted. Fractional tracks and
+minmax fractional maxima use shared CSS number grammar with finite, nonnegative
+range checks. Regressions cover zero across units, negative values, overflow and
+invalid fractional minima. All 67 compiler tests and native contracts pass.
+These checks validate compiler input and typed output construction, not complete
+grid layout parity; intrinsic track sizing and browser comparisons remain open.

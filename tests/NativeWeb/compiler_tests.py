@@ -121,6 +121,15 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { grid-template-columns:repeat('+count+', 1fr); }')
             self.assertNotEqual(result.returncode,0,count)
 
+    def test_grid_range_validation_accepts_negative_zero(self):
+        for value in ['-0px', '-0fr', 'minmax(-0px, -0fr)', 'minmax(-0, -0%)']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for value in ['-1px', '-1fr', 'minmax(-1px, 1fr)', 'minmax(0, -1%)',
+                      '1e999fr', 'minmax(0, 1e999fr)', 'minmax(1fr, 2fr)']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_grid_repeat_is_expanded_at_build_time(self):
         result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:repeat(3,1fr); }')
         self.assertEqual(result.returncode,0,result.stderr)
