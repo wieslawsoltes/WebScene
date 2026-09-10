@@ -36,6 +36,13 @@ class CompilerTests(unittest.TestCase):
         for tracks in ['-1px 1fr', 'minmax(1px)', 'bogus', '1fr -2px']:
             result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
             self.assertNotEqual(result.returncode,0,tracks)
+    def test_background_none_resets_background(self):
+        result,out=self.compile('<div></div>', 'div { background:#ffffff; background:none; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.reset_background();',out.read_text())
+        result,_=self.compile('<div></div>', 'div { background-color:none; }')
+        self.assertNotEqual(result.returncode,0)
+
     def test_inset_shorthand(self):
         for value,expected in [('1px',[1,1,1,1]),('1px 2px',[1,2,1,2]),
                                ('1px 2px 3px',[1,2,3,2]),('1px 2px 3px 4px',[1,2,3,4])]:

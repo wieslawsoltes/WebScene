@@ -510,6 +510,7 @@ static std::string assignments(const std::string &name,
   }
   if (name == "color" && (value == "inherit" || value == "unset"))
     return "s.set_foreground_rgba(0u);";
+  if (name == "background" && value == "none") return "s.reset_background();";
   if (name == "background" || name == "background-color" || name == "color") {
     if (!std::regex_match(value, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|["
                                             "0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) &&

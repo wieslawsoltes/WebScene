@@ -191,6 +191,7 @@ public:
     value_.box_shadow_rgba = *color;
     value_.box_shadow_present = true;
   }
+  void reset_background() { value_.background_rgba = 0; value_.clear_background_image(); }
   void set_background_rgba(uint32_t value) { value_.background_rgba = value; }
   void set_foreground_rgba(uint32_t value) { value_.foreground_rgba = value; }
   void set_font_weight(int32_t value) { value_.font_weight = value; }

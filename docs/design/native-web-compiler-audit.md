@@ -265,3 +265,11 @@ SVG text-anchor field and serializer. A compiled text element regression verifie
 that middle alignment reaches serialized SVG. Compiler and native contract tests
 pass. Full SVG text layout, additional positioning attributes, variable values
 and CSS-wide keywords remain open; this is not a general SVG conformance claim.
+
+### Background reset (2026-09-10)
+
+Fresh baseline after SVG additions: 62 unsupported constructs. `background:none`
+now generates a native reset of background color and background-image state,
+while `background-color:none` remains invalid. Compiler regression covers the
+shorthand distinction. All 40 compiler tests and the native contract suite pass.
+Gradient/image authoring and other background shorthand combinations remain open.
