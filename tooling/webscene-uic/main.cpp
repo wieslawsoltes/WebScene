@@ -67,6 +67,14 @@ static bool css_number(const std::string &value) {
   static const std::regex grammar(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)");
   return std::regex_match(value, grammar);
 }
+static bool supported_literal_color(const std::string &value) {
+  static const std::set<std::string> names = {
+      "transparent", "black", "white", "red", "green", "lime", "blue", "yellow",
+      "cyan", "aqua", "magenta", "fuchsia", "gray", "grey", "silver", "maroon",
+      "purple", "olive", "navy", "teal", "orange"};
+  return names.contains(ascii_keyword(value)) || std::regex_match(value,
+      std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})"));
+}
 static std::vector<std::string> component_values(const std::string &value, char separator = 0, bool split = true) {
   std::vector<std::string> result;
   std::string token;
@@ -201,8 +209,7 @@ static std::string variable_code(const std::string &input) {
     const bool zero = std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")) && std::stof(token) == 0;
     if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh))", std::regex::icase)) || zero)
       typed_length = "webscene::native_web::length" + length(token);
-    if (std::regex_match(token, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) ||
-        keyword == "transparent" || keyword == "black" || keyword == "white")
+    if (supported_literal_color(token))
       typed_color = std::to_string(native_document::parse_color(keyword)) + "u";
     std::string typed_fraction = "std::nullopt";
     if (keyword.ends_with("fr") && css_number(keyword.substr(0, keyword.size() - 2))) {
@@ -798,11 +805,8 @@ static std::string assignments(const std::string &name,
     return "s.set_foreground_rgba(0u);";
   if (name == "background" && value == "none") return "s.reset_background();";
   if (name == "background" || name == "background-color" || name == "color") {
-    if (!std::regex_match(value, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|["
-                                            "0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) &&
-        value != "transparent" && value != "black" && value != "white")
-      throw std::runtime_error("color profile requires #rgb, #rgba, #rrggbb, "
-                               "#rrggbbaa, black, white or transparent");
+    if (!supported_literal_color(value))
+      throw std::runtime_error("color profile requires a supported named color or hex color");
     return std::string("s.") +
            (name == "color" ? "foreground_rgba" : "background_rgba") + " = " +
            std::to_string(native_document::parse_color(value)) + "u;";

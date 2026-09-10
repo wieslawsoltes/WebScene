@@ -83,6 +83,17 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb, #fff '+percent+', transparent); }')
             self.assertNotEqual(result.returncode,0,percent)
 
+    def test_supported_named_colors_share_literal_and_variable_lowering(self):
+        for name,rgba in [('ReD',0xff0000ff),('GREEN',0x008000ff),('lime',0x00ff00ff),
+                          ('orange',0xffa500ff),('AQUA',0x00ffffff),('grey',0x808080ff)]:
+            for property in ['color', 'background-color', 'border-color']:
+                result,out=self.compile('<div></div>', 'div { '+property+':'+name+'; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn(str(rgba)+'u',out.read_text())
+                result,out=self.compile('<div></div>', 'div { '+property+':var(--Paint,'+name+'); }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn(str(rgba)+'u',out.read_text())
+
     def test_direct_variable_and_calc_comments(self):
         for name,value in [('width', 'var(--Size /* , ) */, 12px)'),
                            ('left', 'calc(var(--Size, 12px) + /* ) , ( */ 2px)'),

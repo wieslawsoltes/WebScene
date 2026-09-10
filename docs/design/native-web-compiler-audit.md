@@ -1768,3 +1768,15 @@ expected 40px calc inset with comments inside the escaped-name reference and
 arithmetic expression. Token-boundary subtleties (including comments adjacent to
 operators without authored whitespace) and full component-token semantics remain
 open; this does not close the grammar family.
+
+### Shared supported named-color lowering (2026-09-10)
+
+The native color parser already handles 20 basic named colors plus transparent;
+compiler literals and variable metadata previously admitted only black/white/
+transparent. Added one shared validator for the engine's existing named set and
+hex forms. Names are matched case-insensitively without changing variable names.
+Compiler coverage compares literal and fallback RGBA across foreground,
+background and borders. All 93 compiler tests pass. Native contracts verify
+ORANGE in a custom property produces ffa50080 through the compiled 50% mix and
+restores the fallback after mutation. The complete CSS named-color set and
+functional color grammar remain open; this does not claim full color support.

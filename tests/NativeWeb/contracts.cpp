@@ -364,6 +364,8 @@ int main() {
     check_mix_paint(0x12345680u);
     d.attribute(mixed, "class", "changed");
     check_mix_paint(0xabcdef40u);
+    d.attribute(mixed, "class", "named");
+    check_mix_paint(0xffa50080u);
     d.remove_attribute(mixed, "class");
     check_mix_paint(0x12345680u);
     d.render(800, 600);
