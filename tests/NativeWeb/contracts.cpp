@@ -316,6 +316,12 @@ int main() {
         "align-self center uses horizontal cross axis in column flex");
   check(d.bounds(d.find("self-grid-child")).y == d.bounds(d.find("self-grid")).y + 15,
         "compiled grid align-self centers within track");
+  d.attribute(d.find("self-grid-child"), "class", "auto-margin");
+  d.render(800, 600);
+  check(d.bounds(d.find("self-grid-child")).y == d.bounds(d.find("self-grid")).y + 30,
+        "grid auto top margin takes precedence over center alignment");
+  d.remove_attribute(d.find("self-grid-child"), "class");
+  d.render(800, 600);
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

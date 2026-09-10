@@ -1562,3 +1562,12 @@ uses intrinsic height for nonstretched auto-height items, and applies center/end
 block-axis offsets. The 15px centering regression and native contracts pass.
 Auto margins, post-constraint offsets, baseline groups and alternate grid paths
 remain open; this fixes the exercised explicit-track arrange path only.
+
+### Grid vertical auto-margin precedence (2026-09-10)
+
+A native regression showed margin-top:auto failing to override align-self:center.
+Explicit-track grid arrangement now distributes positive remaining block space
+to auto margins before alignment and avoids stretching auto-height items with
+vertical auto margins. The 10px child now sits at offset 30px in its 40px track;
+rebuilt contracts pass. Horizontal auto margins, min/max constraints and other
+grid arrange paths remain open.

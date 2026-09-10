@@ -2347,9 +2347,10 @@ void native_document::layout_children(dom_node& parent)
                     : std::max(0.0F, available_width - margin_left - margin_right);
                 const auto alignment = child->style.align_self_specified
                     ? child->style.align_self : parent.style.align_items;
+                const bool auto_vertical_margin = child->style.margin_top_auto || child->style.margin_bottom_auto;
                 auto height = is_specified(child->style.height)
                     ? outer_authored_size(*child, false, available_height)
-                    : alignment == align_mode::stretch
+                    : alignment == align_mode::stretch && !auto_vertical_margin
                         ? std::max(0.0F, available_height - margin_top - margin_bottom)
                         : intrinsic_size(*child, false, available_height);
                 if (child->style.grid().subgrid_columns) {
@@ -2363,7 +2364,10 @@ void native_document::layout_children(dom_node& parent)
                     child->clear_grid_layout();
                 }
                 const auto remaining_height = available_height - margin_top - margin_bottom - height;
-                const auto alignment_offset = alignment == align_mode::center ? remaining_height * 0.5F
+                const auto alignment_offset = auto_vertical_margin
+                    ? (child->style.margin_top_auto ? std::max(0.0F, remaining_height) /
+                        (child->style.margin_bottom_auto ? 2.0F : 1.0F) : 0.0F)
+                    : alignment == align_mode::center ? remaining_height * 0.5F
                     : alignment == align_mode::end ? remaining_height : 0.0F;
                 layout_child(*child, parent.layout, {
                     column_offsets[item.column] + margin_left,
