@@ -106,6 +106,10 @@ class CompilerTests(unittest.TestCase):
         for declaration in ['overflow:bogus','overflow:hidden auto scroll','text-align:bogus','white-space:bogus']:
             result,_=self.compile('<div></div>', 'div {'+declaration+';}')
             self.assertNotEqual(result.returncode,0)
+    def test_structural_selectors(self):
+        for selector in ['first-child','last-child','only-child']:
+            result,out=self.compile('<div></div>', 'div:'+selector+' { width:10px; }')
+            self.assertEqual(result.returncode,0,result.stderr)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

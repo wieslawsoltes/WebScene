@@ -508,7 +508,7 @@ static std::string selector_code(const selector_syntax_selector &sel) {
     std::string tag, id;
     std::vector<std::string> classes;
     std::vector<std::string> attributes;
-    bool focus = false, hover = false, root = false, active = false, disabled = false, focus_visible = false;
+    bool focus = false, hover = false, root = false, active = false, disabled = false, focus_visible = false, first_child = false, last_child = false, only_child = false;
     auto input = sel.compounds[i];
     size_t p = 0;
     while (p < input.size()) {
@@ -554,6 +554,9 @@ static std::string selector_code(const selector_syntax_selector &sel) {
           focus = true;
         else if (name == "root")
           root = true;
+        else if (name == "first-child") first_child = true;
+        else if (name == "last-child") last_child = true;
+        else if (name == "only-child") only_child = true;
         else if (name == "focus-visible")
           focus_visible = true;
         else if (name == "active")
@@ -586,7 +589,7 @@ static std::string selector_code(const selector_syntax_selector &sel) {
         result += ",";
       result += attributes[j];
     }
-    result += "}," + std::string(active ? "true" : "false") + "," + (disabled ? "true" : "false") + "," + (focus_visible ? "true" : "false") + "}";
+    result += "}," + std::string(active ? "true" : "false") + "," + (disabled ? "true" : "false") + "," + (focus_visible ? "true" : "false") + "," + (first_child ? "true" : "false") + "," + (last_child ? "true" : "false") + "," + (only_child ? "true" : "false") + "}";
   }
   return result + "}," + std::to_string(sel.specificity) + "}";
 }

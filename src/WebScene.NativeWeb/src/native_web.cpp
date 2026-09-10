@@ -369,6 +369,18 @@ static bool class_has(const std::string &list, const std::string &name) {
 }
 static bool matches_part(const dom_node &n, const selector_part &p,
                          document_state &s) {
+  if (p.first_child || p.last_child || p.only_child) {
+    const dom_node *first = nullptr, *last = nullptr;
+    if (n.parent) {
+      for (const auto *child : n.parent->children) {
+        if (child->tag.starts_with("#")) continue;
+        if (!first) first = child;
+        last = child;
+      }
+    } else first = last = &n;
+    if ((p.first_child || p.only_child) && first != &n) return false;
+    if ((p.last_child || p.only_child) && last != &n) return false;
+  }
   for (const auto &attribute : p.attributes) {
     auto found = n.attributes.find(attribute.name);
     if (found == n.attributes.end() || (attribute.equals && found->second != attribute.value)) return false;

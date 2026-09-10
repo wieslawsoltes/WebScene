@@ -199,6 +199,7 @@ struct selector_part {
   bool root{};
   std::vector<attribute_selector> attributes;
   bool active{}, disabled{}, focus_visible{};
+  bool first_child{}, last_child{}, only_child{};
 };
 struct selector {
   std::vector<selector_part> parts;

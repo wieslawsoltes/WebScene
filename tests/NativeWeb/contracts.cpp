@@ -297,5 +297,26 @@ int main() {
     responsive.render(1000, 700);
     check(responsive.bounds(responsive.find("grid-left")).width == 222, "height media restores variable on resize");
   }
+  {
+    document structural;
+    auto parent = structural.element(structural.body(), "div");
+    structural.text(parent, " ");
+    auto first = structural.element(parent, "button");
+    rule last_rule;
+    selector_part part;
+    part.tag = "button";
+    part.last_child = true;
+    last_rule.match.parts.push_back(part);
+    last_rule.declarations.push_back({false, +[](style &s) { s.set_width({99,length_unit::pixels}); }});
+    structural.add_rule(std::move(last_rule));
+    structural.render(500, 300);
+    check(structural.bounds(first).width == 99, "last child ignores whitespace text");
+    auto second = structural.element(parent, "button");
+    structural.render(500, 300);
+    check(structural.bounds(first).width != 99 && structural.bounds(second).width == 99, "insertion updates structural selector");
+    structural.remove(second);
+    structural.render(500, 300);
+    check(structural.bounds(first).width == 99, "removal updates structural selector");
+  }
   std::cout << "Native Web contracts passed\n";
 }
