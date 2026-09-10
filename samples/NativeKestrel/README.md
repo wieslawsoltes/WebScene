@@ -174,3 +174,16 @@ publishes completed frames and rebuilds/uploads scene geometry for camera-only
 updates. Compare these with the existing WebScene integration before claiming
 panning parity; preserve its synchronization and frame admission design when
 extending the native API.
+
+### Original-layout diagnostic
+
+Run `FocoKestrelPreview.app/Contents/MacOS/FocoKestrelPreview --dump-layout`
+to print the compiled original shell's major element bounds at 1280×800 and
+1280×1000 without opening a window. This checks the static shell; dynamically
+instantiated ribbon content is not included in this mode.
+
+Current observation: the shell occupies the full viewport, but the status bar
+ends at y=660 and y=860 respectively, leaving 140 pixels unused. The native flex
+layout accounts for the workbench's constrained 140-pixel minimum in its base-size
+sum, then uses its unconstrained zero flex basis during final size assignment.
+The allocation must use consistent bases; this diagnostic does not yet fix it.

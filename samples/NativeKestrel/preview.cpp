@@ -47,6 +47,23 @@ public:
   }
 };
 int main(int argc, char **argv) {
+  if (argc == 2 && std::string_view(argv[1]) == "--dump-layout") {
+    webscene::native_web::document document;
+    compiled_ui::build(document);
+    for (auto size : {std::pair{1280.f, 800.f}, std::pair{1280.f, 1000.f}}) {
+      document.render(size.first, size.second);
+      std::cout << "viewport " << size.first << "x" << size.second << '\n';
+      for (auto id : {"shell", "titlebar", "ribbon-tabs", "ribbon", "documentbar",
+                      "workbench", "command-dock", "statusbar"}) {
+        auto node = document.find(id);
+        if (!node) { std::cout << id << " missing\n"; continue; }
+        auto bounds = document.bounds(node);
+        std::cout << id << " " << bounds.x << "," << bounds.y << " "
+                  << bounds.width << "x" << bounds.height << '\n';
+      }
+    }
+    return 0;
+  }
   auto result = foco::AppBuilder::Configure<preview_app>().WithSkia().WithCocoa()
       .TryStartWithClassicDesktopLifetime(argc, argv);
   if (!result) { std::cerr << result.failure().message; return 1; }
