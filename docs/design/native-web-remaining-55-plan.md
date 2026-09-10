@@ -344,3 +344,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   and runtime host-pointer-exit/positional/iframe cascade regressions pass. This
   establishes an input-state boundary but does not yet provide full standalone
   compound matching, a CSS cascade, or native-app interaction integration.
+
+- Inherited selector state: language/direction matching now uses shared native
+  document helpers. V8-free tests cover inherited language, case folding, nearer
+  overrides, explicit empty language, direction inheritance and default direction.
+  The runtime delegates to these helpers; service and runtime positional/iframe
+  cascade regressions pass. Existing behavior is preserved; broader language-range
+  support and automatic direction detection are not added by this extraction.
+  Full compound matching and cascade execution remain open.

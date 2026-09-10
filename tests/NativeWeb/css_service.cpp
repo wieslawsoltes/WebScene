@@ -71,5 +71,19 @@ int main() {
     if(interaction_matches(document,fieldset,"hover",interaction,false) ||
        interaction_matches(document,exempt,"focus",interaction,false) ||
        !interaction_matches(document,blocked,"focus-visible",interaction,true)) return 16;
+    using webscene_native::css::language_matches;
+    using webscene_native::css::direction_matches;
+    fieldset.attributes["lang"]="en-GB";
+    fieldset.attributes["dir"]="rtl";
+    if(!language_matches(document,exempt,"EN") ||
+       language_matches(document,exempt,"fr") ||
+       !direction_matches(document,exempt,"rtl") || direction_matches(document,exempt,"ltr")) return 17;
+    legend.attributes["lang"]="fr";
+    legend.attributes["dir"]="ltr";
+    if(language_matches(document,exempt,"en") || !language_matches(document,exempt,"fr") ||
+       !direction_matches(document,exempt,"ltr")) return 18;
+    legend.attributes["lang"]="";
+    if(language_matches(document,exempt,"en")) return 19;
+    if(!direction_matches(document,select,"ltr")) return 20;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

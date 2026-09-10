@@ -2254,51 +2254,9 @@
                 const auto value = node.attributes.find("value");
                 if (value != node.attributes.end() && !value->second.empty()) return false;
             } else if (name == "lang") {
-                auto wanted = lower_html_name(trim_css(argument));
-                if (wanted.size() >= 2U
-                    && (wanted.front() == '\'' || wanted.front() == '"')
-                    && wanted.back() == wanted.front()) {
-                    wanted = wanted.substr(1U, wanted.size() - 2U);
-                } else {
-                    size_t language_cursor = 0U;
-                    auto decoded = read_css_identifier(wanted, language_cursor);
-                    if (decoded.empty() || language_cursor != wanted.size()) return false;
-                    wanted = lower_html_name(decoded);
-                }
-                auto matched = false;
-                for (auto* language_node = &node; language_node != nullptr;
-                    language_node = document.dom_parent(*language_node)) {
-                    auto language = language_node->attributes.find("lang");
-                    if (language == language_node->attributes.end()) {
-                        language = language_node->attributes.find("xml:lang");
-                    }
-                    if (language == language_node->attributes.end()) continue;
-                    const auto actual = lower_html_name(language->second);
-                    matched = actual == wanted || actual.starts_with(wanted + "-");
-                    break;
-                }
-                if (!matched) return false;
+                if (!css::language_matches(document,node,argument)) return false;
             } else if (name == "dir") {
-                auto wanted = lower_html_name(trim_css(argument));
-                if (wanted.size() >= 2U
-                    && (wanted.front() == '\'' || wanted.front() == '"')
-                    && wanted.back() == wanted.front()) {
-                    wanted = wanted.substr(1U, wanted.size() - 2U);
-                }
-                auto actual = std::string("ltr");
-                for (auto* direction_node = &node; direction_node != nullptr;
-                    direction_node = document.dom_parent(*direction_node)) {
-                    const auto authored = direction_node->attributes.find("dir");
-                    if (authored == direction_node->attributes.end()) continue;
-                    const auto candidate = lower_html_name(trim_css(authored->second));
-                    if (candidate == "ltr" || candidate == "rtl") {
-                        actual = candidate;
-                        break;
-                    }
-                }
-                if ((wanted != "ltr" && wanted != "rtl") || wanted != actual) {
-                    return false;
-                }
+                if (!css::direction_matches(document,node,argument)) return false;
             } else if (name == "target") {
                 const auto local_context = isolate->GetCurrentContext();
                 v8::Local<v8::Value> location_value;

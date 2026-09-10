@@ -166,4 +166,53 @@ inline bool interaction_matches(const native_document& document,const dom_node& 
     }
     return false;
 }
+inline bool language_matches(const native_document& document,const dom_node& node,std::string_view argument) {
+                auto wanted = ascii_lower(trim_value(argument));
+                if (wanted.size() >= 2U
+                    && (wanted.front() == '\'' || wanted.front() == '"')
+                    && wanted.back() == wanted.front()) {
+                    wanted = wanted.substr(1U, wanted.size() - 2U);
+                } else {
+                    size_t language_cursor = 0U;
+                    auto decoded = read_css_identifier(wanted, language_cursor);
+                    if (decoded.empty() || language_cursor != wanted.size()) return false;
+                    wanted = ascii_lower(decoded);
+                }
+                auto matched = false;
+                for (auto* language_node = &node; language_node != nullptr;
+                    language_node = document.dom_parent(*language_node)) {
+                    auto language = language_node->attributes.find("lang");
+                    if (language == language_node->attributes.end()) {
+                        language = language_node->attributes.find("xml:lang");
+                    }
+                    if (language == language_node->attributes.end()) continue;
+                    const auto actual = ascii_lower(language->second);
+                    matched = actual == wanted || actual.starts_with(wanted + "-");
+                    break;
+                }
+                return matched;
+}
+inline bool direction_matches(const native_document& document,const dom_node& node,std::string_view argument) {
+                auto wanted = ascii_lower(trim_value(argument));
+                if (wanted.size() >= 2U
+                    && (wanted.front() == '\'' || wanted.front() == '"')
+                    && wanted.back() == wanted.front()) {
+                    wanted = wanted.substr(1U, wanted.size() - 2U);
+                }
+                auto actual = std::string("ltr");
+                for (auto* direction_node = &node; direction_node != nullptr;
+                    direction_node = document.dom_parent(*direction_node)) {
+                    const auto authored = direction_node->attributes.find("dir");
+                    if (authored == direction_node->attributes.end()) continue;
+                    const auto candidate = ascii_lower(trim_value(authored->second));
+                    if (candidate == "ltr" || candidate == "rtl") {
+                        actual = candidate;
+                        break;
+                    }
+                }
+                if ((wanted != "ltr" && wanted != "rtl") || wanted != actual) {
+                    return false;
+                }
+                return true;
+}
 } // namespace webscene_native::css
