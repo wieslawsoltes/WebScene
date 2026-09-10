@@ -85,3 +85,9 @@ snap points and bounds points. Complete output is compared against upstream for
 curves, hatches, dimensions, a mesh, Unicode multiline text and point entities.
 This provides renderer input; GPU rendering and command/UI integration remain
 outstanding. Numeric dimension-label formatting retains the limitation above.
+
+`kestrel.render_data` defines the upstream GPU line-instance and triangle-vertex
+layouts with checked strides and offsets. Coordinate packing subtracts the scene
+origin in double precision before conversion to floats; a large-coordinate test
+verifies sub-unit detail is retained. GPU pipelines, scene styling and upload/
+submission still need implementation; this module alone does not render a frame.
