@@ -1010,3 +1010,11 @@ three 20px lines, and native text mutation preserves leading/trailing spaces in
 scene text. Restoring the original text also renders successfully. Contracts pass.
 Whitespace-only content, tab expansion, trailing newline boundaries and the other
 preserving whitespace modes remain open.
+
+### Preformatted whitespace boundaries (2026-09-10)
+
+Native contracts now cover whitespace-only spaces, a leading newline and a
+trailing newline after text. The cases produce one line, two lines and one line
+respectively at the fixture's 20px line height. Contracts pass without further
+layout changes. Tab stops, cross-element whitespace boundaries, pre-wrap,
+pre-line and break-spaces remain open.

@@ -396,6 +396,15 @@ int main() {
   d.set_text(whitespace_variable, "A\n\nB");
   d.render(800, 600);
   check(d.bounds(whitespace_variable).height == 60, "preformatted blank line contributes line height");
+  d.set_text(whitespace_variable, "   ");
+  d.render(800, 600);
+  check(d.bounds(whitespace_variable).height == 20, "whitespace-only pre content creates a line box");
+  d.set_text(whitespace_variable, "A\n");
+  d.render(800, 600);
+  check(d.bounds(whitespace_variable).height == 20, "trailing pre newline does not add an empty final line");
+  d.set_text(whitespace_variable, "\nA");
+  d.render(800, 600);
+  check(d.bounds(whitespace_variable).height == 40, "leading pre newline retains its blank line");
   d.set_text(whitespace_variable, "  Spaced  ");
   const auto &spaces_scene = d.render(800, 10000);
   check(std::string_view(spaces_scene.bytes.data(), spaces_scene.bytes.size()).find("  Spaced  ") != std::string_view::npos,
