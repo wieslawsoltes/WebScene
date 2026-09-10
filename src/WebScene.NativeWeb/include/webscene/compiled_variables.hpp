@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include "webscene_native_dom.h"
 #include <map>
 #include <optional>
 #include <set>
@@ -9,14 +10,31 @@
 namespace webscene::native_web {
 // Tokens are supplied by the compiler. Evaluation substitutes token sequences;
 // it never lexes CSS text. Property lowering consumes the resulting typed IR.
+struct variable_token {
+  std::string text;
+  std::optional<webscene_native::css_length> length;
+  std::optional<uint32_t> color;
+  variable_token(const char *value) : text(value) {}
+  variable_token(std::string value) : text(std::move(value)) {}
+  variable_token(std::string value, std::optional<webscene_native::css_length> l,
+                 std::optional<uint32_t> c) : text(std::move(value)), length(l), color(c) {}
+  bool operator==(const variable_token &other) const {
+    return text == other.text && color == other.color &&
+      length.has_value() == other.length.has_value() &&
+      (!length || (length->value == other.length->value && length->unit == other.length->unit &&
+                   length->pixel_offset == other.length->pixel_offset));
+  }
+};
 struct variable_expression {
   enum class kind { token, reference };
   kind type{kind::token};
   std::string value;
   std::vector<variable_expression> fallback;
   bool has_fallback{};
+  std::optional<webscene_native::css_length> length;
+  std::optional<uint32_t> color;
 };
-using variable_tokens = std::vector<std::string>;
+using variable_tokens = std::vector<variable_token>;
 using variable_result = std::optional<variable_tokens>;
 using computed_variables = std::map<std::string, variable_result>;
 using specified_variables = std::map<std::string, std::vector<variable_expression>>;
@@ -66,7 +84,7 @@ inline computed_variables compute_variables(const specified_variables &local,
       variable_tokens output;
       for (const auto &expression : expressions) {
         if (expression.type == variable_expression::kind::token) {
-          output.push_back(expression.value);
+          output.emplace_back(expression.value, expression.length, expression.color);
           continue;
         }
         auto value = self(self, expression.value);

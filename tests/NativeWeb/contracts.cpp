@@ -78,7 +78,9 @@ int main() {
   compiled_variable_probe.match.parts.push_back(probe_root);
   compiled_variable_probe.declarations.push_back({false, +[](style &s) {
     auto border = s.variable("--border");
-    check(border && *border && **border == variable_tokens({"1px", "solid", "#5ac6d2"}),
+    check(border && *border && (**border).size() == 3 &&
+          (**border)[0].length && (**border)[0].length->value == 1 &&
+          (**border)[1].text == "solid" && (**border)[2].color == 0x5ac6d2ffu,
           "compiler-generated variable expression reaches native cascade");
   }});
   d.add_rule(std::move(compiled_variable_probe));
