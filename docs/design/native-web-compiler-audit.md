@@ -810,3 +810,17 @@ All 52 compiler tests and native contracts pass. Relative bolder/lighter,
 fractional native weight representation, variable values and font selection
 parity remain open. Numeric line-height overflow was inspected: stof rejects
 out-of-range inputs before C++ emission; no change was required there.
+
+### Native translation transform lowering (2026-09-10)
+
+Refreshed the unchanged reference corpus: 397 rules, 1475 declarations and 58
+unsupported constructs before this change. Added a native typed translation
+setter and compiler lowering for translateX/translateY lengths or percentages
+and transform:none. The setter resets scale/rotation and records authored
+transform versus stacking-context state separately. No runtime CSS parsing added.
+
+Native geometry verifies percentage translation resolves against the element's
+own width and class-applied none resets it. All 52 compiler tests and native
+contracts pass. Transform lists, variables, rotation/scale lowering, transformed
+hit testing and rendered stacking comparisons remain open; this is not full
+transform-family closure.

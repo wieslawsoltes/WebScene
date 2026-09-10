@@ -86,6 +86,14 @@ public:
   void set_margin_top(length value) { value_.margin_top = value; }
   void set_margin_right(length value) { value_.margin_right = value; }
   void set_margin_bottom(length value) { value_.margin_bottom = value; }
+  void set_translation(length x, length y, bool active = true) {
+    value_.transform_translate_x = x;
+    value_.transform_translate_y = y;
+    value_.transform_scale_x = value_.transform_scale_y = 1;
+    value_.transform_rotate_degrees = 0;
+    value_.transform_specified = true;
+    value_.transform_stacking_context = active;
+  }
   void set_row_gap(length value) { value_.row_gap = value; }
   void set_column_gap(length value) { value_.column_gap = value; }
   void set_flex_basis(length value) { value_.flex_basis = value; }

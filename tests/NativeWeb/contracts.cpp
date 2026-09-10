@@ -176,6 +176,11 @@ int main() {
   d.render(800, 600);
   check(d.bounds(variable_margin).x - d.bounds(margin_container).x == 40,
         "removing margin longhand preserves shorthand auto state");
+  auto translated = d.find("translated"), translate_parent = d.find("translate-parent");
+  check(d.bounds(translated).x - d.bounds(translate_parent).x == 10, "compiled percentage translation uses own width");
+  d.attribute(translated, "class", "reset");
+  d.render(800, 600);
+  check(d.bounds(translated).x == d.bounds(translate_parent).x, "transform none resets translation");
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");

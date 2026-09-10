@@ -418,6 +418,17 @@ static std::string assignments(const std::string &name,
       throw std::runtime_error("unsupported font smoothing mode");
     return "s.set_font_smoothing(" + quote(value) + ");";
   }
+  if (name == "transform") {
+    if (value == "none") return "s.set_translation(" + length("0") + "," + length("0") + ",false);";
+    std::smatch match;
+    if (!std::regex_match(value, match, std::regex(R"(translate([XY])\(\s*([^()]+?)\s*\))", std::regex::icase)))
+      throw std::runtime_error("compiled transform currently supports translateX/translateY or none");
+    auto argument = trim(match[2]);
+    if (argument == "auto") throw std::runtime_error("transform translation requires a length");
+    auto translated = length(argument), zero = length("0");
+    bool horizontal = match[1] == "x" || match[1] == "X";
+    return "s.set_translation(" + (horizontal ? translated : zero) + "," + (horizontal ? zero : translated) + ");";
+  }
   if (name == "text-anchor") {
     if (value != "start" && value != "middle" && value != "end")
       throw std::runtime_error("text-anchor requires start, middle or end");
