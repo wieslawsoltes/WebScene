@@ -1002,3 +1002,11 @@ Both now preserve preformatted line segments and explicit newlines. Contracts pa
 Pre-wrap/pre-line/break-spaces, tabs, trailing-newline edge cases, mixed inline
 styles and pixel comparisons still need coverage; this closes the recorded
 preformatted two-line failure, not the whole whitespace family.
+
+### Preformatted blank lines and spaces (2026-09-10)
+
+Extended native contracts after the preformatted fix: A/newline/newline/B occupies
+three 20px lines, and native text mutation preserves leading/trailing spaces in
+scene text. Restoring the original text also renders successfully. Contracts pass.
+Whitespace-only content, tab expansion, trailing newline boundaries and the other
+preserving whitespace modes remain open.

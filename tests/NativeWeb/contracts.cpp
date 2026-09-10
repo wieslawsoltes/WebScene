@@ -392,6 +392,17 @@ int main() {
   d.attribute(whitespace_variable, "class", "invalid");
   d.render(800, 600);
   check(d.bounds(whitespace_variable).height == 20, "invalid whitespace inherits normal collapse");
+  d.remove_attribute(whitespace_variable, "class");
+  d.set_text(whitespace_variable, "A\n\nB");
+  d.render(800, 600);
+  check(d.bounds(whitespace_variable).height == 60, "preformatted blank line contributes line height");
+  d.set_text(whitespace_variable, "  Spaced  ");
+  const auto &spaces_scene = d.render(800, 10000);
+  check(std::string_view(spaces_scene.bytes.data(), spaces_scene.bytes.size()).find("  Spaced  ") != std::string_view::npos,
+        "preformatted leading and trailing spaces reach scene text");
+  d.set_text(whitespace_variable, "A\nB");
+  d.render(800, 600);
+
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");
