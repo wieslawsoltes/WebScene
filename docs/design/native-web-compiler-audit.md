@@ -1414,3 +1414,13 @@ default to one, positive values clamp to 1000 and an optional plus is accepted.
 Contracts cover compiled +1 and dynamic negative/zero/nonnumeric defaults without
 altering the 60px column. All 76 compiler tests and rebuilt contracts pass.
 Large-span geometry, colgroup span behavior and full table reflection remain open.
+
+### Column span overflow regression and shared parsing (2026-09-10)
+
+An oversized dynamic span exposed two additional unchecked column-span conversions
+in intrinsic sizing and column geometry, throwing vector length_error despite the
+previous allocation guard. All three column paths now share bounded integer
+parsing. Contracts verify +2suffix repeats the 60px width, a very large integer
+renders without failure, and restoring +1 recovers the automatic second column.
+Rebuilt contracts pass. This supersedes the prior partial column-span guard;
+cell-span reflection and colgroup semantics remain separate audit items.

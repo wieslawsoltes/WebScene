@@ -179,7 +179,18 @@ int main() {
     check(d.bounds(d.find("col-priority")).width == 60,
           "invalid column span defaults to one");
   }
+  d.attribute(d.find("priority-column"), "span", "+2suffix");
+  d.render(800, 600);
+  check(d.bounds(d.find("col-priority-second")).width == 60,
+        "positive column span repeats authored width across tracks");
+  d.attribute(d.find("priority-column"), "span", "999999999999999999999999999999");
+  d.render(800, 600);
+  check(d.bounds(d.find("col-priority-second")).width == 60,
+        "oversized column span stays bounded and preserves leading tracks");
   d.attribute(d.find("priority-column"), "span", "+1");
+  d.render(800, 600);
+  check(d.bounds(d.find("col-priority-second")).width > 60,
+        "column span removal restores automatic second column");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));
