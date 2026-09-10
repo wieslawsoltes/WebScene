@@ -471,3 +471,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   transition tests are retained because the existing tests share a clock timeline.
   This preserves existing first-animation/property coverage limits; it does not
   establish full animation compliance or Kestrel application parity.
+
+- Pseudo-element value extraction: generated content decoding and the existing
+  pseudo-element property dispatcher now live in webscene_css_pseudo_values.h.
+  Runtime cascade retains variable resolution and diagnostic reporting, while
+  native callers can apply resolved values without V8. Native tests cover escaped
+  content, display, padding, currentColor borders, elliptical radii, resets and
+  unsupported/partial diagnostics. Runtime active-chart-pseudo-border and
+  elliptical-corner-radii regressions pass. Existing content grammar, logical
+  direction, paint and typography limits remain; pseudo rule orchestration and
+  compiled application integration are not yet complete.

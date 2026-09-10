@@ -7,6 +7,7 @@
 #include "webscene_css_box_values.h"
 #include "webscene_css_transitions.h"
 #include "webscene_css_layout_values.h"
+#include "webscene_css_pseudo_values.h"
 #include <iostream>
 int main() {
     using webscene_native::css::parse_declarations;
@@ -266,5 +267,25 @@ int main() {
     webscene_native::css::configure_keyframes(animated.style,definitions);
     animated_document.update_style_animations(animated);
     if(animated.animation_runtime() && animated.animation_runtime()->opacity_keyframe_animation_active) return 64;
+    webscene_native::node_style::pseudo_element generated;
+    const auto apply_generated=[&](const std::string& name,const std::string& value) {
+        return webscene_native::css::apply_pseudo_value(generated,0x123456FF,name,value);
+    };
+    apply_generated("content",R"("\2192 next")");
+    apply_generated("display","inline-block");
+    apply_generated("padding-inline","4px 8px");
+    apply_generated("border","2px solid currentColor");
+    apply_generated("border-radius","4px / 8px");
+    if(!generated.generated || generated.content!="\u2192next" ||
+       generated.display!=webscene_native::display_mode::inline_block ||
+       generated.padding_left.value!=4 || generated.padding_right.value!=8 ||
+       generated.border_left_width.value!=2 || !generated.border_left_current_color ||
+       !generated.elliptical_border_radius || generated.border_top_left_radius.value!=4 ||
+       generated.border_top_left_radius_y.value!=8) return 65;
+    if(apply_generated("unknown-property","x").classification!="unsupported" ||
+       apply_generated("line-height","inherit").classification!="partially-supported") return 66;
+    apply_generated("content","none");
+    apply_generated("border","none");
+    if(generated.generated || !generated.content.empty() || generated.border_left_width.value!=0) return 67;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
