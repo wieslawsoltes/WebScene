@@ -1189,6 +1189,12 @@ struct compiler {
       }
       if (n.tag == "body")
         body = &n;
+      if (n.tag == "style" || n.tag == "link") {
+        auto type = n.attributes.find("type");
+        if (type != n.attributes.end() && !trim(type->second).empty() &&
+            ascii_keyword(trim(type->second)) != "text/css") return;
+        if (n.tag == "link" && n.attributes.contains("disabled")) return;
+      }
       std::array<float, 4> media_bounds{0, 1e9f, 0, 1e9f};
       if ((n.tag == "style" || n.tag == "link") && n.attributes.contains("media")) {
         const auto media = trim(n.attributes.at("media"));

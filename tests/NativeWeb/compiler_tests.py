@@ -324,6 +324,22 @@ class CompilerTests(unittest.TestCase):
             self.assertEqual(preview.returncode,0,preview.stderr)
             self.assertNotIn('123.0f',output.read_text())
 
+    def test_inactive_stylesheets_do_not_apply(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        for element in ['<style type="text/plain">not CSS</style>',
+                        '<link rel="stylesheet" disabled="false" href="missing.css">',
+                        '<link rel="stylesheet" type="text/plain" href="missing.css">']:
+            source.write_text('<html><head>'+element+'</head><body></body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertNotIn('d.add_rule',output.read_text())
+        for mime in ['text/css','TEXT/CSS','']:
+            source.write_text('<html><head><style type="'+mime+'">body { width:123px; }</style></head><body></body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('123.0f',output.read_text())
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'

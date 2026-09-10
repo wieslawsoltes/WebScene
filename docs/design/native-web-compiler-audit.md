@@ -1305,3 +1305,12 @@ now has native geometry coverage. Viewports 400, 500, 700, 701 and 400px verify
 base style, inclusive boundaries, intersection and restoration on shrinking.
 Rebuilt contracts pass. These are layout checks for the supported conditions;
 they do not establish presentation frame rate or general media-query coverage.
+
+### Static stylesheet activation (2026-09-10)
+
+Non-CSS style/link types and disabled stylesheet links no longer contribute
+compiled rules. Disabled uses attribute presence, including disabled="false";
+empty type and case-insensitive text/css remain active. Tests verify inactive
+content is not parsed/read and active CSS still lowers. All 73 compiler tests
+pass. This implements initial compiled activation only: runtime stylesheet
+activation, alternate stylesheet sets and stylesheet DOM objects remain open.
