@@ -1521,3 +1521,11 @@ modes. A 100px flex fixture containing two 20px items verifies offsets 15/65px
 for around and 20/60px for evenly after class mutation. All 77 compiler tests
 and rebuilt contracts pass. Wrapped lines, overflow and logical-direction cases
 remain outside this evidence.
+
+### Flex distribution with explicit gap (2026-09-10)
+
+The compiled distribution fixture now applies a 12px gap. Native contracts verify
+space-evenly offsets of 16/64px and space-around offsets of 12/68px in the 100px
+container, accounting for the explicit gap before distributing remaining space.
+Rebuilt contracts pass. Negative free space and wrapped-line distribution remain
+open cases.
