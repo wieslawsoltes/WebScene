@@ -265,6 +265,12 @@ static std::string assignments(const std::string &name,
         "s.set_bottom(side(valid && v->size()>2?2:0));"
         "s.set_left(side(valid && v->size()>3?3:valid && v->size()>1?1:0));";
   }
+  if (name == "-webkit-font-smoothing") {
+    if (value == "inherit" || value == "unset") return "s.set_font_smoothing(\"\");";
+    if (value != "auto" && value != "none" && value != "antialiased" && value != "subpixel-antialiased")
+      throw std::runtime_error("unsupported font smoothing mode");
+    return "s.set_font_smoothing(" + quote(value) + ");";
+  }
   if (name == "text-anchor") {
     if (value != "start" && value != "middle" && value != "end")
       throw std::runtime_error("text-anchor requires start, middle or end");

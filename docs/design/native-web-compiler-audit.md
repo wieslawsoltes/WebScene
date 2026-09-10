@@ -273,3 +273,16 @@ now generates a native reset of background color and background-image state,
 while `background-color:none` remains invalid. Compiler regression covers the
 shorthand distinction. All 40 compiler tests and the native contract suite pass.
 Gradient/image authoring and other background shorthand combinations remain open.
+
+### Typography dependency review and font smoothing (2026-09-10)
+
+`text-overflow:ellipsis` is an engine gap, not merely a missing compiler setter:
+no native text-overflow field or ellipsis implementation was found, and text is
+emitted through both inline-fragment and direct-text paths. Correct implementation
+must cover both paths and clipping/line direction before compiler acceptance.
+
+The existing native font-smoothing field and serialized text metadata are now
+exposed to compiled `-webkit-font-smoothing` declarations (auto, none, antialiased,
+subpixel-antialiased, inherit/unset). A native contract verifies inherited
+antialiased metadata reaches text output. Compiler and native contract suites pass.
+This verifies propagation, not identical glyph rasterization across platforms.

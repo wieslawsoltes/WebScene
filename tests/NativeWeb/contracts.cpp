@@ -173,6 +173,8 @@ int main() {
         "compiled SVG stroke width reaches serialized geometry");
   check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end()).find("text-anchor=\"middle\"") != std::string::npos,
         "compiled SVG text anchor reaches serialized text");
+  check(std::string(initial_scene.bytes.begin(), initial_scene.bytes.end()).find("antialiased") != std::string::npos,
+        "compiled inherited font smoothing reaches native text scene");
   bool font_found = false;
   for (const auto &command : initial_scene.commands) {
     if (command.kind != 3 || command.flags >= initial_scene.strings.size()) continue;
