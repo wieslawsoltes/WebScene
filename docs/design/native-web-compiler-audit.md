@@ -693,3 +693,16 @@ The native numeric fixture now uses uppercase PX and retains its geometry check.
 All 48 compiler tests and native contracts pass. Property-specific prevalidators
 (e.g. border widths and spacing), escaped units and keyword casing outside the
 previously audited enum families remain open.
+
+### Shared pixel-property validation (2026-09-10)
+
+Border side widths, font size, pixel line height and letter/word spacing now share
+one finite pixel-value validator. It accepts case-insensitive units, exponent and
+fractional numbers and signed zero, with nonnegative constraints for widths/font
+size/line height and signed spacing. Font-size emission uses the validated numeric
+value instead of reparsing through a separate native utility.
+
+Regression coverage exercises each property with valid numeric forms, overflow,
+unsupported relative units and separated units; font-size output is checked for
+its exact 5px value. All 49 compiler tests and native contracts pass. Relative
+units for these property profiles and broader keyword/function grammar remain open.

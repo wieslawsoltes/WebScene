@@ -99,6 +99,16 @@ static std::string length(std::string value) {
          ", static_cast<webscene::native_web::length_unit>(" +
          std::to_string(int(v.unit)) + "), " + number(v.pixel_offset) + "}";
 }
+static float pixel_length(const std::string &value, bool nonnegative) {
+  static const std::regex grammar(R"([+-]?(?:[0-9]*\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?(?:px)?)", std::regex::icase);
+  if (!std::regex_match(value, grammar)) throw std::runtime_error("expected pixel length");
+  size_t consumed = 0;
+  const float numeric = std::stof(value, &consumed);
+  if (!std::isfinite(numeric) || (nonnegative && numeric < 0) ||
+      (consumed == value.size() && numeric != 0))
+    throw std::runtime_error("invalid pixel length");
+  return numeric;
+}
 // Initial custom-value token grammar. Unsupported token forms remain errors;
 // declarations are never passed as CSS strings to the application.
 static std::string variable_code(const std::string &text) {
@@ -518,9 +528,7 @@ static std::string assignments(const std::string &name,
   }
   for (const std::string side : {"left", "top", "right", "bottom"}) {
     if (name == "border-" + side + "-width") {
-      if (!std::regex_match(value, std::regex(R"([+-]?(?:[0-9]*\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?(?:px)?)")) ||
-          std::stof(value) < 0 || (!value.ends_with("px") && std::stof(value) != 0))
-        throw std::runtime_error("border width currently requires nonnegative px");
+      pixel_length(value, true);
       return "s.set_border_" + side + "_width(" + length(value) + ");";
     }
     if (name == "border-" + side + "-style") {
@@ -690,16 +698,11 @@ static std::string assignments(const std::string &name,
     if (value == "normal") return "s.set_line_height(-2.0f);";
     if (std::regex_match(value, std::regex(R"(\+?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")))
       return "s.set_line_height(" + number(-3 - std::stof(value)) + ");";
-    if (!value.ends_with("px") || value.starts_with("-"))
-      throw std::runtime_error("line-height requires normal, nonnegative px or multiplier");
-    length(value);
-    return "s.set_line_height(" + number(std::stof(value)) + ");";
+    return "s.set_line_height(" + number(pixel_length(value, true)) + ");";
   }
   if (name == "letter-spacing" || name == "word-spacing") {
     if (value == "normal") return "s.set_" + member + "(0.0f);";
-    if (!value.ends_with("px")) throw std::runtime_error("spacing currently requires px");
-    length(value);
-    return "s.set_" + member + "(" + number(std::stof(value)) + ");";
+    return "s.set_" + member + "(" + number(pixel_length(value, false)) + ");";
   }
   if (name == "font-family") {
     if (value.empty())
@@ -709,13 +712,7 @@ static std::string assignments(const std::string &name,
   }
   if (name == "font-size") {
     if (value == "inherit" || value == "unset") return "s.set_font_size(-1.0f);";
-    if (!value.ends_with("px"))
-      throw std::runtime_error("font-size currently requires px");
-    auto l = native_document::parse_length(value);
-    length(value);
-    if (l.value < 0)
-      throw std::runtime_error("negative font size");
-    return "s.font_size = " + number(l.value) + ";";
+    return "s.font_size = " + number(pixel_length(value, true)) + ";";
   }
   if (name == "font-weight" && (value == "inherit" || value == "unset"))
     return "s.set_font_weight(0);";

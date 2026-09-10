@@ -178,6 +178,17 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { width:'+value+'; }')
             self.assertNotEqual(result.returncode,0,value)
 
+    def test_pixel_property_grammar(self):
+        for name in ['font-size','line-height','letter-spacing','word-spacing','border-left-width']:
+            for value in ['+.5e1PX','-0px','0']:
+                result,_=self.compile('<div></div>', 'div {'+name+':'+value+';}')
+                self.assertEqual(result.returncode,0,name+':'+value+result.stderr)
+            for value in ['1e999px','1em','2 PX']:
+                result,_=self.compile('<div></div>', 'div {'+name+':'+value+';}')
+                self.assertNotEqual(result.returncode,0,name+':'+value)
+        result,out=self.compile('<div></div>', 'div {font-size:+.5e1PX;}')
+        self.assertIn('s.set_font_size(5.0f)',out.read_text())
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)
