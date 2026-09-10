@@ -76,3 +76,23 @@ explicit. Compression and lazy decoding may reduce memory without changing the
 no-network deployment guarantee. Verify packaged applications with network access
 unavailable and source directories absent. This is an accepted requirement;
 general resource embedding and font/image compiler support are not implemented yet.
+
+## Future optimization: compiled SVG path data
+
+Compile static SVG `path` data (`d`) at build time into immutable native path
+commands and coordinates, emitted with the generated C++ module or embedded
+resource data. Preserve the original SVG markup unchanged. WebScene should expose
+a native path representation that its independently embeddable renderer can consume
+without reparsing SVG path strings at application startup or on each scene update.
+Share compiled geometry between template instances where ownership permits.
+
+Keep geometry separate from live CSS fill/stroke, transforms, viewBox scaling,
+clipping and hit testing. Native code must still be able to select another compiled
+path or construct/update geometry through typed commands. Preserve source locations
+for malformed path diagnostics and future design tooling. Verify curves, arcs,
+fill rules and transformed rendering against the original SVG before claiming
+parity; avoid assuming fixed tessellation remains correct at every zoom level.
+
+This is a deferred optimization, not implemented by the current SVG markup and
+paint support. Measure parsing, allocation and rendering costs independently:
+removing path-string parsing does not by itself remove rasterization or GPU work.
