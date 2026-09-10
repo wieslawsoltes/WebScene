@@ -8,6 +8,23 @@ contains 397 rules and 1475 declarations, with 80 distinct unsupported construct
 This corpus is a compatibility input, not the complete compiler specification.
 Audit supported features too: accepting syntax does not prove correct semantics.
 
+## Current compatibility checkpoint
+
+At implementation revision `6702b62e`, the unchanged reference stylesheet reports
+**55 distinct unsupported constructs** across **397 rules / 1475 declarations**,
+compared with the historical 80-construct baseline above. This is a diagnostic
+inventory count, not percentage compatibility or visual parity. No Kestrel launch
+or new application porting was performed for this checkpoint.
+
+Reference SHA-256: `4a6ce8c12c047367e92424a545e7b6142a1a3d19a576896d53644e17e2d85492`.
+Command: `artifacts/native-web-modules/webscene-uic --check-css samples/NativeKestrel/reference/src/style.css`.
+Full output: [compatibility checkpoint](native-web-css-checkpoint.txt).
+
+Remaining groups include pseudo-elements/generated content, conditional rules and
+animation, gradients/two-color mixing/shadows, grid placement, overflow typography,
+and platform/control presentation. Continue independent compiler audit fixtures;
+this corpus does not change the work order below.
+
 ## Work order and closure gates
 
 | Order | Feature family | Required closure evidence | Status |
@@ -1812,3 +1829,11 @@ Rebuilt smoke, template, module-template and contract suites pass. Relative colo
 none channels, channel variables/math, HSL/HWB and other color spaces remain open.
 This is literal RGB lowering, not completion of functional-color semantics or
 browser differential validation. No runtime CSS parser is introduced.
+
+### At-rule diagnostic classification (2026-09-10)
+
+The compatibility checkpoint exposed misleading keyframes errors describing media
+conditions. Non-media at-rules now report their actual unsupported rule kind;
+media failures retain the condition diagnostic. All 96 compiler tests pass,
+including keyframes, supports and print-media classification. No at-rule support
+is claimed by this diagnostic change.

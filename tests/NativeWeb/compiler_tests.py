@@ -84,6 +84,14 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb, #fff '+percent+', transparent); }')
             self.assertNotEqual(result.returncode,0,percent)
 
+    def test_at_rule_diagnostics_distinguish_media(self):
+        for css,message in [('@keyframes spin { from { opacity:0; } }', 'unsupported at-rule: @keyframes'),
+                            ('@supports (display:grid) { div { width:1px; } }', 'unsupported at-rule: @supports'),
+                            ('@media print { div { width:1px; } }', 'media conditions')]:
+            result,_=self.compile('<div></div>',css)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn(message,result.stderr)
+
     def test_rgb_literals_and_variable_tokens(self):
         for value,rgba in [('rgb(255,0,128)',0xff0080ff),('RGBA(100%, 0%, 50%, .5)',0xff008080),
                            ('rgb(255 0 50% / 25%)',0xff008040),('rgb(-10 300 0 / 2)',0x00ff00ff),

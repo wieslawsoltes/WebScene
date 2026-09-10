@@ -1,0 +1,134 @@
+samples/NativeKestrel/reference/src/style.css: error: #command-input::placeholder: unsupported selector: #command-input::placeholder
+  in rule: samples/NativeKestrel/reference/src/style.css:11:1429
+samples/NativeKestrel/reference/src/style.css: error: #ribbon-tab-list button.active:after: unsupported selector: #ribbon-tab-list button.active::after
+  in rule: samples/NativeKestrel/reference/src/style.css:5:428
+samples/NativeKestrel/reference/src/style.css: error: .document-tab.active:after: unsupported selector: .document-tab.active::after
+  in rule: samples/NativeKestrel/reference/src/style.css:7:561
+samples/NativeKestrel/reference/src/style.css: error: .panel-tabs button.active:after: unsupported selector: .panel-tabs button.active::after
+  in rule: samples/NativeKestrel/reference/src/style.css:8:1190
+samples/NativeKestrel/reference/src/style.css: error: .progress-line:after: unsupported selector: .progress-line::after
+  in rule: samples/NativeKestrel/reference/src/style.css:14:4419
+samples/NativeKestrel/reference/src/style.css: error: .property-section-title:before: unsupported selector: .property-section-title::before
+  in rule: samples/NativeKestrel/reference/src/style.css:10:609
+samples/NativeKestrel/reference/src/style.css: error: @keyframes progress: unsupported at-rule: @keyframes
+  in rule: samples/NativeKestrel/reference/src/style.css:14:4561
+samples/NativeKestrel/reference/src/style.css: error: @keyframes toast-in: unsupported at-rule: @keyframes
+  in rule: samples/NativeKestrel/reference/src/style.css:13:1263
+samples/NativeKestrel/reference/src/style.css: error: @media (prefers-reduced-motion:reduce): only min/max width or height media conditions in px are supported
+  in rule: samples/NativeKestrel/reference/src/style.css:19:1
+samples/NativeKestrel/reference/src/style.css: error: @media print: only min/max width or height media conditions in px are supported
+  in rule: samples/NativeKestrel/reference/src/style.css:20:1
+samples/NativeKestrel/reference/src/style.css: error: accent-color:var(--accent): compiled var() not supported for property: accent-color
+  in rule: input[type=checkbox] at samples/NativeKestrel/reference/src/style.css:3:841
+samples/NativeKestrel/reference/src/style.css: error: animation:none: unsupported Native Web CSS property: animation
+  in rule: @media (prefers-reduced-motion:reduce) > * at samples/NativeKestrel/reference/src/style.css:19:41
+samples/NativeKestrel/reference/src/style.css: error: animation:progress 1.2s infinite ease-in-out: unsupported Native Web CSS property: animation
+  in rule: .progress-line:after at samples/NativeKestrel/reference/src/style.css:14:4516
+samples/NativeKestrel/reference/src/style.css: error: animation:toast-in .15s ease-out: unsupported Native Web CSS property: animation
+  in rule: .toast at samples/NativeKestrel/reference/src/style.css:13:1079
+samples/NativeKestrel/reference/src/style.css: error: backdrop-filter:blur(3px): unsupported Native Web CSS property: backdrop-filter
+  in rule: dialog::backdrop at samples/NativeKestrel/reference/src/style.css:14:207
+samples/NativeKestrel/reference/src/style.css: error: backdrop-filter:blur(9px): unsupported Native Web CSS property: backdrop-filter
+  in rule: .floating-toolbar at samples/NativeKestrel/reference/src/style.css:9:2004
+samples/NativeKestrel/reference/src/style.css: error: background:color-mix(in srgb,var(--active) 63%,var(--panel)): compiled color-mix currently supports an sRGB color percentage mixed with transparent
+  in rule: .layer-row.current at samples/NativeKestrel/reference/src/style.css:8:2369
+samples/NativeKestrel/reference/src/style.css: error: background:linear-gradient(125deg,var(--panel2),var(--panel)): unsupported custom-value token: linear-gradient(125deg,var(--panel2),var(--panel))
+  in rule: .modal-header at samples/NativeKestrel/reference/src/style.css:14:494
+samples/NativeKestrel/reference/src/style.css: error: background:linear-gradient(145deg,var(--panel2),var(--panel)): unsupported custom-value token: linear-gradient(145deg,var(--panel2),var(--panel))
+  in rule: .explorer-summary at samples/NativeKestrel/reference/src/style.css:8:3644
+samples/NativeKestrel/reference/src/style.css: error: border-collapse:collapse: unsupported Native Web CSS property: border-collapse
+  in rule: .report-table at samples/NativeKestrel/reference/src/style.css:14:2805
+samples/NativeKestrel/reference/src/style.css: error: border:1px dashed #65c5a4: border shorthand currently requires width solid color, 0 or none
+  in rule: #selection-window.crossing at samples/NativeKestrel/reference/src/style.css:9:4061
+samples/NativeKestrel/reference/src/style.css: error: border:2px dashed var(--accent): border shorthand currently requires width solid color, 0 or none
+  in rule: #drop-zone at samples/NativeKestrel/reference/src/style.css:9:4148
+samples/NativeKestrel/reference/src/style.css: error: box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent): unsupported custom-value token: color-mix(in srgb,var(--accent) 25%,transparent)
+  in rule: input:focus,select:focus,textarea:focus at samples/NativeKestrel/reference/src/style.css:3:597
+samples/NativeKestrel/reference/src/style.css: error: box-shadow:inset 0 -2px 0 var(--accent): native compiled inset shadows are not supported yet
+  in rule: #layout-tabs button.active at samples/NativeKestrel/reference/src/style.css:12:431
+samples/NativeKestrel/reference/src/style.css: error: box-shadow:inset 0 0 0 1px var(--accent-dim): native compiled inset shadows are not supported yet
+  in rule: .ribbon-large.active,.ribbon-small.active at samples/NativeKestrel/reference/src/style.css:6:1213
+samples/NativeKestrel/reference/src/style.css: error: box-shadow:inset 2px 0 0 var(--accent): native compiled inset shadows are not supported yet
+  in rule: .layer-row.current at samples/NativeKestrel/reference/src/style.css:8:2430
+samples/NativeKestrel/reference/src/style.css: error: color-scheme:dark: unsupported Native Web CSS property: color-scheme
+  in rule: :root at samples/NativeKestrel/reference/src/style.css:1:7
+samples/NativeKestrel/reference/src/style.css: error: color-scheme:light: unsupported Native Web CSS property: color-scheme
+  in rule: :root[data-theme=light] at samples/NativeKestrel/reference/src/style.css:2:25
+samples/NativeKestrel/reference/src/style.css: error: content:"": unsupported Native Web CSS property: content
+  in rule: #ribbon-tab-list button.active:after at samples/NativeKestrel/reference/src/style.css:5:465
+  in rule: .document-tab.active:after at samples/NativeKestrel/reference/src/style.css:7:588
+  in rule: .panel-tabs button.active:after at samples/NativeKestrel/reference/src/style.css:8:1222
+  in rule: .progress-line:after at samples/NativeKestrel/reference/src/style.css:14:4440
+samples/NativeKestrel/reference/src/style.css: error: content:"⌄": unsupported Native Web CSS property: content
+  in rule: .property-section-title:before at samples/NativeKestrel/reference/src/style.css:10:640
+samples/NativeKestrel/reference/src/style.css: error: cursor:col-resize: unsupported Native Web CSS property: cursor
+  in rule: .panel-resizer at samples/NativeKestrel/reference/src/style.css:8:4385
+samples/NativeKestrel/reference/src/style.css: error: cursor:crosshair: unsupported Native Web CSS property: cursor
+  in rule: #viewport at samples/NativeKestrel/reference/src/style.css:9:101
+samples/NativeKestrel/reference/src/style.css: error: cursor:grabbing: unsupported Native Web CSS property: cursor
+  in rule: #viewport.panning at samples/NativeKestrel/reference/src/style.css:9:148
+samples/NativeKestrel/reference/src/style.css: error: cursor:move: unsupported Native Web CSS property: cursor
+  in rule: #viewport.orbiting at samples/NativeKestrel/reference/src/style.css:9:183
+samples/NativeKestrel/reference/src/style.css: error: cursor:not-allowed: unsupported Native Web CSS property: cursor
+  in rule: button:disabled at samples/NativeKestrel/reference/src/style.css:3:387
+samples/NativeKestrel/reference/src/style.css: error: cursor:pointer: unsupported Native Web CSS property: cursor
+  in rule: #viewcube svg g at samples/NativeKestrel/reference/src/style.css:9:972
+  in rule: .layer-row at samples/NativeKestrel/reference/src/style.css:8:2335
+  in rule: .object-row at samples/NativeKestrel/reference/src/style.css:8:3090
+  in rule: .suggestion at samples/NativeKestrel/reference/src/style.css:11:1871
+  in rule: button at samples/NativeKestrel/reference/src/style.css:3:250
+  in rule: input[type=color] at samples/NativeKestrel/reference/src/style.css:3:805
+samples/NativeKestrel/reference/src/style.css: error: cursor:row-resize: unsupported Native Web CSS property: cursor
+  in rule: #command-resizer at samples/NativeKestrel/reference/src/style.css:11:280
+samples/NativeKestrel/reference/src/style.css: error: dialog::backdrop: unsupported selector: dialog::backdrop
+  in rule: samples/NativeKestrel/reference/src/style.css:14:169
+samples/NativeKestrel/reference/src/style.css: error: filter:brightness(1.1): unsupported Native Web CSS property: filter
+  in rule: .button.primary:hover at samples/NativeKestrel/reference/src/style.css:14:1334
+samples/NativeKestrel/reference/src/style.css: error: font-synthesis:none: unsupported Native Web CSS property: font-synthesis
+  in rule: :root at samples/NativeKestrel/reference/src/style.css:1:520
+samples/NativeKestrel/reference/src/style.css: error: grid-column:1/-1: unsupported Native Web CSS property: grid-column
+  in rule: .form-divider at samples/NativeKestrel/reference/src/style.css:14:2101
+  in rule: .form-field.full at samples/NativeKestrel/reference/src/style.css:14:1738
+samples/NativeKestrel/reference/src/style.css: error: outline-offset:-2px: unsupported Native Web CSS property: outline-offset
+  in rule: button:focus-visible,a:focus-visible,[tabindex]:focus-visible at samples/NativeKestrel/reference/src/style.css:3:962
+samples/NativeKestrel/reference/src/style.css: error: outline:2px solid var(--accent): compiled var() not supported for property: outline
+  in rule: button:focus-visible,a:focus-visible,[tabindex]:focus-visible at samples/NativeKestrel/reference/src/style.css:3:930
+samples/NativeKestrel/reference/src/style.css: error: outline:none: unsupported Native Web CSS property: outline
+  in rule: #viewport at samples/NativeKestrel/reference/src/style.css:9:70
+  in rule: input,select,textarea at samples/NativeKestrel/reference/src/style.css:3:517
+samples/NativeKestrel/reference/src/style.css: error: overflow-wrap:anywhere: unsupported Native Web CSS property: overflow-wrap
+  in rule: #command-history>div at samples/NativeKestrel/reference/src/style.css:11:629
+samples/NativeKestrel/reference/src/style.css: error: resize:vertical: unsupported Native Web CSS property: resize
+  in rule: .form-field textarea at samples/NativeKestrel/reference/src/style.css:14:2002
+samples/NativeKestrel/reference/src/style.css: error: scrollbar-color:var(--line) transparent: compiled var() not supported for property: scrollbar-color
+  in rule: #command-history at samples/NativeKestrel/reference/src/style.css:11:508
+  in rule: .panel-scroll at samples/NativeKestrel/reference/src/style.css:8:2104
+samples/NativeKestrel/reference/src/style.css: error: scrollbar-width:none: unsupported Native Web CSS property: scrollbar-width
+  in rule: #document-tabs at samples/NativeKestrel/reference/src/style.css:7:228
+samples/NativeKestrel/reference/src/style.css: error: scrollbar-width:thin: unsupported Native Web CSS property: scrollbar-width
+  in rule: #command-history at samples/NativeKestrel/reference/src/style.css:11:487
+  in rule: #modal-body at samples/NativeKestrel/reference/src/style.css:14:730
+  in rule: #palette-results at samples/NativeKestrel/reference/src/style.css:15:399
+  in rule: #ribbon at samples/NativeKestrel/reference/src/style.css:6:193
+  in rule: .panel-scroll at samples/NativeKestrel/reference/src/style.css:8:2083
+samples/NativeKestrel/reference/src/style.css: error: text-overflow:ellipsis: unsupported Native Web CSS property: text-overflow
+  in rule: #command-prefix at samples/NativeKestrel/reference/src/style.css:11:1245
+  in rule: .layer-row .layer-name at samples/NativeKestrel/reference/src/style.css:8:2591
+  in rule: .property-row>span at samples/NativeKestrel/reference/src/style.css:10:1284
+  in rule: .title-document #title-name at samples/NativeKestrel/reference/src/style.css:4:1028
+samples/NativeKestrel/reference/src/style.css: error: touch-action:none: unsupported Native Web CSS property: touch-action
+  in rule: #viewport at samples/NativeKestrel/reference/src/style.css:9:83
+samples/NativeKestrel/reference/src/style.css: error: transition:fill .15s: unsupported Native Web CSS property: transition
+  in rule: #viewcube polygon at samples/NativeKestrel/reference/src/style.css:9:1060
+samples/NativeKestrel/reference/src/style.css: error: transition:none: unsupported Native Web CSS property: transition
+  in rule: @media (prefers-reduced-motion:reduce) > * at samples/NativeKestrel/reference/src/style.css:19:66
+samples/NativeKestrel/reference/src/style.css: error: user-select:none: unsupported Native Web CSS property: user-select
+  in rule: #documentbar at samples/NativeKestrel/reference/src/style.css:7:147
+  in rule: #ribbon at samples/NativeKestrel/reference/src/style.css:6:214
+  in rule: #ribbon-tabs at samples/NativeKestrel/reference/src/style.css:5:150
+  in rule: #statusbar at samples/NativeKestrel/reference/src/style.css:12:141
+  in rule: #titlebar at samples/NativeKestrel/reference/src/style.css:4:232
+  in rule: #viewcube at samples/NativeKestrel/reference/src/style.css:9:831
+samples/NativeKestrel/reference/src/style.css: error: user-select:text: unsupported Native Web CSS property: user-select
+  in rule: #command-history at samples/NativeKestrel/reference/src/style.css:11:548
+397 rules, 1475 declarations, 55 distinct unsupported constructs

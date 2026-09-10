@@ -1094,7 +1094,9 @@ struct media_bound { size_t axis; bool minimum; float value; };
 static media_bound compile_media_bound(const std::string &name, const std::string &prelude) {
   std::smatch match;
   static const std::regex grammar(R"(\s*\(\s*(min|max)-(width|height)\s*:\s*([^\s]+)\s*\)\s*)", std::regex::icase);
-  if (ascii_keyword(name) != "media" || !std::regex_match(prelude, match, grammar))
+  if (ascii_keyword(name) != "media")
+    throw std::runtime_error("unsupported at-rule: @" + name);
+  if (!std::regex_match(prelude, match, grammar))
     throw std::runtime_error("only min/max width or height media conditions in px are supported");
   return {ascii_keyword(match[2]) == "width" ? size_t{0} : size_t{2},
           ascii_keyword(match[1]) == "min", pixel_length(match[3], false)};
