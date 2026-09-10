@@ -1019,6 +1019,12 @@ struct compiler {
   size_t location{1};
   size_t column{1};
   bool stylesheet_locations{false};
+  size_t stylesheet_line_offset{}, stylesheet_first_column_offset{};
+  size_t embedded_stylesheet_cursor{};
+  void locate_css(size_t line, size_t col) {
+    location = line + stylesheet_line_offset;
+    column = col + (line == 1 ? stylesheet_first_column_offset : 0);
+  }
   std::set<std::string> ids;
   std::vector<std::pair<std::string, std::string>> names;
   std::vector<fs::path> dependencies;
@@ -1044,7 +1050,7 @@ struct compiler {
     for (size_t j = 0; j < r.declaration_count; ++j) {
       const auto &d = css.declarations.at(r.first_declaration + j);
       if (inline_owner) locate_node(*inline_owner);
-      else if (stylesheet_locations) { location = d.source_line; column = d.source_column; }
+      else if (stylesheet_locations) { locate_css(d.source_line, d.source_column); }
       else locate(d.name);
       try {
         std::string code;
@@ -1069,13 +1075,13 @@ struct compiler {
     auto css = parse_css_syntax_stylesheet(text);
     if (!css) throw std::runtime_error("invalid CSS stylesheet: " + css.error);
     if (css.metrics.parse_error_count) {
-      if (exact_locations) { location = css.metrics.first_error_line; column = css.metrics.first_error_column; }
+      if (exact_locations) { locate_css(css.metrics.first_error_line, css.metrics.first_error_column); }
       throw std::runtime_error("invalid CSS syntax (" + std::to_string(css.metrics.parse_error_count) + " parse errors)");
     }
     std::vector<std::array<float, 4>> bounds(css.rules.size(), initial_bounds);
     for (size_t i = 0; i < css.rules.size(); ++i) {
       const auto &r = css.rules[i];
-      if (exact_locations) { location = r.source_line; column = r.source_column; }
+      if (exact_locations) { locate_css(r.source_line, r.source_column); }
       auto &range = bounds[i];
       if (r.parent_index != css_syntax_no_parent)
         range = bounds.at(r.parent_index);
@@ -1253,7 +1259,18 @@ struct compiler {
         std::string css;
         for (auto *c : n.children)
           css += c->text_content;
-        stylesheet(css, false, media_bounds);
+        // Raw style text is preserved by the HTML parser. Match successive
+        // blocks independently so repeated declarations keep their own spans.
+        const auto at = css.empty() ? std::string::npos
+            : content.find(css, embedded_stylesheet_cursor);
+        if (at != std::string::npos) {
+          embedded_stylesheet_cursor = at + css.size();
+          stylesheet_line_offset = std::count(content.begin(), content.begin() + at, '\n');
+          const auto newline = at == 0 ? std::string::npos : content.rfind('\n', at - 1);
+          stylesheet_first_column_offset = newline == std::string::npos ? at : at - newline - 1;
+        }
+        stylesheet(css, at != std::string::npos, media_bounds);
+        stylesheet_line_offset = stylesheet_first_column_offset = 0;
       }
       if (n.tag == "link") {
         auto rel = n.attributes.find("rel"), href = n.attributes.find("href");

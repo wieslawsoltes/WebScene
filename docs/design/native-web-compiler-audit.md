@@ -1610,3 +1610,20 @@ This shared engine change has not been verified across V8 hosts or against brows
 screenshots. Percentage containing blocks and automatic minimum sizes remain open.
 After closing this discovered regression, resume the earliest open audit gates
 listed above rather than extending grid coverage indefinitely.
+
+### Embedded stylesheet declaration locations (2026-09-10)
+
+Returned to the first audit family. Embedded style blocks now translate CSS parser
+line/column locations to document positions when their raw text can be matched in
+the source. Successive blocks advance a cursor, so identical declarations in
+repeated style blocks no longer all report the first property occurrence. This
+also maps selector and CSS syntax diagnostics through the same location helper.
+An independent preview fixture checks two identical one-line blocks and a
+multiline block; the strict unsupported-property fixture now requires column 26
+rather than the old column 1. All 79 compiler tests pass.
+
+This is still a source-text matching bridge, not complete HTML token spans: text
+normalization (such as CRLF), matching text in other HTML contexts, inline attribute
+entities and multiline start tags require parser-origin offsets. When an embedded
+block cannot be matched, the existing approximate location fallback remains.
+The source-location closure gate stays open pending those cases.

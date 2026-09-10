@@ -219,6 +219,15 @@ class CompilerTests(unittest.TestCase):
             audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
             self.assertNotEqual(audit.returncode,0,value)
 
+    def test_embedded_css_repeated_declaration_locations(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html'
+        source.write_text('<html><head>\n<style>div { cursor:pointer; }</style>\n<style>div { cursor:pointer; }</style>\n<style>\ndiv {\n  cursor:pointer;\n}\n</style></head><body></body></html>')
+        result=subprocess.run([UIC,source,root/'view.hpp','--preview'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        for line,column in [(2,14),(3,14),(6,3)]:
+            self.assertIn(str(source)+':'+str(line)+':'+str(column)+': warning:',result.stderr)
+
     def test_preview_linked_css_reports_each_exact_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         root=pathlib.Path(folder.name)
@@ -705,7 +714,7 @@ class CompilerTests(unittest.TestCase):
         self.assertNotIn('webscene_native::',text);self.assertNotIn('s.width',text);self.assertNotIn('parse_',text);self.assertNotIn('20px',text)
         source=out.with_name('view.html');subprocess.run([UIC,source,out],check=True);self.assertEqual(text,out.read_text())
     def test_unsupported_property_has_source_diagnostic(self):
-        result,out=self.compile('<div></div>','div { filter: blur(2px); }');self.assertNotEqual(result.returncode,0);self.assertIn(':2:1: error:',result.stderr);self.assertIn('filter',result.stderr);self.assertFalse(out.exists())
+        result,out=self.compile('<div></div>','div { filter: blur(2px); }');self.assertNotEqual(result.returncode,0);self.assertIn(':2:26: error:',result.stderr);self.assertIn('filter',result.stderr);self.assertFalse(out.exists())
     def test_scripts_rejected(self):
         result,_=self.compile('<script>alert(1)</script>');self.assertNotEqual(result.returncode,0)
     def test_js_attributes_rejected(self):
