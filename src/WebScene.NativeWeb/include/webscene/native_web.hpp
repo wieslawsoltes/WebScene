@@ -1,5 +1,6 @@
 #pragma once
 #include "webscene_native_dom.h"
+#include "compiled_variables.hpp"
 #include <functional>
 #include <memory>
 #include <thread>
@@ -19,9 +20,15 @@ using grid_track = webscene_native::node_style::grid_data::track;
 class style {
   friend class document;
   webscene_native::node_style &value_;
-  explicit style(webscene_native::node_style &value) : value_(value) {}
+  const computed_variables &variables_;
+  explicit style(webscene_native::node_style &value, const computed_variables &variables)
+      : value_(value), variables_(variables) {}
 
 public:
+  const variable_result *variable(const std::string &name) const {
+    auto found = variables_.find(name);
+    return found == variables_.end() ? nullptr : &found->second;
+  }
   void set_grid_template_columns(std::vector<grid_track> tracks) {
     auto &grid = value_.mutable_grid();
     grid.subgrid_columns = false;
@@ -120,6 +127,8 @@ struct selector {
 struct declaration {
   bool important{};
   void (*apply)(style &){};
+  std::string custom_name;
+  std::vector<variable_expression> custom_value;
 };
 struct rule {
   selector match;

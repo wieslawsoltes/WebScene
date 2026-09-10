@@ -429,14 +429,14 @@ const scene &document::render(float width, float height) {
   auto &out = s.output;
   if (!s.dom.dirty() && out.width == width && out.height == height)
     return out;
-  const auto cascade = [&](auto &&self, dom_node &n) -> void {
+  const auto cascade = [&](auto &&self, dom_node &n, const computed_variables &inherited) -> void {
     n.style = node_style{};
     n.style.display = native_default_display_for_node(n);
     struct candidate {
       bool important;
       uint64_t specificity;
       size_t order;
-      void (*apply)(style &);
+      const declaration *value;
     };
     std::vector<candidate> declarations;
     size_t order = 0;
@@ -451,20 +451,26 @@ const scene &document::render(float width, float height) {
           declarations.push_back(
               {d.important,
                r.inline_target ? (1ull << 32) : r.match.specificity, order,
-               d.apply});
+               &d});
         ++order;
       }
     }
     std::ranges::sort(declarations, {}, [](const auto &d) {
       return std::tuple(d.important, d.specificity, d.order);
     });
-    style writer(n.style);
+    specified_variables local;
     for (const auto &d : declarations)
-      d.apply(writer);
+      if (!d.value->custom_name.empty())
+        local[d.value->custom_name] = d.value->custom_value;
+    const auto variables = compute_variables(local, inherited);
+    style writer(n.style, variables);
+    for (const auto &d : declarations)
+      if (d.value->custom_name.empty() && d.value->apply)
+        d.value->apply(writer);
     for (auto *c : n.children)
-      self(self, *c);
+      self(self, *c, variables);
   };
-  cascade(cascade, s.dom.body());
+  cascade(cascade, s.dom.body(), {});
   s.dom.mark_dirty();
   s.dom.layout(width, height);
   out.commands.clear();

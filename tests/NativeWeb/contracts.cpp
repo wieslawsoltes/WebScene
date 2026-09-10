@@ -33,6 +33,43 @@ int main() {
     check(result.at("--rescue") == variable_tokens({"safe"}), "invalid variable uses fallback");
     check(result.at("--fallback") == variable_tokens({"fallback"}), "missing variable uses fallback");
   }
+  {
+    document themed;
+    auto panel = themed.element(themed.body(), "div");
+    auto root_rule = [](const char *value, bool light) {
+      rule r;
+      selector_part part;
+      part.root = true;
+      if (light) part.attributes.push_back({"data-theme", "light", true});
+      r.match.parts.push_back(part);
+      r.match.specificity = light ? 20 : 10;
+      r.declarations.push_back({false, nullptr, "--panel-width",
+          {{variable_expression::kind::token, value}}});
+      return r;
+    };
+    themed.add_rule(root_rule("wide", false));
+    themed.add_rule(root_rule("narrow", true));
+    rule consumer;
+    selector_part panel_selector;
+    panel_selector.tag = "div";
+    consumer.match.parts.push_back(panel_selector);
+    consumer.declarations.push_back({false, +[](style &s) {
+      auto value = s.variable("--panel-width");
+      if (value && *value)
+        s.set_width({**value == variable_tokens{"wide"} ? 222.f : 195.f, length_unit::pixels});
+    }});
+    themed.add_rule(std::move(consumer));
+    themed.render(800, 600);
+    check(themed.bounds(panel).width == 222, "cascade inherits compiled variable");
+    themed.attribute(themed.root(), "data-theme", "light");
+    themed.render(800, 600);
+    check(themed.bounds(panel).width == 195, "theme selector recomputes inherited variables");
+    auto important = root_rule("wide", false);
+    important.declarations.front().important = true;
+    themed.add_rule(std::move(important));
+    themed.render(800, 600);
+    check(themed.bounds(panel).width == 222, "important variable beats theme specificity");
+  }
   document d;
   auto refs = compiled_ui::build(d);
   check(d.root() != d.body(), "HTML root differs from body");
