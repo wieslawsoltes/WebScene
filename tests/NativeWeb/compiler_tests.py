@@ -73,6 +73,12 @@ class CompilerTests(unittest.TestCase):
             rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
             self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
 
+    def test_shorthand_components_preserve_escaped_names(self):
+        for name in [r'--a\)b', r'--a\(b', r'--a\,b']:
+            for property in ['inset', 'padding', 'margin', 'gap']:
+                result,out=self.compile('<div></div>', 'div { '+name+':3px; '+property+':var('+name+') 2px; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+
     def test_custom_property_escaped_delimiters(self):
         for name in [r'--a\,b', r'--a\)b', r'--a\(b', r'--a\\b']:
             result,out=self.compile('<div></div>', 'div { '+name+':17px; width:var('+name+', 9px); }')

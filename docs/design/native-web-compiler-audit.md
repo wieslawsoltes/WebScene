@@ -1701,3 +1701,14 @@ and backslash. Native contracts verify an inherited chain using comma and closin
 parenthesis names selects 38px rather than the 9px fallback. All 85 compiler tests
 and native contracts pass. This fixes var() framing only: shared component-value
 scanners and specialized color-mix parsing still need the same token-aware audit.
+
+### Escaped identifiers through shorthand component scanning (2026-09-10)
+
+The shared component scanner still counted escaped parentheses in var() names,
+rejecting a valid inset shorthand as an unbalanced function. It now skips escaped
+characters before tracking nesting or whitespace boundaries. A regression matrix
+covers escaped parentheses/comma references in inset, padding, margin and gap;
+it failed before the fix. Native coverage now uses escaped names in a four-sided
+inset shorthand and verifies both offsets equal 38px. All 86 compiler tests and
+native contracts pass. This covers escaped punctuation inside variable functions;
+quoted token sequences and complete CSS component-token handling remain open.

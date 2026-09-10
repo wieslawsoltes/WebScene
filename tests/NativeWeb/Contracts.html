@@ -32,7 +32,7 @@ button:focus { height: 30px; }
 #svg-paint text { text-anchor:middle; }
 #calc-child.literal { inset:calc(2 * (5px + 2px)) auto auto calc((50% - 20px) / 2); }
 #calc-parent.delimiter-offset { --a\,b:38px; --a\)b:var(--a\,b); }
-#calc-parent.delimiter-offset #calc-child { left:var(--a\)b, 9px); }
+#calc-parent.delimiter-offset #calc-child { inset:var(--a\)b, 9px) auto auto var(--a\,b); }
 #calc-parent.unicode-offset { --尺寸:34px; --café:var(--尺寸); }
 #calc-parent.unicode-offset #calc-child { left:var(--caf\e9); }
 #calc-parent.named-offset { --1:30px; ---:var(--1); }

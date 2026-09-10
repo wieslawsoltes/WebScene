@@ -73,6 +73,7 @@ static std::vector<std::string> component_values(const std::string &value) {
   int depth = 0;
   for (size_t i = 0; i <= value.size(); ++i) {
     if (i < value.size()) {
+      if (value[i] == '\\' && i + 1 < value.size()) { ++i; continue; }
       if (value[i] == '(') ++depth;
       if (value[i] == ')' && --depth < 0) throw std::runtime_error("unbalanced CSS function");
     }
