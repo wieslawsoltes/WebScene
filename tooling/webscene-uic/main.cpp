@@ -421,8 +421,13 @@ static std::string assignments(const std::string &name,
   if (name == "transform") {
     if (value == "none") return "s.set_translation(" + length("0") + "," + length("0") + ",false);";
     std::smatch match;
+    if (std::regex_match(value, match, std::regex(R"(translate\(\s*([^(),]+?)(?:\s*,\s*([^(),]+?))?\s*\))", std::regex::icase))) {
+      auto x = trim(match[1]), y = match[2].matched ? trim(match[2]) : "0";
+      if (x == "auto" || y == "auto") throw std::runtime_error("transform translation requires lengths");
+      return "s.set_translation(" + length(x) + "," + length(y) + ");";
+    }
     if (!std::regex_match(value, match, std::regex(R"(translate([XY])\(\s*([^()]+?)\s*\))", std::regex::icase)))
-      throw std::runtime_error("compiled transform currently supports translateX/translateY or none");
+      throw std::runtime_error("compiled transform currently supports translate/translateX/translateY or none");
     auto argument = trim(match[2]);
     if (argument == "auto") throw std::runtime_error("transform translation requires a length");
     auto translated = length(argument), zero = length("0");

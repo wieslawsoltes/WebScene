@@ -188,6 +188,11 @@ int main() {
   d.pointer("pointerdown", d.bounds(translate_parent).x + 1, translated_area.y + 1);
   d.pointer("pointerup", d.bounds(translate_parent).x + 1, translated_area.y + 1);
   check(translated_hits == 1, "translation removes hit coverage from original left edge");
+  d.attribute(translated, "class", "both");
+  d.render(800, 10000);
+  check(d.bounds(translated).x - d.bounds(translate_parent).x == 10 &&
+        d.bounds(translated).y - d.bounds(translate_parent).y == 5,
+        "two-axis percentage translate uses own width and height");
   d.attribute(translated, "class", "reset");
   d.render(800, 600);
   check(d.bounds(translated).x == d.bounds(translate_parent).x, "transform none resets translation");

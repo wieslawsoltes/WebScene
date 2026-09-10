@@ -833,3 +833,11 @@ pass. Compiler tests cover signed percentages/pixels, case variants and rejectio
 of auto, nonzero unitless values, unsupported transform lists and excess arguments;
 all 53 compiler tests pass. This verifies simple translated hit geometry, not
 nested transforms, clipping or rendered stacking-context parity.
+
+### Two-axis translate function (2026-09-10)
+
+Compiler transform lowering now accepts translate(x) and translate(x,y), with the
+one-argument form supplying zero Y. Native regression checks percentages resolve
+against each axis of the element's own box; compiler tests reject excess arguments,
+missing commas and auto. All 53 compiler tests and native contracts pass. Function
+lists, calc/variables and broader transform composition remain open.
