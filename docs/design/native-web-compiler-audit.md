@@ -800,3 +800,13 @@ margin/inset/flex basis, continued rejection for padding/gaps/radii, and preserv
 of an unrelated font-family value named AUTO. All 51 compiler tests and native
 contracts pass. This is scoped keyword normalization, not general CSS token
 normalization; other keyword families and escaped forms remain open.
+
+### Font weight absolute keywords (2026-09-10)
+
+Font-weight normal/bold now lower to native weights 400/700. Keyword matching is
+ASCII case-insensitive, including existing inherit/unset handling. Compiler
+regressions verify exact generated weights and rejection of invalid values.
+All 52 compiler tests and native contracts pass. Relative bolder/lighter,
+fractional native weight representation, variable values and font selection
+parity remain open. Numeric line-height overflow was inspected: stof rejects
+out-of-range inputs before C++ emission; no change was required there.

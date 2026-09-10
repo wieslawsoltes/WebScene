@@ -216,6 +216,15 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn('set_font_family("AUTO")',out.read_text())
 
+    def test_font_weight_keywords(self):
+        for value,expected in [('normal',400),('NORMAL',400),('bold',700),('BoLd',700),('INHERIT',0),('UNSET',0)]:
+            result,out=self.compile('<div>Text</div>', 'div {font-weight:'+value+';}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_font_weight('+str(expected)+')',out.read_text())
+        for value in ['boldish','0','1001']:
+            result,_=self.compile('<div>Text</div>', 'div {font-weight:'+value+';}')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)

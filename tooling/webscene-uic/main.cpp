@@ -761,6 +761,13 @@ static std::string assignments(const std::string &name,
     if (value == "inherit" || value == "unset") return "s.set_font_size(-1.0f);";
     return "s.font_size = " + number(pixel_length(value, true)) + ";";
   }
+  if (name == "font-weight") {
+    std::ranges::transform(value, value.begin(), [](unsigned char c) {
+      return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : static_cast<char>(c);
+    });
+    if (value == "normal") return "s.set_font_weight(400);";
+    if (value == "bold") return "s.set_font_weight(700);";
+  }
   if (name == "font-weight" && (value == "inherit" || value == "unset"))
     return "s.set_font_weight(0);";
   if (name == "font-weight" || name == "opacity" || name == "flex-grow" ||
