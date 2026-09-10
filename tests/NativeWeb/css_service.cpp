@@ -207,5 +207,16 @@ int main() {
     if(box.border_top_width.value!=1 || box.border_left_width.value!=4) return 50;
     webscene_native::css::apply_border_declaration(box,"border","none");
     if(box.border_top_width.value!=0 || box.border_left_width.value!=0) return 51;
+    using webscene_native::css::apply_corner_radius_declaration;
+    apply_corner_radius_declaration("border-radius","1px 2px 3px 4px / 5px 6px 7px 8px",box);
+    if(box.border_top_left_radius.value!=1 || box.border_bottom_left_radius.value!=4 ||
+       box.border_top_left_radius_y().value!=5 || box.border_bottom_left_radius_y().value!=8) return 52;
+    apply_corner_radius_declaration("border-top-left-radius","9px 10px",box);
+    if(box.border_top_left_radius.value!=9 || box.border_top_left_radius_y().value!=10) return 53;
+    webscene_native::node_style::pseudo_element pseudo;
+    apply_corner_radius_declaration("border-radius","2px / 4px",pseudo);
+    if(!pseudo.elliptical_border_radius || pseudo.border_top_right_radius_y.value!=4) return 54;
+    apply_corner_radius_declaration("border-radius","3px",pseudo);
+    if(pseudo.elliptical_border_radius || pseudo.border_top_left_radius.value!=3) return 55;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

@@ -435,3 +435,10 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   logical-inset-transition tests pass. Existing border-style/logical-direction and
   parsing limitations remain; this is shared behavior, not full border compliance.
   Full declaration dispatch and cascade orchestration are still unfinished.
+
+- Corner-radius extraction: shared box-value helpers now apply circular and
+  elliptical radii to ordinary styles and pseudo styles. Native tests cover
+  horizontal/vertical shorthand expansion, individual corners and clearing a
+  pseudo's elliptical state. Service and runtime elliptical-corner-radii and
+  active-chart-pseudo-border tests pass. Parsing/logical-corner limitations are
+  unchanged; full declaration dispatch and cascade orchestration remain open.
