@@ -562,6 +562,19 @@ int main() {
   check(d.bounds(d.find("grid-right")).width == 252, "compiled grid preserves fixed track");
   check(d.bounds(d.find("variable-probe")).width == 222, "compiled var width resolves");
   check(d.bounds(d.find("variable-probe")).height == 14, "compiled var fallback plus borders resolves");
+  auto fraction_grid = d.find("fraction-grid");
+  d.attribute(fraction_grid, "class", "reverse");
+  d.render(800, 600);
+  check(d.bounds(d.find("fraction-a")).width == 200, "fraction variable mutation reverses ratio");
+  check(d.bounds(d.find("fraction-b")).width == 100, "fraction variable mutation second track");
+  d.attribute(fraction_grid, "class", "invalid");
+  d.render(800, 600);
+  check(d.bounds(d.find("fraction-a")).width == 300, "invalid fraction resets whole grid declaration");
+  check(d.bounds(d.find("fraction-b")).width == 300, "invalid fraction removes stale second track");
+  d.remove_attribute(fraction_grid, "class");
+  d.render(800, 600);
+  check(d.bounds(d.find("fraction-a")).width == 100, "fraction fallback recovers after invalid value");
+  check(d.bounds(d.find("fraction-b")).width == 200, "fraction fallback second track recovers");
   d.attribute(d.root(), "data-theme", "light");
   const auto &light_scene = d.render(800, 600);
   check(std::string(light_scene.bytes.begin(), light_scene.bytes.end())

@@ -1221,3 +1221,12 @@ runtime strings. A native fixture verifies var fallback 1FR/2fr divides a 300px
 grid into 100px/200px tracks. All 68 compiler tests and rebuilt native contracts
 pass. Dynamic invalidation/recovery and minmax expressions inside variable token
 sequences still need coverage/support; this closes simple fractional tokens only.
+
+### Fractional grid variable mutation and recovery (2026-09-10)
+
+Native contracts now change the fractional track custom property from fallback
+1fr/2fr to 2fr/1fr and verify the widths reverse. A negative fraction invalidates
+the complete declaration: both children use the implicit full-width column.
+Removing the class restores the original fallback ratio with no stale tracks.
+Rebuilt native contracts pass. This adds dynamic geometry evidence; nested
+minmax token expressions, raster parity and broader grid behavior remain open.
