@@ -960,3 +960,11 @@ scrolling when the inner container is already at its boundary, and return to inn
 scrolling when direction reverses. Native contracts pass. This tests discrete
 pixel wheel events; residual deltas within one event, overscroll-behavior, gesture
 latching and momentum remain open and must not be inferred from this regression.
+
+### Overflow and text keyword casing (2026-09-10)
+
+Overflow axis lookup and text-align/white-space/text-transform lowering now use
+ASCII case-insensitive keyword matching. Overflow shorthand inherits this through
+axis expansion. Independent tests compare uppercase/lowercase generated rules
+across these families. All 54 compiler tests and native contracts pass. Variable
+keyword values and escaped identifiers remain separate gaps.

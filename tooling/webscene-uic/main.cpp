@@ -49,6 +49,12 @@ static std::string trim(std::string value) {
     return {};
   return value.substr(b, value.find_last_not_of(" \t\r\n\f") - b + 1);
 }
+static std::string ascii_keyword(std::string value) {
+  std::ranges::transform(value, value.begin(), [](unsigned char c) {
+    return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : static_cast<char>(c);
+  });
+  return value;
+}
 static std::vector<std::string> component_values(const std::string &value) {
   std::vector<std::string> result;
   size_t start = 0;
@@ -541,11 +547,12 @@ static std::string assignments(const std::string &name,
   if (name == "overflow-x" || name == "overflow-y") {
     static const std::map<std::string,std::string> modes{{"visible","visible"},{"hidden","hidden"},
       {"clip","clip"},{"auto","automatic"},{"scroll","scroll"}};
-    auto mode = modes.find(value);
+    auto mode = modes.find(ascii_keyword(value));
     if (mode == modes.end()) throw std::runtime_error("unsupported overflow: " + value);
     return "s.set_" + member + "(webscene::native_web::overflow_mode::" + mode->second + ");";
   }
   if (name == "text-align" || name == "white-space" || name == "text-transform") {
+    value = ascii_keyword(value);
     static const std::map<std::string,std::set<std::string>> keywords{
       {"text-align", {"left","right","center","start","end"}},
       {"white-space", {"normal","nowrap","pre","pre-wrap","pre-line","break-spaces"}},

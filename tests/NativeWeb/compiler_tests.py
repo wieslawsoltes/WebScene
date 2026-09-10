@@ -234,6 +234,15 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div {transform:'+value+';}')
             self.assertNotEqual(result.returncode,0,value)
 
+    def test_overflow_and_text_keyword_case(self):
+        for name,value in [('overflow','hidden auto'),('overflow-x','clip'),('overflow-y','scroll'),('text-align','center'),('white-space','pre-wrap'),('text-transform','capitalize')]:
+            result,out=self.compile('<div>Text</div>', 'div {'+name+':'+value+';}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            expected=[line for line in out.read_text().splitlines() if 'd.add_rule' in line]
+            result,out=self.compile('<div>Text</div>', 'div {'+name+':'+value.upper()+';}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(expected,[line for line in out.read_text().splitlines() if 'd.add_rule' in line])
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)
