@@ -167,3 +167,16 @@ if(FOCO_SOURCE_DIR AND APPLE AND WEBSCENE_NATIVE_WEB_GPU AND BUILD_TESTING)
  target_link_libraries(FocoKestrel PRIVATE kestrel_controller kestrel_gpu webscene_native_web_foco_gpu)
  set_target_properties(FocoKestrel PROPERTIES CXX_SCAN_FOR_MODULES ON MACOSX_BUNDLE_GUI_IDENTIFIER "dev.focoui.kestrel" MACOSX_BUNDLE_BUNDLE_NAME "Kestrel Native Web")
 endif()
+
+if(FOCO_SOURCE_DIR)
+ set(PREVIEW_UI "${CMAKE_CURRENT_BINARY_DIR}/KestrelPreview.cppm")
+ add_custom_command(OUTPUT "${PREVIEW_UI}"
+   COMMAND webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/reference/index.html" "${PREVIEW_UI}" --module kestrel.original.preview --preview
+   DEPENDS webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/reference/index.html"
+   DEPFILE "${PREVIEW_UI}.d" VERBATIM)
+ add_executable(FocoKestrelPreview MACOSX_BUNDLE "${WEBSCENE_ROOT}/samples/NativeKestrel/preview.cpp")
+ target_sources(FocoKestrelPreview PRIVATE FILE_SET CXX_MODULES BASE_DIRS "${CMAKE_CURRENT_BINARY_DIR}" FILES "${PREVIEW_UI}")
+ set_target_properties(FocoKestrelPreview PROPERTIES CXX_SCAN_FOR_MODULES ON)
+ target_include_directories(FocoKestrelPreview PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/foco")
+ target_link_libraries(FocoKestrelPreview PRIVATE webscene_native_web FocoUI::PlatformCocoa)
+endif()

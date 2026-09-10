@@ -41,3 +41,17 @@ declarations, with 241 distinct unsupported constructs. Prioritize custom
 properties and live variable evaluation next; they must retain cascade,
 inheritance, theme changes and responsive overrides without runtime CSS parsing.
 The original stylesheet must not be rewritten to remove these requirements.
+
+### Diagnostic native preview
+
+Build the `FocoKestrelPreview` target in the Foco-enabled build directory to
+inspect the original files before full compiler coverage is complete. This uses
+`webscene-uic ... --module kestrel.original.preview --preview`. The explicit
+preview option reports skipped declarations/selectors and unsupported elements;
+unknown elements and attributes are passed to the native DOM for inspection.
+Scripts and noscript fallback content are omitted. Unsupported at-rule blocks
+are omitted in full. The original source files are never rewritten.
+
+This is a static diagnostic preview, not the ported CAD application or a visual
+parity acceptance result. It has no JavaScript runtime and performs no runtime
+HTML/CSS parsing. The ordinary compiler mode still rejects unsupported input.

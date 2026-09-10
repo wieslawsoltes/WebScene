@@ -668,6 +668,9 @@ static std::string selector_code(const selector_syntax_selector &sel) {
   return result + "}," + std::to_string(sel.specificity) + "}";
 }
 struct compiler {
+  bool preview{};
+  void warning(const std::string &message) { std::cerr << source.string() << ": warning: preview: " << message << '\n'; }
+
   std::ostringstream out;
   fs::path source;
   std::string content;
@@ -687,22 +690,23 @@ struct compiler {
   }
   void declarations(const css_syntax_output &css, const css_syntax_rule &r) {
     out << "{";
+    bool emitted = false;
     for (size_t j = 0; j < r.declaration_count; ++j) {
       const auto &d = css.declarations.at(r.first_declaration + j);
       locate(d.name);
-      if (j)
-        out << ",";
-      if (d.name.starts_with("--")) {
-        out << "{" << (d.important ? "true" : "false") << ",nullptr,"
-            << quote(d.name) << "," << variable_code(trim(d.value)) << "}";
-        continue;
+      try {
+        std::string code;
+        if (d.name.starts_with("--"))
+          code = "nullptr," + quote(d.name) + "," + variable_code(trim(d.value));
+        else code = "+[](webscene::native_web::style& s){" +
+          std::regex_replace(assignments(d.name, trim(d.value)), std::regex(R"(s\.([a-z_]+) = ([^;]+);)"), "s.set_$1($2);") + "}";
+        if (emitted) out << ",";
+        out << "{" << (d.important ? "true" : "false") << "," << code << "}";
+        emitted = true;
+      } catch (const std::exception &e) {
+        if (!preview) throw;
+        warning(d.name + ": " + d.value + ": " + e.what());
       }
-      out << "{" << (d.important ? "true" : "false")
-          << ", +[](webscene::native_web::style& s){"
-          << std::regex_replace(assignments(d.name, trim(d.value)),
-                                std::regex(R"(s\.([a-z_]+) = ([^;]+);)"),
-                                "s.set_$1($2);")
-          << "}}";
     }
     out << "}";
   }
@@ -722,7 +726,8 @@ struct compiler {
             !std::regex_match(
                 r.prelude, match,
                 std::regex(R"(\s*\((min|max)-(width|height)\s*:\s*([0-9]+)px\)\s*)")))
-          throw std::runtime_error("only min/max width or height media conditions in px are supported");
+          { if (!preview) throw std::runtime_error("only min/max width or height media conditions in px are supported");
+            warning("skipped @" + r.name + " " + r.prelude); range[0] = 1e9f; range[1] = -1; continue; }
         auto v = std::stof(match[3]);
         const size_t axis = match[2] == "width" ? 0 : 2;
         if (match[1] == "min")
@@ -731,11 +736,15 @@ struct compiler {
           range[axis + 1] = std::min(range[axis + 1], v);
         continue;
       }
+      if (range[0] > range[1]) continue;
       auto selectors = parse_selector_syntax(r.prelude);
       if (!selectors)
         throw std::runtime_error(selectors.error);
       for (const auto &sel : selectors.selectors) {
-        out << "d.add_rule({" << selector_code(sel) << ",";
+        std::string selector;
+        try { selector = selector_code(sel); }
+        catch (const std::exception &e) { if (!preview) throw; warning(e.what()); continue; }
+        out << "d.add_rule({" << selector << ",";
         declarations(css, r);
         out << "," << number(range[0]) << "," << number(range[1])
             << ",0," << number(range[2]) << "," << number(range[3]) << "});\n";
@@ -759,8 +768,11 @@ struct compiler {
     static const std::set<std::string> tags = {
         "body", "main",   "section", "div", "span", "p",      "h1",     "h2",
         "h3",   "button", "canvas",  "ul",  "li",   "header", "footer", "nav"};
-    if (!tags.contains(n.tag))
-      throw std::runtime_error("unsupported Native Web element: " + n.tag);
+    if (preview && (n.tag == "script" || n.tag == "noscript")) { warning("skipped " + n.tag); return; }
+    if (!tags.contains(n.tag)) {
+      if (!preview) throw std::runtime_error("unsupported Native Web element: " + n.tag);
+      warning("generic native element: " + n.tag);
+    }
     auto local = "n" + std::to_string(++count);
     locate("<" + n.tag);
     out << "#line " << location << " " << quote(source.string()) << "\n";
@@ -785,13 +797,14 @@ struct compiler {
         out << ",0,1e9f," << local << "});\n";
         continue;
       }
-      if (k.starts_with("on"))
-        throw std::runtime_error(
-            "JavaScript attributes are not supported in Native Web");
+      if (k.starts_with("on")) {
+        if (!preview) throw std::runtime_error("JavaScript attributes are not supported in Native Web");
+        warning("skipped JavaScript attribute " + k); continue;
+      }
       if (k != "id" && k != "class" && k != "width" && k != "height" &&
           k != "tabindex" && k != "disabled" && k != "type" && k != "role" &&
           !k.starts_with("aria-") && !k.starts_with("data-"))
-        throw std::runtime_error("unsupported attribute: " + k);
+        { if (!preview) throw std::runtime_error("unsupported attribute: " + k); warning("generic native attribute: " + k); }
       if (in_template && k == "id")
         throw std::runtime_error(
             "template elements use data-ref instead of document-global id");
@@ -842,8 +855,10 @@ struct compiler {
         templates.emplace_back(id->second, &n);
         return;
       }
-      if (n.tag == "script")
-        throw std::runtime_error("Native Web profile excludes scripts");
+      if (n.tag == "script") {
+        if (!preview) throw std::runtime_error("Native Web profile excludes scripts");
+        warning("skipped script"); return;
+      }
       if (n.tag == "body")
         body = &n;
       if (n.tag == "style") {
@@ -1009,12 +1024,15 @@ static int check_css(const fs::path &path) {
   return errors.empty() ? 0 : 1;
 }
 int main(int argc, char **argv) {
+  bool preview = argc > 1 && std::string_view(argv[argc-1]) == "--preview";
+  if (preview) --argc;
   if (argc != 3 && argc != 5) {
     std::cerr
         << "usage: webscene-uic input.html output [--module module.name]\n       webscene-uic --check-css input.css\n";
     return 2;
   }
   compiler c;
+  c.preview = preview;
   try {
     if (argc == 3 && std::string_view(argv[1]) == "--check-css") {
       c.source = argv[2];

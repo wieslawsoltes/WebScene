@@ -134,6 +134,14 @@ class CompilerTests(unittest.TestCase):
         for value in ['10px','italic 10px monospace','-10px monospace']:
             result,_=self.compile('<div></div>', 'div { font:'+value+'; }')
             self.assertNotEqual(result.returncode,0)
+    def test_preview_is_explicit_and_reports_omissions(self):
+        result,out=self.compile('<div>Hello</div>', 'div { color-scheme:dark; width:20px; }')
+        self.assertNotEqual(result.returncode,0)
+        result=subprocess.run([UIC,out.with_name('view.html'),out,'--preview'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('warning: preview:',result.stderr)
+        self.assertIn('color-scheme',result.stderr)
+        self.assertIn('set_width',out.read_text())
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)
