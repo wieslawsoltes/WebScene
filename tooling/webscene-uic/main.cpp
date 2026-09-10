@@ -674,6 +674,7 @@ static std::string selector_code(const selector_syntax_selector &sel) {
 }
 struct compiler {
   bool preview{};
+  std::string namespace_name{"compiled_ui"};
   void warning(const std::string &message) { std::cerr << source.string() << ": warning: preview: " << message << '\n'; }
 
   std::ostringstream out;
@@ -843,7 +844,7 @@ struct compiler {
       out << "module;\n#include <webscene/native_web.hpp>\n"
           << "export module " << module_name << ";\nexport ";
     }
-    out << "namespace compiled_ui {\nstruct view {\n";
+    out << "namespace " << namespace_name << " {\nstruct view {\n";
     // Collect metadata and code separately, so references are returned without
     // exposing engine nodes.
     std::ostringstream prefix;
@@ -1031,9 +1032,9 @@ static int check_css(const fs::path &path) {
 int main(int argc, char **argv) {
   bool preview = argc > 1 && std::string_view(argv[argc-1]) == "--preview";
   if (preview) --argc;
-  if (argc != 3 && argc != 5) {
+  if (argc != 3 && argc != 5 && argc != 7) {
     std::cerr
-        << "usage: webscene-uic input.html output [--module module.name]\n       webscene-uic --check-css input.css\n";
+        << "usage: webscene-uic input.html output [--module module.name] [--namespace identifier] [--preview]\n       webscene-uic --check-css input.css\n";
     return 2;
   }
   compiler c;
@@ -1044,10 +1045,15 @@ int main(int argc, char **argv) {
       return check_css(argv[2]);
     }
     std::string module_name;
-    if (argc == 5) {
-      if (std::string(argv[3]) != "--module")
-        throw std::runtime_error("Expected --module option");
-      module_name = argv[4];
+    for (int option = 3; option < argc; option += 2) {
+      if (std::string_view(argv[option]) == "--namespace") {
+        c.namespace_name = argv[option + 1];
+        if (!std::regex_match(c.namespace_name, std::regex("[A-Za-z][A-Za-z0-9_]*")))
+          throw std::runtime_error("Invalid generated namespace");
+        continue;
+      }
+      if (std::string_view(argv[option]) != "--module") throw std::runtime_error("Unknown compiler option");
+      module_name = argv[option + 1];
       bool start = true;
       for (unsigned char ch : module_name) {
         if (ch == '.' && !start) {

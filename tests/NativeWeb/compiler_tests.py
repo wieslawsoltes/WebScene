@@ -146,6 +146,13 @@ class CompilerTests(unittest.TestCase):
         result,out=self.compile('<div></div>', 'div { height:100dvh; width:50dvw; }')
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertNotIn('100dvh',out.read_text())
+    def test_generated_namespace(self):
+        result,out=self.compile('<div></div>')
+        module=out.with_suffix('.cppm')
+        result=subprocess.run([UIC,out.with_name('view.html'),module,'--module','app.tabs','--namespace','app_tabs'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('namespace app_tabs',module.read_text())
+        self.assertNotIn('namespace compiled_ui',module.read_text())
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

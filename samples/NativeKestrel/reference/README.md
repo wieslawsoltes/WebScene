@@ -55,3 +55,8 @@ are omitted in full. The original source files are never rewritten.
 This is a static diagnostic preview, not the ported CAD application or a visual
 parity acceptance result. It has no JavaScript runtime and performs no runtime
 HTML/CSS parsing. The ordinary compiler mode still rejects unsupported input.
+
+The preview's six ribbon tabs are instantiated from `templates/RibbonTabs.html`
+with native C++ selection handlers. Their groups and CAD commands are not yet
+connected. The reusable template module uses `--namespace kestrel_tabs` so its
+API can coexist with the original document module in one translation unit.
