@@ -211,6 +211,20 @@ int main() {
   check(std::none_of(clip_scene.commands.begin(), clip_scene.commands.end(), [&](const auto& command) {
     return command.node_id == clip_parent && (command.kind == 12 || command.kind == 13);
   }), "overflow visible removes ancestor clip commands");
+  d.attribute(clip_parent, "class", "empty");
+  d.render(800, 10000);
+  check(std::any_of(clip_scene.commands.begin(), clip_scene.commands.end(), [&](const auto& command) {
+    return command.node_id == clip_parent && command.kind == 12 && command.height == 0;
+  }), "zero-height overflow viewport retains empty scene clip");
+  auto empty_area = d.bounds(clip_parent);
+  d.pointer("pointerdown", empty_area.x + 15, empty_area.y + 1);
+  d.pointer("pointerup", empty_area.x + 15, empty_area.y + 1);
+  check(clipped_hits == 2, "zero-height clipped viewport excludes retained descendant input");
+  check(d.bounds(clip_child).height == 10, "empty clip retains descendant geometry");
+  d.remove_attribute(clip_parent, "class");
+  d.render(800, 10000);
+  click_clip(15);
+  check(clipped_hits == 3, "restoring clip height restores descendant targeting");
   int translated_hits = 0;
   auto translated_subscription = d.on(translated, "pointerdown", [&](event&) { ++translated_hits; });
   auto translated_area = d.bounds(translated);

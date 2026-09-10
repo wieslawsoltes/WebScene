@@ -888,3 +888,11 @@ verify clip begin/end commands bracket that child's paint and use the ancestor's
 20x10 viewport. Changing overflow to visible removes both ancestor clip commands.
 Native contracts pass. This verifies scene ordering and metadata, not final
 rasterized pixels; renderer differential and mixed-axis clipping remain open.
+
+### Empty overflow viewport regression (2026-09-10)
+
+Native compiled overflow coverage now includes a class-driven zero-height
+viewport. The scene retains a zero-height clip, descendant geometry remains
+allocated, outside pointer targeting is suppressed, and restoring the height
+restores targeting. Native contracts pass. This checks retained-scene/input
+behavior, not renderer pixel output or animated height transitions.
