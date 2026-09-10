@@ -719,3 +719,15 @@ Independent compiler regressions exercise pixels, percentages, uppercase relativ
 units, signed zero, invalid auto and valid signed offsets. All 50 compiler tests
 and native contracts pass. Computed-value range semantics through variables/calc
 and browser-style invalid-declaration recovery remain separate open audit items.
+
+### Typed variable padding shorthand (2026-09-10)
+
+Padding now accepts variable-token shorthand values, validates one-to-four
+nonnegative typed lengths, and expands sides only after whole-value validation.
+Invalid computed values reset all four sides to initial zero rather than keeping
+partially valid sides. Evaluation uses typed native tokens, not runtime CSS parsing.
+
+Native geometry checks verify two-axis padding, a class mutation introducing a
+negative component, all-side reset, and recovery after class removal. All 50
+compiler tests and native contracts pass. Padding longhand variables, calc values
+and remaining box shorthand families still require coverage.

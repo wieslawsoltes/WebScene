@@ -116,6 +116,16 @@ int main() {
   d.render(800, 600);
   check(std::abs(d.bounds(d.find("after-break")).y - d.bounds(d.find("before-break")).y) < 0.01f,
         "removing compiled br restores a shared inline line");
+  auto variable_padding = d.find("variable-padding");
+  check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
+        "compiled variable padding expands both axes");
+  d.attribute(variable_padding, "class", "invalid");
+  d.render(800, 600);
+  check(d.bounds(variable_padding).width == 20 && d.bounds(variable_padding).height == 10,
+        "invalid variable padding resets every side to initial zero");
+  d.remove_attribute(variable_padding, "class");
+  d.render(800, 600);
+  check(d.bounds(variable_padding).width == 28, "variable padding recovers after mutation");
   auto hidden_probe = d.find("hidden-probe");
   check(d.bounds(hidden_probe).height == 0, "compiled hidden attribute suppresses layout");
   d.remove_attribute(hidden_probe, "hidden");

@@ -373,6 +373,15 @@ static std::string assignments(const std::string &name,
         "s.set_bottom(side(valid && v->size()>2?2:0));"
         "s.set_left(side(valid && v->size()>3?3:valid && v->size()>1?1:0));";
   }
+  if (name == "padding" && value.find("var(") != std::string::npos) {
+    return "auto v=s.evaluate(" + variable_code(value) + ");"
+        "bool valid=v && !v->empty() && v->size()<=4;"
+        "if(valid) for(const auto& t:*v) valid=valid && t.length && t.length->value>=0;"
+        "auto side=[&](size_t i){return valid ? *(*v)[i].length : webscene::native_web::length" + length("0") + ";};"
+        "s.set_padding_top(side(0));s.set_padding_right(side(valid && v->size()>1?1:0));"
+        "s.set_padding_bottom(side(valid && v->size()>2?2:0));"
+        "s.set_padding_left(side(valid && v->size()>3?3:valid && v->size()>1?1:0));";
+  }
   if (name == "-webkit-font-smoothing") {
     if (value == "inherit" || value == "unset") return "s.set_font_smoothing(\"\");";
     if (value != "auto" && value != "none" && value != "antialiased" && value != "subpixel-antialiased")
