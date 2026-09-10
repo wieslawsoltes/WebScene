@@ -314,6 +314,9 @@ int main() {
     responsive.render(1000, 300);
     check(responsive.bounds(responsive.find("grid-left")).width == 175, "height media active at boundary");
     responsive.render(1000, 700);
+    check(responsive.bounds(responsive.find("dynamic-viewport")).height == 350 &&
+          responsive.bounds(responsive.find("dynamic-viewport")).width == 500,
+          "dynamic viewport units track host dimensions");
     check(responsive.bounds(responsive.find("grid-left")).width == 222, "height media restores variable on resize");
   }
   {

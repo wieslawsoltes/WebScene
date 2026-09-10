@@ -142,6 +142,10 @@ class CompilerTests(unittest.TestCase):
         self.assertIn('warning: preview:',result.stderr)
         self.assertIn('color-scheme',result.stderr)
         self.assertIn('set_width',out.read_text())
+    def test_dynamic_viewport_units(self):
+        result,out=self.compile('<div></div>', 'div { height:100dvh; width:50dvw; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertNotIn('100dvh',out.read_text())
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)
