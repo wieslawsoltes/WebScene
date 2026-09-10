@@ -208,6 +208,19 @@ int main() {
   check(rowspan_peer.x >= rowspan_box.x + rowspan_box.width &&
         rowspan_box.height >= rowspan_peer.y + rowspan_peer.height - rowspan_box.y,
         "zero rowspan covers remaining row group and reserves column");
+  check(d.bounds(d.find("next-group-cell")).x == rowspan_box.x,
+        "zero rowspan does not reserve column in following group");
+  auto added_row = d.element(d.find("zero-rowspan-group"), "tr");
+  auto added_cell = d.element(added_row, "td");
+  d.text(added_cell, "AddedRow");
+  d.render(800, 600);
+  auto expanded_span = d.bounds(d.find("zero-rowspan"));
+  check(expanded_span.height > rowspan_box.height && d.bounds(added_cell).x >= expanded_span.x + expanded_span.width,
+        "zero rowspan expands to native inserted row");
+  d.remove(added_row);
+  d.render(800, 600);
+  check(d.bounds(d.find("zero-rowspan")).height == rowspan_box.height,
+        "zero rowspan shrinks after native row removal");
   check(d.bounds(d.find("after-break")).y > d.bounds(d.find("before-break")).y,
         "compiled br moves following inline content to a new line");
   d.remove(d.find("explicit-break"));

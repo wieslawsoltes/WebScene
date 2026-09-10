@@ -1442,3 +1442,11 @@ the same boundary. The native fixture verifies a zero-span cell covers both rows
 and reserves its column beside the second-row cell. Rebuilt contracts pass.
 Multiple-group transitions, dynamic row insertion and comprehensive rowspan
 geometry still require dedicated coverage.
+
+### Rowspan group boundary and native row mutation (2026-09-10)
+
+Contracts verify the next tbody begins in the first column after a zero rowspan
+in the preceding group. Inserting a row through native construction expands the
+zero-span cell and reserves its column; removing that row restores its original
+height. Rebuilt native contracts pass. No runtime HTML parsing is used. Complex
+span overlaps, row-group reordering and browser differential coverage remain open.
