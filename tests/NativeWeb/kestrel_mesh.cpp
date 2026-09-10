@@ -82,5 +82,17 @@ int main(int argc, char **argv) {
     if (!rejected)
       throw std::runtime_error("Invalid revolution accepted");
   }
+  for (auto &edge_case : fixture["edgeCases"]) {
+    auto vertices = points(edge_case["entity"]["vertices"]);
+    auto edges = mesh_edges(edge_case["entity"]);
+    auto actual = feature_edges(vertices, edges, edge_case["all"]);
+    auto &expected = edge_case["segments"];
+    if (actual.size() != expected.size())
+      throw std::runtime_error("Feature edge count mismatch");
+    for (size_t i = 0; i < actual.size(); ++i)
+      for (size_t j = 0; j < 2; ++j)
+        if ((actual[i][j] - point(expected[i][j])).length() > 1e-8)
+          throw std::runtime_error("Feature edge endpoint mismatch");
+  }
   std::cout << "Kestrel: five upstream mesh primitives matched\n";
 }

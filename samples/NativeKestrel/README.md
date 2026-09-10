@@ -74,3 +74,8 @@ HTML/CSS view modules remain to be implemented.
 Entity transforms now preserve native conic axes, normal transforms, hatch
 spacing, dimension offsets, text orientation and mirrored mesh winding. Seven
 upstream comparisons cover these under reflection and nonuniform scaling.
+
+Mesh edge extraction now preserves upstream boundary/crease semantics, including
+coincident edges with separate vertex indices. Reference tests compare both
+feature-only and all-edge output for boxes, extrusions and split coplanar faces.
+The renderer-facing aggregate geometry output still needs integration.

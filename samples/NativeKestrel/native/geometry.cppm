@@ -5,6 +5,7 @@ module;
 #include <charconv>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <numbers>
 #include <numeric>
 #include <optional>
@@ -714,4 +715,120 @@ inline json transform_entity(const json &e, const matrix &m) {
   return out;
 }
 
+struct mesh_edge {
+  size_t a{}, b{}, count{1};
+  vec3 normal;
+  bool crease{};
+};
+inline std::vector<mesh_edge> mesh_edges(const json &entity) {
+  auto vertices = points(entity.at("vertices"));
+  std::vector<mesh_edge> edges;
+  std::map<std::pair<size_t, size_t>, size_t> lookup;
+  for (auto &face : entity.at("faces")) {
+    if (face.size() < 3)
+      continue;
+    std::vector<vec3> polygon;
+    for (auto &index : face)
+      polygon.push_back(vertices.at(index.get<size_t>()));
+    auto normal = face_normal(polygon);
+    for (size_t i = 0; i < face.size(); ++i) {
+      auto a = face[i].get<size_t>(),
+           b = face[(i + 1) % face.size()].get<size_t>();
+      auto key = std::pair{std::min(a, b), std::max(a, b)};
+      auto [it, inserted] = lookup.emplace(key, edges.size());
+      if (inserted)
+        edges.push_back({a, b, 1, normal, false});
+      else {
+        auto &edge = edges[it->second];
+        ++edge.count;
+        if (std::abs(edge.normal.dot(normal)) < .98)
+          edge.crease = true;
+      }
+    }
+  }
+  return edges;
+}
+inline std::vector<segment> feature_edges(std::span<const vec3> vertices,
+                                          std::span<const mesh_edge> edges,
+                                          bool all = false) {
+  std::vector<segment> result;
+  if (all) {
+    for (auto &e : edges)
+      result.push_back({vertices[e.a], vertices[e.b]});
+    return result;
+  }
+  auto base = vertices.empty() ? vec3{} : vertices.front();
+  double scale = 1;
+  for (auto p : vertices)
+    scale = std::max(scale, (p - base).length());
+  auto eps = scale * 1e-7;
+  struct interval {
+    double low, high;
+    vec3 normal;
+  };
+  struct group {
+    vec3 direction, origin;
+    std::vector<interval> intervals;
+  };
+  std::vector<group> groups;
+  std::map<std::array<double, 6>, size_t> lookup;
+  for (auto &edge : edges) {
+    if (edge.count > 1) {
+      if (edge.crease)
+        result.push_back({vertices[edge.a], vertices[edge.b]});
+      continue;
+    }
+    auto a = vertices[edge.a], b = vertices[edge.b],
+         direction = (b - a).normalized();
+    if (direction.length() < .5)
+      continue;
+    double first = std::abs(direction.x) > 1e-5   ? direction.x
+                   : std::abs(direction.y) > 1e-5 ? direction.y
+                                                  : direction.z;
+    if (first < 0)
+      direction = direction * -1;
+    auto moment = (a - base).cross(direction);
+    auto round = [](double x) { return std::floor(x + .5); };
+    std::array<double, 6> key{
+        round(direction.x * 1e6), round(direction.y * 1e6),
+        round(direction.z * 1e6), round(moment.x / eps),
+        round(moment.y / eps),    round(moment.z / eps)};
+    auto [it, inserted] = lookup.emplace(key, groups.size());
+    if (inserted)
+      groups.push_back({direction, a, {}});
+    auto &g = groups[it->second];
+    auto ta = (a - g.origin).dot(g.direction),
+         tb = (b - g.origin).dot(g.direction);
+    g.intervals.push_back({std::min(ta, tb), std::max(ta, tb), edge.normal});
+  }
+  for (auto &g : groups) {
+    std::vector<double> values, times;
+    for (auto &e : g.intervals) {
+      values.push_back(e.low);
+      values.push_back(e.high);
+    }
+    std::sort(values.begin(), values.end());
+    for (size_t i = 0; i < values.size(); ++i)
+      if (!i || std::abs(values[i] - values[i - 1]) > eps)
+        times.push_back(values[i]);
+    for (size_t i = 0; i + 1 < times.size(); ++i) {
+      auto low = times[i], high = times[i + 1], mid = (low + high) / 2;
+      size_t count = 0;
+      vec3 normal;
+      bool crease = false;
+      for (auto &e : g.intervals)
+        if (mid > e.low - eps && mid < e.high + eps) {
+          if (!count)
+            normal = e.normal;
+          else if (std::abs(e.normal.dot(normal)) < .98)
+            crease = true;
+          ++count;
+        }
+      if (count == 1 || crease)
+        result.push_back(
+            {g.origin + g.direction * low, g.origin + g.direction * high});
+    }
+  }
+  return result;
+}
 } // namespace kestrel::geo
