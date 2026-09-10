@@ -949,7 +949,7 @@ static media_bound compile_media_bound(const std::string &name, const std::strin
 struct compiler {
   bool preview{};
   std::string namespace_name{"compiled_ui"};
-  void warning(const std::string &message) { std::cerr << source.string() << ": warning: preview: " << message << '\n'; }
+  void warning(const std::string &message) { std::cerr << source.string() << ":" << location << ":" << column << ": warning: preview: " << message << '\n'; }
 
   std::ostringstream out;
   fs::path source;

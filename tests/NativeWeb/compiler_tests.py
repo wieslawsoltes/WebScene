@@ -144,6 +144,19 @@ class CompilerTests(unittest.TestCase):
             audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
             self.assertNotEqual(audit.returncode,0,value)
 
+    def test_preview_linked_css_reports_each_exact_location(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name)
+        css=root/'linked.css'
+        css.write_text('/* audit */\n@media print { div { width:1px; } }\ndiv {\n  filter:blur(2px);\n  filter:blur(3px);\n}\n')
+        source=root/'view.html'
+        source.write_text('<html><head><link rel="stylesheet" href="linked.css"></head><body><div></div></body></html>')
+        result=subprocess.run([UIC,source,root/'view.cppm','--module','audit.view','--preview'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        for line,column in [(2,1),(4,3),(5,3)]:
+            self.assertIn(str(css)+':'+str(line)+':'+str(column)+': warning: preview:',result.stderr)
+        self.assertEqual(result.stderr.count(': warning: preview:'),3)
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'

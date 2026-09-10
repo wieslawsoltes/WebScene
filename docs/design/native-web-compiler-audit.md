@@ -1071,3 +1071,19 @@ tests and native contracts passed; the additional generated-bound assertions pas
 in the focused regression. General media expressions, relative media lengths and
 browser differential coverage remain open; this is numeric validation closure
 for the existing pixel min/max condition subset only.
+
+### Preview diagnostic locations and HTML mapping gap (2026-09-10)
+
+Preview warnings now retain the compiler's current source line and column instead
+of printing only a filename. A linked-stylesheet regression verifies the at-rule
+location and two separate repeated-property locations in generated-module preview
+mode. All 57 compiler tests and native contracts pass.
+
+HTML diagnostics remain approximate: dom_node and the HTML parser bridge expose
+no authored source spans, and compiler::locate searches the first matching text.
+Repeated tags/properties, decoded attribute entities and reordered HTML tree nodes
+therefore cannot be mapped reliably with that mechanism. Closing this gate needs
+parser-provided source provenance (including attribute-value mapping) propagated
+into compiler diagnostics and generated source mappings; do not replace it with
+another substring-search heuristic or claim inline location accuracy. Linked CSS
+locations are parser-derived and are covered by the regression above.
