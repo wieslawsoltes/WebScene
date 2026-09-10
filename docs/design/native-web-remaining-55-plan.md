@@ -370,3 +370,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   and negative relationships. Service and runtime positional/iframe/pointer tests
   pass. These tests do not imply the standalone service can evaluate all compound
   selectors yet; that predicate and cascade execution remain open.
+
+- Compound matcher extraction: webscene_css_compound.h now contains the existing
+  compound evaluation logic without V8 types. A host contract supplies document,
+  input state, target hash, class lookup, text-control classification and recursive
+  queries; the runtime delegates while keeping its current caches/query behavior.
+  Sibling benchmark counters retain their export access through shared storage.
+  A V8-free test host verifies combined class/combinator/focus/hover selectors,
+  disabled/target selectors and nested not/is/has cases. Service and runtime
+  positional/iframe/pointer/shadow checks pass. This preserves existing selector
+  limitations and is not full standards compliance. A production native query host
+  and cascade execution are still required before styling the compiled application.

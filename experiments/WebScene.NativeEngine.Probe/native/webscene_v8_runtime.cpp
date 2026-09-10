@@ -26,6 +26,7 @@
 #include "webscene_css_declarations.h"
 #include "webscene_css_selectors.h"
 #include "webscene_css_matching.h"
+#include "webscene_css_compound.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"
@@ -185,10 +186,10 @@ webscene_media_refresh_benchmark_owned_class_lookup_bytes(void)
 
 #if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
 namespace {
-std::atomic<uint64_t> selector_sibling_positional_matches{0U};
-std::atomic<uint64_t> selector_sibling_scans{0U};
-std::atomic<uint64_t> selector_sibling_vector_materializations{0U};
-std::atomic<uint64_t> selector_sibling_pointer_copies{0U};
+using webscene_native::css::selector_sibling_positional_matches;
+using webscene_native::css::selector_sibling_scans;
+using webscene_native::css::selector_sibling_vector_materializations;
+using webscene_native::css::selector_sibling_pointer_copies;
 }
 
 extern "C" WEBSCENE_API void webscene_selector_sibling_benchmark_reset_counters(void)

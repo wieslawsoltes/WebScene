@@ -1,7 +1,46 @@
 #include "webscene_css_declarations.h"
 #include "webscene_css_selectors.h"
 #include "webscene_css_matching.h"
+#include "webscene_css_compound.h"
 #include <iostream>
+// Test host deliberately has no JavaScript context. Production hosts own their
+// class/selector caches and project input/URL state through the same contract.
+struct native_selector_test_host {
+    webscene_native::native_document& document;
+    const webscene_native::dom_node* hover_target{};
+    const webscene_native::dom_node* active_element{};
+    bool focus_visible{};
+    std::optional<std::string> selector_target_hash() const { return "#destination"; }
+    bool has_class(const webscene_native::dom_node& node,std::string_view wanted) const {
+        std::istringstream words(node.class_name);
+        for(std::string value;words>>value;) if(value==wanted) return true;
+        return false;
+    }
+    bool is_text_control(const webscene_native::dom_node* node) const {
+        return node && (node->tag=="input" || node->tag=="textarea");
+    }
+    bool css_selector_matches(const webscene_native::dom_node& node,std::string_view text,
+        const webscene_native::dom_node* scope=nullptr) const {
+        const auto list=webscene_native::css::compile_selector_list(text);
+        for(const auto& selector:list.selectors) {
+            if(!selector.compounds.empty() && webscene_native::css::selector_matches(document,node,
+                selector,selector.compounds.size()-1,scope,[&](const auto& n,const auto& c,const auto* root) {
+                    return webscene_native::css::compound_matches(*this,n,c,root);
+                })) return true;
+        }
+        return false;
+    }
+    const webscene_native::dom_node* query_selector_node(webscene_native::dom_node& root,
+        std::string_view text,bool include_root) const {
+        if(include_root && css_selector_matches(root,text,&root)) return &root;
+        for(auto* child:root.children) {
+            if(!child) continue;
+            if(css_selector_matches(*child,text,&root)) return child;
+            if(auto* found=query_selector_node(*child,text,false)) return found;
+        }
+        return nullptr;
+    }
+};
 int main() {
     using webscene_native::css::parse_declarations;
     const auto values=parse_declarations(R"CSS(
@@ -115,5 +154,12 @@ int main() {
     if(!matches(exempt,"fieldset button") || !matches(exempt,"legend > button") ||
        matches(exempt,"fieldset > button") || !matches(blocked,"legend + input") ||
        !matches(blocked,"legend ~ input") || matches(exempt,"input + button")) return 27;
+    native_selector_test_host host{document,&exempt,&exempt,true};
+    exempt.class_name="primary";
+    if(!host.css_selector_matches(exempt,"fieldset > legend > button.primary:focus:hover") ||
+       host.css_selector_matches(exempt,"button:disabled") ||
+       !host.css_selector_matches(blocked,"input:disabled:target") ||
+       !host.css_selector_matches(fieldset,"fieldset:has(> legend):focus-within") ||
+       !host.css_selector_matches(exempt,"button:not(.secondary):is(.primary, .other)")) return 28;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
