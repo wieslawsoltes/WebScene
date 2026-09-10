@@ -201,4 +201,36 @@ inline json revolve(std::span<const vec3> p,vec3 origin,vec3 axis,double degrees
     if(volume(result)<0)for(auto& face:result["faces"])std::reverse(face.begin(),face.end());return result;
 }
 
+inline json offset(const json& e,double distance){
+    auto type=e.at("type").get<std::string>();
+    if(type=="CIRCLE"||type=="ARC"){
+        auto radius=number(e,"radius",0);if(radius==0)radius=axes(e).x.length();auto r=radius+distance;
+        if(r<=epsilon)throw std::invalid_argument("Offset would create a non-positive radius");
+        auto out=e;out["radius"]=r;for(auto key:{"axisX","axisY"})if(out.contains(key))out[key]=encode(point(out[key])*(r/radius));return out;
+    }
+    if(type!="LINE"&&type!="POLYLINE")throw std::invalid_argument("Unsupported offset entity");
+    bool bulged=false;if(e.contains("bulges"))for(auto& b:e["bulges"])if(!b.is_null()&&b.get<double>()!=0)bulged=true;
+    auto p=type=="POLYLINE"&&bulged?path(e):points(e.at("points"));bool close=e.value("closed",false);
+    if(p.size()<2)throw std::invalid_argument("Offset needs at least two points");
+    auto side=close?(polygon_area(p)>0?-distance:distance):distance;std::vector<segment> segments;
+    for(size_t i=0;i<p.size()-(close?0:1);++i){auto a=p[i],b=p[(i+1)%p.size()],v=b-a;auto length=std::hypot(v.x,v.y);
+        if(length<epsilon)throw std::invalid_argument("Offset profile contains a zero-length segment");
+        vec3 shift{-v.y/length*side,v.x/length*side,0};segments.push_back({a+shift,b+shift});}
+    json result=e;result["points"]=json::array();result.erase("bulges");
+    for(size_t i=0;i<p.size();++i){vec3 q;
+        if(!close&&i==0)q=segments.front()[0];else if(!close&&i==p.size()-1)q=segments.back()[1];
+        else{auto prev=segments[(i+segments.size()-1)%segments.size()],cur=segments[i%segments.size()];auto hit=line_intersection(prev[0],prev[1],cur[0],cur[1]);
+            q=hit&&(hit->point-p[i]).length()<std::abs(distance)*20?hit->point:lerp(prev[1],cur[0],.5);}
+        result["points"].push_back(encode(q));
+    }return result;
+}
+inline json arc_through(vec3 a,vec3 b,vec3 c){
+    auto ab=lerp(a,b,.5),bc=lerp(b,c,.5),u=b-a,v=c-b;
+    auto hit=line_intersection(ab,ab+vec3{-u.y,u.x,0},bc,bc+vec3{-v.y,v.x,0});
+    if(!hit)throw std::invalid_argument("Three arc points must not be collinear");
+    auto center=hit->point;auto aa=std::atan2(a.y-center.y,a.x-center.x),bb=std::atan2(b.y-center.y,b.x-center.x),cc=std::atan2(c.y-center.y,c.x-center.x);
+    bool forward=angle(bb-aa)<=angle(cc-aa);
+    return {{"type","ARC"},{"center",encode(center)},{"radius",(center-a).length()},{"startAngle",forward?aa:cc},{"endAngle",forward?cc:aa}};
+}
+
 }

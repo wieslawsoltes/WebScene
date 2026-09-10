@@ -24,5 +24,16 @@ int main(int argc,char** argv){
         for(auto key:{"height","rotation"})if(std::abs(actual.text[key].get<double>()-expected["text"][key].get<double>())>1e-8)throw std::runtime_error("Dimension text scalar mismatch");
         if(actual.text["text"]!=expected["text"]["text"]||actual.text["align"]!=expected["text"]["align"])throw std::runtime_error("Dimension label mismatch");
     }
+    auto compare_entity=[](const kestrel::json& actual,const kestrel::json& expected){
+        if(actual["type"]!=expected["type"])throw std::runtime_error("Edit entity type mismatch");
+        for(auto key:{"center","axisX","axisY"})if(expected.contains(key)&&(kestrel::geo::point(actual[key])-kestrel::geo::point(expected[key])).length()>1e-8)throw std::runtime_error("Edit vector mismatch");
+        for(auto key:{"radius","startAngle","endAngle"})if(expected.contains(key)&&std::abs(actual[key].get<double>()-expected[key].get<double>())>1e-8)throw std::runtime_error("Edit scalar mismatch");
+        if(expected.contains("points")){
+            if(actual["points"].size()!=expected["points"].size())throw std::runtime_error("Offset point count mismatch");
+            for(size_t i=0;i<expected["points"].size();++i)if((kestrel::geo::point(actual["points"][i])-kestrel::geo::point(expected["points"][i])).length()>1e-8)throw std::runtime_error("Offset point mismatch");
+        }
+    };
+    for(auto& f:fixtures["offsets"])compare_entity(kestrel::geo::offset(f["entity"],f["distance"]),f["result"]);
+    for(auto& f:fixtures["arcs"])compare_entity(kestrel::geo::arc_through(kestrel::geo::point(f["points"][0]),kestrel::geo::point(f["points"][1]),kestrel::geo::point(f["points"][2])),f["result"]);
     std::cout<<"Kestrel curves: "<<compared<<" upstream vertices matched\n";
 }

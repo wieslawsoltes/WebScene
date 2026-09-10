@@ -58,3 +58,7 @@ including exact cap/side topology and volume. Revolution is also implemented, wi
 reference cases. Seven invalid-profile/sweep/axis cases are rejected by both
 upstream and native implementations. Other solid operations and renderer
 integration remain outstanding.
+
+Offset and three-point arc construction are now native, with upstream reference
+cases for lines, closed and bulged polylines, conic axes and arc direction.
+These operations still need connection to the native command/UI layer.
