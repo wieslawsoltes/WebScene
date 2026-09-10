@@ -43,6 +43,7 @@
 #include "webscene_css_box_application.h"
 #include "webscene_css_paint_values.h"
 #include "webscene_css_visibility_values.h"
+#include "webscene_css_text_values.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"

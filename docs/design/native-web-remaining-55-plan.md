@@ -613,3 +613,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   overflow navigation, virtual-row scroll and pointer-exit regressions pass.
   Existing inheritance/keyword coverage remains; this does not establish complete
   scrolling behavior or presented-frame performance for Native Kestrel.
+
+- Typography extraction: font resolution/shorthand and text, SVG paint, cursor and
+  list-style application now use shared native helpers. Native tests verify
+  inherited percentage sizing, em spacing and unitless line-height preservation.
+  A numeric-weight shorthand test exposed 700 being read as font-size; the parser
+  now recognizes modeled 100–900 weights before locating size. Native service and
+  runtime dimension/font-relative, SVG typography and reset regressions pass.
+  Variable weights, additional font axes, shaping and other existing grammar limits
+  remain; this does not establish font-resource packaging or full app parity.

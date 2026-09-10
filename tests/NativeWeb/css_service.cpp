@@ -19,6 +19,7 @@
 #include "webscene_css_box_application.h"
 #include "webscene_css_paint_values.h"
 #include "webscene_css_visibility_values.h"
+#include "webscene_css_text_values.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -584,5 +585,17 @@ int main(int argc,char** argv) {
     visibility("opacity","2");
     if(hit_node.style.scroll_x_enabled || hit_node.style.scroll_y_enabled ||
        !hit_node.style.contain_stacking_context || hit_node.style.opacity!=1) return 112;
+    const auto text_value=[&](const std::string& name,const std::string& value) {
+        return webscene_native::css::apply_text_value(hit_node,name,value,grid_result,unprotected);
+    };
+    hit_document.body().style.font_size=20;
+    text_value("font-size","150%");
+    text_value("letter-spacing",".5em");
+    text_value("line-height","1.5");
+    if(hit_node.style.font_size!=30 || hit_node.style.letter_spacing!=15 ||
+       hit_node.style.line_height!=-4.5f) return 113;
+    text_value("font","700 16px/1.5 sans-serif");
+    if(hit_node.style.font_size!=16 || hit_node.style.font_weight!=700 ||
+       hit_node.style.textual().font_family!="sans-serif") return 114;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
