@@ -1002,6 +1002,8 @@ enum class script_execution_state : uint8_t {
 };
 
 struct dom_node final {
+    // HTML tree-builder line at creation, not an exact authored token span.
+    uint64_t parser_line{0};
     static constexpr std::string_view html_namespace_uri =
         "http://www.w3.org/1999/xhtml";
 

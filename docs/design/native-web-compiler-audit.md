@@ -1087,3 +1087,18 @@ parser-provided source provenance (including attribute-value mapping) propagated
 into compiler diagnostics and generated source mappings; do not replace it with
 another substring-search heuristic or claim inline location accuracy. Linked CSS
 locations are parser-derived and are covered by the regression above.
+
+### Parser-derived element line mappings (2026-09-10)
+
+The HTML tree sink now captures html5ever's current-line callback and passes the
+creation line through the native bridge into dom_node. Generated element #line
+mappings use this provenance instead of the first matching tag substring. An
+independent fixture verifies distinct mappings for repeated div elements and a
+nested section. All 58 compiler tests and rebuilt native contracts pass.
+
+The HTML bridge ABI is version 2 because create_element now receives a line
+argument. CSS and selector ABI versions are unchanged. Parser lines describe the
+tree-builder position at creation, not exact opening-token spans: multiline tags,
+implicit/reconstructed elements, attribute columns, entity decoding and inline
+CSS offsets still require richer provenance. This is a foundation for source
+mapping, not closure of the precise HTML diagnostics gate.

@@ -32,7 +32,7 @@ struct webscene_html_sink_vtable final {
         void*,
         const webscene_html_qualified_name*,
         const webscene_html_attribute*,
-        size_t);
+        size_t, uint64_t);
     webscene_html_node_handle (*create_comment)(void*, webscene_html_byte_slice);
     webscene_html_node_handle (*create_processing_instruction)(
         void*, webscene_html_byte_slice, webscene_html_byte_slice);

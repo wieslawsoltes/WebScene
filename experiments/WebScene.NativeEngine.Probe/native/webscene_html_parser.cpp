@@ -9,7 +9,7 @@
 namespace webscene_native {
 namespace {
 
-constexpr uint32_t parser_abi_version = 1;
+constexpr uint32_t parser_abi_version = 2;
 
 std::string copy_slice(webscene_html_byte_slice value)
 {
@@ -75,7 +75,7 @@ webscene_html_node_handle create_element(
     void* opaque,
     const webscene_html_qualified_name* name,
     const webscene_html_attribute* attributes,
-    size_t attribute_count) noexcept
+    size_t attribute_count, uint64_t parser_line) noexcept
 {
     auto& context = *static_cast<sink_context*>(opaque);
     return guard<webscene_html_node_handle>(context, 0, [&] {
@@ -83,6 +83,7 @@ webscene_html_node_handle create_element(
         auto& result = context.document.create_node(
             dom_node_kind::element,
             copy_slice(name->local_name));
+        result.parser_line = parser_line;
         result.set_namespace(
             copy_slice(name->namespace_uri),
             copy_slice(name->prefix));

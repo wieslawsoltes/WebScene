@@ -66,6 +66,7 @@ unsafe impl GlobalAlloc for MeasuringAllocator {
 static ALLOCATOR: MeasuringAllocator = MeasuringAllocator;
 
 const ABI_VERSION: u32 = 1;
+const HTML_ABI_VERSION: u32 = 2;
 const STATUS_OK: u32 = 0;
 const STATUS_INVALID_ARGUMENT: u32 = 1;
 const STATUS_CALLBACK_FAILED: u32 = 2;
@@ -130,6 +131,7 @@ pub struct SinkVTable {
             *const QualifiedName,
             *const ParserAttribute,
             usize,
+            u64,
         ) -> NodeHandle,
     >,
     pub create_comment: Option<unsafe extern "C" fn(*mut c_void, ByteSlice) -> NodeHandle>,
@@ -192,6 +194,7 @@ struct ElementData {
 }
 
 struct Sink<'a> {
+    current_line: Cell<u64>,
     callbacks: &'a SinkVTable,
     // Boxed metadata keeps QualName addresses stable when the handle map
     // rehashes. TreeSink::elem_name returns a borrow that may outlive the
@@ -279,6 +282,10 @@ impl TreeSink for Sink<'_> {
     where
         Self: 'a;
 
+    fn set_current_line(&self, line_number: u64) {
+        self.current_line.set(line_number);
+    }
+
     fn finish(self) -> Self::Output {
         ParseResult {
             status: if self.callback_failed() {
@@ -357,6 +364,7 @@ impl TreeSink for Sink<'_> {
                     &QualifiedName::from_name(&name),
                     attributes.as_ptr(),
                     attributes.len(),
+                    self.current_line.get(),
                 )
             })
             .unwrap_or_default();
@@ -579,8 +587,8 @@ fn validate<'a>(
             ..Default::default()
         });
     };
-    if options.abi_version != ABI_VERSION
-        || callbacks.abi_version != ABI_VERSION
+    if options.abi_version != HTML_ABI_VERSION
+        || callbacks.abi_version != HTML_ABI_VERSION
         || options.struct_size < std::mem::size_of::<ParseOptions>() as u32
         || callbacks.struct_size < std::mem::size_of::<SinkVTable>() as u32
         || callbacks.document == 0
@@ -598,6 +606,7 @@ fn validate<'a>(
 
 fn new_sink<'a>(options: &ParseOptions, callbacks: &'a SinkVTable) -> Sink<'a> {
     Sink {
+        current_line: Cell::new(1),
         callbacks,
         elements: RefCell::new(HashMap::new()),
         quirks_mode: Cell::new(QuirksMode::NoQuirks),
@@ -626,7 +635,7 @@ fn attach_allocation_metrics(mut result: ParseResult) -> ParseResult {
 
 #[no_mangle]
 pub extern "C" fn webscene_html_parser_abi_version() -> u32 {
-    ABI_VERSION
+    HTML_ABI_VERSION
 }
 
 #[no_mangle]

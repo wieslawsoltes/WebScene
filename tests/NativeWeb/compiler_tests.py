@@ -157,6 +157,16 @@ class CompilerTests(unittest.TestCase):
             self.assertIn(str(css)+':'+str(line)+':'+str(column)+': warning: preview:',result.stderr)
         self.assertEqual(result.stderr.count(': warning: preview:'),3)
 
+    def test_repeated_elements_use_parser_lines(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        source.write_text('<html><body>\n<div>first</div>\n<div>second</div>\n<section>\n<div>third</div>\n</section>\n</body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=output.read_text()
+        for line in [2,3,4,5]:
+            self.assertIn('#line '+str(line)+' "'+str(source)+'"',generated)
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'

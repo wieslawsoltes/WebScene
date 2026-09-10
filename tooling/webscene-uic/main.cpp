@@ -1063,7 +1063,8 @@ struct compiler {
       warning("generic native element: " + n.tag);
     }
     auto local = "n" + std::to_string(++count);
-    locate("<" + n.tag);
+    if (n.parser_line) { location = n.parser_line; column = 1; }
+    else locate("<" + n.tag);
     out << "#line " << location << " " << quote(source.string()) << "\n";
     if (n.tag == "body")
       out << "auto " << local << " = d.body();\n";
