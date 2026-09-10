@@ -255,9 +255,10 @@ static std::optional<int> tab_index(const dom_node &n) {
   return negative ? -result : result;
 }
 static bool focusable(const dom_node &n) {
+  for (auto *ancestor = &n; ancestor; ancestor = ancestor->parent)
+    if (ancestor->style.display == display_mode::none) return false;
   return (n.tag == "button" || tab_index(n).has_value()) &&
-         !n.attributes.contains("disabled") &&
-         n.style.display != display_mode::none;
+         !n.attributes.contains("disabled");
 }
 void document::focus(node_id id) {
   state_->check();

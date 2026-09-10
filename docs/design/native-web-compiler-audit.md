@@ -637,3 +637,15 @@ element and text sequence, verify its text and three roots, then remove every
 root and verify no text remains. Both template suites, native contracts and all
 45 compiler tests pass. Nested template support and transactional construction
 failure cleanup remain open.
+
+### Hidden ancestor focus eligibility (2026-09-10)
+
+Programmatic focus previously checked only the target's display mode. It now
+rejects targets with any `display:none` ancestor. A native regression hides a
+container through a class rule, verifies focus is rejected, removes the class,
+recomputes layout and verifies focus succeeds. All 45 compiler tests and native
+contracts pass. This uses computed style; style flushing before focus and clearing
+existing focus when an ancestor becomes hidden remain open.
+
+Inspection also confirmed subtree removal already removes inline-target rules
+and listeners belonging to removed nodes; no duplicate cleanup mechanism added.

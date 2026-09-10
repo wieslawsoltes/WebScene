@@ -461,6 +461,25 @@ int main() {
     check(tabs.focused() == tied, "tab order reflects removed tabindex");
   }
   {
+    document visibility;
+    auto container = visibility.element(visibility.body(), "div");
+    auto child = visibility.element(container, "button");
+    rule hidden;
+    selector_part part;
+    part.classes.push_back("hidden");
+    hidden.match.parts.push_back(part);
+    hidden.declarations.push_back({false, +[](style &s) { s.set_display(display_mode::none); }});
+    visibility.add_rule(std::move(hidden));
+    visibility.attribute(container, "class", "hidden");
+    visibility.render(400, 300);
+    visibility.focus(child);
+    check(visibility.focused() == 0, "hidden ancestor prevents programmatic focus");
+    visibility.remove_attribute(container, "class");
+    visibility.render(400, 300);
+    visibility.focus(child);
+    check(visibility.focused() == child, "shown ancestor restores programmatic focus");
+  }
+  {
     document responsive;
     auto references = compiled_ui::build(responsive);
     responsive.render(1000, 301);
