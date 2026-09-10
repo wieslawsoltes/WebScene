@@ -25,6 +25,7 @@
 #include "webscene_css_state.h"
 #include "webscene_css_declarations.h"
 #include "webscene_css_selectors.h"
+#include "webscene_css_matching.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"

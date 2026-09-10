@@ -317,3 +317,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Runtime positional-selector-siblings, iframe-dynamic-recascade and shared-shadow-values
   tests pass. This moves preparation, not DOM-dependent matching or cascade execution;
   supported selector semantics are unchanged by this extraction.
+
+- Native selector matching extraction: attribute and nth-expression matching now
+  live in webscene_css_matching.h and are used by the existing runtime. V8-free
+  tests exercise attribute word/language matching, empty substring rejection,
+  mutation, signed An+B expressions and malformed expressions. Nth arithmetic uses
+  a 64-bit difference to avoid overflow for valid extreme offsets. Service tests
+  and runtime positional-selector-siblings/iframe-dynamic-recascade tests pass.
+  Full compound matching, document state, combinators and cascade execution still
+  require extraction; this does not claim new overall selector compliance.
