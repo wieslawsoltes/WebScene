@@ -246,4 +246,92 @@ inline void configure_keyframes(node_style& style,
         }
     }
 
+inline void append_keyframe(
+        css_opacity_keyframes& definition,
+        std::string selector,
+        const std::vector<css_declaration>& declarations)
+    {
+        const auto opacity = std::find_if(
+            declarations.begin(), declarations.end(), [](const auto& declaration) {
+                return declaration.name == "opacity";
+            });
+        const auto transform = std::find_if(
+            declarations.begin(), declarations.end(), [](const auto& declaration) {
+                return declaration.name == "transform";
+            });
+        const auto rotation_degrees = [&]() -> std::optional<float> {
+            if (transform == declarations.end()) return std::nullopt;
+            auto value = ascii_lower(trim_value(transform->value));
+            const auto rotate = value.find("rotate(");
+            if (rotate == std::string::npos) return std::nullopt;
+            const auto close = value.find(')', rotate + 7U);
+            if (close == std::string::npos) return std::nullopt;
+            auto angle = trim_value(value.substr(rotate + 7U, close - rotate - 7U));
+            auto multiplier = 1.0F;
+            if (angle.ends_with("turn")) {
+                angle.resize(angle.size() - 4U);
+                multiplier = 360.0F;
+            } else if (angle.ends_with("deg")) {
+                angle.resize(angle.size() - 3U);
+            } else if (angle.ends_with("rad")) {
+                angle.resize(angle.size() - 3U);
+                multiplier = 57.29577951308232F;
+            } else return std::nullopt;
+            return std::strtof(angle.c_str(), nullptr) * multiplier;
+        }();
+        for (auto component : split_css_component_list(selector, ',')) {
+            component = ascii_lower(trim_value(std::move(component)));
+            float offset = -1;
+            if (component == "from") offset = 0;
+            else if (component == "to") offset = 1;
+            else if (component.ends_with('%')) {
+                component.pop_back();
+                offset = std::strtof(component.c_str(), nullptr) / 100.0F;
+            }
+            if (offset < 0 || offset > 1) continue;
+            if (opacity != declarations.end()) {
+                definition.opacity_stops.push_back({
+                    offset,
+                    std::clamp(std::strtof(opacity->value.c_str(), nullptr), 0.0F, 1.0F)});
+            }
+            if (rotation_degrees.has_value()) {
+                definition.rotation_stops.push_back({offset, *rotation_degrees});
+            }
+        }
+    }
+
+inline void finish_keyframes(
+        std::unordered_map<std::string,css_opacity_keyframes>& definitions,
+        std::string name,
+        css_opacity_keyframes definition)
+    {
+        const auto normalize = [](auto& stops) {
+            std::stable_sort(
+                stops.begin(), stops.end(),
+                [](const auto& left, const auto& right) { return left.offset < right.offset; });
+            using stop_type = typename std::decay_t<decltype(stops)>::value_type;
+            std::vector<stop_type> unique;
+            for (const auto& stop : stops) {
+                if (!unique.empty()
+                    && std::abs(unique.back().offset - stop.offset) < 0.0001F) {
+                    unique.back() = stop;
+                } else {
+                    unique.push_back(stop);
+                }
+            }
+            stops = std::move(unique);
+        };
+        normalize(definition.opacity_stops);
+        normalize(definition.rotation_stops);
+        if (definition.rotation_stops.size() == 1U
+            && definition.rotation_stops.front().offset > 0) {
+            definition.rotation_stops.insert(definition.rotation_stops.begin(), {0, 0});
+        }
+        if (definition.opacity_stops.size() >= 2U
+            || definition.rotation_stops.size() >= 2U) {
+            definitions[ascii_lower(trim_value(std::move(name)))] =
+                std::move(definition);
+        }
+    }
+
 } // namespace webscene_native::css

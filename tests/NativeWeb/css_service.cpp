@@ -19,7 +19,6 @@ struct stylesheet_test_host {
         std::string address;
     };
     std::vector<rule> rules;
-    std::vector<std::string> keyframe_selectors;
     std::vector<std::string> unsupported;
     bool inventory_media_query(const std::string&) { return true; }
     void record_feature(std::string_view, const std::string& name,
@@ -31,10 +30,7 @@ struct stylesheet_test_host {
         const std::vector<std::string>& media,const std::string& address) {
         rules.push_back({std::move(selector),std::move(declarations),media,address});
     }
-    void append_css_syntax_keyframe(webscene_native::css::css_opacity_keyframes&,
-        std::string selector,const std::vector<webscene_native::css::css_declaration>&) {
-        keyframe_selectors.push_back(std::move(selector));
-    }
+
 };
 int main() {
     using webscene_native::css::parse_declarations;
@@ -330,7 +326,25 @@ int main() {
     if(!stylesheet_parsed || !stylesheet_sink.complete() || stylesheet_host.rules.size()!=4 ||
        stylesheet_host.rules[1].media.size()!=2 || !stylesheet_host.rules[1].declarations[0].important ||
        stylesheet_host.rules[3].selector!=".last" || stylesheet_host.rules[3].address!=stylesheet_address ||
-       stylesheet_host.keyframe_selectors.size()!=2 || stylesheet_sink.keyframes().size()!=1 ||
+       stylesheet_sink.keyframes().size()!=1 || stylesheet_sink.keyframes()[0].second.opacity_stops.size()!=2 ||
        stylesheet_sink.keyframes()[0].first!="pulse" || stylesheet_host.unsupported.size()!=1) return 68;
+    std::unordered_map<std::string,webscene_native::css::css_opacity_keyframes> parsed_keyframes;
+    for(auto& [name,definition]:stylesheet_sink.keyframes()) {
+        webscene_native::css::finish_keyframes(parsed_keyframes,name,std::move(definition));
+    }
+    webscene_native::css::apply_animation_shorthand(animated.style,"pulse 1s linear infinite");
+    webscene_native::css::configure_keyframes(animated.style,parsed_keyframes);
+    animated_document.signal_animation_frame(1000);
+    animated_document.update_style_animations(animated);
+    animated_document.advance_animations();
+    animated_document.signal_animation_frame(1250);
+    animated_document.advance_animations();
+    if(std::abs(animated.painted_opacity_value()-.25f)>.02f) return 69;
+    webscene_native::css::css_opacity_keyframes rotation_definition;
+    webscene_native::css::append_keyframe(rotation_definition,"to",{{"transform","rotate(.5turn)",false}});
+    webscene_native::css::finish_keyframes(parsed_keyframes,"spin",std::move(rotation_definition));
+    if(parsed_keyframes["spin"].rotation_stops.size()!=2 ||
+       parsed_keyframes["spin"].rotation_stops[0].degrees!=0 ||
+       parsed_keyframes["spin"].rotation_stops[1].degrees!=180) return 70;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

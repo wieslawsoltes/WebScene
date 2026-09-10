@@ -1,6 +1,7 @@
 #pragma once
 #include "webscene_css_declarations.h"
 #include "webscene_css_matching.h"
+#include "webscene_css_transitions.h"
 
 namespace webscene_native::css {
 // Host supplies rule/keyframe storage, media capability inventory and diagnostics.
@@ -142,7 +143,7 @@ public:
 
         if (current.kind == css_syntax_style_rule) {
             if (!stack_.empty() && stack_.back().keyframes) {
-                owner_.append_css_syntax_keyframe(
+                append_keyframe(
                     stack_.back().keyframe_definition,
                     std::move(current.prelude),
                     current.declarations);

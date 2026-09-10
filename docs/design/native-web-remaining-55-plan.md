@@ -491,3 +491,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   host-clock-keyframes and iframe-dynamic-recascade regressions pass. Existing
   at-rule limitations are deliberately retained; this adapter does not implement
   cascade layers, container conditions or a complete native stylesheet owner.
+
+- Keyframe ingestion now calls shared native stop parsing and normalization
+  directly, removing another runtime-host dependency from the stylesheet adapter.
+  The V8-free service test parses a CSS keyframe block, stores its definition,
+  configures a native document and verifies opacity at a host-clock timestamp.
+  It also verifies turn-to-degree rotation and implicit initial rotation handling.
+  Existing first-declaration, name normalization and restricted property/grammar
+  behavior remain; this is reuse of current semantics, not complete CSS animations.
