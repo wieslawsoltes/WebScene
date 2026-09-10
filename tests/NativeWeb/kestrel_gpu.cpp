@@ -1,6 +1,11 @@
+#include "../../samples/NativeKestrel/third_party/nlohmann/json.hpp"
 #include "native_webgpu_device.h"
+#include "native_webgpu_surface.h"
+#include <chrono>
 #include <stdexcept>
+#include <thread>
 import kestrel.gpu_pipelines;
+import kestrel.viewport;
 import kestrel.gpu_renderer;
 import kestrel.render_data;
 int main() {
@@ -75,4 +80,22 @@ int main() {
   if (red < 500 || green < 80 || background < 1000)
     throw std::runtime_error(
         "Rendered frame missing triangle, line or background");
+  kestrel::viewport viewport(77, 160, 120);
+  kestrel::drawing drawing;
+  drawing.add("MESH", kestrel::geo::box({-10, -10, 0}, 20, 20, 20));
+  viewport.options.style = kestrel::display_style::shaded_edges;
+  for (int frame = 0; frame < 3; ++frame) {
+    viewport.resize(160 + frame * 16, 120 + frame * 8);
+    if (!viewport.submit(drawing) || viewport.submit(drawing))
+      throw std::runtime_error("Viewport pending-frame contract failed");
+    std::shared_ptr<const webscene_gpu_image_lease_v3> image;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    do {
+      image = viewport.poll();
+      if (!image)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (!image && std::chrono::steady_clock::now() < deadline);
+    if (!image)
+      throw std::runtime_error("Viewport shared image timed out");
+  }
 }

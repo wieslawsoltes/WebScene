@@ -120,3 +120,9 @@ Adaptive grid generation now follows upstream zoom spacing, major/minor lines
 and colored axes. The renderer accepts a separate grid buffer and draws it
 before scene triangles and lines. CPU spacing/count and existing GPU regression
 tests pass; a visible integrated viewport remains outstanding.
+
+`kestrel.viewport` connects drawing/camera/grid rendering to WebScene's native
+shared-image surface. Hosts submit and poll without blocking the UI thread;
+completed leases use the existing Foco GPU adapter. The Metal test exercises
+three resized drawing frames and pending-frame backpressure. Foco window wiring,
+annotation drawing and compiled Kestrel controls remain outstanding.
