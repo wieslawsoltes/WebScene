@@ -937,6 +937,15 @@ static std::string selector_code(const selector_syntax_selector &sel) {
   }
   return result + "}," + std::to_string(sel.specificity) + "}";
 }
+struct media_bound { size_t axis; bool minimum; float value; };
+static media_bound compile_media_bound(const std::string &name, const std::string &prelude) {
+  std::smatch match;
+  static const std::regex grammar(R"(\s*\(\s*(min|max)-(width|height)\s*:\s*([^\s]+)\s*\)\s*)", std::regex::icase);
+  if (ascii_keyword(name) != "media" || !std::regex_match(prelude, match, grammar))
+    throw std::runtime_error("only min/max width or height media conditions in px are supported");
+  return {ascii_keyword(match[2]) == "width" ? size_t{0} : size_t{2},
+          ascii_keyword(match[1]) == "min", pixel_length(match[3], false)};
+}
 struct compiler {
   bool preview{};
   std::string namespace_name{"compiled_ui"};
@@ -1002,19 +1011,17 @@ struct compiler {
       if (r.parent_index != css_syntax_no_parent)
         range = bounds.at(r.parent_index);
       if (r.kind == css_syntax_at_rule) {
-        std::smatch match;
-        if (r.name != "media" ||
-            !std::regex_match(
-                r.prelude, match,
-                std::regex(R"(\s*\((min|max)-(width|height)\s*:\s*([0-9]+)px\)\s*)")))
-          { if (!preview) throw std::runtime_error("only min/max width or height media conditions in px are supported");
-            warning("skipped @" + r.name + " " + r.prelude); range[0] = 1e9f; range[1] = -1; continue; }
-        auto v = std::stof(match[3]);
-        const size_t axis = match[2] == "width" ? 0 : 2;
-        if (match[1] == "min")
-          range[axis] = std::max(range[axis], v);
-        else
-          range[axis + 1] = std::min(range[axis + 1], v);
+        try {
+          const auto bound = compile_media_bound(r.name, r.prelude);
+          if (bound.minimum)
+            range[bound.axis] = std::max(range[bound.axis], bound.value);
+          else
+            range[bound.axis + 1] = std::min(range[bound.axis + 1], bound.value);
+        } catch (const std::exception &) {
+          if (!preview) throw;
+          warning("skipped @" + r.name + " " + r.prelude);
+          range[0] = 1e9f; range[1] = -1;
+        }
         continue;
       }
       if (range[0] > range[1]) continue;
@@ -1300,9 +1307,7 @@ static int check_css(const fs::path &path) {
     auto location = path.string() + ":" + std::to_string(rule.source_line) + ":" + std::to_string(rule.source_column);
     if (rule.kind == css_syntax_at_rule) {
       check("@" + rule.name + " " + rule.prelude, [&] {
-        if (rule.name != "media" || !std::regex_match(rule.prelude,
-            std::regex(R"(\s*\((min|max)-(width|height)\s*:\s*([0-9]+)px\)\s*)")))
-          throw std::runtime_error("unsupported at-rule or condition");
+        compile_media_bound(rule.name, rule.prelude);
       }, location);
     } else {
       check(rule.prelude, [&] {

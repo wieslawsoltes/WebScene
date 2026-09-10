@@ -1053,3 +1053,21 @@ rejects negative factors/bases, malformed numbers, excess components and overflo
 The regression failed before the fix; all 55 compiler tests and native contracts
 pass afterward. This closes this shorthand grammar inconsistency only; broader
 function grammar and source-location gates remain open.
+
+### Shared media-condition numeric validation (2026-09-10)
+
+Compiler lowering and `--check-css` previously duplicated an integer-only media
+condition regex; the audit path also omitted numeric conversion/range checks.
+Both now use one min/max width/height condition parser and the validated pixel
+length grammar. Supported values include signs, decimals, exponents, unitless
+zero, case-insensitive keywords/units and surrounding whitespace. Negative bounds
+are retained so their comparisons have their natural always/never-match result
+for nonnegative viewport dimensions.
+
+Independent tests verify audit/compiler agreement for accepted and rejected
+values and inspect generated axis/bound values. Overflow, malformed numbers,
+nonzero unitless values and unsupported units fail both paths. All 56 compiler
+tests and native contracts passed; the additional generated-bound assertions pass
+in the focused regression. General media expressions, relative media lengths and
+browser differential coverage remain open; this is numeric validation closure
+for the existing pixel min/max condition subset only.

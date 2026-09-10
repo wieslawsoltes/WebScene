@@ -124,6 +124,26 @@ class CompilerTests(unittest.TestCase):
         source.write_text('div { display:grid; grid-template-columns:repeat(3,1fr); }')
         result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
+    def test_media_numeric_grammar_audit_and_compile_agree(self):
+        for condition,generated in [('(min-width:.5px)', ',0.5f,1e+09f,0,0.0f,1e+09f}'),
+                                    ('(MAX-WIDTH: +2E2PX)', ',0.0f,200.0f,0,0.0f,1e+09f}'),
+                                    ('( min-height : 0 )', ',0.0f,1e+09f,0,0.0f,1e+09f}'),
+                                    ('(max-height:-1px)', ',0.0f,1e+09f,0,0.0f,-1.0f}')]:
+            css='@media '+condition+' { div { width:1px; } }'
+            result,out=self.compile('<div></div>',css)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn(generated,out.read_text())
+            source=out.with_suffix('.css');source.write_text(css)
+            audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+            self.assertEqual(audit.returncode,0,audit.stderr)
+        for value in ['1.', '1e', '2', '1 px', '1e999px', 'auto', '10%']:
+            css='@media (min-width:'+value+') { div { width:1px; } }'
+            result,out=self.compile('<div></div>',css)
+            self.assertNotEqual(result.returncode,0,value)
+            source=out.with_suffix('.css');source.write_text(css)
+            audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+            self.assertNotEqual(audit.returncode,0,value)
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'
