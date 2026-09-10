@@ -108,3 +108,10 @@ upstream pipelines (instanced AA lines, lit meshes and xray meshes), including
 4x MSAA, blending and depth states. Creation succeeds on Metal through WebScene's
 native device helper without V8. Frame submission/readback and visible Kestrel
 rendering remain unverified; pipeline creation alone is not an end-to-end test.
+
+`kestrel.gpu_renderer` now uploads native vertices/uniforms, manages 4x MSAA and
+depth attachments, submits mesh/line draws and resolves to a supplied texture
+view. A Metal readback test verifies red triangle pixels, green line pixels and
+background pixels from a real submitted frame. Readback is diagnostic only.
+This test does not yet exercise Foco presentation, Kestrel UI, resize sequences,
+grid rendering or annotations; those remain required integration work.
