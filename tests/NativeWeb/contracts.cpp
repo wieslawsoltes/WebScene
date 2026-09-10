@@ -160,6 +160,22 @@ int main() {
   d.attribute(variable_margin, "class", "invalid");
   d.render(800, 600);
   check(d.bounds(variable_margin).x == d.bounds(margin_container).x, "invalid variable margin resets to zero");
+  d.attribute(variable_margin, "class", "longhand");
+  d.render(800, 600);
+  check(d.bounds(variable_margin).x - d.bounds(margin_container).x == 10,
+        "margin longhand replaces one auto shorthand side");
+  d.attribute(variable_margin, "class", "longhand bad-longhand");
+  d.render(800, 600);
+  check(d.bounds(variable_margin).x == d.bounds(margin_container).x,
+        "invalid margin longhand resets its side instead of taking fallback");
+  d.attribute(variable_margin, "class", "longhand auto-longhand");
+  d.render(800, 600);
+  check(d.bounds(variable_margin).x - d.bounds(margin_container).x == 40,
+        "variable longhand restores auto centering");
+  d.remove_attribute(variable_margin, "class");
+  d.render(800, 600);
+  check(d.bounds(variable_margin).x - d.bounds(margin_container).x == 40,
+        "removing margin longhand preserves shorthand auto state");
   auto variable_padding = d.find("variable-padding");
   check(d.bounds(variable_padding).width == 28 && d.bounds(variable_padding).height == 14,
         "compiled variable padding expands both axes");

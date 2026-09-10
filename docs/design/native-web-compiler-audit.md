@@ -772,3 +772,12 @@ Native regression verifies block centering via variable auto margins, transition
 to a negative left margin without stale auto state, and invalid-value reset.
 All 50 compiler tests and native contracts pass. Margin longhand cascade tests,
 case-insensitive variable auto, calc and collapsing-margin parity remain open.
+
+### Margin longhand cascade coverage (2026-09-10)
+
+Native contracts now verify a variable margin-left overrides one auto shorthand
+side, a multi-token invalid value resets that side without selecting fallback,
+a subsequent auto value restores centering, and class removal retains shorthand
+auto behavior. The native contract suite passes without a lowering change. This
+closes the missing longhand interaction regression for the supported token
+profile; collapsing margins and broader keyword/expression support remain open.
