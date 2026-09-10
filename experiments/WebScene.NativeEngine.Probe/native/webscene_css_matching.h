@@ -1,5 +1,6 @@
 #pragma once
 #include "webscene_css_selectors.h"
+#include "webscene_native_form_state.h"
 #include "webscene_css_declarations.h"
 #include <charconv>
 #include <sstream>
@@ -214,5 +215,17 @@ inline bool direction_matches(const native_document& document,const dom_node& no
                     return false;
                 }
                 return true;
+}
+inline bool checked_matches(const dom_node& node) {
+    const auto type=node.attributes.find("type");
+    const bool checkable=node.tag=="input" && type!=node.attributes.end() &&
+        (type->second=="checkbox" || type->second=="radio");
+    if(checkable) return node.form_control().checkedness_initialized ?
+        node.form_control().checkedness : node.attributes.contains("checked");
+    return node.tag=="option" && forms::option_is_selected(const_cast<dom_node&>(node));
+}
+inline bool target_matches(const dom_node& node,std::string_view hash) {
+    if(hash.starts_with('#')) hash.remove_prefix(1);
+    return !hash.empty() && node.id_attribute==hash;
 }
 } // namespace webscene_native::css

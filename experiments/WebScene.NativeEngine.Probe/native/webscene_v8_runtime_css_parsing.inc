@@ -2269,21 +2269,9 @@
                     return false;
                 }
                 auto hash = to_utf8(isolate, hash_value);
-                if (!hash.empty() && hash.front() == '#') hash.erase(0U, 1U);
-                if (hash.empty() || node.id_attribute != hash) return false;
+                if (!css::target_matches(node,hash)) return false;
             } else if (name == "checked") {
-                const auto input_type = node.attributes.find("type");
-                const auto checkable_input = node.tag == "input"
-                    && input_type != node.attributes.end()
-                    && (input_type->second == "checkbox" || input_type->second == "radio");
-                const auto checked_input = checkable_input
-                    && (node.form_control().checkedness_initialized
-                        ? node.form_control().checkedness
-                        : node.attributes.contains("checked"));
-                const auto selected_option = node.tag == "option"
-                    && option_is_selected(const_cast<dom_node&>(node));
-                if (!checked_input
-                    && !selected_option) return false;
+                if (!css::checked_matches(node)) return false;
             } else if (name == "hover" || name == "focus" || name == "focus-visible" || name == "focus-within") {
                 if (!css::interaction_matches(document,node,name,
                     {hover_target,active_element,focus_visible},is_text_control(&node))) return false;

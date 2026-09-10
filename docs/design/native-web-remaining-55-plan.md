@@ -352,3 +352,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   cascade regressions pass. Existing behavior is preserved; broader language-range
   support and automatic direction detection are not added by this extraction.
   Full compound matching and cascade execution remain open.
+
+- Form/URL selector boundary: selected-option resolution and its traversal helpers
+  now live in webscene_native_form_state.h and serve both DOM properties and CSS.
+  Shared checked matching consumes live native checkbox/option state. Target
+  matching consumes a plain hash string; the V8 adapter still obtains the current
+  context's hash. Native service tests cover default/authored option selection,
+  live state overriding attributes, checkbox state and empty/matching URL targets.
+  Service and runtime pointer/positional/iframe cascade regressions pass. Compound
+  matching still contains recursive selector/cache dependencies and is not yet a
+  standalone service; no additional browser-compliance claim is made.

@@ -85,5 +85,23 @@ int main() {
     legend.attributes["lang"]="";
     if(language_matches(document,exempt,"en")) return 19;
     if(!direction_matches(document,select,"ltr")) return 20;
+    using webscene_native::css::checked_matches;
+    auto& second_option=document.create_element("option");
+    document.append_child(select,second_option);
+    if(!checked_matches(option) || checked_matches(second_option)) return 21;
+    second_option.attributes["selected"]="";
+    if(checked_matches(option) || !checked_matches(second_option)) return 22;
+    second_option.mutable_form_control().selectedness_initialized=true;
+    second_option.mutable_form_control().selectedness=false;
+    if(checked_matches(second_option)) return 23;
+    blocked.attributes["type"]="checkbox";blocked.attributes["checked"]="";
+    if(!checked_matches(blocked)) return 24;
+    blocked.mutable_form_control().checkedness_initialized=true;
+    blocked.mutable_form_control().checkedness=false;
+    if(checked_matches(blocked)) return 25;
+    blocked.id_attribute="destination";
+    if(!webscene_native::css::target_matches(blocked,"#destination") ||
+       webscene_native::css::target_matches(blocked,"#") ||
+       webscene_native::css::target_matches(blocked,"#elsewhere")) return 26;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
