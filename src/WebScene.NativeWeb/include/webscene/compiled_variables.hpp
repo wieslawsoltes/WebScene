@@ -36,6 +36,18 @@ inline std::optional<webscene_native::css_length> add_compiled_lengths(
   return left;
 }
 
+inline std::optional<webscene_native::css_length> scale_compiled_length(
+    webscene_native::css_length value, float factor) {
+  using unit = webscene_native::length_unit;
+  if (value.unit != unit::pixels && value.unit != unit::percent && value.unit != unit::em &&
+      value.unit != unit::rem && value.unit != unit::viewport_width && value.unit != unit::viewport_height)
+    return std::nullopt;
+  value.value *= factor;
+  value.pixel_offset *= factor;
+  if (!std::isfinite(value.value) || !std::isfinite(value.pixel_offset)) return std::nullopt;
+  return value;
+}
+
 // Tokens are supplied by the compiler. Evaluation substitutes token sequences;
 // it never lexes CSS text. Property lowering consumes the resulting typed IR.
 struct variable_token {

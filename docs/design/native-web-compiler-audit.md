@@ -433,3 +433,13 @@ addition/subtraction. Native geometry tests use `calc(50% - (15px + 5px))` and
 `calc(var(--missing-offset, 5px) + 20px - 10px)`; expected positions remain 80px
 and 15px. Compiler and native contract tests pass. Product/division and richer
 mixed-unit representation remain open.
+
+### Scalar products in positional calc (2026-09-10)
+
+Added typed length scaling and compiler lowering for multiplication by literal
+scalars (either side) and division by literal scalars. Operator precedence and
+chained product evaluation are exercised by native geometry fixtures that mix
+percentages, pixel offsets, groups and variable length operands. Compiler tests
+reject division by zero, length×length and scalar÷length. All 41 compiler tests
+and native contracts pass. Scalar variables/expressions, general dimensional
+algebra and additional calc-consuming properties remain open.

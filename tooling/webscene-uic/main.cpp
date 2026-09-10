@@ -153,6 +153,26 @@ static std::string compiled_length_expression(std::string value) {
           (value[i]=='-' ? "true" : "false") + ");}()";
     }
   }
+  depth = 0;
+  for (size_t i = value.size(); i-- > 0;) {
+    if (value[i] == ')') ++depth;
+    else if (value[i] == '(') --depth;
+    else if (depth == 0 && (value[i] == '*' || value[i] == '/')) {
+      auto left = trim(value.substr(0, i)), right = trim(value.substr(i + 1));
+      const std::regex scalar(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)");
+      if (value[i] == '*' && std::regex_match(left, scalar)) std::swap(left, right);
+      if (!std::regex_match(right, scalar))
+        throw std::runtime_error("compiled length product requires a literal scalar operand");
+      auto factor = std::stof(right);
+      if (value[i] == '/') {
+        if (factor == 0) throw std::runtime_error("compiled length division by zero");
+        factor = 1 / factor;
+      }
+      if (!std::isfinite(factor)) throw std::runtime_error("non-finite calc scalar");
+      return "[&]()->std::optional<webscene::native_web::length>{auto v=" + compiled_length_expression(left) +
+          ";if(!v)return std::nullopt;return webscene::native_web::scale_compiled_length(*v," + number(factor) + ");}()";
+    }
+  }
   if (value.starts_with("var("))
     return "[&]()->std::optional<webscene::native_web::length>{auto v=s.evaluate(" + variable_code(value) +
         ");if(v&&v->size()==1)return (*v)[0].length;return std::nullopt;}()";

@@ -43,6 +43,11 @@ class CompilerTests(unittest.TestCase):
         result,_=self.compile('<div></div>', 'div { background-color:none; }')
         self.assertNotEqual(result.returncode,0)
 
+    def test_calc_rejects_invalid_length_products(self):
+        for value in ['calc(10px / 0)', 'calc(10px * 2px)', 'calc(2 / 10px)']:
+            result,_=self.compile('<div></div>', 'div { left:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_inset_shorthand(self):
         for value,expected in [('1px',[1,1,1,1]),('1px 2px',[1,2,1,2]),
                                ('1px 2px 3px',[1,2,3,2]),('1px 2px 3px 4px',[1,2,3,4])]:
