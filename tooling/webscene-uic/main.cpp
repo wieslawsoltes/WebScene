@@ -68,7 +68,13 @@ static std::vector<std::string> component_values(const std::string &value) {
   return result;
 }
 
-static std::string length(const std::string &value) {
+static std::string length(std::string value) {
+  if (!value.empty() && (std::isdigit(static_cast<unsigned char>(value[0])) ||
+      value[0] == '+' || value[0] == '-' || value[0] == '.')) {
+    std::ranges::transform(value, value.begin(), [](unsigned char c) {
+      return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : static_cast<char>(c);
+    });
+  }
   static const std::regex valid(
       R"(^([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh)?|auto)$)");
   if (!std::regex_match(value, valid) ||
@@ -131,7 +137,7 @@ static std::string variable_code(const std::string &text) {
       throw std::runtime_error("custom-property CSS-wide keywords are not supported yet");
     std::string typed_length = "std::nullopt", typed_color = "std::nullopt";
     const bool zero = std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)")) && std::stof(token) == 0;
-    if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh))")) || zero)
+    if (std::regex_match(token, std::regex(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?(px|%|em|rem|vw|vh|dvw|dvh))", std::regex::icase)) || zero)
       typed_length = "webscene::native_web::length" + length(token);
     if (std::regex_match(token, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) ||
         token == "transparent" || token == "black" || token == "white")

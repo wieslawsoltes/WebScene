@@ -168,6 +168,16 @@ class CompilerTests(unittest.TestCase):
             self.assertEqual(upper.returncode,0,upper.stderr)
             self.assertEqual(expected,[line for line in out.read_text().splitlines() if 'd.add_rule' in line])
 
+    def test_length_unit_case(self):
+        for unit in ['PX','EM','REM','VW','VH','DVW','DVH']:
+            result,out=self.compile('<div></div>', 'div { width:2'+unit+'; height:var(--Size); --Size:3'+unit+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('"--Size"',out.read_text())
+            self.assertNotIn('parse_length',out.read_text())
+        for value in ['1e999PX','1PPX','2 PX']:
+            result,_=self.compile('<div></div>', 'div { width:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)

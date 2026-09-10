@@ -682,3 +682,14 @@ forms across all six families. All 47 compiler tests and native contracts pass.
 This normalization is confined to keyword lookup; custom-property names and
 case-sensitive strings are untouched. Other property grammars, function names,
 units and escaped keyword identifiers still need case-handling coverage.
+
+### Common length unit casing (2026-09-10)
+
+The shared compiler length parser normalizes ASCII case in numeric dimensions,
+and custom-property token lowering recognizes the same unit variants while
+preserving custom-property names. Tests cover PX/EM/REM/VW/VH/DVW/DVH in direct
+widths and variable dimensions, plus overflow and malformed unit rejection.
+The native numeric fixture now uses uppercase PX and retains its geometry check.
+All 48 compiler tests and native contracts pass. Property-specific prevalidators
+(e.g. border widths and spacing), escaped units and keyword casing outside the
+previously audited enum families remain open.
