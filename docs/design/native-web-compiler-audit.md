@@ -596,3 +596,16 @@ Native contracts verify `text_content` is `A B` for adjacent spans and retains
 both spaces in a preformatted element. All 45 compiler tests and native contracts
 pass. These checks prove DOM preservation, not full inline shaping or rendered
 whitespace parity; those remain part of layout differential coverage.
+
+### Native attribute removal (2026-09-10)
+
+HTML boolean attributes correctly use presence, including `disabled="false"`,
+but C++ authoring lacked removal. Added `document::remove_attribute`, clearing
+special id/class storage and invalidating native styles after removal. Missing
+attributes are a no-op. No parsing or node reconstruction is involved.
+
+Native contracts verify disabled presence prevents focus, removal restores focus
+eligibility and removes the disabled selector's width, and removing id clears
+lookup state. All 45 compiler tests and native contracts pass. General HTML form
+semantics, tabindex ordering and focus cleanup on disabling an already-focused
+control still require audit; this closes only the missing mutation operation.

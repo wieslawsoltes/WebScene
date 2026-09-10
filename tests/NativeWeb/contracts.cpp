@@ -415,6 +415,21 @@ int main() {
     states.attribute(button, "disabled", "");
     states.render(500, 300);
     check(states.bounds(button).width == 150, "disabled selector applies");
+    states.attribute(button, "disabled", "false");
+    states.focus(0);
+    states.focus(button);
+    check(states.focused() == 0, "boolean disabled uses presence, not string value");
+    states.remove_attribute(button, "disabled");
+    check(!states.attribute(button, "disabled"), "attribute removal clears presence");
+    states.render(500, 300);
+    check(states.bounds(button).width != 150, "attribute removal invalidates selector style");
+    states.focus(button);
+    check(states.focused() == button, "removing disabled restores focus eligibility");
+    states.attribute(button, "id", "temporary-id");
+    check(states.find("temporary-id") == button, "native id is searchable");
+    states.remove_attribute(button, "id");
+    check(states.find("temporary-id") == 0, "removing id clears native lookup state");
+    states.remove_attribute(button, "missing");
   }
   {
     document responsive;

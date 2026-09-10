@@ -138,6 +138,13 @@ void document::attribute(node_id id, std::string name, std::string value) {
   n.attributes[std::move(name)] = std::move(value);
   state_->dom.mark_dirty();
 }
+void document::remove_attribute(node_id id, std::string_view name) {
+  auto &n = state_->node(id);
+  if (!n.attributes.erase(std::string(name))) return;
+  if (name == "id") n.id_attribute.clear();
+  if (name == "class") n.class_name.clear();
+  state_->dom.mark_dirty();
+}
 void document::remove(node_id id) {
   auto &n = state_->node(id);
   if (id == body() || id == root())
