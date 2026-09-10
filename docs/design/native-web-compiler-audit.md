@@ -649,3 +649,16 @@ existing focus when an ancestor becomes hidden remain open.
 
 Inspection also confirmed subtree removal already removes inline-target rules
 and listeners belonging to removed nodes; no duplicate cleanup mechanism added.
+
+### Compiled hidden attribute (2026-09-10)
+
+Strict compilation now permits ordinary HTML hidden state, reusing the native
+engine's existing default-display behavior. The `until-found` keyword is rejected
+explicitly because native find/reveal semantics are not implemented. Other values,
+including `false`, preserve HTML hidden-state behavior.
+
+Compiler tests cover accepted values and case-insensitive until-found rejection.
+Native contracts verify the compiled element has no layout height, removing the
+attribute restores its 17px height, and reapplying hidden suppresses it again.
+All 46 compiler tests and native contracts pass. Find/reveal and focus cleanup
+on hidden-state changes remain open.

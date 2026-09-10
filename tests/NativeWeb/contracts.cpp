@@ -109,6 +109,15 @@ int main() {
   }
   document d;
   auto refs = compiled_ui::build(d);
+  d.render(800, 600);
+  auto hidden_probe = d.find("hidden-probe");
+  check(d.bounds(hidden_probe).height == 0, "compiled hidden attribute suppresses layout");
+  d.remove_attribute(hidden_probe, "hidden");
+  d.render(800, 600);
+  check(d.bounds(hidden_probe).height == 17, "native removal reveals compiled hidden element");
+  d.attribute(hidden_probe, "hidden", "");
+  d.render(800, 600);
+  check(d.bounds(hidden_probe).height == 0, "native attribute update hides element again");
   check(d.text_content(d.find("inline-whitespace")) == "A B",
         "compiled HTML preserves whitespace between inline elements");
   check(d.text_content(d.find("preserved-whitespace")) == "  ",

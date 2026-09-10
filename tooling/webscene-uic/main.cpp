@@ -991,7 +991,12 @@ struct compiler {
         if (!preview) throw std::runtime_error("JavaScript attributes are not supported in Native Web");
         warning("skipped JavaScript attribute " + k); continue;
       }
-      if (k != "id" && k != "class" && k != "width" && k != "height" &&
+      if (k == "hidden") {
+        auto state = v;
+        std::ranges::transform(state, state.begin(), [](unsigned char c) { return std::tolower(c); });
+        if (state == "until-found") throw std::runtime_error("hidden until-found requires native find/reveal support");
+      }
+      if (k != "hidden" && k != "id" && k != "class" && k != "width" && k != "height" &&
           k != "tabindex" && k != "disabled" && k != "type" && k != "role" &&
           !k.starts_with("aria-") && !k.starts_with("data-") &&
           !(std::set<std::string>{"viewBox","viewbox","xmlns","d","points","fill","stroke","stroke-width","stroke-linecap","stroke-linejoin","x","y","x1","x2","y1","y2","cx","cy","r","rx","ry"}.contains(k)))

@@ -150,6 +150,15 @@ class CompilerTests(unittest.TestCase):
         self.assertRegex(generated, r'd\.text\(n[0-9]+," "\);')
         self.assertRegex(generated, r'd\.text\(n[0-9]+,"  "\);')
 
+    def test_hidden_attribute(self):
+        for value in ['', 'hidden', 'false']:
+            result,out=self.compile('<div hidden="'+value+'">Hidden</div>')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('"hidden",',out.read_text())
+        result,_=self.compile('<div hidden="UNTIL-FOUND">Hidden</div>')
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('find/reveal support',result.stderr)
+
     def test_custom_property_expressions(self):
         result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
         self.assertEqual(result.returncode,0,result.stderr)
