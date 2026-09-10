@@ -2,7 +2,7 @@
 #include "webgpu_canvas_interop.h"
 #if defined(__APPLE__)
 #include "dawn_scene_image_snapshot.h"
-#include "v8_webgpu_iosurface_canvas_host.h"
+#include "webgpu_iosurface_canvas_host.h"
 namespace webscene::graphics {
 using platform_dawn_canvas_host=dawn_iosurface_canvas_host;
 using platform_dawn_scene_snapshot=dawn_scene_image_snapshot;
@@ -13,7 +13,7 @@ inline auto make_platform_webgpu_canvas_host(std::shared_ptr<platform_dawn_canva
 }
 #elif defined(_WIN32)
 #include "dawn_dxgi_scene_snapshot.h"
-#include "v8_webgpu_dxgi_canvas_host.h"
+#include "webgpu_dxgi_canvas_host.h"
 namespace webscene::graphics {
 using platform_dawn_canvas_host=dawn_dxgi_canvas_host;
 using platform_dawn_scene_snapshot=dawn_dxgi_scene_snapshot;

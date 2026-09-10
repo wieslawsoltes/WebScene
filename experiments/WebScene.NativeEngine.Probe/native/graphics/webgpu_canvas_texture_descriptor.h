@@ -1,6 +1,6 @@
 #pragma once
-#include "v8_webgpu_canvas_configuration.h"
-#include "v8_webgpu_texture_descriptor.h"
+#include "webgpu_canvas_configuration.h"
+#include "webgpu_texture_descriptor.h"
 namespace webscene::graphics {
 // Content-side checks specific to canvas formats/usage. Required-format feature
 // checks must precede these in configure; native texture validation follows.

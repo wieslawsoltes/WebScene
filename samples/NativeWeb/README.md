@@ -133,3 +133,18 @@ instances cannot overwrite each other's ID lookup. Styles live in the document's
 compiled stylesheet and continue to match dynamic classes. Nested templates,
 unwrapped root text, scripts and unsupported elements are rejected at compile
 time. The Native Web sample's Add Item command now uses this path.
+
+### Native WebGPU validation
+
+Configure `src/WebScene.NativeWeb` with `WEBSCENE_NATIVE_WEB_GPU=ON` and
+`WEBSCENE_GRAPHICS_SDK_ROOT` pointing at a verified Dawn SDK RID directory.
+Build `native_web_gpu`, then run `ctest -R '^native_web_gpu$' --output-on-failure`
+from that build directory. This target links Dawn and system libraries without V8.
+
+The native headers provide explicit device discovery and Canvas
+configure/current-texture/end-frame/resize/unconfigure APIs. The hardware test
+renders a clear through the native Canvas context and checks 68 pixels using
+diagnostic readback. This is not the production presentation path and does not
+prove Foco compositor integration. The native platform host adapters reuse the
+existing IOSurface/DXGI providers; their end-to-end connection to the Native Web
+Foco carrier remains outstanding. Only macOS Metal has been run for this new test.
