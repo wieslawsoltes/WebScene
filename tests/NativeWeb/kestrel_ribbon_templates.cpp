@@ -31,6 +31,22 @@ int main() {
     throw std::runtime_error("Original ribbon tab labels or ordering changed");
   d.dispatch(tabs[3], "click");
   if (selected != 3) throw std::runtime_error("Native tab handler failed");
+  auto ribbon = d.element(d.body(), "div");
+  std::vector<node_id> groups;
+  for (const char *name : {"Draw", "Modify", "Annotation"}) {
+    auto group = compiled_ui::instantiate(d, ribbon, "ribbon-group");
+    d.set_text(group.named("name"), name);
+    auto column = compiled_ui::instantiate(d, group.named("tools"), "ribbon-column");
+    auto launcher = compiled_ui::instantiate(d, group.named("name"), "ribbon-launcher");
+    d.attribute(launcher.named("launcher"), "data-action", "layers");
+    d.attribute(launcher.named("launcher"), "aria-label", std::string("Open ") + name);
+    if (!column.named("column")) throw std::runtime_error("Missing named column slot");
+    groups.push_back(group.named("group"));
+  }
+  if (d.text_content(ribbon) != "Draw↗Modify↗Annotation↗")
+    throw std::runtime_error("Parameterized ribbon structure changed");
+  for (auto group : groups) d.remove(group);
+  if (!d.text_content(ribbon).empty()) throw std::runtime_error("Nested template disposal failed");
   for (auto id : tabs) d.remove(id);
   handlers.clear();
   if (!d.text_content(parent).empty()) throw std::runtime_error("Tab disposal failed");
