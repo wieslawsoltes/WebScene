@@ -1757,3 +1757,14 @@ fixture now includes those comments and retains its expected paint/mutation resu
 All 91 compiler tests pass, as do rebuilt smoke, template, module-template and
 native contract suites. This improves callers of component_values; direct var/calc
 scanners and other ad hoc grammars still require comment/token-tree auditing.
+
+### Shared comment scanning for direct variables and calc (2026-09-10)
+
+Added a no-split mode to the shared component scanner and used it before direct
+variable/custom-value and calc lowering. Comments containing delimiters no longer
+corrupt those paths. A compiler regression failed on a comment after a variable
+name before the fix. All 92 compiler tests pass; native contracts retain the
+expected 40px calc inset with comments inside the escaped-name reference and
+arithmetic expression. Token-boundary subtleties (including comments adjacent to
+operators without authored whitespace) and full component-token semantics remain
+open; this does not close the grammar family.

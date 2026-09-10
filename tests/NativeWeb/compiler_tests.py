@@ -83,6 +83,13 @@ class CompilerTests(unittest.TestCase):
             result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb, #fff '+percent+', transparent); }')
             self.assertNotEqual(result.returncode,0,percent)
 
+    def test_direct_variable_and_calc_comments(self):
+        for name,value in [('width', 'var(--Size /* , ) */, 12px)'),
+                           ('left', 'calc(var(--Size, 12px) + /* ) , ( */ 2px)'),
+                           ('--Saved', 'var(--Size /* ) , */, 12px)')]:
+            result,_=self.compile('<div></div>', 'div { '+name+':'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+
     def test_component_comments_do_not_change_function_boundaries(self):
         for value in ['color-mix(in /* , ) ( */ srgb, #fff 50%, transparent)',
                       'color-mix(in srgb, var(--Color, #fff) /* , ) */ 50%, transparent)']:

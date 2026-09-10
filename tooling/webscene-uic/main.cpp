@@ -67,7 +67,7 @@ static bool css_number(const std::string &value) {
   static const std::regex grammar(R"([+-]?([0-9]+(\.[0-9]+)?|\.[0-9]+)([eE][+-]?[0-9]+)?)");
   return std::regex_match(value, grammar);
 }
-static std::vector<std::string> component_values(const std::string &value, char separator = 0) {
+static std::vector<std::string> component_values(const std::string &value, char separator = 0, bool split = true) {
   std::vector<std::string> result;
   std::string token;
   int depth = 0;
@@ -91,13 +91,13 @@ static std::vector<std::string> component_values(const std::string &value, char 
     if (c == '/' && i + 1 < value.size() && value[i + 1] == '*') {
       const auto end = value.find("*/", i + 2);
       if (end == std::string::npos) throw std::runtime_error("unclosed CSS comment");
-      if (!separator && depth == 0) flush(); else token += ' ';
+      if (split && !separator && depth == 0) flush(); else token += ' ';
       i = end + 1;
       continue;
     }
     if (c == '(') ++depth;
     if (c == ')' && --depth < 0) throw std::runtime_error("unbalanced CSS function");
-    if (depth == 0 && (separator ? c == separator : std::isspace(static_cast<unsigned char>(c)))) flush();
+    if (split && depth == 0 && (separator ? c == separator : std::isspace(static_cast<unsigned char>(c)))) flush();
     else token += c;
   }
   if (depth || quote) throw std::runtime_error("unclosed CSS function or string");
@@ -148,7 +148,9 @@ static float pixel_length(const std::string &value, bool nonnegative) {
 }
 // Initial custom-value token grammar. Unsupported token forms remain errors;
 // declarations are never passed as CSS strings to the application.
-static std::string variable_code(const std::string &text) {
+static std::string variable_code(const std::string &input) {
+  const auto components = component_values(input, 0, false);
+  const auto text = components.empty() ? std::string{} : components.front();
   std::string result = "{";
   size_t cursor = 0;
   auto append = [&](const std::string &entry) {
@@ -217,7 +219,8 @@ static std::string variable_code(const std::string &text) {
 // Lower additive length expressions into typed native operations. Parsing is
 // confined to this compiler; generated code evaluates values, not CSS strings.
 static std::string compiled_length_expression(std::string value) {
-  value = trim(value);
+  const auto components = component_values(value, 0, false);
+  value = components.empty() ? std::string{} : components.front();
   for (;;) {
     size_t opening = ascii_keyword(value.substr(0, 5)) == "calc(" ? 4 : value.starts_with('(') ? 0 : std::string::npos;
     if (opening == std::string::npos) break;
