@@ -12,7 +12,10 @@
 #include "webscene_css_rule_payload.h"
 #include "webscene_css_resources.h"
 #include "webscene_css_rule_preparation.h"
+#include "webscene_css_stylesheet.h"
 #include <iostream>
+#include <fstream>
+#include <iterator>
 
 struct stylesheet_test_host {
     struct rule {
@@ -39,7 +42,24 @@ struct stylesheet_test_host {
     }
 
 };
-int main() {
+int main(int argc,char** argv) {
+    if(argc==2) {
+        std::ifstream input(argv[1]);
+        if(!input) return 82;
+        const std::string source((std::istreambuf_iterator<char>(input)),{});
+        const auto sheet=webscene_native::css::prepare_stylesheet(source,argv[1],
+            [](const auto&) { return false; });
+        if(!sheet || sheet->rules.empty()) return 83;
+        size_t declarations=0;
+        for(const auto& rule:sheet->rules) declarations+=rule->declarations.size();
+        std::cout<<"Prepared CSS: rules="<<sheet->rules.size()
+            <<" declarations="<<declarations<<" keyframes="<<sheet->keyframes.size()
+            <<" diagnostics="<<sheet->diagnostics.size()<<"\n";
+        for(const auto& diagnostic:sheet->diagnostics)
+            std::cout<<diagnostic.classification<<": "<<diagnostic.feature
+                <<" ("<<diagnostic.detail<<")\n";
+        return 0;
+    }
     using webscene_native::css::parse_declarations;
     const auto values=parse_declarations(R"CSS(
       COLOR: red !important; --Theme: blue; --theme: green;
@@ -383,5 +403,22 @@ int main() {
        stylesheet_host.rules.back().declarations[0].value!="url(\"asset://kestrel/images/grid.png\")") return 77;
     stylesheet_host.append_parsed_css_style_rule("div > > span",{{"color","red",false}}, {},css_base);
     if(stylesheet_host.rules.size()!=old_rule_count+2) return 78;
+    auto prepared=webscene_native::css::prepare_stylesheet(R"CSS(
+        .panel { background-image: url(../../images/grid.png); }
+        @media (min-width: 600px) { .panel { width: 50%; } }
+        @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    )CSS",css_base,[](const std::string&) { return false; });
+    if(!prepared || prepared->rules.size()!=2 || prepared->source_address!=css_base ||
+       prepared->rules[0]->declarations[0].value!="url(\"asset://kestrel/images/grid.png\")" ||
+       prepared->rules[1]->media_queries.size()!=1 || prepared->keyframes["fade"].opacity_stops.size()!=2 ||
+       prepared->diagnostics.size()!=2) return 79;
+    // Rule data outlives the preparation host and its temporary interning cache.
+    auto retained_rule=prepared->rules[0];
+    prepared.reset();
+    if(retained_rule->selector!=".panel" || retained_rule->compiled_selector.compiled_compounds.empty()) return 80;
+    const auto rejected=webscene_native::css::prepare_stylesheet(
+        "div > > span {color:red} @font-face {font-family: Test;src:url(test.woff2)}",
+        css_base,[](const auto&) { return true; });
+    if(!rejected || !rejected->rules.empty() || rejected->diagnostics.size()!=2) return 81;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

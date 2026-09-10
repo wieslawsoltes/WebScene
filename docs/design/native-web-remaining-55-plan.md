@@ -522,3 +522,17 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   URLs and invalid combinator rejection; parser error recovery remains intact.
   Native service and runtime relative-resource, iframe cascade and positional
   selector regressions pass. Whole-document native cascade remains unfinished.
+
+- Owned stylesheet preparation: webscene_css_stylesheet.h now assembles shared
+  parsing, rule preparation, immutable payloads and keyframes into an owned native
+  result with diagnostics. Media conditions remain attached for later live
+  matching; the caller supplies capability inventory. Native ownership and
+  diagnostics tests pass. Running native_web_css_service with the original
+  samples/NativeKestrel/reference/src/style.css prepares 407 selector-expanded
+  rules and 1520 declarations, with one retained keyframe definition. Its seven
+  diagnostics comprise five media conditions (the diagnostic command deliberately
+  supplies no media capabilities) and two partially supported keyframe blocks.
+  These syntax/preparation counts are not compiler support or visual-parity counts.
+  Unsupported animation properties, font registration, property application and
+  complete native document cascade remain open. This does not change the
+  compiled application's runtime parsing dependencies.
