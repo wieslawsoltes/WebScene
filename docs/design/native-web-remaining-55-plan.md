@@ -554,3 +554,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   verify pseudo-element rules do not accidentally match their originating DOM box.
   The service test passes. Candidate indexing, pseudo rule routing and complete
   document cascade application remain separate unfinished work.
+
+- Declaration precedence metadata extraction: the existing property bit groups
+  and alias/shorthand mapping now live in webscene_css_property_mask.h and all
+  runtime callers use that shared definition. Native tests cover combined groups,
+  aliases, custom-property exclusion and high-bit storage; runtime dimension,
+  inheritance, animation and iframe cascade regressions pass. Grouped-field
+  precedence limitations remain unchanged. This is a dependency for sharing the
+  full declaration dispatcher, not new property coverage or completed cascade.

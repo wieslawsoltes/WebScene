@@ -14,6 +14,7 @@
 #include "webscene_css_rule_preparation.h"
 #include "webscene_css_stylesheet.h"
 #include "webscene_css_media.h"
+#include "webscene_css_property_mask.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -446,5 +447,13 @@ int main(int argc,char** argv) {
     animated.class_name="other";
     if(live_query.matches_prepared(animated,live_sheet->rules[0]->compiled_selector) ||
        live_query.matches_prepared(animated,live_sheet->rules[1]->compiled_selector)) return 88;
+    using webscene_native::css::property_mask;
+    if(property_mask("background")!=(property_mask("background-color")|property_mask("background-image")) ||
+       property_mask("flex")!=(property_mask("flex-grow")|property_mask("flex-shrink")|property_mask("flex-basis")) ||
+       property_mask("transition")!=(property_mask("transition-property")|property_mask("transition-duration")|
+           property_mask("transition-delay")|property_mask("transition-timing-function")) ||
+       property_mask("inset-inline-start")!=property_mask("left") ||
+       property_mask("borderTopColor")!=property_mask("border") ||
+       property_mask("--custom")!=0 || property_mask("text-anchor")<=0xFFFFFFFFULL) return 89;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
