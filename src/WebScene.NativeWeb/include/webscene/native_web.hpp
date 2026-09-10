@@ -71,6 +71,15 @@ public:
   void set_font_family(std::string value) {
     value_.mutable_textual().font_family = std::move(value);
   }
+  void set_line_height(float value) { value_.line_height = value; }
+  void set_letter_spacing(float value) {
+    value_.letter_spacing = value;
+    value_.letter_spacing_specified = true;
+  }
+  void set_word_spacing(float value) {
+    value_.word_spacing = value;
+    value_.word_spacing_specified = true;
+  }
   void set_font_size(float value) { value_.font_size = value; }
   void set_flex_grow(float value) { value_.flex_grow = value; }
   void set_flex_shrink(float value) { value_.flex_shrink = value; }

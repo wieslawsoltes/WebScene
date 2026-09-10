@@ -38,6 +38,14 @@ class CompilerTests(unittest.TestCase):
     def test_control_state_selectors(self):
         result,out=self.compile('<button>Go</button>', 'button:active { width:20px; } button:disabled { opacity:0.34; } button:focus-visible { width:30px; }')
         self.assertEqual(result.returncode,0,result.stderr)
+    def test_text_metrics(self):
+        for value,expected in [('normal','-2.0f'),('1.5','-4.5f'),('30px','30.0f'),('inherit','-1.0f')]:
+            result,out=self.compile('<p>Text</p>', 'p { line-height:'+value+'; letter-spacing:1.05px; color:inherit; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_line_height('+expected+')',out.read_text())
+        for value in ['-1px','-1','bogus']:
+            result,_=self.compile('<p>Text</p>', 'p { line-height:'+value+'; }')
+            self.assertNotEqual(result.returncode,0)
     def test_font_family_compiles(self):
         result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
         self.assertEqual(result.returncode,0,result.stderr)

@@ -209,6 +209,8 @@ static std::string assignments(const std::string &name,
       throw std::runtime_error("invalid gap");
     return assignments("row-gap", a) + assignments("column-gap", b);
   }
+  if (name == "color" && (value == "inherit" || value == "unset"))
+    return "s.set_foreground_rgba(0u);";
   if (name == "background" || name == "background-color" || name == "color") {
     if (!std::regex_match(value, std::regex("#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|["
                                             "0-9a-fA-F]{6}|[0-9a-fA-F]{8})")) &&
@@ -275,6 +277,22 @@ static std::string assignments(const std::string &name,
                                     "::" + val->second) +
            ";";
   }
+  if (name == "line-height") {
+    if (value == "inherit" || value == "unset") return "s.set_line_height(-1.0f);";
+    if (value == "normal") return "s.set_line_height(-2.0f);";
+    if (std::regex_match(value, std::regex(R"([0-9]+(\.[0-9]+)?)")))
+      return "s.set_line_height(" + number(-3 - std::stof(value)) + ");";
+    if (!value.ends_with("px") || value.starts_with("-"))
+      throw std::runtime_error("line-height requires normal, nonnegative px or multiplier");
+    length(value);
+    return "s.set_line_height(" + number(std::stof(value)) + ");";
+  }
+  if (name == "letter-spacing" || name == "word-spacing") {
+    if (value == "normal") return "s.set_" + member + "(0.0f);";
+    if (!value.ends_with("px")) throw std::runtime_error("spacing currently requires px");
+    length(value);
+    return "s.set_" + member + "(" + number(std::stof(value)) + ");";
+  }
   if (name == "font-family") {
     if (value.empty())
       throw std::runtime_error("Empty font family");
@@ -282,6 +300,7 @@ static std::string assignments(const std::string &name,
            quote(value == "inherit" || value == "unset" ? "" : value) + ");";
   }
   if (name == "font-size") {
+    if (value == "inherit" || value == "unset") return "s.set_font_size(-1.0f);";
     if (!value.ends_with("px"))
       throw std::runtime_error("font-size currently requires px");
     auto l = native_document::parse_length(value);
@@ -290,6 +309,8 @@ static std::string assignments(const std::string &name,
       throw std::runtime_error("negative font size");
     return "s.font_size = " + number(l.value) + ";";
   }
+  if (name == "font-weight" && (value == "inherit" || value == "unset"))
+    return "s.set_font_weight(0);";
   if (name == "font-weight" || name == "opacity" || name == "flex-grow" ||
       name == "flex-shrink") {
     if (!std::regex_match(value, std::regex(R"([0-9]+(\.[0-9]+)?)")))
