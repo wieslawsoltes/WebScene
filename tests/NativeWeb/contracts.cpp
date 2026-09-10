@@ -800,6 +800,12 @@ int main() {
   d.render(800, 600);
   check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 80,
         "removing inherited custom names restores the original inset");
+  d.attribute(d.find("calc-parent"), "class", "unicode-offset");
+  d.render(800, 600);
+  check(d.bounds(d.find("calc-child")).x == d.bounds(d.find("calc-parent")).x + 34,
+        "escaped and Unicode custom names share decoded native identity");
+  d.remove_attribute(d.find("calc-parent"), "class");
+  d.render(800, 600);
   check(d.bounds(d.find("zero-variable")).width == 0,
         "unitless exponent zero retains length semantics after variable substitution");
   bool font_found = false;

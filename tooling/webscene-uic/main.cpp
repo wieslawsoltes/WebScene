@@ -149,8 +149,16 @@ static std::string variable_code(const std::string &text) {
       }
       if (end == text.size()) throw std::runtime_error("unclosed variable reference");
       auto name = trim(text.substr(start, (comma == std::string::npos ? end : comma) - start));
-      if (!std::regex_match(name, std::regex("--[A-Za-z0-9_-]+")))
+      // Let the build-time CSS tokenizer validate and decode identifiers,
+      // matching declaration names (including Unicode and CSS escapes).
+      auto parsed_name = parse_css_syntax_declarations(name + ":0");
+      if (!parsed_name || parsed_name.metrics.parse_error_count ||
+          parsed_name.declarations.size() != 1 ||
+          !parsed_name.declarations[0].name.starts_with("--") ||
+          parsed_name.declarations[0].name == "--" ||
+          parsed_name.declarations[0].value != "0")
         throw std::runtime_error("unsupported custom property name: " + name);
+      name = parsed_name.declarations[0].name;
       auto fallback = comma == std::string::npos ? "{}" : variable_code(text.substr(comma + 1, end - comma - 1));
       append("{" + kind + "reference," + quote(name) + "," + fallback + "," + (comma == std::string::npos ? "false" : "true") + "}");
       cursor = end + 1;

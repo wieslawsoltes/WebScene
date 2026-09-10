@@ -73,6 +73,15 @@ class CompilerTests(unittest.TestCase):
             rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
             self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
 
+    def test_unicode_and_escaped_custom_property_references(self):
+        for name in ['--é', '--尺寸', r'--\31 size', r'--caf\e9']:
+            result,out=self.compile('<div></div>', 'div { '+name+':12px; width:var('+name+'); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_width',out.read_text())
+        for name in ['--a:0;--b', '--a; color:red', '--a{}']:
+            result,_=self.compile('<div></div>', 'div { width:var('+name+', 1px); }')
+            self.assertNotEqual(result.returncode,0,name)
+
     def test_custom_names_allow_digit_and_hyphen_suffixes(self):
         for name in ['--1', '---', '--9-grid', '--_']:
             for declaration in ['width:var('+name+');', 'color:color-mix(in srgb,var('+name+') 50%,transparent);']:

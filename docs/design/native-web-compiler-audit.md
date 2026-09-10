@@ -1674,3 +1674,18 @@ A compiler regression failed on `--1` before the change. All 83 compiler tests n
 pass, as do native contracts covering an inherited `---:var(--1)` reference and
 class removal restoring the original inset. Escaped and non-ASCII identifiers
 remain open; this is not a claim of complete CSS identifier support.
+
+### Tokenizer-backed custom-property references (2026-09-10)
+
+Replaced var()'s ASCII identifier regex with validation/decoding through the
+existing build-time CSS declaration tokenizer. A single synthetic declaration
+must parse without errors and retain the expected sentinel value and a nonempty
+dashed name. This aligns reference identity with parsed definitions and rejects
+malformed names or additional declarations. No parser is added to generated apps.
+
+All 84 compiler tests pass, including Unicode and escaped names and malformed
+reference cases. Native contracts verify an inherited Unicode reference chain
+ending in an escaped spelling of café resolves to the expected 34px inset.
+The specialized color-mix regex still has its narrower ASCII input grammar;
+escaped punctuation inside var() scanning and broader custom-value token trees
+remain open. Identifier support outside this var() path is not implied complete.
