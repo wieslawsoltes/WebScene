@@ -1529,3 +1529,12 @@ space-evenly offsets of 16/64px and space-around offsets of 12/68px in the 100px
 container, accounting for the explicit gap before distributing remaining space.
 Rebuilt contracts pass. Negative free space and wrapped-line distribution remain
 open cases.
+
+### Normal gap in flex/grid profile (2026-09-10)
+
+Literal row-gap/column-gap normal now lower to zero for supported flex/grid
+layouts, including mixed shorthand values and case-insensitive spelling. Compiler
+coverage checks these forms; native flex geometry verifies switching from an
+explicit gap to normal restores zero-gap distribution. All 78 compiler tests and
+rebuilt contracts pass. Multicol's different normal-gap semantics require a distinct
+representation when that layout is supported; variable normal tokens remain open.

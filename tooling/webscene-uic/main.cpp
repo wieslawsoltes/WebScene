@@ -388,6 +388,8 @@ static std::string assignments(const std::string &name,
     });
     if (keyword == "auto") value = keyword;
   }
+  if ((name == "row-gap" || name == "column-gap") && ascii_keyword(value) == "normal")
+    value = "0"; // Flex/grid normal gaps are zero; multicol layout is not in this profile.
   auto member = name;
   std::replace(member.begin(), member.end(), '-', '_');
   if (ascii_keyword(value.substr(0, 5)) == "calc(" && (name == "left" || name == "right" || name == "top" || name == "bottom")) {

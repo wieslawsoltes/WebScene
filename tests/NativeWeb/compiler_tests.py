@@ -382,6 +382,13 @@ class CompilerTests(unittest.TestCase):
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn('display_mode::'+value.replace('-','_'),out.read_text())
 
+    def test_normal_gap_lowering(self):
+        for name,value in [('gap','normal'),('gap','NORMAL 12px'),
+                           ('gap','12px normal'),('row-gap','Normal'),('column-gap','NORMAL')]:
+            result,out=self.compile('<div></div>', 'div { '+name+':'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('{0.0f, static_cast<webscene::native_web::length_unit>',out.read_text())
+
     def test_css_syntax_error_location(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'invalid.css'
