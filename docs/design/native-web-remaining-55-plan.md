@@ -2181,3 +2181,14 @@ build and startup/capture smoke pass (GPU serial 1, clean exit). This smoke does
 not verify physical Line pointer interaction. Rubber-band preview, snapping,
 command-line Undo/numeric entry, drawing-default UI synchronization and complete
 application tool transitions remain unfinished; do not claim Line parity yet.
+
+### Hosted original Line interaction evidence
+
+Added --exercise-line-draw to the Foco preview. The check locates the original
+compiled ribbon button, sends press/release events through the Foco WebScene
+view, then clicks two viewport positions. It verifies the first point leaves the
+model unchanged and the second creates one LINE with endpoints matching camera
+unprojection. Native Escape cancels pending state; platform Undo restores the
+exact document snapshot. The rebuilt hosted run passed and captured with GPU
+serial 2, exiting 0. This exercises synthetic Foco view input, not physical OS
+mouse ingestion, snapping, rubber-band feedback, or a pixel check of the new line.

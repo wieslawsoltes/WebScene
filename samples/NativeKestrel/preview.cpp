@@ -19,6 +19,7 @@ static bool exercise_theme=false;
 static bool exercise_picking=false;
 static bool exercise_layer_edit=false;
 static bool exercise_line_edit=false;
+static bool exercise_line_draw=false;
 static bool exercise_color_picker=false;
 static bool show_color_picker=false;
 static bool show_group_dialog=false;
@@ -682,6 +683,47 @@ public:
             throw std::runtime_error("Panel toggle did not restore viewport width");
           navigation_serial=gpu_serial;navigation_exercised=true;
         }
+        if(exercise_line_draw && viewport && gpu_serial) {
+          const auto find_line=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
+            if(view->document.attribute(node,"data-action")=="line")return node;
+            for(auto child:view->document.children(node))if(auto found=self(self,child))return found;
+            return 0;
+          };
+          const auto button=find_line(find_line,view->document.root());
+          if(!button)throw std::runtime_error("Original Line button missing");
+          const auto host=view->bounds();
+          const auto click=[&](float x,float y) {
+            foco::pointer_event event;event.position={host.x+x,host.y+y};
+            event.kind=foco::pointer_event_kind::pressed;event.buttons=1;view->pointer_event_received(event);
+            event.kind=foco::pointer_event_kind::released;event.buttons=0;view->pointer_event_received(event);
+          };
+          auto box=view->document.bounds(button);click(box.x+box.width/2,box.y+box.height/2);
+          if(!line_active || view->document.attribute(view->document.find("tool-banner"),"hidden"))
+            throw std::runtime_error("Original Line pointer activation failed");
+          const auto before=model.data;
+          const auto area=view->document.bounds(view->document.find("scene"));
+          const auto first=viewport->camera.unproject(area.width*.4,area.height*.45,0);
+          const auto second=viewport->camera.unproject(area.width*.6,area.height*.55,0);
+          if(!first || !second)throw std::runtime_error("Line fixture has no drafting plane");
+          click(area.x+area.width*.4,area.y+area.height*.45);
+          if(model.data!=before || line_tool.points().size()!=1)throw std::runtime_error("First hosted Line point failed");
+          click(area.x+area.width*.6,area.y+area.height*.55);
+          if(model.data["entities"].size()!=before["entities"].size()+1)throw std::runtime_error("Hosted Line segment missing");
+          const auto& entity=model.data["entities"].back();
+          const auto near=[](const auto& p,const auto& expected) {
+            return std::abs(p[0].template get<double>()-expected.x)<.01 &&
+              std::abs(p[1].template get<double>()-expected.y)<.01 && std::abs(p[2].template get<double>()-expected.z)<.01;
+          };
+          if(entity["type"]!="LINE" || !near(entity["points"][0],*first) || !near(entity["points"][1],*second))
+            throw std::runtime_error("Hosted Line coordinates differ from viewport projection");
+          view->document.focus(view->document.find("viewport"));
+          foco::key_event key;key.value=foco::key::escape;view->key_event_received(key);
+          if(line_active || !line_tool.points().empty())throw std::runtime_error("Hosted Line cancellation failed");
+          key={};key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
+          if(model.data!=before)throw std::runtime_error("Hosted Line Undo failed");
+          exercise_line_draw=false;
+          std::cout<<"Hosted original Line ribbon, pointer geometry, Escape and Undo passed\n";
+        }
         if(exercise_drag_selection && viewport && gpu_serial) {
           const auto area=view->document.bounds(view->document.find("scene"));
           const auto host=view->bounds();const auto box=view->document.find("selection-window");
@@ -930,6 +972,7 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-shortcuts") exercise_shortcuts=true;
     else if(std::string_view(argv[i])=="--show-color-picker") {exercise_picking=true;exercise_color_picker=true;show_color_picker=true;}
     else if(std::string_view(argv[i])=="--exercise-color-picker") {exercise_picking=true;exercise_color_picker=true;}
+    else if(std::string_view(argv[i])=="--exercise-line-draw") exercise_line_draw=true;
     else if(std::string_view(argv[i])=="--exercise-line-edit") {exercise_picking=true;exercise_line_edit=true;}
     else if(std::string_view(argv[i])=="--exercise-layer-edit") {exercise_picking=true;exercise_layer_edit=true;}
     else if(std::string_view(argv[i])=="--exercise-picking") exercise_picking=true;
