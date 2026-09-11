@@ -1288,3 +1288,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   fix. Foco change intentionally uncommitted pending resource-resolution fix.
   Next inspect skia_graphite_renderer::draw_image images_ and command-surface
   fallback, which return unavailable for the updated native GPU packet resource.
+
+- Semantic resource narrowing: temporary logging in update_command_surface finds
+  packet compilation failures (40,449-byte packets, zero GPU images), not failed
+  Metal imports. There are 64,261 such attempts in /tmp/kestrel-resource-probe.log
+  during one 360-tick run, suggesting repeated scans of accumulated resources.
+  Do not assume attachment loss is proven: failing packets may include stale
+  resources, and current draw_image's failing ID must be correlated with its
+  resource attachment/generation. Next inspect scene resource attachment retention
+  and cache population. Temporary renderer logging removed; Foco's uncommitted
+  render-status preservation experiment remains. Rendering still incomplete.
