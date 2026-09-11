@@ -8,6 +8,15 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Group model foundation: group_entities accepts the dialog's captured entity IDs,
+requires at least two distinct editable members, generates a shared group ID/name,
+and commits one Create group undo transaction. Tests verify captured versus live
+selection, regrouping without altering old peers, duplicate/missing/noneditable
+members, ASCII whitespace trimming, blank-name fallback and exact undo. The
+native drawing suite passes. This operation is not yet connected to the original
+Group dialog; compiled dialog markup, modal focus/submit/cancel behavior, default
+name/count, maxlength validation and Unicode trim parity remain open.
+
 Native Ungroup action: the existing compiled ribbon action now calls the native
 model, collecting groups from editable selected entities and removing group and
 groupName from all editable members of those groups, matching the original

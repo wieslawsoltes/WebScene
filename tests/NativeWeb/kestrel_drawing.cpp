@@ -18,6 +18,25 @@ static void check(bool v, const char *message) {
 int main() {
   {
     kestrel::drawing model;
+    const auto a=model.add("POINT",{{"position",{0,0,0}},{"group","old"}});
+    const auto b=model.add("POINT",{{"position",{1,0,0}}});
+    const auto c=model.add("POINT",{{"position",{2,0,0}},{"group","old"}});
+    const auto before=model.data;
+    check(!model.group_entities({a,a},"duplicate"),"duplicate selection counted twice");
+    check(!model.group_entities({a,"missing"},"invalid") && model.data==before,"invalid group partially applied");
+    model.selection={c}; // A dialog submits its captured IDs, not current selection.
+    check(model.group_entities({a,b},"  Building  "),"group creation failed");
+    check(model.find(a)->at("group")==model.find(b)->at("group"),"members have different groups");
+    check(model.find(a)->at("groupName")=="Building" && model.find(c)->at("group")=="old","name or original peers changed");
+    check(model.undo()=="Create group" && model.data==before,"group undo failed");
+    check(model.group_entities({a,b}," \t"),"blank group name failed");
+    check(model.find(a)->at("groupName")=="Group","blank group name fallback failed");
+    check(model.undo()=="Create group" && model.data==before,"fallback group undo failed");
+    (*model.find(b))["hidden"]=true;const auto hidden=model.data;
+    check(!model.group_entities({a,b},"Hidden") && model.data==hidden,"noneditable captured member grouped");
+  }
+  {
+    kestrel::drawing model;
     const auto a=model.add("POINT",{{"position",{0,0,0}},{"group","g"},{"groupName","Group"}});
     const auto b=model.add("POINT",{{"position",{1,0,0}},{"group","g"},{"groupName","Group"}});
     const auto c=model.add("POINT",{{"position",{2,0,0}},{"group","other"}});

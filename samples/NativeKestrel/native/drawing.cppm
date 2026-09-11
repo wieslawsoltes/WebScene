@@ -539,6 +539,24 @@ public:
       }
     });
   }
+  bool group_entities(const std::vector<std::string>& captured_ids,std::string name) {
+    std::unordered_set<std::string> unique;
+    for(const auto& id:captured_ids) {
+      const auto* entity=find(id);
+      if(!entity || !editable(*entity))return false;
+      unique.insert(id);
+    }
+    if(unique.size()<2)return false;
+    const auto first=name.find_first_not_of(" \t\r\n\f\v");
+    if(first==std::string::npos)name="Group";
+    else name=name.substr(first,name.find_last_not_of(" \t\r\n\f\v")-first+1);
+    const auto group_id=uid("group");
+    return transaction("Create group",[&] {
+      for(const auto& id:unique) {
+        auto* entity=find(id);(*entity)["group"]=group_id;(*entity)["groupName"]=name;
+      }
+    });
+  }
   size_t erase_selected() {
     const auto ids=selected(true);
     if(ids.empty())return 0;
