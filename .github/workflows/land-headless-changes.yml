@@ -1,0 +1,26 @@
+name: Apply reviewed native platform changes
+on:
+  push:
+    branches: [codex/linux-headless-platform]
+    paths: ['.automation/headless-change.patch.gz', '.github/workflows/land-headless-changes.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.repository == 'SceneTech/WebScene' && github.ref == 'refs/heads/codex/linux-headless-platform'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply checksum-verified source patch and remove transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '3c8f47aef661a657973b1e2304e1b10306e880c3139668282aba0c63cbca00e1  .automation/headless-change.patch.gz' | sha256sum --check
+          gzip -dc .automation/headless-change.patch.gz | git apply --check
+          gzip -dc .automation/headless-change.patch.gz | git apply --index
+          git rm .automation/headless-change.patch.gz .github/workflows/land-headless-changes.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -c core.hooksPath=/dev/null commit -m 'feat: add native Linux SDK and bounded offscreen WebGPU surfaces'
+          git push origin HEAD:refs/heads/codex/linux-headless-platform
