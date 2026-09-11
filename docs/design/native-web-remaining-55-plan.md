@@ -1177,3 +1177,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   not a physical pointer test or presented-frame benchmark. Empty search input
   still omits placeholder painting, the inspector is empty and renderer status
   remains the original startup text; broader application parity is unfinished.
+
+- Native placeholder painting: eligible empty input/textarea controls now emit
+  their authored placeholder through the native text scene, while keeping the
+  live value and caret calculations independent. Rebuilt native_web_text; CTest
+  passes focused/unfocused display, typing suppression, clearing restoration,
+  attribute replacement/removal and exclusion for range controls. This closes the
+  missing text seen in the explorer capture, but does not implement ::placeholder
+  styling, placeholder-specific line handling, or case-insensitive input types;
+  current painting inherits the field text style. Visual recapture remains pending.

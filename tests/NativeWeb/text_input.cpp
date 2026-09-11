@@ -23,6 +23,23 @@ int main() {
     verify(0x12AB34FFU);colors.set_value(swatch,"#ff0088");verify(0xFF0088FFU);
     colors.set_value(swatch,"invalid");verify(0x000000FFU);
   }
+  {
+    document hints;
+    auto search=hints.element(hints.body(),"input");
+    hints.attribute(search,"type","search");hints.attribute(search,"placeholder","Filter objects…");
+    auto contains=[&](const std::string& text) {
+      const auto& scene=hints.render(300,100);
+      return std::string(scene.bytes.begin(),scene.bytes.end()).find(text)!=std::string::npos;
+    };
+    require(contains("Filter objects…") && hints.value(search).empty());
+    hints.focus(search);require(contains("Filter objects…"));
+    hints.text_input("Box");require(!contains("Filter objects…") && contains("Box"));
+    hints.set_value(search,"");require(contains("Filter objects…"));
+    hints.attribute(search,"placeholder","Filter layers…");require(contains("Filter layers…"));
+    hints.remove_attribute(search,"placeholder");require(!contains("Filter layers…"));
+    hints.attribute(search,"placeholder","Not a range label");hints.attribute(search,"type","range");
+    require(!contains("Not a range label"));
+  }
   document d;
   auto field=d.element(d.body(),"input");d.attribute(field,"value","Find");
   d.focus(field);require(d.focused()==field && d.value(field)=="Find");

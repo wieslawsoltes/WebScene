@@ -1527,9 +1527,17 @@ void native_document::append_scene(
         const auto text_y = node.layout.y + std::max(0.0F, (node.layout.height - line_height) * 0.5F);
         const auto text_width = std::max(
             0.0F, node.layout.width - padding_left - padding_right);
-        if (!node.form_control().value.empty()) {
+        const auto placeholder = node.attributes.find("placeholder");
+        const bool placeholder_type = node.tag == "textarea" || input_type == node.attributes.end()
+            || input_type->second == "text" || input_type->second == "search"
+            || input_type->second == "url" || input_type->second == "tel"
+            || input_type->second == "email" || input_type->second == "password"
+            || input_type->second == "number";
+        const bool show_placeholder = placeholder_type && node.form_control().value.empty()
+            && placeholder != node.attributes.end() && !placeholder->second.empty();
+        if (!node.form_control().value.empty() || show_placeholder) {
             const auto painted_value = resolved_text_transform(
-                node, node.form_control().value);
+                node, show_placeholder ? placeholder->second : node.form_control().value);
             std::ostringstream resource;
             resource << font_size << '\t' << line_height << '\t'
                 << resolved_font_weight(node) << '\t' << "start" << '\t'
