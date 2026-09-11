@@ -1639,3 +1639,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   cancelled deletion, ordinary deletion and disposal. Kestrel shortcut routing
   and full host key coverage still need implementation; this is their native API
   prerequisite, not a claim that erase/undo shortcuts are working yet.
+
+- Native editing shortcuts: Foco forwards A/Z/Y, Escape and F7 in addition to
+  existing delete keys. Root keydown handles select-all, erase, undo/redo, Escape
+  selection/navigation cancellation and grid toggle, while input/textarea/select
+  and contenteditable ancestors retain editing behavior. Open modal/palette guards
+  prevent underlying shortcuts. Added native tag_name introspection. Hosted
+  --exercise-shortcuts verifies select-all/erase, Ctrl and platform-modifier undo,
+  redo, exact document restoration, Backspace text isolation, Escape and grid.
+  Rebuilt run exits 0 with success marker and GPU serial 2 capture. Full tool
+  cancellation, remaining shortcut commands and physical-key delivery remain open.

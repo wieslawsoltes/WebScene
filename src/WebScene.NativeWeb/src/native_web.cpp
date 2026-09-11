@@ -142,6 +142,7 @@ std::optional<std::string> document::attribute(node_id id, std::string_view name
   if (found == node.attributes.end()) return std::nullopt;
   return found->second;
 }
+std::string document::tag_name(node_id id) const {return state_->node(id).tag;}
 node_id document::parent(node_id id) const {
   auto *parent = state_->node(id).parent;
   return parent ? parent->id : 0;

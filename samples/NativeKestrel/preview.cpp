@@ -15,6 +15,7 @@ static bool exercise_objects=false;
 static bool exercise_navigation=false;
 static bool exercise_theme=false;
 static bool exercise_picking=false;
+static bool exercise_shortcuts=false;
 static bool benchmark_pan=false;
 static bool benchmark_courtyard=false;
 static bool benchmark_large=false;
@@ -241,6 +242,31 @@ public:
     }
     view->refresh();
 #endif
+    handlers.push_back(view->document.on(view->document.root(),"keydown",[this](auto& event) {
+      if(!viewport)return;
+      for(auto id:{"modal","command-palette"})if(auto dialog=view->document.find(id))
+        if(view->document.attribute(dialog,"open"))return;
+      if(event.key=="Escape") {
+        panning=false;selection_pressed=false;model.selection.clear();
+      } else {
+        for(auto node=event.target;node;node=view->document.parent(node)) {
+          const auto tag=view->document.tag_name(node);
+          if(tag=="input" || tag=="textarea" || tag=="select" || view->document.attribute(node,"contenteditable")=="true")return;
+        }
+        if(event.modifiers.control || event.modifiers.meta) {
+          if(event.key=="a")model.select_all_editable();
+          else if(event.key=="z") {if(event.modifiers.shift)model.redo();else model.undo();}
+          else if(event.key=="y")model.redo();
+          else return;
+        } else if(event.key=="Delete" || event.key=="Backspace")model.erase_selected();
+        else if(event.key=="F7")viewport->grid_enabled=!viewport->grid_enabled;
+        else return;
+      }
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+      if(layers)layers->refresh();
+#endif
+      gpu_dirty=true;view->refresh();event.prevent_default();
+    }));
     handlers.push_back(view->document.on(view->document.root(), "click",
         [this](auto &event) {
           if (!viewport) return;
@@ -466,6 +492,35 @@ public:
             throw std::runtime_error("Panel toggle did not restore viewport width");
           navigation_serial=gpu_serial;navigation_exercised=true;
         }
+        if(exercise_shortcuts && viewport && gpu_serial) {
+          const auto press=[&](foco::key key,foco::key_modifiers modifiers={}) {
+            foco::key_event event;event.value=key;event.modifiers=modifiers;view->key_event_received(event);
+            if(!event.handled)throw std::runtime_error("Shortcut key was not forwarded");
+          };
+          const auto before=model.data;
+          view->document.focus(view->document.find("viewport"));
+          press(foco::key::a,foco::key_modifiers::control);
+          if(model.selection.empty())throw std::runtime_error("Select-all shortcut failed");
+          press(foco::key::delete_key);
+          if(model.data["entities"].size()>=before["entities"].size())throw std::runtime_error("Erase shortcut failed");
+          press(foco::key::z,foco::key_modifiers::platform);
+          if(model.data!=before)throw std::runtime_error("Undo shortcut failed");
+          press(foco::key::y,foco::key_modifiers::control);
+          if(model.data==before)throw std::runtime_error("Redo shortcut failed");
+          press(foco::key::z,foco::key_modifiers::control);
+          const auto search=view->document.find("explorer-search");
+          view->document.set_value(search,"abc");view->document.focus(search);
+          press(foco::key::backspace);
+          if(view->document.value(search)!="ab" || model.data!=before)throw std::runtime_error("Typing shortcut isolation failed");
+          view->document.set_value(search,"");view->document.dispatch(search,"input");
+          view->document.focus(view->document.find("viewport"));
+          press(foco::key::a,foco::key_modifiers::control);press(foco::key::escape);
+          if(!model.selection.empty())throw std::runtime_error("Escape selection clearing failed");
+          const bool grid=viewport->grid_enabled;press(foco::key::f7);
+          if(viewport->grid_enabled==grid)throw std::runtime_error("Grid shortcut failed");
+          press(foco::key::f7);
+          exercise_shortcuts=false;std::cout<<"Hosted native shortcuts passed\n";
+        }
         if(exercise_picking && viewport && gpu_serial) {
           const auto area=view->document.bounds(view->document.find("scene"));
           bool found=false;
@@ -565,6 +620,7 @@ int main(int argc, char **argv) {
   for(int i=1;i<argc;++i) {
     if(std::string_view(argv[i])=="--capture" && i+1<argc) capture_path=argv[++i];
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
+    else if(std::string_view(argv[i])=="--exercise-shortcuts") exercise_shortcuts=true;
     else if(std::string_view(argv[i])=="--exercise-picking") exercise_picking=true;
     else if(std::string_view(argv[i])=="--exercise-theme") exercise_theme=true;
     else if(std::string_view(argv[i])=="--exercise-failure") exercise_failure=true;

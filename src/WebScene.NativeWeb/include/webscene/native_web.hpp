@@ -412,6 +412,7 @@ public:
   std::pair<float, float> scroll_offset(node_id) const;
   std::optional<std::string> attribute(node_id, std::string_view name) const;
   node_id parent(node_id) const;
+  std::string tag_name(node_id) const;
   std::vector<node_id> children(node_id) const;
   void remove(node_id);
   node_id find(std::string_view id) const;
