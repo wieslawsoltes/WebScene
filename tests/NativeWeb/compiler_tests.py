@@ -12,6 +12,27 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_hybrid_engine_module(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder);source=root/'view.html';output=root/'view.cppm'
+            source.write_text('<html><head><style>button {color:red}</style><script src="app.js"></script></head><body><button id="root">Hello</button><template><style>div{position:fixed}</style><script src="must-not-load.js"></script></template></body></html>')
+            (root/'app.js').write_text('globalThis.started=true;')
+            (root/'templates.html').write_text('<template id="row"><style>button{position:fixed}</style><textarea>__ws_slot_0__</textarea><svg><path d="__ws_slot_1__"/></svg></template>')
+            (root/'template-attributes.html').write_text('')
+            command=[UIC,'--engine-module',source,output,'--module','webscene.application','--templates',root/'templates.html']
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            first=output.read_bytes();generated=first.decode()
+            self.assertEqual(generated.count('p.stylesheets.push_back('),1)
+            self.assertIn('p.allow_runtime_html=false',generated)
+            self.assertIn('compiled_argument(args,0)',generated)
+            self.assertIn('compiled_argument_text(args,1)',generated)
+            self.assertIn('http://www.w3.org/2000/svg',generated)
+            self.assertIn('globalThis.started=true;',generated)
+            self.assertIn('app.js',pathlib.Path(str(output)+'.d').read_text())
+            self.assertEqual(subprocess.run(command,capture_output=True).returncode,0)
+            self.assertEqual(output.read_bytes(),first)
+
     def test_shared_css_html_backend(self):
         with tempfile.TemporaryDirectory() as folder:
             root=pathlib.Path(folder);source=root/'view.html';output=root/'view.cppm'

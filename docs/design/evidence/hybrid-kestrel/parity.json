@@ -1,0 +1,29 @@
+[
+  {
+    "width": 1280,
+    "height": 800,
+    "theme": "dark",
+    "tab": "Home",
+    "parsed_nodes": 376,
+    "compiled_nodes": 376,
+    "differences": []
+  },
+  {
+    "width": 980,
+    "height": 620,
+    "theme": "dark",
+    "tab": "Text",
+    "parsed_nodes": 298,
+    "compiled_nodes": 298,
+    "differences": []
+  },
+  {
+    "width": 1440,
+    "height": 900,
+    "theme": "light",
+    "tab": "Drafting",
+    "parsed_nodes": 311,
+    "compiled_nodes": 311,
+    "differences": []
+  }
+]

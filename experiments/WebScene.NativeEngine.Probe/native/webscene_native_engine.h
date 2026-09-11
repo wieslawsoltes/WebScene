@@ -1159,6 +1159,12 @@ WEBSCENE_API uint8_t webscene_engine_set_resource_root(
     webscene_engine* engine,
     const char* resource_root,
     size_t resource_root_length);
+// Loads a named, build-time compiled package on the engine worker. Strings and
+// viewport are copied before return. No application C++ objects cross this ABI.
+WEBSCENE_API uint8_t webscene_engine_load_compiled_document_v1(
+    webscene_engine* engine, const char* name, size_t name_length,
+    const char* base_url, size_t base_url_length, const webscene_input_event* viewport);
+
 WEBSCENE_API uint8_t webscene_engine_load_url(
     webscene_engine* engine,
     const char* url,

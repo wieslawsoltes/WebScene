@@ -378,5 +378,12 @@
       ]
     }
   ],
-  "note": "API occurrence inventory, not complete template inventory; dialog HTML producers require separate extraction."
+  "note": "API occurrence inventory, not complete template inventory; dialog HTML producers require separate extraction.",
+  "additional_resources": [
+    {
+      "path": "src/io-worker.js",
+      "sha256": "9383269e51527bf97ce0257c19a65a7d764240a496fea6bff9ff03ce81b5e603",
+      "purpose": "Bundled file-processing worker; not a main-document entry script"
+    }
+  ]
 }

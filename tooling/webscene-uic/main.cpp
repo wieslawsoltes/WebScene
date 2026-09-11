@@ -1915,13 +1915,207 @@ static int prepare_css_module(const fs::path& input,const fs::path& output,
   if(!file) throw std::runtime_error("failed writing prepared CSS module");
   return 0;
 }
+static std::string template_text_expression(const std::string& text) {
+  static const std::regex slot("__ws_slot_([0-9]+)__");
+  std::string result="std::string{}";
+  size_t offset=0;
+  for(auto i=std::sregex_iterator(text.begin(),text.end(),slot);i!=std::sregex_iterator{};++i) {
+    result+='+'+quote(text.substr(offset,i->position()-offset));
+    result+="+compiled_argument_text(args,"+(*i)[1].str()+")";
+    offset=i->position()+i->length();
+  }
+  return result+'+'+quote(text.substr(offset));
+}
+static int compile_engine_module(const fs::path& input, const fs::path& output,
+    const std::string& module, const fs::path& script_root, const fs::path& template_file = {},
+    const fs::path& bootstrap = {}) {
+  if (!std::regex_match(module, std::regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*")))
+    throw std::runtime_error("Invalid module name");
+  if (fs::weakly_canonical(input) == fs::weakly_canonical(output))
+    throw std::runtime_error("Output must not overwrite input");
+  native_document dom;
+  auto& root = dom.body();
+  html_parse_options options;
+  options.scripting_enabled = true;
+  auto parsed = parse_html_document(dom, root, read(input), options);
+  if (!parsed) throw std::runtime_error(parsed.error);
+  std::ostringstream nodes, sheets, scripts, templates, attribute_bindings;
+  bool template_mode=false, inert_content=false;
+  std::vector<fs::path> dependencies{fs::absolute(input)};
+  size_t count = 0;
+  const auto visit = [&](auto&& self, const dom_node& node, const std::string& parent) -> void {
+    const auto name = "n" + std::to_string(++count);
+    if (template_mode && (node.kind == dom_node_kind::text || node.kind == dom_node_kind::comment)) {
+      static const std::regex slot("__ws_slot_([0-9]+)__");
+      const auto& text = node.text_content;
+      size_t offset=0;
+      const auto literal=[&](const std::string& value) {
+        if(value.empty()) return;
+        nodes << "compiled_append_argument(d," << parent << ",{ " << quote(value) << ",nullptr});\n";
+      };
+      for(auto i=std::sregex_iterator(text.begin(),text.end(),slot);i!=std::sregex_iterator{};++i) {
+        literal(text.substr(offset,i->position()-offset));
+        nodes << "compiled_append_argument(d," << parent << ",compiled_argument(args," << (*i)[1].str() << "));\n";
+        offset=i->position()+i->length();
+      }
+      if (node.kind==dom_node_kind::text || offset) { literal(text.substr(offset)); return; }
+    }
+    if (node.kind == dom_node_kind::element)
+      nodes << "auto& " << name << "=d.create_element(" << quote(node.tag) << ");\n"
+            << name << ".set_namespace(" << quote(node.namespace_uri()) << ");\n";
+    else if (node.kind == dom_node_kind::text || node.kind == dom_node_kind::comment)
+      nodes << "auto& " << name << "=d.create_node(dom_node_kind::"
+            << (node.kind == dom_node_kind::text ? "text" : "comment") << ',' << quote(node.tag) << ");\n";
+    else return;
+    nodes << name << ".text_content=" << quote(node.text_content) << ";\n";
+    for (const auto& [key, value] : node.attributes) {
+      std::smatch match;
+      if (template_mode && std::regex_match(key, match, std::regex("__ws_slot_([0-9]+)__")))
+        nodes << "bind_attributes(" << name << ",compiled_argument_text(args," << match[1].str() << "));\n";
+      else nodes << "compiled_attribute(" << name << ',' << quote(key) << ','
+          << (template_mode ? template_text_expression(value) : quote(value)) << ");\n";
+    }
+    nodes << "d.append_child(" << parent << ',' << name << ");\n";
+    auto prepare = [&](std::string text, const fs::path& address) {
+      if (node.attributes.contains("media")) text = "@media " + node.attributes.at("media") + "{" + text + "}";
+      auto sheet = css::prepare_stylesheet(text, address.string(), [](const auto& query) {
+        return css::inventory_media(query, [](std::string_view, std::string_view, std::string_view, const std::string&, std::string_view) {});
+      });
+      if (!sheet) throw std::runtime_error("CSS preparation failed: " + address.string());
+      sheets << "p.stylesheets.push_back([](){\n";
+      emit_prepared_sheet(sheets, *sheet);
+      sheets << "}());\n";
+    };
+    if (!template_mode && !inert_content && node.tag == "link" && node.attributes.contains("rel") && node.attributes.at("rel") == "stylesheet"
+        && !node.attributes.contains("disabled")) {
+      const auto path = input.parent_path() / node.attributes.at("href");
+      dependencies.push_back(fs::absolute(path));
+      prepare(read(path), path);
+    }
+    if (!template_mode && !inert_content && node.tag == "style") {
+      std::string text = node.text_content;
+      for (const auto* child : node.children) text += child->text_content;
+      prepare(text, input);
+    }
+    if (!template_mode && !inert_content && node.tag == "script") {
+      const auto type = node.attributes.contains("type") ? node.attributes.at("type") : "";
+      if (type.empty() || type == "text/javascript" || type == "application/javascript" || type == "module") {
+        std::string text;
+        if (node.attributes.contains("src")) {
+          const auto path = (script_root.empty() ? input.parent_path() : script_root) / node.attributes.at("src");
+          dependencies.push_back(fs::absolute(path));
+          text = read(path);
+        } else for (const auto* child : node.children) text += child->text_content;
+        scripts << "p.scripts.push_back({{}," << quote(text) << ',' << node.attributes.contains("defer")
+                << ',' << (type == "module") << ',' << quote(node.attributes.contains("src") ? node.attributes.at("src") : "inline-script") << "});\n";
+      }
+    }
+    for (const auto* child : node.children) self(self, *child, name);
+    if (node.template_contents) {
+      const auto fragment = "f" + std::to_string(count);
+      nodes << "auto& " << fragment << "=d.parser_template_contents(" << name << ");\n";
+      const bool was_inert = inert_content;
+      inert_content = true;
+      for (const auto* child : node.template_contents->children) self(self, *child, fragment);
+      inert_content = was_inert;
+    }
+  };
+  for (const auto* child : root.children) visit(visit, *child, "d.body()");
+  const auto root_nodes=nodes.str();
+  if (!template_file.empty()) {
+    dependencies.push_back(fs::absolute(template_file));
+    native_document template_dom;
+    if (!parse_html_document(template_dom, template_dom.body(), read(template_file), options))
+      throw std::runtime_error("Invalid template catalog");
+    const auto gather=[&](auto&& self,const dom_node& element)->void {
+      if (element.tag=="template" && element.template_contents) {
+        nodes.str(""); nodes.clear(); template_mode=true;
+        for(const auto* child:element.template_contents->children) {
+          if(child->tag=="svg" && child->attributes.contains("data-ws-wrapper"))
+            for(const auto* svgChild:child->children)visit(visit,*svgChild,"fragment");
+          else visit(visit,*child,"fragment");
+        }
+        templates << "p.templates.emplace(" << quote(element.attributes.at("id"))
+          << ",[](native_document& d,compiled_template_arguments args)->dom_node&{\n"
+          << "auto& fragment=d.create_element(\"#document-fragment\");\n" << nodes.str()
+          << "return fragment;});\n";
+        return;
+      }
+      for(const auto* child:element.children)self(self,*child);
+    };
+    gather(gather,template_dom.body());
+    const auto attribute_file=template_file.parent_path()/"template-attributes.html";
+    dependencies.push_back(fs::absolute(attribute_file));
+    native_document attribute_dom;
+    if (!parse_html_document(attribute_dom,attribute_dom.body(),read(attribute_file),options))
+      throw std::runtime_error("Invalid attribute binding catalog");
+    attribute_bindings << "inline void bind_attributes(webscene_native::dom_node& node,const std::string& input){\n"
+      << "using namespace webscene_native; auto begin=input.find_first_not_of(\" \\t\\r\\n\"); if(begin==std::string::npos)return; auto value=input.substr(begin,input.find_last_not_of(\" \\t\\r\\n\")-begin+1);\n";
+    const auto attributes=[&](auto&& self,const dom_node& element)->void {
+      if(element.tag=="template" && element.template_contents) {
+        attribute_bindings << "if(value==" << quote(element.attributes.at("data-ws-attributes")) << "){\n";
+        for(const auto* child:element.template_contents->children)
+          for(const auto& [key,value]:child->attributes)
+            attribute_bindings << "compiled_attribute(node," << quote(key) << ',' << quote(value) << ");\n";
+        attribute_bindings << "return;}\n";return;
+      }
+      for(const auto* child:element.children)self(self,*child);
+    };
+    attributes(attributes,attribute_dom.body());
+    attribute_bindings << "throw std::invalid_argument(\"Uncompiled dynamic attribute set: \"+value);\n}\n";
+  }
+  if (!bootstrap.empty()) dependencies.push_back(fs::absolute(bootstrap));
+  fs::create_directories(fs::absolute(output).parent_path());
+  std::ofstream file(output);
+  if (!file) throw std::runtime_error("Cannot write engine module");
+  file << "// Generated by webscene-uic. Compiled DOM and prepared root stylesheets.\nmodule;\n"
+       << "#include <webscene_compiled_document.h>\n#include <webscene_native_dom.h>\n"
+       << "export module " << module << ";\nexport namespace compiled_engine {\n"
+       << attribute_bindings.str()
+       << "inline webscene_native::compiled_document build(std::string base_url) {\n"
+       << "using namespace webscene_native;\ncompiled_document p; p.base_url=std::move(base_url);\n"
+       << "p.construct=[](native_document& d){\n" << root_nodes << "};\n"
+       << sheets.str() << templates.str();
+  if (!bootstrap.empty()) file << "p.scripts.push_back({{}," << quote(read(bootstrap)) << ",false,false});\n";
+  file << scripts.str();
+  if (!template_file.empty()) file << "p.allow_runtime_html=false;\n";
+  file << "return p;\n}\n}\n";
+  file.close();
+  if (!file) throw std::runtime_error("Failed writing engine module");
+  std::ofstream dep(output.string() + ".d");
+  const auto escape = [](const fs::path& path) {
+    std::string result;
+    for (char c : fs::absolute(path).string()) { if (c == ' ' || c == '#' || c == '\\') result += '\\'; if(c == '$') result += '$'; result += c; }
+    return result;
+  };
+  dep << escape(output) << ':';
+  for (const auto& dependency : dependencies) dep << ' ' << escape(dependency);
+  dep << '\n';
+  dep.close();
+  if (!dep) throw std::runtime_error("Failed writing engine module dependencies");
+  return 0;
+}
 int main(int argc, char **argv) {
+  if (argc >= 6 && argc % 2 == 0 && std::string_view(argv[1]) == "--engine-module"
+      && std::string_view(argv[4]) == "--module") {
+    try {
+      fs::path script_root, templates, bootstrap;
+      for(int i=6;i<argc;i+=2) {
+        const std::string_view option=argv[i];
+        if(option=="--script-root")script_root=argv[i+1];
+        else if(option=="--templates")templates=argv[i+1];
+        else if(option=="--bootstrap")bootstrap=argv[i+1];
+        else throw std::runtime_error("Unknown engine compiler option");
+      }
+      return compile_engine_module(argv[2], argv[3], argv[5], script_root,templates,bootstrap);
+    } catch (const std::exception& error) { std::cerr << argv[2] << ": error: " << error.what() << '\n'; return 1; }
+  }
   bool preview = argc > 1 && std::string_view(argv[argc-1]) == "--preview";
   if (preview) --argc;
   const bool prepare_css = argc == 6 && std::string_view(argv[1]) == "--prepare-css" && std::string_view(argv[4]) == "--module";
   if (!prepare_css && argc != 3 && argc != 5 && argc != 7 && argc != 9) {
     std::cerr
-        << "usage: webscene-uic input.html output [--module module.name] [--namespace identifier] [--css-backend typed|shared] [--preview]\n       webscene-uic --check-css input.css\n       webscene-uic --prepare-css input.css output.cppm --module module.name\n";
+        << "usage: webscene-uic input.html output [--module module.name] [--namespace identifier] [--css-backend typed|shared] [--preview]\n       webscene-uic --engine-module input.html output.cppm --module module.name [--script-root dir] [--templates catalog.html] [--bootstrap script.js]\n       webscene-uic --check-css input.css\n       webscene-uic --prepare-css input.css output.cppm --module module.name\n";
     return 2;
   }
   compiler c;

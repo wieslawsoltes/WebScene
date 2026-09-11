@@ -1204,6 +1204,36 @@
     }
 #endif
 
+    void add_prepared_stylesheet(const css::prepared_stylesheet& sheet)
+    {
+        const auto first_prepared_rule = css_rules.size();
+        for (const auto& payload : sheet.rules) {
+            css_rule rule;
+            rule.payload = payload;
+            rule.media_matches = css_rule_media_matches(rule);
+            const auto index = css_rules.size();
+            css_rules.push_back(std::move(rule));
+            index_css_rule(index);
+        }
+        for (auto index = first_prepared_rule; index < css_rules.size(); ++index) {
+            const auto& rule = css_rules[index];
+            if (!rule.media_matches || rule.shadow_scope_root_id != 0U) continue;
+            if (rule.selector() != ":root" && rule.selector() != "html") continue;
+            for (const auto& declaration : rule.declarations()) {
+                if (!declaration.name.starts_with("--")) continue;
+                if (!declaration.important
+                    && important_css_variables.contains(declaration.name)) continue;
+                css_variables[declaration.name] = declaration.value;
+                if (declaration.important) important_css_variables.insert(declaration.name);
+                else important_css_variables.erase(declaration.name);
+            }
+        }
+        for (const auto& [name, frames] : sheet.keyframes) opacity_keyframes[name] = frames;
+        for (const auto& diagnostic : sheet.diagnostics)
+            record_feature("css", diagnostic.feature, diagnostic.classification,
+                diagnostic.detail, "compiled-stylesheet");
+    }
+
     size_t add_stylesheet(
         std::string css,
         const std::string& stylesheet_address = {},

@@ -85,7 +85,7 @@
         auto scripts = compiled ? std::vector<frame_script>{} : parse_frame_scripts(html);
         if (compiled) {
             for (const auto& entry : compiled->scripts)
-                scripts.push_back({entry.url, entry.source, entry.defer, scripts.size(), entry.module});
+                scripts.push_back({entry.url, entry.source, entry.defer, scripts.size(), entry.module, entry.name});
         }
         for (const auto& href : stylesheets) {
             start_resource_prefetch(
@@ -137,6 +137,7 @@
             v8::Null(isolate)).Check();
 
         allow_runtime_html = compiled == nullptr || compiled->allow_runtime_html;
+        compiled_dom_templates = compiled ? compiled->templates : compiled_dom_factories{};
         auto& viewport_root = document.body();
         record_feature(
             "html",
@@ -316,7 +317,7 @@
         important_css_variables.clear();
 
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
-        for (auto stylesheet : parsed_inline_stylesheets(html_element)) {
+        for (auto stylesheet : compiled ? std::vector<std::string>{} : parsed_inline_stylesheets(html_element)) {
 #else
         for (auto stylesheet : parse_inline_stylesheets(html)) {
 #endif
@@ -336,6 +337,8 @@
             }
             add_stylesheet(std::move(stylesheet), stylesheet_url);
         }
+
+        if (compiled) for (const auto& sheet : compiled->stylesheets) add_prepared_stylesheet(sheet);
 
         apply_css_rules(html_element);
         apply_css_rules(head_element);
@@ -384,7 +387,8 @@
                 if (script.defer != defer) continue;
                 std::string source = script.code;
                 std::shared_ptr<const immutable_text_source> immutable_source;
-                auto name = resolved_url + "#inline-script-" + std::to_string(script.index + 1U);
+                auto name = resolved_url + (script.compiled_name.empty()
+                    ? "#inline-script-" + std::to_string(script.index + 1U) : "#" + script.compiled_name);
                 if (!script.source.empty()) {
                     if (!load_text_resource(
                             script.source,
@@ -399,7 +403,18 @@
                         continue;
                     }
                 }
-                set_current_script(local_context, document_object.Get(isolate), name);
+                if (!script.compiled_name.empty()) {
+                    dom_node* source_node = nullptr;
+                    for (auto* candidate : document.query_selector_all(html_element, "script")) {
+                        const auto source = candidate->attributes.find("src");
+                        if (source != candidate->attributes.end() && source->second == script.compiled_name) {
+                            source_node = candidate; break;
+                        }
+                    }
+                    outer_document->Set(local_context, js_string(isolate, "currentScript"),
+                        source_node ? v8::Local<v8::Value>(wrap_node(*source_node))
+                                    : v8::Local<v8::Value>(v8::Null(isolate))).Check();
+                } else set_current_script(local_context, document_object.Get(isolate), name);
                 std::string error;
                 const auto script_source = immutable_source != nullptr
                     ? immutable_source->view()

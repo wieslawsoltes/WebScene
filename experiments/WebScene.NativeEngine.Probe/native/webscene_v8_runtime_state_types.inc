@@ -73,6 +73,7 @@
         bool defer{false};
         size_t index{0};
         bool module{false};
+        std::string compiled_name;
     };
 
     using css_declaration = webscene_native::css::css_declaration;

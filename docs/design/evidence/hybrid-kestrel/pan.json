@@ -1,0 +1,11 @@
+{
+  "actual_presentations": 719,
+  "pan_seconds": 11.999957999985781,
+  "presentation_hz": 59.91625597367178,
+  "median_interval_ms": 16.66675000160467,
+  "p95_interval_ms": 16.66683300572913,
+  "max_interval_ms": 33.33350000320934,
+  "submit_to_present_median_ms": 47.388667007908225,
+  "rss_after_pan_kib": 297872,
+  "note": "Submit-to-present is not input-to-photon latency. RSS sampled after benchmark, not peak."
+}

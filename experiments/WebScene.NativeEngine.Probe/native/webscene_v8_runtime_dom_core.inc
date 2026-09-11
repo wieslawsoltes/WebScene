@@ -4613,35 +4613,54 @@
         auto* self = current(info.GetIsolate());
         auto* parent = unwrap_node(info.This());
         if (parent == nullptr) return;
-        for (int index = 0; index < info.Length(); ++index) {
-            if (!info[index]->IsObject()) continue;
-            auto* child = unwrap_node(info[index].As<v8::Object>());
-            if (insertion_would_create_cycle(parent, child)) {
-                throw_hierarchy_request(info.GetIsolate(), "replaceChildren");
-                return;
+        std::vector<dom_node*> children;
+        const auto collect = [&](dom_node* node) {
+            if (insertion_would_create_cycle(parent, node)) {
+                throw_hierarchy_request(info.GetIsolate(), "replaceChildren"); return false;
             }
+            std::erase(children, node);
+            children.push_back(node);
+            return true;
+        };
+        for (int index = 0; index < info.Length(); ++index) {
+            auto value = info[index];
+            auto* child = value->IsObject() && self->node_template.Get(info.GetIsolate())->HasInstance(value)
+                ? unwrap_node(value.As<v8::Object>()) : nullptr;
+            if (!child) {
+                v8::Local<v8::String> text;
+                if (!value->ToString(info.GetIsolate()->GetCurrentContext()).ToLocal(&text)) return;
+                child = &self->document.create_node(dom_node_kind::text, "#text");
+                child->text_content = to_utf8(info.GetIsolate(), text);
+            }
+            if (child->tag == "#document-fragment") {
+                for (auto* item : child->children) if (item && !collect(item)) return;
+            } else if (!collect(child)) return;
         }
         if (!self->blur_active_descendant_before_replacing_children(*parent)) return;
         self->detach_all_children(*parent);
-        for (int index = 0; index < info.Length(); ++index) {
-            if (!info[index]->IsObject()) continue;
-            auto* child = unwrap_node(info[index].As<v8::Object>());
-            if (child == nullptr) continue;
+        parent->text_content.clear();
+        for (auto* child : children) {
             if (child->parent != nullptr) {
-                if (self->is_connected(*child)) {
-                    self->notify_custom_elements_subtree(*child, "disconnected");
-                }
+                if (self->is_connected(*child)) self->notify_custom_elements_subtree(*child, "disconnected");
                 auto* old_parent = child->parent;
                 std::erase(old_parent->children, child);
                 synchronize_textarea_value_from_children(*old_parent);
                 child->parent = nullptr;
             }
+            child->visible = true;
             self->document.append_child(*parent, *child);
         }
+        // Match structural selectors against the completed sibling list. Styling
+        // each inserted child early makes every child temporarily :last-child.
         self->recascade_connected_subtree(*parent);
-        self->activate_connected_stylesheet(*parent);
-        self->notify_custom_elements_subtree(*parent, "connected");
+        for (auto* child : children) {
+            self->activate_connected_stylesheet(*child);
+            self->enqueue_connected_resources_subtree(*child, self->wrap_node(*child), info.GetIsolate()->GetCurrentContext());
+            self->enqueue_iframe_hydration_if_needed(*child);
+            self->notify_custom_elements_subtree(*child, "connected");
+        }
         synchronize_textarea_value_from_children(*parent);
+        self->document.mark_dirty();
     }
 
     static void remove_element(const v8::FunctionCallbackInfo<v8::Value>& info)

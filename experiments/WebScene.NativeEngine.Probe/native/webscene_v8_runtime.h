@@ -1,6 +1,7 @@
 #pragma once
 
 #include "webscene_native_engine.h"
+#include "webscene_compiled_document.h"
 
 #include <chrono>
 #include <functional>
@@ -262,15 +263,7 @@ public:
         std::function<dom_node&(native_document&, const std::string&)>;
     void register_compiled_template(std::string name, compiled_template_factory factory);
 
-    struct compiled_document {
-        std::string base_url;
-        bool allow_runtime_html{true};
-        // Append HTML/HEAD/BODY below the stable engine viewport root.
-        std::function<void(native_document&)> construct;
-        struct script { std::string url, source; bool defer{}, module{}; };
-        std::vector<script> scripts;
-        std::vector<std::string> stylesheet_urls;
-    };
+    using compiled_document = webscene_native::compiled_document;
     bool load_compiled_document(const compiled_document& package);
 
     bool initialize();

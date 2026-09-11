@@ -8,6 +8,7 @@
 #endif
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
 #include "graphics/platform_webgpu_canvas.h"
+#include "graphics/v8_webgpu_canvas_context.h"
 #endif
 #include "webscene_v8_runtime.h"
 #include "webscene_frame_trace.h"
@@ -957,6 +958,9 @@ struct v8_dom_runtime::implementation final {
         document_template->SetNativeDataProperty(
             js_string(isolate, "implementation"),
             get_document_implementation);
+        document_template->Set(
+            js_string(isolate, "createCompiledTemplateParts"),
+            v8::FunctionTemplate::New(isolate, create_compiled_template_parts));
         document_template->Set(
             js_string(isolate, "createCompiledTemplate"),
             v8::FunctionTemplate::New(isolate, create_compiled_template));
@@ -2238,7 +2242,8 @@ struct v8_dom_runtime::implementation final {
             const decoderLabels = new Map([
               ['utf-8', 'utf-8'], ['utf8', 'utf-8'], ['unicode-1-1-utf-8', 'utf-8'],
               ['utf-16', 'utf-16le'], ['utf-16le', 'utf-16le'], ['utf16le', 'utf-16le'],
-              ['utf-16be', 'utf-16be'], ['utf16be', 'utf-16be']
+              ['utf-16be', 'utf-16be'], ['utf16be', 'utf-16be'],
+              ['windows-1252', 'windows-1252'], ['cp1252', 'windows-1252'], ['x-cp1252', 'windows-1252']
             ]);
             class WebSceneTextDecoder {
               constructor(label = 'utf-8', options = {}) {
@@ -2260,6 +2265,17 @@ struct v8_dom_runtime::implementation final {
                     input.buffer, input.byteOffset, input.byteLength);
                 } else {
                   throw new TypeError('TextDecoder.decode requires an ArrayBuffer view');
+                }
+                if (this.encoding === 'windows-1252') {
+                  // WHATWG Encoding index-windows-1252, including control mappings.
+                  const special = [0x20ac,0x81,0x201a,0x192,0x201e,0x2026,0x2020,0x2021,
+                    0x2c6,0x2030,0x160,0x2039,0x152,0x8d,0x17d,0x8f,
+                    0x90,0x2018,0x2019,0x201c,0x201d,0x2022,0x2013,0x2014,
+                    0x2dc,0x2122,0x161,0x203a,0x153,0x9d,0x17e,0x178];
+                  let result = '';
+                  for (const byte of bytes) result += String.fromCharCode(
+                    byte >= 0x80 && byte < 0xa0 ? special[byte - 0x80] : byte);
+                  return result;
                 }
                 if (this.encoding === 'utf-16le' || this.encoding === 'utf-16be') {
                   const littleEndian = this.encoding === 'utf-16le';

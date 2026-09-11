@@ -36,6 +36,12 @@
 #include <variant>
 #include <vector>
 
+#if defined(WEBSCENE_COMPILED_APPLICATION)
+namespace webscene_native {
+compiled_document compiled_application(std::string_view name, std::string base_url);
+}
+#endif
+
 namespace {
 
 constexpr uint32_t input_capacity = 8192;
@@ -268,6 +274,7 @@ struct acknowledgement_state final {
     std::atomic<uint64_t> maximum_acknowledgement_nanoseconds{0};
 };
 
+
 struct script_request final {
     std::string source;
     std::string document_name;
@@ -283,6 +290,7 @@ struct url_request final {
     std::string url;
     std::vector<webscene_native::document_start_script> document_start_scripts;
     std::optional<webscene_input_event> initial_viewport;
+    std::string compiled_name;
 };
 
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -953,6 +961,13 @@ uint8_t webscene_engine_set_resource_root(
         && engine->set_resource_root(resource_root, resource_root_length)
         ? 1U
         : 0U;
+}
+
+uint8_t webscene_engine_load_compiled_document_v1(
+    webscene_engine* engine, const char* name, size_t name_length,
+    const char* base_url, size_t base_url_length, const webscene_input_event* viewport)
+{
+    return engine && engine->load_compiled_document(name, name_length, base_url, base_url_length, viewport) ? 1U : 0U;
 }
 
 uint8_t webscene_engine_load_url(

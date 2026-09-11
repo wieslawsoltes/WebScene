@@ -902,10 +902,17 @@
 #endif
                 if (auto* url = std::get_if<url_request>(&request)) {
                     if (url->initial_viewport) apply(*url->initial_viewport);
-                    if (runtime_ != nullptr
-                        && runtime_->load_url(
-                            url->url,
-                            std::move(url->document_start_scripts))) {
+                    bool loaded = false;
+                    if (runtime_ != nullptr) {
+#if defined(WEBSCENE_COMPILED_APPLICATION)
+                        if (!url->compiled_name.empty()) {
+                            auto package = webscene_native::compiled_application(url->compiled_name, url->url);
+                            loaded = runtime_->load_compiled_document(package);
+                        } else
+#endif
+                        loaded = runtime_->load_url(url->url, std::move(url->document_start_scripts));
+                    }
+                    if (loaded) {
                         native_scene_active_ = true;
                         frame_scripts_executed_.store(
                             runtime_->frame_scripts_executed(),
