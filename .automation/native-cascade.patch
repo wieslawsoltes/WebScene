@@ -1,0 +1,19 @@
+diff --git a/src/WebScene.NativeWeb/src/native_web.cpp b/src/WebScene.NativeWeb/src/native_web.cpp
+index 4e35b22..263a8c2 100644
+--- a/src/WebScene.NativeWeb/src/native_web.cpp
++++ b/src/WebScene.NativeWeb/src/native_web.cpp
+@@ -936,8 +936,12 @@ const scene &document::render(float width, float height) {
+         ++order;
+       }
+     }
+-    std::ranges::sort(declarations, {}, [](const auto &d) {
+-      return std::tuple(d.important, d.specificity, d.order);
++    // Explicit iterator comparator avoids a Clang 18 concepts-instantiation
++    // crash for a projected ranges::sort inside this recursive generic lambda.
++    // Keep the same importance/specificity/source-order cascade key.
++    std::sort(declarations.begin(), declarations.end(), [](const candidate &a, const candidate &b) {
++      return std::tie(a.important, a.specificity, a.order) <
++             std::tie(b.important, b.specificity, b.order);
+     });
+     specified_variables local;
+     for (const auto &d : declarations)
