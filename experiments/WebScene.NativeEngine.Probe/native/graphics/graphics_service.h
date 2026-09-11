@@ -10,6 +10,7 @@
 #include "command_channel.h"
 #include "release_channel.h"
 #include <chrono>
+#include <cstdio>
 #include <algorithm>
 
 namespace webscene::graphics {
@@ -379,6 +380,15 @@ public:
         if (now>=next_event_poll_)
             return std::chrono::milliseconds::zero();
         return std::min(maximum,std::chrono::ceil<std::chrono::milliseconds>(next_event_poll_-now));
+    }
+    void trace_memory_resources() {
+        check_thread();
+        devices_.visit_live([](auto& device) {
+            std::fprintf(stderr, "webgpu-resources textures=%zu views=%zu buffers=%zu encoders=%zu commands=%zu passes=%zu pipelines=%zu\n",
+                device.live_textures(), device.live_texture_views(), device.live_buffers(),
+                device.live_command_encoders(), device.live_command_buffers(), device.live_render_passes(),
+                device.live_render_pipelines());
+        });
     }
     graphics_metrics metrics() const {
         check_thread();

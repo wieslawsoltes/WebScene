@@ -1139,6 +1139,23 @@
             }
 #endif
 
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+            if (runtime_ != nullptr && !host_frame_applied && !changed
+                && document_.scene_generation() == starting_scene_generation
+                && !deferred_input.has_value() && inputs_.empty()
+                && !resize_pending_.load(std::memory_order_acquire)
+                && !runtime_->has_pending_tasks() && !runtime_->has_open_gpu_output()) {
+                bool did_work = false;
+                if (!runtime_->pump_idle_platform_tasks(did_work)) {
+                    script_errors_.fetch_add(1, std::memory_order_relaxed);
+                    set_last_error(runtime_->last_error());
+                }
+                if (did_work) {
+                    update_compilation_metrics();
+                    update_component_readiness();
+                }
+            }
+#endif
             update_host_animation_frame_demand();
             changed = changed
                 || document_.scene_generation() != starting_scene_generation

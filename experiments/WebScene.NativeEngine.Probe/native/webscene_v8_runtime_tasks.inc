@@ -13,7 +13,7 @@
         return false;
     }
 
-    void pump_v8_platform_tasks()
+    uint32_t pump_v8_platform_tasks()
     {
         constexpr uint32_t maximum_tasks = 8U;
         constexpr auto maximum_time = std::chrono::milliseconds(1);
@@ -27,6 +27,7 @@
                 v8::platform::MessageLoopBehavior::kDoNotWait)) {
             ++count;
         }
+        return count;
     }
 
     void perform_microtask_checkpoint()

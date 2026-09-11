@@ -340,6 +340,9 @@ public:
         std::function<void(webscene::graphics::completion_record)> deliver);
 #endif
     bool pump_task();
+    // Service V8's foreground/idle queue without fabricating application work
+    // or releasing requestAnimationFrame callbacks. Called at worker idle.
+    bool pump_idle_platform_tasks(bool& did_work);
     bool has_pending_tasks() const noexcept;
     std::chrono::milliseconds recommended_idle_wait(
         std::chrono::milliseconds maximum) const noexcept;

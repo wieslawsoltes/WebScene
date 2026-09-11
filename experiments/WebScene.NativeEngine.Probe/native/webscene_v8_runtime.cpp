@@ -4963,6 +4963,30 @@ bool v8_dom_runtime::pump_task()
     return result;
 }
 
+bool v8_dom_runtime::pump_idle_platform_tasks(bool& did_work)
+{
+    did_work = false;
+    if (impl_->isolate == nullptr) return true;
+    auto isolate_locker = impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto local_context = impl_->context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(local_context);
+    // Delayed V8 tasks (including heap maintenance) do not appear in the DOM
+    // task queue. Waiting for a DOM timer/input before pumping strands them
+    // when a desktop app becomes idle after an allocation-heavy interaction.
+    did_work = impl_->pump_v8_platform_tasks() != 0;
+    v8::platform::RunIdleTasks(v8_platform.get(), impl_->isolate, 0.001);
+    if (did_work) impl_->perform_microtask_checkpoint();
+    const bool result = impl_->promote_pending_promise_error();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    // A foreground completion's microtasks may draw a canvas just like a DOM
+    // task. Retire that opportunity using the same ownership boundary.
+    impl_->finish_gpu_rendering_opportunity(result);
+#endif
+    return result;
+}
+
 bool v8_dom_runtime::has_pending_tasks() const noexcept
 {
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
@@ -5589,6 +5613,10 @@ uint64_t v8_dom_runtime::input_callbacks_invoked() const noexcept
 v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexcept
 {
     memory_metrics result{};
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    if (impl_->graphics && std::getenv("WEBSCENE_GRAPHICS_MEMORY_TRACE"))
+        impl_->graphics->trace_memory_resources();
+#endif
     if (impl_->isolate != nullptr) {
         auto isolate_locker = impl_->lock_shared_isolate();
         v8::HeapStatistics statistics;

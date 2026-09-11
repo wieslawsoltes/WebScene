@@ -125,6 +125,10 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "idle-v8-platform") {
+            test_idle_v8_foreground_completion();
+            return 0;
+        }
         if(selected=="modal-backdrop") {
             auto* focused_engine=webscene_engine_create(0);
             require(focused_engine!=nullptr,"backdrop engine creation failed");
@@ -633,6 +637,7 @@ int main()
     test_loaded_iframe_replaces_provisional_layout_root();
     test_youtube_embed_fallback();
     test_outer_dynamic_recascade_preserves_iframe_cascade();
+    test_idle_v8_foreground_completion();
     test_animation_frame_demand_emits_idle_to_active_edges();
     test_dynamic_stylesheet_custom_properties_preserve_cascade_order();
     test_persistent_compilation_cache_reuse();
