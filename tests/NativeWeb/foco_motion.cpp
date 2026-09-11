@@ -28,6 +28,9 @@ int main() {
     foco::detail::window_composition_attachment gpu_attachment(*gpu_root,gpu_publisher);
     foco::retained_scene retained;
     auto canvas=gpu_view->document.element(gpu_view->document.body(),"canvas");
+    rule canvas_size;canvas_size.inline_target=canvas;
+    canvas_size.declarations.push_back({false,+[](style& s){s.set_width({100,length_unit::pixels});s.set_height({100,length_unit::pixels});}});
+    gpu_view->document.add_rule(std::move(canvas_size));
     gpu_root->measure({200,200});gpu_root->arrange({0,0,200,200});
     for(uint64_t generation=1;generation<=4;++generation) {
       auto owner=std::make_shared<frame_owner>();
@@ -44,6 +47,24 @@ int main() {
       require(retained.resources().at(id).attachment==owner);
       owner.reset();require(!weak.expired());
     }
+    auto gpu_commands=[&] {
+      const auto stream=gpu_view->composition_command_stream();require(bool(stream));
+      foco::webscene_packet::header header;
+      std::memcpy(&header,stream->bytes.data(),sizeof(header));
+      unsigned count=0;
+      for(unsigned i=0;i<header.dom_command_count;++i) {
+        foco::webscene_packet::dom_command command;
+        std::memcpy(&command,stream->bytes.data()+header.dom_command_offset+i*sizeof(command),sizeof(command));
+        if(command.kind==256 && command.node_id==canvas) ++count;
+      }
+      return count;
+    };
+    require(gpu_commands()==1);
+    rule larger;larger.inline_target=canvas;
+    larger.declarations.push_back({false,+[](style& s){s.set_width({120,length_unit::pixels});}});
+    gpu_view->document.add_rule(std::move(larger));gpu_view->refresh();require(gpu_commands()==0);
+    gpu_view->set_gpu_image(canvas,120,100,5,std::make_shared<frame_owner>());
+    require(gpu_commands()==1);
   }
   {
     auto input=foco::make_ref<webscene::foco_host::view>();

@@ -72,6 +72,13 @@ public:
     if (gpu_owner_ && gpu_node_) {
       const auto area = document.bounds(gpu_node_);
       std::erase_if(layers, [&](const auto& layer){ return layer.node_id == gpu_node_; });
+      // A previous allocation is not a valid frame for the resized canvas.
+      // Keep the DOM/background visible until the host supplies matching content.
+      if (static_cast<uint32_t>(std::max(0.f, area.width)) != gpu_width_ ||
+          static_cast<uint32_t>(std::max(0.f, area.height)) != gpu_height_)
+        std::erase_if(commands, [&](const auto& command) {
+          return command.kind == 257 && command.node_id == gpu_node_;
+        });
       for (auto &command : commands) {
         if (command.kind != 257 || command.node_id != gpu_node_) continue;
         command.kind = 256;

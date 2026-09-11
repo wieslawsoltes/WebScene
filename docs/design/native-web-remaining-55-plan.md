@@ -1320,3 +1320,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   ownership. Rebuilt target and CTest passes. This guards the actual attachment
   omission behind the panning failure; it does not exercise Metal imports or
   substitute for the separately recorded 60fps presentation trace.
+
+- Native GPU resize validity: view packet generation now suppresses the GPU draw
+  command when the image's logical allocation dimensions differ from the current
+  canvas dimensions (using the host's integer sizing convention). Previously it
+  stretched the old image into the new bounds. Matching content restores drawing.
+  Native Foco regression verifies matching image -> resize suppression -> new
+  matching image; rebuilt native_web_foco_motion and CTest passes. This is a
+  correctness guard, not smooth-resize completion: DOM/background can remain
+  briefly visible without GPU content while replacement is pending. Next ensure
+  correctly sized content arrives on resize presentation deadlines; live 60fps
+  resize and no blank intervals still require measurement/integration work.
