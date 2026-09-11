@@ -262,6 +262,9 @@ static void audio_native_call(const v8::FunctionCallbackInfo<v8::Value> &info) {
             auto *element = unwrap_node(info[2].As<v8::Object>());
             if (!element || (element->tag != "audio" && element->tag != "video"))
                 throw std::invalid_argument("Media element required");
+            const auto media = self->media_bindings.find(self->wrapper_key(*element));
+            if (media != self->media_bindings.end() && media->second->stream)
+                throw std::invalid_argument("Native URL media audio cannot be routed through Web Audio");
             if (self->media_audio_source_elements.contains(self->wrapper_key(*element)))
                 throw std::invalid_argument("Media element already has an audio source node");
             return;

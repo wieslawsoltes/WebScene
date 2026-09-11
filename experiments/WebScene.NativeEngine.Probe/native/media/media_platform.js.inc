@@ -52,18 +52,26 @@ function load(el,select=true){
  const src=el.getAttribute('src')||Array.from(el.querySelectorAll('source')).find(source=>!source.getAttribute('type')||el.canPlayType(source.getAttribute('type')))?.getAttribute('src');if(!src)return;
  const url=new URL(src,document.baseURI).href;s.currentSrc=url;s.networkState=2;
  emit(el,'loadstart');
- fetch(url,{signal:s.abort.signal}).then(r=>{if(!r.ok)throw Error('Media resource failed: '+r.status);return r.arrayBuffer();}).then(bytes=>{
-  if(s.generation!==generation)return;
-  const ext=new URL(url).pathname.match(/\.[^.\/]+$/)?.[0]?.toLowerCase()|| (el.tagName==='VIDEO'?'.mp4':'.wav');
-  native('load',el,bytes,ext,function(info){
+ const deliver=function(info){
    if(s.generation!==generation)return;
    if(info.error){s.error=mediaError(3,info.error);s.networkState=3;rejectPlay(s,fail(info.error,'NotSupportedError'));emit(el,'error');return;}
+   if(!info.ready)return;
+   if(s.buffering!==!!info.buffering){s.buffering=!!info.buffering;if(!s.paused)emit(el,s.buffering?'waiting':'playing');}
    const first=s.readyState===0;Object.assign(s,{duration:info.duration,width:info.width,height:info.height,networkState:1});
    if(first){s.readyState=1;emit(el,'loadedmetadata');s.readyState=2;emit(el,'loadeddata');s.readyState=4;emit(el,'progress');emit(el,'canplay');emit(el,'canplaythrough');}
    if(s.seeking&&!info.seeking){s.seeking=false;emit(el,'timeupdate');emit(el,'seeked');}
    if(first){finishPlay(el,s);if(el.autoplay)el.play().catch(()=>{});}
-  });
- }).catch(error=>{if(s.generation!==generation)return;s.error=mediaError(4,String(error.message||error));s.networkState=3;rejectPlay(s,fail(s.error.message,'NotSupportedError'));emit(el,'error');});
+ };
+ const failed=error=>{if(s.generation!==generation)return;s.error=mediaError(4,String(error.message||error));s.networkState=3;rejectPlay(s,fail(s.error.message,'NotSupportedError'));emit(el,'error');};
+ if(native('streamAllowed',el,url)){
+  try{native('loadURL',el,url,'',deliver);}catch(error){failed(error);}
+  return;
+ }
+ fetch(url,{signal:s.abort.signal}).then(r=>{if(!r.ok)throw Error('Media resource failed: '+r.status);return r.arrayBuffer();}).then(bytes=>{
+  if(s.generation!==generation)return;
+  const ext=new URL(url).pathname.match(/\.[^.\/]+$/)?.[0]?.toLowerCase()|| (el.tagName==='VIDEO'?'.mp4':'.wav');
+  native('load',el,bytes,ext,deliver);
+ }).catch(failed);
 }
 function HTMLMediaElement(){throw new TypeError('Illegal constructor');}
 Object.setPrototypeOf(HTMLMediaElement.prototype,HTMLElement.prototype);Object.setPrototypeOf(HTMLMediaElement,HTMLElement);

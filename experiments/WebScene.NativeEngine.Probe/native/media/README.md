@@ -109,6 +109,36 @@ Device/display physical latency and long-duration A/V drift still require the
 full playback qualification in #59; the included flash/click test measures
 pipeline timestamps through the real mixer/capture renderer.
 
+## Opt-in native application URL streaming (macOS)
+
+Applications may call `webscene_engine_set_native_media_policy_v1` before
+navigation with `WEBSCENE_NATIVE_MEDIA_LOCAL_FILES` and/or
+`WEBSCENE_NATIVE_MEDIA_NETWORK`. The default is zero. Enabled `file:`, `http:`
+and `https:` video sources go directly to AVPlayer for incremental I/O and audio
+playback. There is no whole-file buffer or encoded byte limit on this path.
+Decoded dimensions and retained compositor image budgets still apply. Other
+sources use the admitted byte path described above.
+
+This policy grants trusted application content native media access outside the
+host resource loader. AVPlayer owns URL redirects, networking, codec support and
+buffering; these requests do not implement browser fetch/CORS policy. The flags
+select initial URL schemes, not a network sandbox. Existing streams are not
+revoked by subsequent policy changes. Use the policy for application-owned pages.
+Native streaming is currently macOS-only; other platforms keep byte admission.
+
+Streamed audio goes to the native player output and cannot be routed through
+Web Audio or capture APIs. `createMediaElementSource` rejects a native stream;
+loading a native URL on an element already attached to Web Audio also fails.
+The decoder publishes metadata readiness even when a video track starts after
+the audio clock, avoiding a paused-at-zero startup deadlock. Frames still travel
+through the same retained IOSurface image compositor, without a native overlay.
+
+The `webscene_native_stream_tests`, delayed-video and range CTests verify
+play/pause, seek, cancellation, error delivery and frame leases after teardown.
+The range test uses a 512 MiB sparse MP4 and a throttled local HTTP server to
+verify playback completes without downloading the full source. It does not
+claim a fixed OS-wide memory bound or prohibit native read-ahead buffering.
+
 ## Reproducible verification
 
 Build the usual native V8 engine with media enabled, then:

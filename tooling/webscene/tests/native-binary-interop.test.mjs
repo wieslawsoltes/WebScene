@@ -48,6 +48,7 @@ test('native engine publishes only the versioned leased interop surface', async 
   // they are not the retired v1/v2 JavaScript invocation transport.
   const independentHostApis = new Set([
     'webscene_engine_enable_file_service_v1',
+    'webscene_engine_set_native_media_policy_v1',
     'webscene_engine_take_file_request_v1',
     'webscene_engine_complete_file_request_v1',
     'webscene_file_request_release_v1',

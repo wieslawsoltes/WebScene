@@ -291,6 +291,7 @@ public:
     void cancel_callback_v3(uint64_t call_id);
     uint64_t pending_callback_promises() const noexcept;
     void enable_file_service(bool enabled);
+    void set_native_media_policy(uint32_t flags);
     std::unique_ptr<native_file_request> take_file_request();
     void complete_file_request(native_file_completion& completion);
     bool try_take_host_request(std::string& request);

@@ -454,6 +454,7 @@ private:
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
     std::atomic<bool> file_service_enabled_{false};
+    std::atomic<uint32_t> native_media_policy_{0};
     std::mutex file_runtime_mutex_;
     bool file_runtime_ready_{false};
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -1788,6 +1789,10 @@ uint8_t webscene_engine_get_memory_metrics(
 #if defined(WEBSCENE_GRAPHICS_SCENE_TESTS)
 #include "../tests/graphics_scene_lease_tests.inc"
 #endif
+
+uint8_t webscene_engine_set_native_media_policy_v1(webscene_engine* engine, uint32_t flags) {
+    return engine && engine->set_native_media_policy(flags);
+}
 
 uint8_t webscene_engine_enable_file_service_v1(webscene_engine* engine, uint8_t enabled) {
     return engine && engine->enable_file_service(enabled != 0);

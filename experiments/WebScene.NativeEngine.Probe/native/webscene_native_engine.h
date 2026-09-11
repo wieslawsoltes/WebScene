@@ -1349,6 +1349,16 @@ typedef struct webscene_file_request_v1 {
     const char* accept;
     webscene_file_data_v1 file;
 } webscene_file_request_v1;
+enum {
+    WEBSCENE_NATIVE_MEDIA_LOCAL_FILES = 1U << 0U,
+    WEBSCENE_NATIVE_MEDIA_NETWORK = 1U << 1U
+};
+/* Opt-in for trusted native applications. Set before navigation. File/HTTP(S)
+ * video URLs use native incremental I/O and audio playback, without a whole-file
+ * Blob or encoded-size limit. Zero preserves host-admitted byte loading.
+ * This path does not expose streamed audio through Web Audio/capture APIs. */
+WEBSCENE_API uint8_t webscene_engine_set_native_media_policy_v1(webscene_engine* engine, uint32_t flags);
+
 WEBSCENE_API uint8_t webscene_engine_enable_file_service_v1(webscene_engine* engine, uint8_t enabled);
 WEBSCENE_API const webscene_file_request_v1* webscene_engine_take_file_request_v1(webscene_engine* engine);
 WEBSCENE_API void webscene_file_request_release_v1(const webscene_file_request_v1* request);

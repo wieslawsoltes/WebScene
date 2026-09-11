@@ -141,6 +141,7 @@
     std::deque<std::string> console_messages;
     uint64_t next_host_request_id{0};
     std::atomic<bool> file_service_enabled{false};
+    std::atomic<uint32_t> native_media_policy{0};
     std::mutex file_requests_mutex;
     std::deque<std::unique_ptr<native_file_request>> file_requests;
     struct file_target { uint32_t node_id{}; v8::Global<v8::Context> context; };

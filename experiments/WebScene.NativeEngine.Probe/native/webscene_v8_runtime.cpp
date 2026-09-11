@@ -1,5 +1,6 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
 #include "media/media_session.h"
+#include "media/native_stream.h"
 #include "media/audio_graph.h"
 #include "media/decode_service.h"
 #if defined(__APPLE__)
@@ -6030,6 +6031,7 @@ const std::string& v8_dom_runtime::frame_last_error() const noexcept
 } // namespace webscene_native
 
 namespace webscene_native {
+void v8_dom_runtime::set_native_media_policy(uint32_t flags) { impl_->native_media_policy.store(flags); }
 void v8_dom_runtime::enable_file_service(bool enabled) { impl_->file_service_enabled.store(enabled); }
 std::unique_ptr<native_file_request> v8_dom_runtime::take_file_request() {
     std::lock_guard lock(impl_->file_requests_mutex);

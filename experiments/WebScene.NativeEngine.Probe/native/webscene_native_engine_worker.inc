@@ -856,6 +856,7 @@
                 runtime_->set_resource_root(resource_root_);
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
                 runtime_->enable_file_service(file_service_enabled_.load());
+                runtime_->set_native_media_policy(native_media_policy_.load());
 #endif
             }
             std::deque<script_work_request> script_work;

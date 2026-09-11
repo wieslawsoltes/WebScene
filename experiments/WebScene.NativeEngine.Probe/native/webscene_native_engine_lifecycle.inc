@@ -112,6 +112,14 @@
         // Destruction stays on the V8 worker and outside the host queue lock.
 #endif
     }
+    bool set_native_media_policy(uint32_t flags) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        if (flags & ~(WEBSCENE_NATIVE_MEDIA_LOCAL_FILES | WEBSCENE_NATIVE_MEDIA_NETWORK)) return false;
+        native_media_policy_.store(flags); signal_worker(); return true;
+#else
+        return false;
+#endif
+    }
     bool enable_file_service(bool enabled) {
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
         file_service_enabled_.store(enabled); signal_worker(); return true;

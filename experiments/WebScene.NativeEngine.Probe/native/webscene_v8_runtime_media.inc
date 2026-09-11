@@ -13,6 +13,7 @@ std::shared_ptr<media_image_wake> media_images_ready;
 #endif
 struct media_binding {
     std::unique_ptr<webscene::media::media_session> session;
+    std::unique_ptr<webscene::media::native_stream> stream;
     std::shared_ptr<webscene::media::playback_control> control =
         std::make_shared<webscene::media::playback_control>();
     v8::Global<v8::Context> realm;
@@ -89,6 +90,17 @@ static void media_native_call(const v8::FunctionCallbackInfo<v8::Value> &info) {
             info.GetReturnValue().Set(webscene::media::native_video_decode_available());
             return;
         }
+        const auto stream_allowed = [&](const std::string& url) {
+            const auto flags = self->native_media_policy.load();
+            return node->tag == "video" && webscene::media::native_stream_supported() &&
+                ((url.starts_with("file://") && (flags & WEBSCENE_NATIVE_MEDIA_LOCAL_FILES)) ||
+                 ((url.starts_with("http://") || url.starts_with("https://")) &&
+                  (flags & WEBSCENE_NATIVE_MEDIA_NETWORK)));
+        };
+        if (op == "streamAllowed") {
+            info.GetReturnValue().Set(info.Length() > 2 && stream_allowed(to_utf8(info.GetIsolate(), info[2])));
+            return;
+        }
         if (op == "release") {
             auto old = self->media_bindings.find(key);
             if (old != self->media_bindings.end())
@@ -99,19 +111,27 @@ static void media_native_call(const v8::FunctionCallbackInfo<v8::Value> &info) {
             self->document.mark_scene_changed();
             return;
         }
-        if (op == "load") {
-            if (info.Length() < 5 || !info[2]->IsArrayBuffer() || !info[4]->IsFunction())
+        if (op == "load" || op == "loadURL") {
+            const bool streaming = op == "loadURL";
+            if (info.Length() < 5 || (!streaming && !info[2]->IsArrayBuffer()) || !info[4]->IsFunction())
                 throw std::invalid_argument("Invalid media load");
-            auto buffer = info[2].As<v8::ArrayBuffer>();
-            auto backing = buffer->GetBackingStore();
-            if (backing->ByteLength() > webscene::media::decode_limits{}.encoded_bytes)
-                throw std::length_error("Media input too large");
             auto source = std::make_shared<webscene::media::encoded_source>();
-            if (backing->ByteLength()) {
-                auto p = static_cast<const uint8_t *>(backing->Data());
-                source->bytes.assign(p, p + backing->ByteLength());
+            std::string url;
+            if (streaming) {
+                url = to_utf8(info.GetIsolate(), info[2]);
+                if (!stream_allowed(url)) throw std::invalid_argument("Native media URL is not enabled by the application");
+                if (self->media_audio_source_elements.contains(key))
+                    throw std::invalid_argument("Native URL media audio cannot be routed through Web Audio");
+            } else {
+                auto backing = info[2].As<v8::ArrayBuffer>()->GetBackingStore();
+                if (backing->ByteLength() > webscene::media::decode_limits{}.encoded_bytes)
+                    throw std::length_error("Media input too large");
+                if (backing->ByteLength()) {
+                    auto bytes = static_cast<const uint8_t*>(backing->Data());
+                    source->bytes.assign(bytes, bytes + backing->ByteLength());
+                }
+                source->extension = to_utf8(info.GetIsolate(), info[3]);
             }
-            source->extension = to_utf8(info.GetIsolate(), info[3]);
             self->media_bindings.erase(key);
             if (self->media_bindings.size() >= 32)
                 throw std::length_error("Media session limit reached");
@@ -129,12 +149,16 @@ static void media_native_call(const v8::FunctionCallbackInfo<v8::Value> &info) {
             binding->images = std::make_unique<webscene::graphics::iosurface_canvas_images>(
                 128ULL * 1024 * 1024, self->media_images_ready);
 #endif
-            binding->session = std::make_unique<webscene::media::media_session>([self] {
+            auto notify = [self] {
                 self->media_work_ready.store(true, std::memory_order_release);
-                if (self->runtime_work_available)
-                    self->runtime_work_available();
-            });
-            binding->session->load(std::move(source), node->tag == "video");
+                if (self->runtime_work_available) self->runtime_work_available();
+            };
+            if (streaming) {
+                binding->stream = webscene::media::open_native_stream(std::move(url), notify);
+            } else {
+                binding->session = std::make_unique<webscene::media::media_session>(notify);
+                binding->session->load(std::move(source), node->tag == "video");
+            }
             self->media_bindings.emplace(key, std::move(binding));
             return;
         }
@@ -142,7 +166,10 @@ static void media_native_call(const v8::FunctionCallbackInfo<v8::Value> &info) {
         if (found == self->media_bindings.end())
             return;
         if (op == "time") {
-            info.GetReturnValue().Set(found->second->control->time());
+            if (found->second->stream) {
+                const auto state = found->second->stream->read();
+                info.GetReturnValue().Set(state.ended ? state.duration : state.time);
+            } else info.GetReturnValue().Set(found->second->control->time());
             return;
         }
         if (op == "state") {
@@ -152,13 +179,18 @@ static void media_native_call(const v8::FunctionCallbackInfo<v8::Value> &info) {
                 info[2]->NumberValue(realm).FromMaybe(0), info[3]->NumberValue(realm).FromMaybe(1),
                 info[4]->BooleanValue(info.GetIsolate()), info[5]->NumberValue(realm).FromMaybe(1),
                 info[6]->BooleanValue(info.GetIsolate()));
-            self->start_default_media_audio(key, *found->second);
+            if (found->second->stream) {
+                const auto& control = *found->second->control;
+                found->second->stream->control(control.rate, control.playing, control.volume, control.muted);
+            } else self->start_default_media_audio(key, *found->second);
             return;
         }
         if (op == "seek") {
             if (info.Length() < 3)
                 throw std::invalid_argument("Seek time required");
-            found->second->session->seek(info[2]->NumberValue(realm).FromMaybe(-1));
+            const double time = info[2]->NumberValue(realm).FromMaybe(-1);
+            if (found->second->stream) found->second->stream->seek(time);
+            else found->second->session->seek(time);
             return;
         }
         throw std::invalid_argument("Unknown media operation");
@@ -211,9 +243,18 @@ bool drain_media() {
         if (found == media_bindings.end())
             continue;
         auto &b = *found->second;
-        auto frame = presentation && b.control->playing.load()
-            ? b.session->present(b.control->time_at(media_presentation_time))
-            : b.session->read();
+        webscene::media::media_session::snapshot frame;
+        bool buffering = false;
+        if (b.stream) {
+            auto streamed = b.stream->read();
+            frame.generation = 1; frame.version = streamed.version;
+            frame.duration = streamed.duration; frame.ready = streamed.ready;
+            frame.seeking = streamed.seeking; frame.error = std::move(streamed.error);
+            frame.video = std::move(streamed.video); buffering = streamed.buffering;
+        } else {
+            frame = presentation && b.control->playing.load()
+                ? b.session->present(b.control->time_at(media_presentation_time)) : b.session->read();
+        }
         if (!frame.version)
             continue;
         const bool changed = frame.generation != b.generation || frame.version != b.version;
@@ -284,6 +325,7 @@ bool drain_media() {
         };
         put("seeking", v8::Boolean::New(isolate, b.frame.seeking));
         put("ready", v8::Boolean::New(isolate, b.frame.ready));
+        put("buffering", v8::Boolean::New(isolate, buffering));
         put("error", js_string(isolate, b.frame.error.c_str()));
         put("duration", v8::Number::New(isolate, b.frame.duration));
         put("width", v8::Integer::NewFromUnsigned(isolate, b.frame.video.width));

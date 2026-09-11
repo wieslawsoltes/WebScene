@@ -18,11 +18,11 @@ find_package(Threads REQUIRED)
 target_link_libraries(webscene_media PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
 if(APPLE)
     enable_language(OBJCXX)
-    target_sources(webscene_media PRIVATE video_decode_macos.mm)
-    set_source_files_properties(video_decode_macos.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+    target_sources(webscene_media PRIVATE video_decode_macos.mm native_stream_macos.mm)
+    set_source_files_properties(video_decode_macos.mm native_stream_macos.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
     target_link_libraries(webscene_media PUBLIC "-framework AVFoundation" "-framework CoreMedia" "-framework CoreVideo" "-framework Foundation" "-framework IOSurface")
 else()
-    target_sources(webscene_media PRIVATE video_decode_unsupported.cpp)
+    target_sources(webscene_media PRIVATE video_decode_unsupported.cpp native_stream_unsupported.cpp)
 endif()
 configure_file("${webscene_miniaudio_SOURCE_DIR}/LICENSE" "${CMAKE_BINARY_DIR}/webscene-miniaudio-LICENSE" COPYONLY)
 if(BUILD_TESTING)
@@ -32,6 +32,19 @@ if(BUILD_TESTING)
     add_executable(webscene_media_decode_tests ../../tests/media_decode_tests.cpp)
     target_link_libraries(webscene_media_decode_tests PRIVATE webscene_media)
     if(APPLE)
+        add_executable(webscene_native_stream_tests ../../tests/native_stream_tests.mm)
+        set_source_files_properties(../../tests/native_stream_tests.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+        target_link_libraries(webscene_native_stream_tests PRIVATE webscene_media)
+        add_test(NAME webscene_native_stream_tests COMMAND webscene_native_stream_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/fixtures/media/numbered-motion.mp4")
+        add_test(NAME webscene_native_stream_delayed_video_tests COMMAND webscene_native_stream_tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/fixtures/media/delayed-video.mp4")
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        add_test(NAME webscene_native_stream_range_tests
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/native_stream_range_test.py"
+            "$<TARGET_FILE:webscene_native_stream_tests>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/fixtures/media/numbered-motion.mp4")
+        set_tests_properties(webscene_native_stream_tests webscene_native_stream_range_tests PROPERTIES TIMEOUT 100)
         add_test(NAME webscene_media_decode_tests COMMAND webscene_media_decode_tests "-"
             "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/fixtures/media/numbered-motion.mp4"
             "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/fixtures/media/flash-click.mp4")

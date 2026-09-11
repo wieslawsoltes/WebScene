@@ -97,3 +97,5 @@ _webscene_engine_complete_file_request_v1
 _webscene_engine_set_work_available_callback_v1
 
 _webscene_engine_register_compiled_document_v1
+
+_webscene_engine_set_native_media_policy_v1

@@ -80,6 +80,10 @@
             return false;
         }
         if (compiled != nullptr) resolved_url = compiled->base_url;
+        // File loaders return a filesystem path for their cache key. Preserve
+        // the navigation URL for Document/Location and relative media URLs.
+        if (compiled == nullptr && url.starts_with("file://") && resolved_url.find("://") == std::string::npos)
+            resolved_url = url;
         document_base_address = resolved_url;
         const auto stylesheets = compiled ? compiled->stylesheet_urls : parse_frame_stylesheets(html);
         auto scripts = compiled ? std::vector<frame_script>{} : parse_frame_scripts(html);

@@ -1764,6 +1764,17 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
         }
         require(observed.find("1357,811,1.5")!=std::string::npos,
             "document-start JS observed unexpected viewport: "+observed);
+        const auto address = evaluate(fresh,
+            "[location.href,document.URL,document.baseURI].every(u=>u.startsWith('file://'))"
+            " && new URL('movie.mp4',document.baseURI).protocol === 'file:'",
+            "native-file-url-base.js");
+        require(address == "true", "file URL lost its scheme before relative media resolution: " + address);
+        require(webscene_engine_set_native_media_policy_v1(nullptr, 0) == 0,
+            "native media policy accepted a null engine");
+        require(webscene_engine_set_native_media_policy_v1(fresh, 4) == 0,
+            "native media policy accepted unknown flags");
+        require(webscene_engine_set_native_media_policy_v1(fresh, 0) != 0,
+            "native media policy could not be disabled");
         webscene_engine_destroy(fresh);
         std::filesystem::remove(path);
     }
