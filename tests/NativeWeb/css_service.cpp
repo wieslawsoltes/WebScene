@@ -23,6 +23,7 @@
 #include "webscene_css_decoration_values.h"
 #include "webscene_css_application.h"
 #include "webscene_css_cascade_reset.h"
+#include "webscene_css_cascade_application.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -670,5 +671,28 @@ int main(int argc,char** argv) {
     webscene_native::css::reset_cascaded_style(view,variable_root);
     styled_document.layout(500,200);
     if(view.layout.width!=123) return 126;
+    webscene_native::native_document ordered_document;
+    auto& ordered_node=ordered_document.create_element("div");ordered_node.class_name="view small";
+    ordered_document.append_child(ordered_document.body(),ordered_node);
+    ordered_node.mutable_authored_style().declarations["height"]="var(--height)";
+    ordered_node.style.inline_property_mask=property_mask("height");
+    const auto ordered_sheet=webscene_native::css::prepare_stylesheet(
+        ".view {width:var(--size)} .small {--size:120px;--height:40px}","",
+        [](const auto&) { return true; });
+    if(!ordered_sheet) return 127;
+    std::vector<webscene_native::css::css_rule> ordered_rules;
+    for(const auto& payload:ordered_sheet->rules) ordered_rules.push_back({payload,0,0,true});
+    std::vector<const webscene_native::css::css_rule*> ordered_matches;
+    for(const auto& rule:ordered_rules) ordered_matches.push_back(&rule);
+    webscene_native::css::reset_cascaded_style(ordered_node,variable_root);
+    webscene_native::css::apply_matched_declarations(ordered_node,ordered_matches,
+        [&](const webscene_native::css::css_declaration& declaration,bool inline_origin) {
+            webscene_native::css::property_result result;
+            webscene_native::css::apply_declaration(ordered_document,ordered_node,declaration,variable_root,
+                inline_origin,result,[](const auto&,auto&,auto&,auto&) { return false; },[](bool) {});
+        });
+    ordered_document.layout(500,200);
+    if(ordered_node.layout.width!=120 || ordered_node.layout.height!=40 ||
+       ordered_node.style.inline_property_mask!=property_mask("height")) return 128;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

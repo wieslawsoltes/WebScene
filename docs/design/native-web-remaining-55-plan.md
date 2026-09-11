@@ -649,3 +649,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   iframe cascade, active-class pseudo border, variable dimensions and all-unset
   regressions pass. This preserves existing reset behavior/limitations; candidate
   selection, ordering and the document cascade lifecycle are still unfinished.
+
+- Matched declaration ordering extraction: shared cascade application performs
+  custom-property passes before dependent values, then replays dependent inline
+  values and restores inline transitions with existing important guards. Native
+  tests verify a later matched rule supplies an earlier rule's variable and an
+  initially unresolved inline height updates, retaining its inline mask. Runtime
+  variable/inheritance, transition/keyframe and iframe cascade regressions pass.
+  Candidate selection, final font metrics, pseudo routing and document invalidation
+  still need integration; this is not a complete native stylesheet lifecycle.

@@ -610,67 +610,10 @@
             ? std::chrono::steady_clock::now()
             : std::chrono::steady_clock::time_point{};
 #endif
-        // CSS custom properties are cascaded before dependent declarations are
-        // computed. Applying each rule eagerly made a base button height resolve
-        // with the default medium size before its later `.small-*` rule set the
-        // size token.
-        for (const auto* rule : matched_rules) {
-            for (const auto& declaration : rule->declarations()) {
-                if (declaration.name.starts_with("--")) {
-                    apply_css_declaration(node, declaration);
-                }
-            }
-        }
-        for (const auto* rule : matched_rules) {
-            for (const auto& declaration : rule->declarations()) {
-                if (declaration.name.starts_with("--")) continue;
-                apply_css_declaration(node, declaration);
-            }
-        }
-        // An inline declaration can be authored before the stylesheet that
-        // defines one of its var() references is connected. Its first
-        // computed-value attempt is then invalid, but the authored tokens must
-        // remain live and be recomputed when the variable becomes available.
-        // Replay variable-dependent inline declarations and explicit dimension
-        // inheritance, whose computed values can change with the parent.
-        // Temporarily removing the inline guard lets a declaration update its own
-        // computed value while the important-origin mask still prevents a
-        // normal inline declaration from overriding an author !important rule.
-        for (const auto& [name, value] : node.authored_style().declarations) {
-            const auto inherited_dimension = (name == "width" || name == "height")
-                && trim_css_view(value) == "inherit";
-            if (name.starts_with("--")
-                || (value.find("var(") == std::string::npos && !inherited_dimension)) continue;
-            const auto property_mask = inline_style_mask(name);
-            const auto retained_inline_mask = node.style.inline_property_mask;
-            node.style.inline_property_mask &= ~property_mask;
-            apply_css_declaration(
-                node,
-                {name, value,
-                    node.authored_style().important_declarations.contains(name)}, true);
-            node.style.inline_property_mask = retained_inline_mask;
-        }
-        // Inline transition declarations are stored separately from the hot
-        // style object. Recascade clears cold animation state before applying
-        // stylesheet rules, so restore the inline origin afterward while
-        // retaining per-longhand !important precedence.
-        constexpr std::array transition_properties{
-            "transition",
-            "transition-property",
-            "transition-duration",
-            "transition-delay",
-            "transition-timing-function"
-        };
-        for (const auto* property : transition_properties) {
-            const auto authored = node.authored_style().declarations.find(property);
-            if (authored == node.authored_style().declarations.end()) continue;
-            const auto inline_important =
-                node.authored_style().important_declarations.contains(property);
-            const auto property_mask = inline_style_mask(property);
-            if (!inline_important
-                && (node.style.important_property_mask & property_mask) != 0U) continue;
-            apply_css_declaration(node, {property, authored->second, inline_important});
-        }
+        css::apply_matched_declarations(node,matched_rules,
+            [&](const css_declaration& declaration,bool inline_origin) {
+                apply_css_declaration(node,declaration,inline_origin);
+            });
         // Inline relative line-height is authored at a higher origin, but its
         // computed pixel value depends on the winning font-size. Re-resolve it
         // only after stylesheet declarations have completed their cascade.
