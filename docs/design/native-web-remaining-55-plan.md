@@ -846,3 +846,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   This smoke test does not observe OS cursor state; stationary-pointer visual
   validation remains required. Compiler audit remains 33, and full original
   Kestrel parity and presented 60fps panning/resize remain incomplete.
+
+- Text overflow prerequisite audit: native DOM emits text fragments with spacing
+  metadata, but Foco draw_dom_text ignored both spacing fields. Foco 636d421d now
+  applies finite letter/word spacing while preserving the existing unspaced font
+  run path. Raster tests pass for exact ASCII letter-gap and space advances.
+  This matches the native fallback scalar-spacing policy, not full grapheme-aware
+  shaping. Ellipsis and anywhere wrapping remain open: both fragment and fallback
+  text paint paths require coordinated overflow geometry, and the Foco renderer
+  still uses simple text runs rather than a shared full shaper. Compiler audit
+  remains 33; original app parity and 60fps acceptance remain unfinished.
