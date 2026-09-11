@@ -473,22 +473,45 @@ public:
     window->frame = [this, lifetime] {
       try {
 #ifdef KESTREL_PREVIEW_SHARED_CSS
+        const bool opening_picker=color_picker_pending;
         if(color_picker_pending) {color_picker_pending=false;color_picker->set_open(true);}
         else if(color_picker && !color_picker->is_open())color_picker->set_visibility(foco::visibility::collapsed);
-        if(color_test_before && color_picker->is_open() && !show_color_picker) {
-          color_picker->set_color({0,128,255,255});
+        if(color_test_before && color_picker->is_open() && !show_color_picker && !opening_picker) {
+          const auto find_spectrum=[&](auto&& self,foco::element& element)->foco::color_spectrum* {
+            if(auto* spectrum=dynamic_cast<foco::color_spectrum*>(&element))return spectrum;
+            for(const auto& child:element.children())if(auto* found=self(self,*child))return found;
+            return nullptr;
+          };
+          auto* spectrum=find_spectrum(find_spectrum,*window);
+          if(!spectrum || spectrum->bounds().width<=0 || spectrum->bounds().height<=0)
+            throw std::runtime_error("Native color spectrum was not laid out");
+          const auto bounds=spectrum->bounds();
+          foco::pointer_event pointer;pointer.kind=foco::pointer_event_kind::pressed;pointer.buttons=1;
+          pointer.position={bounds.x+bounds.width*.25f,bounds.y+bounds.height*.25f};
+          if(window->hit_test(pointer.position)!=spectrum)throw std::runtime_error("Native spectrum pointer hit test failed");
+          spectrum->raise_pointer_event(pointer);
+          if(model.data==*color_test_before)throw std::runtime_error("Native spectrum pointer press did not edit color");
           if(!color_picker->is_open())throw std::runtime_error("Native color picker closed during editing");
           const auto intermediate=model.data;
-          color_picker->set_color({255,0,128,255});
+          pointer.kind=foco::pointer_event_kind::moved;
+          pointer.position={bounds.x+bounds.width*.75f,bounds.y+bounds.height*.75f};
+          if(window->hit_test(pointer.position)!=spectrum)throw std::runtime_error("Native spectrum pointer hit test failed");
+          spectrum->raise_pointer_event(pointer);
+          if(model.data==intermediate)throw std::runtime_error("Native spectrum pointer drag did not edit color");
+          pointer.kind=foco::pointer_event_kind::released;pointer.buttons=0;
+          if(window->hit_test(pointer.position)!=spectrum)throw std::runtime_error("Native spectrum pointer hit test failed");
+          spectrum->raise_pointer_event(pointer);
           if(!color_picker->is_open())throw std::runtime_error("Native color picker closed during repeated editing");
-          for(const auto& id:model.selection)if(model.find(id)->value("color",std::string{})!="#ff0080")throw std::runtime_error("Native color picker commit failed");
+          const auto color=spectrum->selected_color();
+          std::ostringstream expected;expected<<'#'<<std::hex<<std::setfill('0')<<std::setw(2)<<unsigned(color.r)<<std::setw(2)<<unsigned(color.g)<<std::setw(2)<<unsigned(color.b);
+          for(const auto& id:model.selection)if(model.find(id)->value("color",std::string{})!=expected.str())throw std::runtime_error("Native color picker commit failed");
           color_picker->set_open(false);
           view->document.focus(view->document.find("viewport"));
           foco::key_event key;key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
           if(model.data!=intermediate)throw std::runtime_error("Native color picker intermediate undo failed");
           key.handled=false;view->key_event_received(key);
           if(model.data!=*color_test_before)throw std::runtime_error("Native color picker undo failed");
-          color_test_before.reset();std::cout<<"Native Foco color picker open, commit and undo passed\n";
+          color_test_before.reset();std::cout<<"Native Foco color picker routed pointer drag, commit and undo passed\n";
         }
 #endif
         if(exercise_failure) throw std::runtime_error("Requested preview failure exercise");

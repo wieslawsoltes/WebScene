@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Spectrum routed-input verification: --exercise-color-picker now waits for popup
+layout, locates its native spectrum, verifies window hit testing at two positions,
+and raises pressed/moved/released routed pointer events on the hit control. Both
+press and drag must change document color while keeping the picker open; the
+selected entity color must match the spectrum and two undos restore exact states.
+The hosted run passes and captures `/tmp/kestrel-picker-pointer.png` (exit 0,
+GPU serial 3). This replaces direct set_color calls in the exercise. It verifies
+native hit testing/control event routing, not OS event ingestion, out-of-bounds
+pointer capture or physical interaction latency.
+
 Picker editing lifetime: the NativeKestrel host no longer closes the flyout from
 its color-change callback, allowing successive edits in one open session. A
 selection mismatch closes it without applying the stale edit. The hosted exercise
