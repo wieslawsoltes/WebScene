@@ -505,86 +505,90 @@ void test_enter_dispatches_browser_keypress_for_interval_commit(webscene_engine*
 
 void test_collapsed_single_select_native_activation(webscene_engine* engine)
 {
-    resize(engine, 320, 140, 600U);
+    resize(engine, 340, 230, 600U);
     execute(engine, R"JS(
         (() => {
-          document.body.innerHTML = `
-            <style>
-              body { margin: 0; }
-              #choice { position:absolute;left:20px;top:20px;width:240px;height:39px;
-                box-sizing:border-box;padding:8px 10px;color:rgb(18,52,86);font-size:16px; }
-            </style>
-            <select id="choice">
-              <option value="one">One-way flight</option>
-              <option value="return">Return flight</option>
-            </select>`;
-          globalThis.__selectEvents = [];
-          for (const type of ['click', 'input', 'change', 'keydown', 'keyup']) {
-            choice.addEventListener(type, () => __selectEvents.push(type));
-          }
+          document.body.innerHTML = `<style>
+            body { margin: 0; background: #202124; color: #f2f2f2; }
+            #choice { position:absolute; left:20px; top:20px; width:240px; height:39px;
+              background:#2b2d31; color:#f2f2f2; }
+            #choice2 { position:absolute; left:20px; top:80px; width:240px; height:39px;
+              background:#2b2d31; color:#f2f2f2; }
+          </style>
+          <select id="choice">
+            <option value="one">One-way flight</option>
+            <option value="return">Return flight</option>
+            <option value="multi">Multi-city</option>
+          </select>
+          <select id="choice2">
+            <option value="a">Alpha</option>
+            <optgroup label="Unavailable" disabled><option value="b">Blocked</option></optgroup>
+            <option value="c">Charlie</option>
+          </select>`;
+          globalThis.choice = document.getElementById('choice');
+          globalThis.choice2 = document.getElementById('choice2');
+          globalThis.observed = [];
+          globalThis.bodyClicks = 0;
+          for (const type of ['click','input','change']) choice.addEventListener(type, () => observed.push(type));
+          document.body.addEventListener('click', e => { if (e.target === document.body) bodyClicks++; });
         })()
-    )JS", "native-collapsed-select-setup.js");
-    const auto initial = evaluate(engine, R"JS((() => {
-          const select = choice.getBoundingClientRect();
-          const options = Array.from(choice.options, option => option.getBoundingClientRect());
-          return [choice.value, select.width, select.height,
-            options.every(rect => rect.width === 0 && rect.height === 0)];
-        })())JS", "native-collapsed-select-initial.js");
-    require(
-        initial == R"(["one",240,39,true])",
-        "single select did not begin as one collapsed native control: " + initial);
+    )JS", "native-select-popup-setup.js");
+    require(evaluate(engine, "choice.offsetWidth", "native-select-popup-ready.js") == "240",
+        "select popup fixture did not complete layout");
 
-    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 40, 35, 601U, true);
-    pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, 40, 35, 602U, false);
-    const auto clicked = evaluate(engine, R"JS(({
+    const auto click = [&](double x,double y,uint64_t& sequence) {
+        pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, x, y, sequence++, true);
+        pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, x, y, sequence++, false);
+    };
+    uint64_t sequence = 601U;
+    click(60, 40, sequence);
+    auto opened = evaluate(engine, R"JS(({
       value: choice.value,
       index: choice.selectedIndex,
       active: document.activeElement === choice,
-      events: __selectEvents
-    }))JS", "native-collapsed-select-clicked.js");
-    require(
-        clicked == R"({"value":"return","index":1,"active":true,"events":["click","input","change"]})",
-        "native select activation did not change value/focus/events: " + clicked);
+      observed
+    }))JS", "native-select-popup-open.js");
+    require(opened == R"JSON({"value":"one","index":0,"active":true,"observed":["click"]})JSON",
+        "opening a collapsed select changed its value or emitted change events: " + opened);
 
-    keyboard_input(engine, WEBSCENE_INPUT_KEY_DOWN, 38U, 603U);
-    keyboard_input(engine, WEBSCENE_INPUT_KEY_UP, 38U, 604U);
-    const auto keyed = evaluate(engine, R"JS(({
+    // The popup starts immediately below the 39px-high control. Its second
+    // 30px row is therefore safely hit around y=108.
+    click(60, 108, sequence);
+    auto chosen = evaluate(engine, R"JS(({
       value: choice.value,
       index: choice.selectedIndex,
-      events: __selectEvents
-    }))JS", "native-collapsed-select-keyed.js");
-    require(
-        keyed == R"({"value":"one","index":0,"events":["click","input","change","keydown","input","change","keyup"]})",
-        "ArrowUp did not navigate the focused native select: " + keyed);
+      observed
+    }))JS", "native-select-popup-pointer-choice.js");
+    require(chosen == R"JSON({"value":"return","index":1,"observed":["click","input","change"]})JSON",
+        "pointer selection did not commit the popup option exactly once: " + chosen);
 
-    webscene_engine_request_scene_checkpoint(engine);
-    auto observed_selected_label = false;
-    auto observed_unselected_label = false;
-    for (auto attempt = 0; attempt < 100; ++attempt) {
-        const auto* scene = webscene_engine_acquire_latest_scene(engine);
-        if (scene != nullptr) {
-            for (uint32_t index = 0; index < scene->header.command_count; ++index) {
-                const auto& command = scene->commands[index];
-                if (command.kind != 3U || command.flags >= scene->string_count) continue;
-                const auto resource = scene->strings[command.flags];
-                const std::string_view text(
-                    scene->string_bytes + resource.byte_offset,
-                    resource.byte_length);
-                observed_selected_label = observed_selected_label
-                    || text.ends_with("One-way flight");
-                observed_unselected_label = observed_unselected_label
-                    || text.ends_with("Return flight");
-            }
-            webscene_scene_acknowledge(scene);
-            webscene_scene_release(scene);
-        }
-        if (observed_selected_label) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
-    }
-    require(
-        observed_selected_label && !observed_unselected_label,
-        "the collapsed select scene did not project exactly its selected label");
+    execute(engine, "observed = [];", "native-select-popup-reset.js");
+    click(60, 40, sequence);
+    click(320, 205, sequence);
+    auto cancelled = evaluate(engine, R"JS(({
+      value: choice.value,
+      observed,
+      bodyClicks
+    }))JS", "native-select-popup-outside-cancel.js");
+    require(cancelled == R"JSON({"value":"return","observed":["click"],"bodyClicks":0})JSON",
+        "outside dismissal changed selection or leaked its click through the popup: " + cancelled);
+
+    click(60, 100, sequence);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_DOWN, 40, sequence++);
+    require(evaluate(engine, "choice2.value", "native-select-popup-pending-arrow.js") == R"("a")",
+        "open-popup ArrowDown committed before acceptance");
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_DOWN, 13, sequence++);
+    auto keyboard = evaluate(engine, "choice2.value", "native-select-popup-keyboard-commit.js");
+    require(keyboard == R"("c")",
+        "keyboard navigation did not skip a disabled optgroup option and commit Charlie: " + keyboard);
+
+    click(60, 100, sequence);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_DOWN, 38, sequence++);
+    keyboard_input(engine, WEBSCENE_INPUT_KEY_DOWN, 27, sequence++);
+    require(evaluate(engine, "choice2.value", "native-select-popup-escape.js") == R"("c")",
+        "Escape cancellation committed the pending highlight");
 }
+
 
 void test_controlled_switch_native_activation_matches_browser_semantics()
 {

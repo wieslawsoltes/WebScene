@@ -1,3 +1,4 @@
+#include "webscene_v8_runtime_select_popup.inc"
     bool promote_pending_promise_error()
     {
         if (pending_promise_rejections.empty()) return true;
@@ -2345,6 +2346,46 @@
             }
             prevented = keypress_prevented;
         }
+        if (!prevented && target->tag == "select"
+            && select_popup_is_candidate(*target)) {
+            if (select_popup_is_open(*target)) {
+                if (!select_popup_snapshot_valid(*target)) {
+                    close_select_popup(*target, false);
+                } else if (key_code == 27) {
+                    close_select_popup(*target, false);
+                    return true;
+                } else if (key_code == 13 || key_code == 32) {
+                    return select_popup_commit(*target, input);
+                } else if (key_code == 36 || key_code == 35
+                    || key_code == 38 || key_code == 40) {
+                    return select_popup_move_highlight(
+                        *target,
+                        key_code == 38 ? -1 : key_code == 40 ? 1 : 0,
+                        key_code == 36,
+                        key_code == 35);
+                } else if (key_code == 33 || key_code == 34) {
+                    for (auto step = 0; step < 5; ++step) {
+                        select_popup_move_highlight(
+                            *target, key_code == 33 ? -1 : 1);
+                    }
+                    return true;
+                } else if (!command_modifier
+                    && ((key_code >= '0' && key_code <= '9')
+                        || (key_code >= 'A' && key_code <= 'Z'))) {
+                    return select_popup_typeahead(
+                        *target, static_cast<char>(key_code));
+                } else if (key_code == 9) {
+                    // Tab accepts no pending value; close and let the normal
+                    // sequential focus algorithm continue below.
+                    close_select_popup(*target, false);
+                }
+            } else if (key_code == 13 || key_code == 32
+                || (key_code == 40
+                    && (input.flags & WEBSCENE_INPUT_MODIFIER_ALT) != 0U)) {
+                static_cast<void>(open_select_popup(*target));
+                return true;
+            }
+        }
         if (!prevented && key_code == 9) {
             const auto focus_order = sequential_focus_order();
             if (!focus_order.empty()) {
@@ -2629,13 +2670,10 @@
     bool apply_non_checkable_form_control_click_default(dom_node& target)
     {
         if (target.attributes.contains("disabled")) return false;
-        if (target.tag == "select" && !target.attributes.contains("multiple")) {
-            // WebScene has no operating-system popup surface. A direct native
-            // activation advances the collapsed selection, while Arrow keys
-            // retain the usual bounded navigation. This keeps ordinary two-
-            // choice component controls usable without a presenter widget.
-            return move_single_select_selection(target, 1, false, false, true);
-        }
+        // Collapsed selects have a real picker default action. Opening it is
+        // deferred until after the click event so preventDefault() can suppress
+        // the picker exactly like any other cancelable activation default.
+        if (select_popup_is_candidate(target)) return false;
         return false;
     }
 
@@ -2772,6 +2810,16 @@
             || input.kind == WEBSCENE_INPUT_KEY_UP || input.kind == WEBSCENE_INPUT_TEXT;
         auto* initial_hit_target = keyboard ? nullptr : document.hit_test(
             document.body(), static_cast<float>(input.x), static_cast<float>(input.y));
+        if (!keyboard
+            && (input.kind == WEBSCENE_INPUT_POINTER_MOVE
+                || input.kind == WEBSCENE_INPUT_POINTER_DOWN
+                || input.kind == WEBSCENE_INPUT_POINTER_UP
+                || input.kind == WEBSCENE_INPUT_WHEEL)) {
+            if (auto handled = dispatch_select_popup_pointer_input(
+                    input, initial_hit_target); handled.has_value()) {
+                return *handled;
+            }
+        }
         auto* input_owner = keyboard ? active_element
             : pointer_capture_target != nullptr ? pointer_capture_target : initial_hit_target;
         if (input_owner != nullptr) local_context = context_for_node(*input_owner);
@@ -3246,6 +3294,12 @@
                     form_control_changed = checkable_activation.changed;
                 }
             }
+            if (!click_default_prevented
+                && activated_form_control != nullptr
+                && !activate_label_control_after_click
+                && select_popup_is_candidate(*activated_form_control)) {
+                static_cast<void>(open_select_popup(*activated_form_control));
+            }
             if (!click_default_prevented && !queue_external_navigation(*click_target)) {
                 last_error = "Native external navigation host request could not be queued";
                 return false;
@@ -3285,6 +3339,11 @@
                 } else {
                     form_control_changed = label_checkable_activation.changed;
                 }
+            }
+            if (!control_click_default_prevented
+                && activated_form_control != nullptr
+                && select_popup_is_candidate(*activated_form_control)) {
+                static_cast<void>(open_select_popup(*activated_form_control));
             }
         }
         if (form_control_changed
