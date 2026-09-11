@@ -1277,3 +1277,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   removed from Foco source; last-built binary retains it until rebuild. This is
   stronger evidence than the earlier scheduler hypothesis; do not change frame
   cadence to hide backing recreation. Displayed 60fps remains unmet.
+
+- Recovery trigger found: logs contain semantic replay skipped: Graphite semantic
+  image resource is unavailable. Cocoa mapped ALL non-presented painter statuses
+  to device_lost, forcing recovery/backing destruction. A working-tree diagnostic
+  change in Foco cocoa_graphite_host.mm preserves render_status. Rebuilt/run:
+  359 GPU images, 358 scene publications, ZERO presentations and 358 skipped
+  attempts. /tmp/kestrel-preserve-skip.log. Thus device recovery masked a persistent
+  semantic image resolution failure; preserving status alone is not a working
+  fix. Foco change intentionally uncommitted pending resource-resolution fix.
+  Next inspect skia_graphite_renderer::draw_image images_ and command-surface
+  fallback, which return unavailable for the updated native GPU packet resource.
