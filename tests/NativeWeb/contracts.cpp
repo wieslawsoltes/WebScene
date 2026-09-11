@@ -19,6 +19,7 @@ int main() {
     box.declarations.push_back({false,+[](style& s) {
       s.set_width({100,length_unit::pixels});s.set_height({40,length_unit::pixels});
       s.set_overflow_y(overflow_mode::scroll);s.set_scrollbar_width(scrollbar_width::thin);
+      s.set_scrollbar_colors(0xFF0000FFU,0x0000FFFFU);
     }});
     bars.add_rule(std::move(box));
     rule inner;inner.inline_target=content;
@@ -27,14 +28,14 @@ int main() {
     const auto& painted=bars.render(300,300);
     bool thin_rail=false;
     for(const auto& command:painted.commands)
-      if(command.node_id==scroller && command.rgba==0x7F7F7F40U && command.width==4) thin_rail=true;
+      if(command.node_id==scroller && command.rgba==0x0000FFFFU && command.width==4) thin_rail=true;
     check(thin_rail,"thin scrollbar emits four-pixel rail");
     rule hidden;hidden.inline_target=scroller;
     hidden.declarations.push_back({false,+[](style& s) {s.set_scrollbar_width(scrollbar_width::none);}});
     bars.add_rule(std::move(hidden));
     const auto& no_bars=bars.render(300,300);
     for(const auto& command:no_bars.commands)
-      check(command.node_id!=scroller || command.rgba!=0x7F7F7F40U,"none suppresses scrollbar rail");
+      check(command.node_id!=scroller || command.rgba!=0x0000FFFFU,"none suppresses scrollbar rail");
     bars.scroll_to(scroller,0,20);
     check(bars.scroll_offset(scroller).second==20,"hidden scrollbar retains scrolling");
   }

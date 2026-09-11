@@ -12,6 +12,15 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_scrollbar_colors(self):
+        for value in ['red transparent', 'var(--line) transparent', 'auto', 'inherit']:
+            result, out = self.compile('<div></div>', 'div {scrollbar-color:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('scrollbar_colors', out.read_text())
+        for value in ['red', 'red blue green', '1px red']:
+            result, _ = self.compile('<div></div>', 'div {scrollbar-color:'+value+'}')
+            self.assertNotEqual(result.returncode, 0, value)
+
     def test_scrollbar_width_keywords(self):
         for value, expected in [('auto', 'automatic'), ('thin', 'thin'), ('none', 'none'), ('THIN', 'thin')]:
             result, out = self.compile('<div></div>', 'div {scrollbar-width:'+value+'}')

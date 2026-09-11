@@ -795,3 +795,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   1475 declarations, **41 distinct unsupported constructs**, down from 43.
   Inherited scrollbar-width, scrollbar-color, original app parity and performance
   remain unfinished; this is not a full CSS Scrollbars conformance claim.
+
+- Compiler scrollbar-color support: two typed colors (including compiled var()
+  expressions), auto/initial and inherit/unset now emit native color updates.
+  Parent color inheritance is preserved without allocating auxiliary style storage
+  for unchanged defaults; invalid computed pairs restore inherited colors.
+  Compiler tests cover Kestrel's var(--line) transparent form and reject malformed
+  literal pairs; native paint contracts verify custom rail colors. Compiler and
+  contract suites pass. Fresh original audit: 397 rules, 1475 declarations,
+  **40 distinct unsupported constructs**. currentColor/color-mix forms, forced-color
+  handling and browser differential validation remain incomplete. No app parity
+  or presented-frame performance claim follows from the audit count.

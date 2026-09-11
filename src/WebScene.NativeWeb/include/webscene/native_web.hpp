@@ -26,8 +26,11 @@ class style {
   length border_widths_[4]{{3,length_unit::pixels},{3,length_unit::pixels},{3,length_unit::pixels},{3,length_unit::pixels}};
   bool border_visible_[4]{};
   const computed_variables &variables_;
+  uint32_t inherited_scrollbar_thumb_, inherited_scrollbar_track_;
   explicit style(webscene_native::node_style &value, const computed_variables &variables)
-      : value_(value), variables_(variables) {}
+      : value_(value), variables_(variables),
+        inherited_scrollbar_thumb_(value.scrollbar().thumb_rgba),
+        inherited_scrollbar_track_(value.scrollbar().track_rgba) {}
 
 public:
   variable_result evaluate(const std::vector<variable_expression> &expressions) const {
@@ -82,6 +85,12 @@ public:
   void set_z_index(int32_t value, bool automatic = false) { value_.z_index = value; value_.z_index_auto = automatic; }
   void set_pointer_events(bool none, bool specified = true) { value_.pointer_events_none = none; value_.pointer_events_specified = specified; }
   void set_visibility(bool hidden, bool specified = true) { value_.visibility_hidden = hidden; value_.visibility_specified = specified; }
+  void set_scrollbar_colors(uint32_t thumb, uint32_t track) {
+    auto &bar=value_.mutable_scrollbar();bar.thumb_rgba=thumb;bar.track_rgba=track;
+  }
+  void inherit_scrollbar_colors() {
+    set_scrollbar_colors(inherited_scrollbar_thumb_,inherited_scrollbar_track_);
+  }
   void set_scrollbar_width(scrollbar_width width) {
     value_.scrollbar_hidden = width == scrollbar_width::none;
     auto &bar = value_.mutable_scrollbar();

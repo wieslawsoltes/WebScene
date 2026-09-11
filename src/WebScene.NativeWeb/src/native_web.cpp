@@ -541,6 +541,15 @@ const scene &document::render(float width, float height) {
   const auto cascade = [&](auto &&self, dom_node &n, const computed_variables &inherited) -> void {
     n.style = node_style{};
     n.style.display = native_default_display_for_node(n);
+    if (n.parent) {
+      const auto &inherited_bar=n.parent->style.scrollbar();
+      if (inherited_bar.thumb_rgba != n.style.scrollbar().thumb_rgba ||
+          inherited_bar.track_rgba != n.style.scrollbar().track_rgba) {
+        auto &bar=n.style.mutable_scrollbar();
+        bar.thumb_rgba=inherited_bar.thumb_rgba;
+        bar.track_rgba=inherited_bar.track_rgba;
+      }
+    }
     struct candidate {
       bool important;
       uint64_t specificity;

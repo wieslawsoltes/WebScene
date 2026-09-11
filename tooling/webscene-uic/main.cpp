@@ -720,6 +720,19 @@ static std::string assignments(const std::string &name,
     if (integer < INT32_MIN || integer > INT32_MAX) throw std::runtime_error("z-index outside native integer range");
     return "s.set_z_index(" + std::to_string(integer) + ");";
   }
+  if (name == "scrollbar-color") {
+    const auto keyword=ascii_keyword(value);
+    if(keyword=="auto" || keyword=="initial")
+      return "s.set_scrollbar_colors(0xA0A0A0D0u,0x7F7F7F40u);";
+    if(keyword=="inherit" || keyword=="unset") return "s.inherit_scrollbar_colors();";
+    const auto parts=component_values(value);
+    const bool dynamic=keyword.find("var(")!=std::string::npos;
+    if(!dynamic && (parts.size()!=2 || !compiled_color(parts[0]) || !compiled_color(parts[1])))
+      throw std::runtime_error("scrollbar-color requires auto or two colors");
+    return "auto colors=s.evaluate("+variable_code(value)+
+      ");if(colors && colors->size()==2 && (*colors)[0].color && (*colors)[1].color) "
+      "s.set_scrollbar_colors(*(*colors)[0].color,*(*colors)[1].color);else s.inherit_scrollbar_colors();";
+  }
   if (name == "scrollbar-width") {
     const auto keyword = ascii_keyword(value);
     if (keyword != "auto" && keyword != "thin" && keyword != "none")
