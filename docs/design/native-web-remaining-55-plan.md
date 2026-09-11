@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Checkbox paint correction: the shared native scene builder now draws a check
+indicator from live checkedness (falling back to the checked attribute), and does
+not paint a checkbox's submitted value as text. Native scene tests verify checked,
+unchecked and attribute/property precedence. Rebuilt Foco and repeated hosted
+polyline click/undo: the capture now visibly shows the restored check mark and
+the app exits successfully. This is a basic native indicator, not complete themed
+form-control appearance or browser pixel parity.
+
 Hosted Closed checkbox verification: the Courtyard inspector exercise now finds
 the compiled checkbox's rendered bounds, sends Foco pointer press/release at its
 center, verifies the selected polyline's closed flag changed, and invokes platform

@@ -1500,6 +1500,20 @@ void native_document::append_scene(
     const auto input_type = node.attributes.find("type");
     const bool color_input = node.tag == "input"
         && input_type != node.attributes.end() && input_type->second == "color";
+    const bool checkbox_input = node.tag == "input"
+        && input_type != node.attributes.end() && input_type->second == "checkbox";
+    if(paint_self && checkbox_input) {
+        const auto& control=node.form_control();
+        const bool checked=control.checkedness_initialized?control.checkedness:node.attributes.contains("checked");
+        if(checked) {
+            const auto size=std::min(node.layout.width,node.layout.height);
+            const auto x=node.layout.x+(node.layout.width-size)*0.5F;
+            const auto y=node.layout.y+(node.layout.height-size)*0.5F;
+            const auto color=with_opacity(resolved_foreground(node));
+            commands.push_back(webscene_scene_command{2U,150U,x+size*.2F,y+size*.5F,x+size*.43F,y+size*.72F,color,node.id});
+            commands.push_back(webscene_scene_command{2U,150U,x+size*.43F,y+size*.72F,x+size*.82F,y+size*.25F,color,node.id});
+        }
+    }
     if (paint_self && color_input) {
         // A color control presents its live value as a swatch, not editable text.
         // Keep the value on the control so native application updates repaint it.
@@ -1516,7 +1530,7 @@ void native_document::append_scene(
             std::max(0.0F, node.layout.height - inset * 2),
             with_opacity(valid_color ? parse_color(value) : 0x000000FFU), node.id});
     }
-    if (paint_self && !color_input && (node.tag == "input" || node.tag == "textarea")) {
+    if (paint_self && !color_input && !checkbox_input && (node.tag == "input" || node.tag == "textarea")) {
         const auto font_size = resolved_font_size(node);
         const auto line_height = resolved_line_height(node, font_size);
         const auto padding_left = resolve_length(

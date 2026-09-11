@@ -4,6 +4,18 @@ using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
   {
+    document d;auto box=d.element(d.body(),"input");d.attribute(box,"type","checkbox");d.attribute(box,"value","must not paint");
+    rule size;size.inline_target=box;size.declarations.push_back({false,+[](style& s){s.set_width({16,length_unit::pixels});s.set_height({16,length_unit::pixels});}});d.add_rule(std::move(size));
+    const auto marks=[&] {
+      unsigned count=0;for(const auto& command:d.render(100,100).commands)if(command.node_id==box) {
+        require(command.kind!=3U && command.kind!=14U);
+        if(command.kind==2U)++count;
+      }return count;
+    };
+    require(marks()==0);d.attribute(box,"checked","");require(marks()==2);
+    d.set_checked(box,false);require(marks()==0);d.set_checked(box,true);require(marks()==2);
+  }
+  {
     document d;auto box=d.element(d.body(),"input");d.attribute(box,"type","checkbox");
     unsigned changes=0;auto change=d.on(box,"change",[&](auto&){++changes;});
     d.focus(box);require(d.focused()==box && !d.checked(box));d.key(" ");require(d.checked(box) && changes==1);
