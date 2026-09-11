@@ -4798,9 +4798,10 @@
             return;
         }
 
+        const auto html = to_utf8(info.GetIsolate(), info[1]);
+        if (!html.empty() && !self->require_runtime_html()) return;
         auto& fragment = self->document.create_element("#document-fragment");
         fragment.visible = false;
-        const auto html = to_utf8(info.GetIsolate(), info[1]);
         if (!html.empty()) self->parse_inner_html(fragment, html, parent);
         auto children = std::move(fragment.children);
         fragment.children.clear();

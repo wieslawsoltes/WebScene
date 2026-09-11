@@ -969,6 +969,7 @@
     {
         auto* self = current(info.GetIsolate());
         const auto html = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
+        if (!html.empty() && !self->require_runtime_html()) return;
         auto& fragment_root = self->document.create_element("#fragment");
         self->parse_inner_html(fragment_root, html);
         // A contextual fragment is a real queryable DOM node. Reuse the native

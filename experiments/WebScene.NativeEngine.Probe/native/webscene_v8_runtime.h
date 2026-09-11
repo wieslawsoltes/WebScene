@@ -45,6 +45,7 @@ struct native_file_completion {
 };
 
 class native_document;
+struct dom_node;
 
 struct document_start_script final {
     std::string source;
@@ -253,6 +254,24 @@ public:
 
     v8_dom_runtime(const v8_dom_runtime&) = delete;
     v8_dom_runtime& operator=(const v8_dom_runtime&) = delete;
+
+    // Owner-thread registration. Factories construct detached nodes in the supplied
+    // document; JS attaches them using ordinary DOM operations and owns listeners.
+    // JSON is structured template data, never markup. Captures outlive the runtime.
+    using compiled_template_factory =
+        std::function<dom_node&(native_document&, const std::string&)>;
+    void register_compiled_template(std::string name, compiled_template_factory factory);
+
+    struct compiled_document {
+        std::string base_url;
+        bool allow_runtime_html{true};
+        // Append HTML/HEAD/BODY below the stable engine viewport root.
+        std::function<void(native_document&)> construct;
+        struct script { std::string url, source; bool defer{}, module{}; };
+        std::vector<script> scripts;
+        std::vector<std::string> stylesheet_urls;
+    };
+    bool load_compiled_document(const compiled_document& package);
 
     bool initialize();
     bool execute(const std::string& source, const std::string& document_name);

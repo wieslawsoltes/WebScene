@@ -3,7 +3,9 @@
 The user has selected hybrid JavaScript/C++ delivery now. Pause general CAD
 feature porting to C++; retain original JavaScript application behavior. Port
 HTML-producing UI code to compiled templates and C++ construction immediately.
-No runtime HTML parsing is permitted. Full browser behavior and 60fps panning /
+Kestrel uses the strict compiled-template profile: no runtime HTML parsing.
+The framework hybrid profile continues to permit JavaScript HTML insertion by
+default, including apps migrating gradually. Full browser behavior and 60fps panning /
 OS window resizing without stretching remain acceptance requirements.
 
 ## Source and ownership

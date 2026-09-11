@@ -2477,3 +2477,20 @@ a retained reference cannot itself enforce lifetime. This is an adapter seam,
 not working hybrid execution: V8 attachment, shared event dispatch/style ownership
 and compiled UI callback registration still need implementation. No further CAD
 logic was ported to C++.
+
+### Hybrid runtime foundation and native-only regression
+
+The single-epic delivery plan is now in hybrid-kestrel-epic.md. Added internal
+V8 native-template factories, compiled-root navigation through the existing
+lifecycle, and per-package runtime HTML policy (allow by default). Strict mode
+rejects nonempty insertion before existing content is removed. Compatibility
+mode retains runtime HTML on the same document. The dedicated hybrid runtime
+test passes shared node identity, listener cleanup, focus, cross-language
+mutation, compiled startup/readiness/base URL and strict insertion tests.
+
+Rebuilt the native-only FocoKestrelPreview and ran its macOS package audit: no V8
+or runtime HTML parser symbols, no JS/HTML assets, bundled dependencies/signature
+valid. The native-only app also completed a capture run (GPU serial 1). This
+confirms the optional runtime work has not made V8 a native-only dependency.
+These checks do not establish hybrid Kestrel completion or browser parity;
+compiler/package integration, all template producers and full acceptance remain.

@@ -1152,6 +1152,31 @@ endif()
 
 # White-box runtime coverage without adding test hooks to the production C ABI.
 # Compile the same source/configuration graph into a separate executable.
+if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    get_target_property(hybrid_runtime_sources webscene_native_engine SOURCES)
+    add_executable(webscene_hybrid_v8_runtime_tests
+        tests/hybrid_v8_runtime_tests.cpp ${hybrid_runtime_sources})
+    target_compile_features(webscene_hybrid_v8_runtime_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,INCLUDE_DIRECTORIES>")
+    target_compile_definitions(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_DEFINITIONS>")
+    target_compile_options(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_OPTIONS>")
+    target_link_libraries(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,LINK_LIBRARIES>" Threads::Threads)
+    # Preserve toolchain/LTO options, excluding the production ABI export lists.
+    target_link_options(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<FILTER:$<TARGET_PROPERTY:webscene_native_engine,LINK_OPTIONS>,EXCLUDE,exported_symbols_list|version-script>")
+    get_target_property(hybrid_runtime_ipo webscene_native_engine INTERPROCEDURAL_OPTIMIZATION)
+    if(hybrid_runtime_ipo)
+        set_property(TARGET webscene_hybrid_v8_runtime_tests PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+    add_dependencies(webscene_hybrid_v8_runtime_tests webscene_native_engine)
+    add_test(NAME webscene_hybrid_v8_runtime_tests COMMAND webscene_hybrid_v8_runtime_tests)
+    set_tests_properties(webscene_hybrid_v8_runtime_tests PROPERTIES TIMEOUT 30 LABELS "hybrid;runtime")
+endif()
+
 if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS AND WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
     get_target_property(graphics_runtime_sources webscene_native_engine SOURCES)
     add_executable(webscene_graphics_v8_runtime_tests

@@ -372,6 +372,7 @@
         const std::string& html,
         const dom_node* context_element = nullptr)
     {
+        if (!html.empty() && !require_runtime_html()) return;
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
         const auto& context = context_element == nullptr ? parent : *context_element;
         const auto context_name = context.kind == dom_node_kind::element
@@ -637,6 +638,7 @@
         auto* parent = unwrap_node(info.Holder());
         if (parent == nullptr) return;
         const auto html = to_utf8(info.GetIsolate(), raw_value);
+        if (!html.empty() && !self->require_runtime_html()) return;
         auto* output = parent;
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
         if (parent->tag == "template") {
@@ -688,6 +690,7 @@
 
     static void frame_document_open(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
+        if (!current(info.GetIsolate())->require_runtime_html()) return;
         auto* self = current(info.GetIsolate());
         auto* node = provisional_frame_owner(info.This());
         if (node == nullptr) return;
@@ -700,6 +703,7 @@
 
     static void frame_document_write(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
+        if (!current(info.GetIsolate())->require_runtime_html()) return;
         auto* node = provisional_frame_owner(info.This());
         if (node != nullptr && info.Length() > 0) {
             node->attributes["frame-html"] += to_utf8(info.GetIsolate(), info[0]);
@@ -708,6 +712,7 @@
 
     static void frame_document_close(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
+        if (!current(info.GetIsolate())->require_runtime_html()) return;
         auto* self = current(info.GetIsolate());
         auto* node = provisional_frame_owner(info.This());
         if (node == nullptr) return;

@@ -958,6 +958,9 @@ struct v8_dom_runtime::implementation final {
             js_string(isolate, "implementation"),
             get_document_implementation);
         document_template->Set(
+            js_string(isolate, "createCompiledTemplate"),
+            v8::FunctionTemplate::New(isolate, create_compiled_template));
+        document_template->Set(
             js_string(isolate, "createElement"),
             v8::FunctionTemplate::New(isolate, create_element));
         document_template->Set(
@@ -4296,6 +4299,7 @@ struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_css_cascade.inc"
 #include "webscene_v8_runtime_cache_and_frames.inc"
 #include "webscene_v8_runtime_html.inc"
+#include "webscene_v8_runtime_compiled_templates.inc"
 #include "webscene_v8_runtime_style.inc"
 #include "webscene_v8_runtime_browser_apis.inc"
     static void promise_rejected(v8::PromiseRejectMessage message)
@@ -4405,6 +4409,15 @@ v8_dom_runtime::v8_dom_runtime(
 
 v8_dom_runtime::~v8_dom_runtime() = default;
 
+void v8_dom_runtime::register_compiled_template(
+    std::string name, compiled_template_factory factory)
+{
+    if (name.empty() || !factory)
+        throw std::invalid_argument("A compiled template requires a name and factory");
+    if (!impl_->compiled_templates.emplace(std::move(name), std::move(factory)).second)
+        throw std::invalid_argument("Compiled template already registered");
+}
+
 bool v8_dom_runtime::initialize()
 {
     if(!impl_->initialize())return false;
@@ -4417,6 +4430,15 @@ bool v8_dom_runtime::initialize()
 bool v8_dom_runtime::execute(const std::string& source, const std::string& document_name)
 {
     return impl_->execute(source, document_name);
+}
+
+bool v8_dom_runtime::load_compiled_document(const compiled_document& package)
+{
+    if (!package.construct || package.base_url.empty()) {
+        impl_->last_error = "Compiled document requires a constructor and base URL";
+        return false;
+    }
+    return impl_->load_url(package.base_url, {}, &package);
 }
 
 bool v8_dom_runtime::load_url(
