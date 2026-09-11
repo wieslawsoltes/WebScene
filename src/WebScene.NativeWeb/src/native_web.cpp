@@ -21,6 +21,7 @@ struct document_state {
   native_document dom;
   std::thread::id owner{std::this_thread::get_id()};
   bool alive{true};
+  bool styles_dirty{true};
   bool keyboard_modality{true};
   node_id focus{}, hover{}, pressed{}, body_id{};
   uint64_t next_listener{1};
@@ -98,6 +99,7 @@ node_id document::element(node_id parent, std::string tag) {
   auto &p = state_->node(parent);
   auto &n = state_->dom.create_element(std::move(tag));
   state_->dom.append_child(p, n);
+  state_->styles_dirty = true;
   return n.id;
 }
 node_id document::text(node_id parent, std::string value) {
@@ -115,6 +117,7 @@ void document::set_text(node_id id, std::string value) {
       remove(child->id);
     text(id, std::move(value));
   }
+  state_->styles_dirty = true;
   state_->dom.mark_dirty();
 }
 std::optional<std::string> document::attribute(node_id id, std::string_view name) const {
@@ -137,6 +140,7 @@ void document::attribute(node_id id, std::string name, std::string value) {
   if (name == "class")
     n.class_name = value;
   n.attributes[std::move(name)] = std::move(value);
+  state_->styles_dirty = true;
   state_->dom.mark_dirty();
 }
 void document::scroll_to(node_id id, float x, float y) {
@@ -150,6 +154,7 @@ void document::scroll_to(node_id id, float x, float y) {
   if (n.scroll_left == x && n.scroll_top == y) return;
   n.scroll_left = x;
   n.scroll_top = y;
+  state_->styles_dirty = true;
   state_->dom.mark_dirty();
 }
 std::pair<float, float> document::scroll_offset(node_id id) const {
@@ -161,6 +166,7 @@ void document::remove_attribute(node_id id, std::string_view name) {
   if (!n.attributes.erase(std::string(name))) return;
   if (name == "id") n.id_attribute.clear();
   if (name == "class") n.class_name.clear();
+  state_->styles_dirty = true;
   state_->dom.mark_dirty();
 }
 void document::remove(node_id id) {
@@ -192,6 +198,7 @@ void document::remove(node_id id) {
   });
   state_->dom.parser_remove_from_parent(n);
   state_->dom.erase_detached_subtree(n);
+  state_->styles_dirty = true;
   state_->dom.mark_dirty();
 }
 node_id document::find(std::string_view id) const {
@@ -202,6 +209,7 @@ node_id document::find(std::string_view id) const {
 void document::add_rule(rule r) {
   state_->check();
   state_->rules.push_back(std::move(r));
+  state_->styles_dirty = true;
   state_->dom.mark_dirty();
 }
 subscription document::on(node_id node, std::string type,
@@ -285,6 +293,7 @@ void document::focus(node_id id) {
   if (old == id)
     return;
   state_->focus = id;
+  state_->styles_dirty = true;
   state_->dom.mark_dirty();
   if (old && state_->dom.find_by_native_id(old))
     dispatch(old, "blur");
@@ -317,6 +326,7 @@ void document::pointer(std::string type, float x, float y, uint32_t buttons) {
   auto id = n ? n->id : 0;
   if (state_->hover != id) {
     state_->hover = id;
+    state_->styles_dirty = true;
     state_->dom.mark_dirty();
   }
   if (type == "pointerdown" || type == "pointerup") {
@@ -331,10 +341,12 @@ void document::pointer(std::string type, float x, float y, uint32_t buttons) {
     // Only the primary button participates in click activation.
     // Auxiliary presses still reach native handlers (for example CAD panning).
     state_->pressed = (buttons & 1u) ? id : 0;
+    state_->styles_dirty = true;
     state_->dom.mark_dirty();
   }
   if (type == "pointercancel") {
     state_->pressed = 0;
+    state_->styles_dirty = true;
     state_->dom.mark_dirty();
   }
   const bool default_allowed = !id || dispatch(id, type, x, y, 0, buttons);
@@ -350,6 +362,7 @@ void document::pointer(std::string type, float x, float y, uint32_t buttons) {
   }
   if (type == "pointerup") {
     const auto pressed = std::exchange(state_->pressed, 0);
+    state_->styles_dirty = true;
     state_->dom.mark_dirty();
     if (id && id == pressed && state_->dom.find_by_native_id(id))
       dispatch(id, "click", x, y);
@@ -359,6 +372,7 @@ void document::key(std::string_view key, bool shift) {
   state_->check();
   if (!state_->keyboard_modality) {
     state_->keyboard_modality = true;
+    state_->styles_dirty = true;
     state_->dom.mark_dirty();
   }
   if (key == "Tab") {
@@ -578,7 +592,10 @@ const scene &document::render(float width, float height) {
     for (auto *c : n.children)
       self(self, *c, variables);
   };
-  cascade(cascade, s.dom.body(), {});
+  if (s.styles_dirty || out.width != width || out.height != height) {
+    cascade(cascade, s.dom.body(), {});
+    s.styles_dirty = false;
+  }
   s.dom.mark_dirty();
   s.dom.layout(width, height);
   out.commands.clear();

@@ -757,3 +757,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   document refresh is not a suitable unconditional animation-frame operation.
   Resource callbacks, selective invalidation, original Kestrel parity and 60fps
   panning/resize verification remain outstanding.
+
+- Compiled Native Web host invalidation: inspection found every dirty canvas update
+  reran the entire compiled declaration cascade. document_state now separately
+  tracks style invalidation; canvas-only changes retain computed styles, while DOM,
+  attributes, rules, interaction and viewport changes still recascade. Layout and
+  scene construction remain unchanged. A declaration-count contract proves canvas
+  paint skips the cascade and attribute/resize updates execute it. Compiler and
+  contract suites pass. This applies to the current app host but does not yet wire
+  the prepared stylesheet session into it or prove 60fps presented performance.

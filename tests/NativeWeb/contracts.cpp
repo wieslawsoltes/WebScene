@@ -8,8 +8,29 @@ static void check(bool value, const char *label) {
   if (!value)
     throw std::runtime_error(label);
 }
+static int style_application_count = 0;
 int main() {
   using namespace webscene::native_web;
+  {
+    document canvas_document;
+    auto canvas = canvas_document.element(canvas_document.body(), "canvas");
+    rule counted;
+    counted.inline_target = canvas;
+    counted.declarations.push_back({false, +[](style&) { ++style_application_count; }});
+    canvas_document.add_rule(std::move(counted));
+    canvas_document.render(200, 200);
+    const auto initial_count = style_application_count;
+    check(initial_count > 0, "initial cascade runs");
+    canvas_document.fill_rect(canvas, 0, 0, 10, 10, 0xffffffff);
+    canvas_document.render(200, 200);
+    check(style_application_count == initial_count, "canvas paint reuses computed style");
+    canvas_document.attribute(canvas, "class", "changed");
+    canvas_document.render(200, 200);
+    check(style_application_count > initial_count, "attribute mutation recascades");
+    const auto before_resize = style_application_count;
+    canvas_document.render(300, 200);
+    check(style_application_count > before_resize, "resize recascades viewport-dependent styles");
+  }
   {
     using expression = variable_expression;
     auto token = [](std::string value) { return expression{expression::kind::token, value}; };
