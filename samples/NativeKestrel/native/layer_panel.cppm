@@ -4,6 +4,9 @@ module;
 #include <functional>
 #include <algorithm>
 #include <string>
+#include <sstream>
+#include <iomanip>
+#include <locale>
 #include <vector>
 #ifdef __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
@@ -137,7 +140,13 @@ public:
       }
       document_.set_value(general.named("layer"),one?one->value("layer",std::string{}):std::string{});
       document_.set_value(general.named("linetype"),one?one->value("linetype",std::string("ByLayer")):"ByLayer");
-      document_.set_value(general.named("lineweight"),one?std::to_string(one->value("lineweight",0.0)):"0");
+      std::ostringstream weight;weight.imbue(std::locale::classic());
+      weight<<std::fixed<<std::setprecision(4)<<(one?one->value("lineweight",0.0):0.0);
+      auto weight_text=weight.str();
+      while(weight_text.ends_with('0'))weight_text.pop_back();
+      if(weight_text.ends_with('.'))weight_text.pop_back();
+      if(weight_text=="-0")weight_text="0";
+      document_.set_value(general.named("lineweight"),weight_text);
       for(auto key:{"linetype","lineweight"}) {
         const auto node=general.named(key);
         handlers_.push_back(document_.on(node,"change",[this,node,key=std::string(key)](auto&) {
@@ -156,6 +165,18 @@ public:
         handlers_.push_back(document_.on(name.named("name"),"change",[this,node=name.named("name")](auto&) {
           model_.change_selected_appearance("name",document_.value(node));refresh();if(changed_)changed_();
         }));
+        const auto read=[&](const std::string& label,const std::string& value) {
+          auto row=kestrel_layers::instantiate(document_,general.named("root"),"inspector-readonly");
+          document_.set_text(row.named("label"),label);document_.set_text(row.named("value"),value);
+          document_.attribute(row.named("value"),"title",value);
+        };
+        const auto& layer=model_.layer(*one);
+        read("Layer state",layer.value("locked",false)?"Locked — read only":layer.value("visible",true)?"Visible / editable":"Hidden");
+        const auto group=one->value("group",std::string{});
+        if(!group.empty()) {
+          auto group_name=one->value("groupName",std::string{});
+          read("Group",group_name.empty()?group:group_name);
+        }
       }
       handlers_.push_back(document_.on(general.named("layer"),"change",[this,node=general.named("layer")](auto&) {
         model_.change_selected_layer(document_.value(node));refresh();if(changed_)changed_();

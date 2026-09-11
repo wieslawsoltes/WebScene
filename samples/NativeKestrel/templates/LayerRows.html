@@ -59,3 +59,5 @@
 <template id="inspector-selected-layer"><div class="property-section" data-ref="root"><div class="property-section-title">GENERAL</div><div class="property-row"><label>Layer</label><select data-prop="layer" aria-label="Object layer" data-ref="layer"></select></div><div class="property-row"><label>Linetype</label><select data-prop="linetype" aria-label="Linetype" data-ref="linetype"><option>ByLayer</option><option>Continuous</option><option>Dashed</option><option>Center</option></select></div><div class="property-row"><label>Lineweight</label><input aria-label="Lineweight" data-prop="lineweight" type="number" value="0" step="any" min="0" max="5" data-ref="lineweight"></div></div></template>
 
 <template id="inspector-selected-name"><div class="property-row" data-ref="root"><label>Name</label><input aria-label="Name" data-prop="name" type="text" maxlength="80" data-ref="name"></div></template>
+
+<template id="inspector-readonly"><div class="property-row" data-ref="root"><label data-ref="label"></label><span data-ref="value"></span></div></template>

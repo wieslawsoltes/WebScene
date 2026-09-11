@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Inspector information: single selections now show the original Layer state row
+(locked, visible/editable or hidden) and optional Group row, using a predefined
+compiled read-only property template. Group names fall back to group IDs.
+Lineweight display uses four decimal places with trailing zeros removed instead
+of std::to_string's six fixed decimals. Native tests verify the visible and locked
+labels, group display, zero formatting and the existing editing/undo behavior.
+
 Hosted text-commit verification: the inspector exercise now sends Foco
 text_input_event for Lineweight and Name, commits each through Foco's Enter key
 event, checks the selected entity's property, then sends platform-Z and requires

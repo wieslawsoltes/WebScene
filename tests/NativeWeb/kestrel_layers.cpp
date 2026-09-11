@@ -15,6 +15,9 @@ int main() {
     auto inspector=doc.element(doc.body(),"div");doc.attribute(inspector,"id","inspector");
     auto list=doc.element(doc.body(),"div");doc.attribute(list,"id","explorer-list");
     kestrel::layer_panel panel(doc,model,[]{});
+    require(doc.text_content(inspector).find("Visible / editable")!=std::string::npos);
+    (*model.find(id))["group"]="group-id";(*model.find(id))["groupName"]="External walls";panel.refresh();
+    require(doc.text_content(inspector).find("External walls")!=std::string::npos);
     const auto control=[&](auto&& self,node_id root,const std::string& property)->node_id {
       if(doc.attribute(root,"data-prop")==property)return root;
       for(auto child:doc.children(root))if(auto result=self(self,child,property))return result;
@@ -24,6 +27,7 @@ int main() {
     auto type=control(control,inspector,"linetype");require(type!=0);doc.focus(type);doc.key("End");
     require(model.find(id)->at("linetype")=="Center");
     auto weight=control(control,inspector,"lineweight");require(weight!=0);
+    require(doc.value(weight)=="0");
     doc.focus(weight);doc.set_selection(weight,0,doc.value(weight).size());doc.text_input("1.25");doc.key("Enter");require(model.find(id)->at("lineweight")==1.25);
     auto name=control(control,inspector,"name");require(name!=0);
     doc.focus(name);doc.text_input("Native wall");doc.focus(0);require(model.find(id)->at("name")=="Native wall");
@@ -32,6 +36,7 @@ int main() {
     require(!model.change_selected_appearance("linetype","invalid"));
     require(!model.change_selected_appearance("lineweight","invalid"));
     model.data["layers"][1]["locked"]=true;
+    panel.refresh();require(doc.text_content(inspector).find("Locked — read only")!=std::string::npos);
     const auto locked=model.data;
     require(!model.change_selected_appearance("name","Locked change") && model.data==locked);
   }
