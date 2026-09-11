@@ -2466,3 +2466,14 @@ inventory under samples/NativeKestrel/hybrid. This corrects the earlier eight-fi
 source-size picture: entry scripts total 9,621 lines, with 27 HTML API occurrence
 sites before auditing all producers. Hybrid is not running yet. See hybrid README
 for shared-DOM, single-state ownership and implementation/verification gates.
+
+### Hybrid same-document adapter seam
+
+Added checked document::runtime_document access for an optional runtime adapter to
+attach V8 to the native wrapper's existing native_document. Native text tests
+verify existing-node identity, stable tree reference, off-thread rejection and
+disposed-wrapper rejection. Attached runtimes must be destroyed before the owner;
+a retained reference cannot itself enforce lifetime. This is an adapter seam,
+not working hybrid execution: V8 attachment, shared event dispatch/style ownership
+and compiled UI callback registration still need implementation. No further CAD
+logic was ported to C++.

@@ -400,6 +400,11 @@ public:
   ~document();
   document(const document &) = delete;
   document &operator=(const document &) = delete;
+  // Runtime adapter seam: returns this document's existing tree, never a copy.
+  // Call only on the owner thread. Attached runtimes must be destroyed before
+  // this wrapper is disposed/destroyed. Mutations through this engine interface
+  // must follow native_document invalidation; it does not merge event dispatchers.
+  webscene_native::native_document& runtime_document();
   node_id body() const;
   node_id root() const;
   node_id element(node_id parent, std::string tag);

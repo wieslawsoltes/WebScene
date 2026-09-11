@@ -1,8 +1,22 @@
 #include <webscene/native_web.hpp>
 #include <iostream>
+#include <webscene_native_dom.h>
+#include <thread>
 using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
+  {
+    document d;const auto node=d.element(d.body(),"div");d.attribute(node,"id","shared");
+    auto& engine=d.runtime_document();require(engine.find_by_native_id(node)!=nullptr);
+    require(&engine==&d.runtime_document());
+    bool off_thread_rejected=false;
+    std::thread worker([&]{try {d.runtime_document();}catch(const std::logic_error&){off_thread_rejected=true;}});worker.join();
+    require(off_thread_rejected);
+    d.dispose();bool disposed_rejected=false;
+    try {d.runtime_document();}catch(const std::logic_error&){disposed_rejected=true;}
+    require(disposed_rejected);
+  }
+
   {
     document d;auto input=d.element(d.body(),"input");d.set_value(input,"abc");d.focus(input);
     int releases=0;

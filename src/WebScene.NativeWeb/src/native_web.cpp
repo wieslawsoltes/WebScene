@@ -85,6 +85,10 @@ void subscription::dispose() noexcept {
 }
 document::document(webscene_text_measure_callback cb, void *data)
     : state_(std::make_shared<document_state>(cb, data)) {}
+native_document& document::runtime_document() {
+  state_->check();
+  return state_->dom;
+}
 document::~document() { state_->alive = false; }
 bool document::disposed() const noexcept { return !state_->alive; }
 void document::dispose() {
