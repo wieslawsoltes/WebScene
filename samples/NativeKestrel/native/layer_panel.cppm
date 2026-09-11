@@ -2,6 +2,7 @@ module;
 #include "../third_party/nlohmann/json.hpp"
 #include <webscene/native_web.hpp>
 #include <functional>
+#include <algorithm>
 #include <string>
 #include <vector>
 #ifdef __APPLE__
@@ -20,6 +21,7 @@ public:
   struct entry {std::string id;webscene::native_web::node_id row,visibility,lock;};
 private:
   std::vector<entry> rows_;
+  std::vector<webscene::native_web::node_id> shell_icons_;
   webscene::native_web::subscription filter_handler_;
   std::vector<webscene::native_web::subscription> tab_handlers_;
   bool objects_{};
@@ -56,6 +58,16 @@ public:
   // Document/model outlive this panel. State belongs to the drawing, not templates.
   layer_panel(webscene::native_web::document& document,drawing& model,std::function<void()> changed)
       :document_(document),model_(model),changed_(std::move(changed)) {
+    const auto hydrate=[&](auto&& self,webscene::native_web::node_id node)->void {
+      const auto children=document_.children(node);
+      if(auto name=document_.attribute(node,"data-icon")) {
+        auto icon=kestrel_layers::instantiate(document_,node,"shell-icon-"+*name);
+        for(auto child:document_.children(node))
+          if(std::find(children.begin(),children.end(),child)==children.end()) shell_icons_.push_back(child);
+      }
+      for(auto child:children) self(self,child);
+    };
+    hydrate(hydrate,document_.root());
     if(auto filter=document_.find("explorer-search"))
       filter_handler_=document_.on(filter,"input",[this](auto&){refresh();});
     for(auto [id,objects]:{std::pair{"layers-tab",false},std::pair{"objects-tab",true}})
@@ -64,7 +76,7 @@ public:
       }));
     refresh();
   }
-  ~layer_panel() {clear();}
+  ~layer_panel() {clear();if(!document_.disposed()) for(auto node:shell_icons_) document_.remove(node);}
   const std::vector<entry>& entries() const {return rows_;}
   void refresh() {
     clear();

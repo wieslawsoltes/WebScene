@@ -874,6 +874,11 @@ uint64_t document::layout_passes() const {
 layout_rect document::bounds(node_id id) const {
   return state_->node(id).layout;
 }
+std::vector<node_id> document::children(node_id id) const {
+  std::vector<node_id> result;
+  for(auto* child:state_->node(id).children) if(child) result.push_back(child->id);
+  return result;
+}
 std::string document::text_content(node_id id) const {
   std::string result;
   const auto visit = [&](auto &&self, dom_node &n) -> void {

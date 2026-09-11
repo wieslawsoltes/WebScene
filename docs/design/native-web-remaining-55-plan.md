@@ -1550,3 +1550,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   layout validation only, not proof original icon buttons are visible/clickable.
   Original shell data-icon hydration remains an interaction/visual gap. This
   same-tick layout check does not measure intermediate GPU sizes or resize FPS.
+
+- Original shell icon hydration: extracted the 17 data-icon names used in the
+  pinned index.html and expanded original UI.icon definitions into predefined
+  SVG templates in LayerRows.html. Native construction traverses child snapshots
+  and instantiates icons into authored placeholders; panel disposal removes owned
+  icon roots. Added native document children snapshots. No runtime HTML parser
+  or JS is used; original index.html/style.css are unchanged. Layer tests verify
+  SVG construction and disposal and pass. Rebuilt preview exits 0 and capture
+  /tmp/kestrel-shell-icons.png visibly includes search/settings/panel arrows and
+  other previously missing shell icons. Icon visibility is proven; individual
+  commands still require their own port/interaction verification.

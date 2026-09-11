@@ -20,6 +20,7 @@ int main() {
     courtyard.selection.clear();require(courtyard.erase_selected()==0);
   }
   document d;d.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
+  auto icon=d.element(d.body(),"span");d.attribute(icon,"data-icon","chevron-left");
   auto title=d.element(d.body(),"span");d.attribute(title,"id","title-name");
   auto selected_status=d.element(d.body(),"span");d.attribute(selected_status,"id","selection-status");
   auto tabs=d.element(d.body(),"div");d.attribute(tabs,"id","document-tabs");
@@ -31,6 +32,8 @@ int main() {
   kestrel::drawing model;unsigned changes=0;
   {
     kestrel::layer_panel panel(d,model,[&]{++changes;});
+    require(d.children(icon).size()==1);
+    require(d.attribute(d.children(icon)[0],"viewBox")=="0 0 24 24");
     require(panel.entries().size()==model.data["layers"].size());
     require(d.text_content(tabs).find("Untitled")!=std::string::npos);
     require(d.text_content(title)=="Untitled" && d.text_content(selected_status)=="No selection");
@@ -98,6 +101,7 @@ int main() {
     require(d.attribute(search,"placeholder")=="Filter layers…");
     d.render(300,300);
   }
+  require(d.children(icon).empty());
   d.dispose();
   std::cout<<"Original layer templates and native state/handlers passed\n";
 }
