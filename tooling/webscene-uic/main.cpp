@@ -720,6 +720,13 @@ static std::string assignments(const std::string &name,
     if (integer < INT32_MIN || integer > INT32_MAX) throw std::runtime_error("z-index outside native integer range");
     return "s.set_z_index(" + std::to_string(integer) + ");";
   }
+  if (name == "cursor") {
+    const auto keyword=ascii_keyword(value);
+    if(keyword=="inherit" || keyword=="unset") return "s.set_cursor(\"\");";
+    const std::set<std::string> supported{"auto","default","pointer","text","crosshair","col-resize","row-resize","ew-resize","ns-resize"};
+    if(!supported.contains(keyword)) throw std::runtime_error("unsupported native cursor: "+value);
+    return "s.set_cursor("+quote(keyword)+");";
+  }
   if (name == "grid-column") {
     const auto parts=component_values(value,'/');
     if(ascii_keyword(value)=="auto") return "s.set_grid_full_columns(false);";

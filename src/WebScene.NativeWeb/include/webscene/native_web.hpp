@@ -68,6 +68,7 @@ public:
     return found == variables_.end() ? nullptr : &found->second;
   }
   void set_align_self(align_mode mode, bool specified = true) { value_.align_self = mode; value_.align_self_specified = specified; }
+  void set_cursor(std::string value) { value_.mutable_textual().cursor=std::move(value); }
   void set_table_layout_fixed(bool fixed) { value_.table_layout_fixed = fixed; }
   void set_grid_full_columns(bool enabled) {
     auto &grid=value_.mutable_grid();grid.compiled_full_columns=enabled;
@@ -392,6 +393,7 @@ public:
   void focus(node_id);
   void key(std::string_view key, bool shift = false);
   node_id focused() const;
+  std::string cursor_at(float x, float y) const;
   void set_external_canvas(node_id, bool enabled);
   void clear_canvas(node_id);
   void fill_rect(node_id, float x, float y, float width, float height,

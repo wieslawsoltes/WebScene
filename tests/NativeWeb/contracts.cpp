@@ -12,6 +12,22 @@ static int style_application_count = 0;
 int main() {
   using namespace webscene::native_web;
   {
+    document cursors;
+    auto parent=cursors.element(cursors.body(),"div");
+    auto child=cursors.element(parent,"div");
+    rule outer;outer.inline_target=parent;
+    outer.declarations.push_back({false,+[](style& s) {s.set_cursor("pointer");}});
+    cursors.add_rule(std::move(outer));
+    rule inner;inner.inline_target=child;
+    inner.declarations.push_back({false,+[](style& s) {s.set_width({100,length_unit::pixels});s.set_height({50,length_unit::pixels});}});
+    cursors.add_rule(std::move(inner));cursors.render(300,300);
+    check(cursors.cursor_at(5,5)=="pointer","cursor inherits from ancestor");
+    rule override;override.inline_target=child;
+    override.declarations.push_back({false,+[](style& s) {s.set_cursor("crosshair");}});
+    cursors.add_rule(std::move(override));cursors.render(300,300);
+    check(cursors.cursor_at(5,5)=="crosshair","child cursor overrides ancestor");
+  }
+  {
     document grid_doc;
     auto grid=grid_doc.element(grid_doc.body(),"div");
     auto full=grid_doc.element(grid,"div");

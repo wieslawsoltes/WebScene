@@ -39,6 +39,7 @@ public:
     if (b.width <= 0 || b.height <= 0)
       return;
     const auto &scene = document.render(b.width, b.height);
+    update_cursor();
     if (scene.revision == document_revision_ && !gpu_dirty_)
       return;
     namespace packet = foco::webscene_packet;
@@ -118,6 +119,8 @@ public:
     refresh();
   }
   void pointer_event_received(foco::pointer_event &e) override {
+    pointer_position_=foco::point{e.position.x-bounds().x,e.position.y-bounds().y};
+    update_cursor();
     if(e.kind==foco::pointer_event_kind::wheel){
       document.wheel(e.position.x-bounds().x,e.position.y-bounds().y,
                      -e.wheel_delta*(e.wheel_is_precise?1.f:48.f));
@@ -154,7 +157,19 @@ public:
   }
 
 private:
+  void update_cursor() {
+    if (pointer_position_) {
+      const auto cursor=document.cursor_at(pointer_position_->x,pointer_position_->y);
+      set_cursor(cursor=="pointer" ? foco::cursor_kind::hand :
+          cursor=="text" ? foco::cursor_kind::ibeam :
+          cursor=="crosshair" ? foco::cursor_kind::cross :
+          cursor=="col-resize" || cursor=="ew-resize" ? foco::cursor_kind::size_west_east :
+          cursor=="row-resize" || cursor=="ns-resize" ? foco::cursor_kind::size_north_south :
+          foco::cursor_kind::arrow);
+    }
+  }
   bool input_refresh_pending_{};
+  std::optional<foco::point> pointer_position_;
   void request_input_refresh() {
     if (input_refresh_pending_) return;
     input_refresh_pending_ = true;

@@ -815,3 +815,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   audit: 397 rules, 1475 declarations, **39 distinct unsupported constructs**.
   General numeric/named grid lines and spans remain unsupported in this compiler
   path. Full original app parity and 60fps acceptance remain unfinished.
+
+- Basic native cursors: compiler supports auto/default, pointer, text, crosshair
+  and horizontal/vertical resize keywords with inherit/unset. Native hit-based
+  cursor lookup walks ancestors; the Foco view maps supported keywords to host
+  cursor types on pointer input and scene refresh. Document inheritance/override
+  contracts, 109 compiler tests and FocoKestrel build pass. Diagnostic fixtures now
+  use unsupported grabbing instead of newly supported pointer. Fresh original CSS
+  audit: **35 distinct unsupported constructs**. Live OS cursor transitions after
+  deferred style changes remain to be verified; grabbing/move/not-allowed, custom
+  cursor images, full browser parity and performance remain open. Border-collapse
+  was rechecked and remains open because shared-edge conflict resolution is absent.

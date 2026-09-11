@@ -12,6 +12,14 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_native_cursor_keywords(self):
+        for value in ['pointer', 'crosshair', 'col-resize', 'row-resize', 'inherit']:
+            result, out = self.compile('<div></div>', 'div {cursor:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('set_cursor', out.read_text())
+        result, _ = self.compile('<div></div>', 'div {cursor:url(hand.png), pointer}')
+        self.assertNotEqual(result.returncode, 0)
+
     def test_full_grid_columns(self):
         for value in ['1/-1', '1 / -1', 'auto']:
             result, out = self.compile('<div></div>', 'div {grid-column:'+value+'}')
@@ -391,7 +399,7 @@ class CompilerTests(unittest.TestCase):
     def test_css_audit_reports_multiple_gaps_without_output(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         source=pathlib.Path(folder.name)/'audit.css'
-        source.write_text('div { filter:blur(2px); cursor:pointer; } p:has(a) { width:20px; }')
+        source.write_text('div { filter:blur(2px); cursor:grabbing; } p:has(a) { width:20px; }')
         result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
         self.assertEqual(result.returncode,1)
         self.assertIn('filter',result.stderr)
@@ -400,12 +408,12 @@ class CompilerTests(unittest.TestCase):
         self.assertIn('has',result.stderr)
         self.assertIn('3 distinct unsupported constructs',result.stdout)
         self.assertEqual(list(source.parent.iterdir()),[source])
-        source.write_text('@media (max-width:400px) { div { cursor:pointer; } } div { cursor:pointer; }')
+        source.write_text('@media (max-width:400px) { div { cursor:grabbing; } } div { cursor:grabbing; }')
         result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
         self.assertEqual(result.returncode,1)
         self.assertIn('@media (max-width:400px) > div',result.stderr)
         self.assertIn('1 distinct unsupported constructs',result.stdout)
-        source.write_text('/* header */\n@media (max-width:400px) {\n  div {\n    cursor:pointer;\n    cursor:pointer;\n  }\n}\n')
+        source.write_text('/* header */\n@media (max-width:400px) {\n  div {\n    cursor:grabbing;\n    cursor:grabbing;\n  }\n}\n')
         result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
         self.assertEqual(result.returncode,1)
         self.assertIn(str(source)+':4:5',result.stderr)
@@ -443,7 +451,7 @@ class CompilerTests(unittest.TestCase):
     def test_embedded_css_ignores_earlier_comment_text(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         root=pathlib.Path(folder.name);source=root/'view.html'
-        source.write_text('<html><head>\n<!-- div { cursor:pointer; } -->\n<style>div { cursor:pointer; }</style>\n</head><body></body></html>')
+        source.write_text('<html><head>\n<!-- div { cursor:grabbing; } -->\n<style>div { cursor:grabbing; }</style>\n</head><body></body></html>')
         result=subprocess.run([UIC,source,root/'view.hpp','--preview'],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn(str(source)+':3:14: warning:',result.stderr)
@@ -453,7 +461,7 @@ class CompilerTests(unittest.TestCase):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         root=pathlib.Path(folder.name);source=root/'view.html'
         for newline in ['\r\n', '\r']:
-            source.write_bytes(newline.join(['<html><head>', '<style>', 'div {', '  cursor:pointer;', '}', '</style></head><body></body></html>']).encode())
+            source.write_bytes(newline.join(['<html><head>', '<style>', 'div {', '  cursor:grabbing;', '}', '</style></head><body></body></html>']).encode())
             result=subprocess.run([UIC,source,root/'view.hpp','--preview'],capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn(str(source)+':4:3: warning:',result.stderr)
@@ -461,7 +469,7 @@ class CompilerTests(unittest.TestCase):
     def test_embedded_css_repeated_declaration_locations(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         root=pathlib.Path(folder.name);source=root/'view.html'
-        source.write_text('<html><head>\n<style>div { cursor:pointer; }</style>\n<style>div { cursor:pointer; }</style>\n<style>\ndiv {\n  cursor:pointer;\n}\n</style></head><body></body></html>')
+        source.write_text('<html><head>\n<style>div { cursor:grabbing; }</style>\n<style>div { cursor:grabbing; }</style>\n<style>\ndiv {\n  cursor:grabbing;\n}\n</style></head><body></body></html>')
         result=subprocess.run([UIC,source,root/'view.hpp','--preview'],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
         for line,column in [(2,14),(3,14),(6,3)]:
@@ -650,7 +658,7 @@ class CompilerTests(unittest.TestCase):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         root=pathlib.Path(folder.name);source=root/'view.html';css=root/'style.css'
         source.write_text('<link rel="stylesheet" href="style.css"><div></div>')
-        for text,location in [('div {\n  cursor:pointer;\n}',':2:3'),('\n  div::before { color:black; }',':2:3'),('div {\n  broken;\n}',':2:9')]:
+        for text,location in [('div {\n  cursor:grabbing;\n}',':2:3'),('\n  div::before { color:black; }',':2:3'),('div {\n  broken;\n}',':2:9')]:
             css.write_text(text)
             result=subprocess.run([UIC,source,root/'view.hpp'],capture_output=True,text=True)
             self.assertEqual(result.returncode,1)

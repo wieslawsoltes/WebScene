@@ -305,6 +305,13 @@ node_id document::focused() const {
   state_->check();
   return state_->focus;
 }
+std::string document::cursor_at(float x, float y) const {
+  state_->check();
+  auto *node=state_->dom.hit_test(state_->dom.body(),x,y);
+  for(auto *current=node;current;current=current->parent)
+    if(!current->style.textual().cursor.empty()) return current->style.textual().cursor;
+  return "auto";
+}
 void document::wheel(float x, float y, float delta_y) {
   state_->check();
   if (!std::isfinite(delta_y)) throw std::invalid_argument("non-finite wheel delta");
