@@ -180,18 +180,34 @@ public:
           auto group_name=one->value("groupName",std::string{});
           read("Group",group_name.empty()?group:group_name);
         }
-        if(one->value("type",std::string{})=="POLYLINE" && one->contains("points") && (*one)["points"].is_array()) {
+        const bool spline=one->value("type",std::string{})=="SPLINE";
+        const auto point_key=one->contains("controlPoints")?"controlPoints":"points";
+        if((spline || one->value("type",std::string{})=="POLYLINE") && one->contains(point_key) && (*one)[point_key].is_array()) {
           auto geometry=kestrel_layers::instantiate(document_,inspector,"inspector-geometry");inspector_roots_.push_back(geometry.named("root"));
           const auto info=[&](const std::string& label,const std::string& value) {
             auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");
             document_.set_text(row.named("label"),label);document_.set_text(row.named("value"),value);document_.attribute(row.named("value"),"title",value);
           };
-          info("Vertices",std::to_string((*one)["points"].size()));
+          info("Vertices",std::to_string((*one)[point_key].size()));
+          if(!spline) {
           auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-polyline-closed");
           document_.set_checked(row.named("input"),one->value("closed",false));
           handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input")](auto&) {
             model_.change_polyline_closed(document_.checked(node));refresh();if(changed_)changed_();
           }));
+          } else {
+            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
+            document_.set_text(row.named("label"),"Degree");document_.attribute(row.named("input"),"aria-label","Degree");document_.attribute(row.named("input"),"data-prop","degree");
+            document_.attribute(row.named("input"),"step","1");document_.attribute(row.named("input"),"min","1");
+            document_.attribute(row.named("input"),"max",std::to_string(std::min(size_t(10),(*one)[point_key].size()-1)));
+            document_.set_value(row.named("input"),std::to_string(one->value("degree",3)));
+            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input")](auto&) {
+              const auto text=document_.value(node);double degree=0;size_t used=0;bool valid=true;
+              try {degree=std::stod(text,&used);}catch(const std::exception&){valid=false;}
+              if(valid && used==text.size())geo::change_spline_degree(model_,degree);
+              refresh();if(changed_)changed_();
+            }));
+          }
           const auto points=geo::path(*one);double length=0;
           const auto distance=[](auto a,auto b){auto d=a-b;return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);};
           for(size_t i=1;i<points.size();++i)length+=distance(points[i-1],points[i]);

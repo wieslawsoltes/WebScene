@@ -8,6 +8,12 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Spline inspector: compiled Degree field and shared Vertices/Length/Plan area
+readouts now cover SPLINE alongside polyline metrics. Native degree edits round
+as in the original app, clamp to 1..min(10, point count - 1), regenerate uniform
+knots and record undo. Model tests verify rounding, clamping, knot values and exact
+undo. Hosted spline interaction and remaining application behavior remain open.
+
 Checkbox paint correction: the shared native scene builder now draws a check
 indicator from live checkedness (falling back to the checked attribute), and does
 not paint a checkbox's submitted value as text. Native scene tests verify checked,
