@@ -16,6 +16,7 @@
 #include "webscene_css_rule_preparation.h"
 #include "webscene_css_stylesheet.h"
 #include "webscene_css_stylesheet_owner.h"
+#include "webscene_css_native_cascade.h"
 #include "webscene_css_media.h"
 #include "webscene_css_property_mask.h"
 #include "webscene_css_reset.h"
@@ -806,5 +807,27 @@ int main(int argc,char** argv) {
        sheets.candidates(ordered_node)!=std::vector<size_t>{0}) return 145;
     sheets.remove(2);
     if(!sheets.candidates(ordered_node).empty()) return 146;
+    auto native_sheet=webscene_native::css::prepare_stylesheet(
+        ".item { width: 140px; color: red } .item::before { content: 'ready'; padding: 3px }",
+        "asset://app/native.css",[](const auto&) { return true; });
+    if(!native_sheet) return 147;
+    sheets.replace(7,std::move(*native_sheet));
+    const auto recascade_native=[&] {
+        return webscene_native::css::apply_native_cascade(ordered_document,ordered_node,sheets,match_query,
+            variable_root,false,[](const auto&,auto&,auto&,auto&) { return false; },
+            [](const auto&,const auto&) {});
+    };
+    recascade_native();
+    if(ordered_node.style.width.value!=140 || !ordered_node.style.before_pseudo().generated ||
+       ordered_node.style.before_pseudo().content!="ready") return 148;
+    auto native_replacement=webscene_native::css::prepare_stylesheet(
+        ".item { width: 210px; color: blue }","asset://app/native.css",[](const auto&) { return true; });
+    if(!native_replacement) return 149;
+    sheets.replace(7,std::move(*native_replacement));
+    if(!recascade_native() || ordered_node.style.width.value!=210 ||
+       ordered_node.style.before_pseudo().generated) return 150;
+    sheets.remove(7);
+    recascade_native();
+    if(ordered_node.style.width.value==210) return 151;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

@@ -1,0 +1,58 @@
+#pragma once
+#include "webscene_css_stylesheet_owner.h"
+#include "webscene_css_query.h"
+#include "webscene_css_application.h"
+#include "webscene_css_cascade_reset.h"
+#include "webscene_css_cascade_application.h"
+#include "webscene_css_cascade_finalization.h"
+#include "webscene_css_rule_matching.h"
+
+namespace webscene_native::css {
+// Apply one node in parent-before-child order. The host supplies resource loading,
+// diagnostics and scheduling; it must not mutate sheets from either callback.
+template<class LoadSvg,class Observe>
+bool apply_native_cascade(native_document& document,dom_node& node,
+    const stylesheet_owner& sheets,query_host& query,
+    const std::unordered_map<std::string,std::string>& variables,
+    bool focused,LoadSvg&& load_svg,Observe&& observe)
+{
+    const auto previous=node.style;
+    if(node.kind!=dom_node_kind::element) {
+        node.style.display=node.kind==dom_node_kind::text?display_mode::inline_flow:display_mode::none;
+    } else {
+        reset_cascaded_style(node,variables);
+        auto indices=sheets.candidates(node,focused);
+        auto matched=match_candidates(document,node,sheets.state().rules,indices,
+            [&](const auto& subject,const auto& selector) { return query.css_selector_matches(subject,selector); },
+            [&](const auto& subject,const auto& rule) { return query.matches_prepared(subject,rule.compiled_selector()); });
+        apply_matched_declarations(node,matched.ordinary,[&](const css_declaration& declaration,bool inline_origin) {
+            property_result result;
+            apply_declaration(document,node,declaration,variables,inline_origin,result,load_svg,[](bool) {});
+            observe(declaration,result);
+        });
+        recompute_cascaded_line_height(node,matched.ordinary,variables);
+        recompute_inline_font_relative_metrics(node);
+        for(const auto& [kind,rule]:matched.pseudo) {
+            for(const auto& declaration:rule->declarations()) {
+                if(kind>=3) apply_scrollbar_declaration(node,kind,declaration,variables);
+                else {
+                    auto& pseudo=kind==1?node.style.mutable_before_pseudo():node.style.mutable_after_pseudo();
+                    property_result result;
+                    apply_pseudo_declaration(node,pseudo,declaration,variables,result,[](bool) {});
+                    observe(declaration,result);
+                }
+            }
+        }
+        if(node.style.before_pseudo().generated && previous.before_pseudo().generated)
+            node.style.mutable_before_pseudo().layout=previous.before_pseudo().layout;
+        if(node.style.after_pseudo().generated && previous.after_pseudo().generated)
+            node.style.mutable_after_pseudo().layout=previous.after_pseudo().layout;
+        configure_keyframes(node.style,sheets.state().opacity_keyframes);
+        document.update_style_animations(node);
+    }
+    const bool layout_changed=!computed_layout_style_equal(previous,node.style);
+    if(layout_changed) document.mark_dirty();
+    else document.mark_scene_changed();
+    return layout_changed;
+}
+} // namespace webscene_native::css

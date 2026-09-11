@@ -717,3 +717,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   diagnostics; these are syntax counts, not visual parity. The owner is not yet
   wired to a native document host. Recascade scheduling, interaction dependencies,
   scoped sheets, resource registration and app integration remain outstanding.
+
+- Native per-node cascade integration: apply_native_cascade combines the prepared
+  stylesheet owner, indexed matching, reset, ordinary/inline declarations, font
+  finalization, pseudo/scrollbar rules, keyframe configuration and layout-versus-
+  paint invalidation. Callers provide root variables, interaction-aware query state,
+  resource loading and diagnostics, and must process parents before children.
+  Native service tests pass for sheet replacement changing width and removing
+  generated content, and removal clearing the previous stylesheet width. No V8 or
+  runtime HTML parsing is used. Automatic tree scheduling, root variable refresh,
+  scoped sheets, interaction invalidation and application hosting remain unfinished;
+  this test proves computed-style updates, not browser parity or frame performance.
