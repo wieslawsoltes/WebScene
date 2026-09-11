@@ -2204,3 +2204,15 @@ and creates another segment by pointer before Escape/global Undo. Build and
 hosted check pass (GPU serial 2, exit 0). Numeric coordinates, semicolon command
 sequences, history/suggestions and general command dispatch remain unported;
 finish aliases have not yet received a dedicated hosted assertion.
+
+### Native drafting coordinate parser
+
+Added parse_drafting_point in the exported drawing module for absolute XY/XYZ,
+relative @ coordinates and distance<angle polar input. It follows original
+parsePoint elevation handling and the finite +/-1e12 operand bound. Native
+drawing tests pass for inherited Z, explicit Z, relative/polar values and malformed
+or nonfinite input. This helper is not yet wired to the command field; persisted
+lastPoint and scalar distance entry remain open. std::stod numeric conversion
+also requires a separate JavaScript Number compatibility audit (binary/octal,
+Unicode whitespace, locale and hex forms); these tests do not prove full grammar
+parity. No runtime HTML or JavaScript was introduced.

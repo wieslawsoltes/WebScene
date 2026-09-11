@@ -17,6 +17,19 @@ static void check(bool v, const char *message) {
 }
 int main() {
   {
+    using point=std::array<double,3>;
+    check(kestrel::parse_drafting_point("1,2",{5,6,7})==point{1,2,7},"absolute XY elevation lost");
+    check(kestrel::parse_drafting_point("@1,2",{5,6,7})==point{6,8,7},"relative XY failed");
+    check(kestrel::parse_drafting_point("1,2,3",{5,6,7})==point{1,2,3},"absolute XYZ failed");
+    auto polar=kestrel::parse_drafting_point("@10<90",{5,6,7});
+    check(std::abs(polar[0]-5)<1e-8 && std::abs(polar[1]-16)<1e-8 && polar[2]==7,"relative polar failed");
+    for(auto invalid:{"1", "1,", "1,2,3,4", "1x,2", "1e13,2", "nan,2", "1<2<3"}) {
+      bool rejected=false;try { kestrel::parse_drafting_point(invalid); } catch(const std::invalid_argument&) { rejected=true; }
+      check(rejected,"invalid coordinate accepted");
+    }
+  }
+
+  {
     kestrel::drawing model;
     kestrel::line_command line(model);
     const auto before=model.data;

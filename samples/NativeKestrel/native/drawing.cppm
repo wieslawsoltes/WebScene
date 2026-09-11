@@ -605,6 +605,42 @@ public:
     return item.label;
   }
 };
+// Coordinate entry shared by native drafting tools; base is pending or last accepted point.
+inline std::array<double,3> parse_drafting_point(std::string text,std::array<double,3> base={}) {
+  const auto trim=[](std::string value) {
+    auto first=value.find_first_not_of(" \t\r\n");
+    return first==std::string::npos?std::string{}:value.substr(first,value.find_last_not_of(" \t\r\n")-first+1);
+  };
+  const auto number=[&](std::string value) {
+    value=trim(value);if(value.empty())return 0.0;
+    size_t used{};double n{};
+    try { n=std::stod(value,&used); } catch(...) { throw std::invalid_argument("Invalid coordinate value"); }
+    if(used!=value.size() || !std::isfinite(n) || n < -1e12 || n > 1e12)
+      throw std::invalid_argument("Invalid coordinate value");
+    return n;
+  };
+  text=trim(text);const bool relative=text.starts_with('@');if(relative)text.erase(0,1);
+  std::array<double,3> result{};
+  if(auto angle=text.find('<');angle!=std::string::npos) {
+    if(text.find('<',angle+1)!=std::string::npos)throw std::invalid_argument("Polar coordinates use distance<angle or @distance<angle.");
+    const auto distance=number(text.substr(0,angle));
+    const auto radians=number(text.substr(angle+1))*std::numbers::pi/180;
+    result={distance*std::cos(radians),distance*std::sin(radians),0};
+  } else {
+    size_t start=0,count=0;
+    for(;;) {
+      const auto comma=text.find(',',start);const auto value=trim(text.substr(start,comma==std::string::npos?comma:comma-start));
+      if(value.empty() || count==3)throw std::invalid_argument("Coordinates use X,Y or X,Y,Z.");
+      result[count++]=number(value);
+      if(comma==std::string::npos)break;
+      start=comma+1;
+    }
+    if(count<2)throw std::invalid_argument("Coordinates use X,Y or X,Y,Z.");
+    if(count==2)result[2]=relative?0:base[2];
+  }
+  if(relative)for(size_t i=0;i<3;++i)result[i]+=base[i];
+  return result;
+}
 // Stateful continuous Line command, independent of generated views and input mapping.
 class line_command {
   drawing& model_;
