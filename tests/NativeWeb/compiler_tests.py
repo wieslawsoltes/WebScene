@@ -12,6 +12,15 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_scrollbar_width_keywords(self):
+        for value, expected in [('auto', 'automatic'), ('thin', 'thin'), ('none', 'none'), ('THIN', 'thin')]:
+            result, out = self.compile('<div></div>', 'div {scrollbar-width:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('scrollbar_width::'+expected, out.read_text())
+        for value in ['3px', 'narrow', 'thin none']:
+            result, _ = self.compile('<div></div>', 'div {scrollbar-width:'+value+'}')
+            self.assertNotEqual(result.returncode, 0, value)
+
     def test_opacity_clamps_but_negative_flex_factors_fail(self):
         for value,expected in [('-0.5','0.0f'),('2','1.0f'),('5e-1','0.5f'),('50%','0.5f'),('-20%','0.0f'),('+2e2%','1.0f')]:
             result,out=self.compile('<div></div>', 'div { opacity:'+value+'; }')

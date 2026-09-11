@@ -17,6 +17,7 @@ using justify_mode = webscene_native::justify_mode;
 using position_mode = webscene_native::position_mode;
 using overflow_mode = webscene_native::overflow_mode;
 using grid_track = webscene_native::node_style::grid_data::track;
+enum class scrollbar_width { automatic, thin, none };
 // Supported compiled-style writer. Generated code never accesses engine fields.
 // A writer is borrowed only for the duration of declaration application.
 class style {
@@ -81,6 +82,12 @@ public:
   void set_z_index(int32_t value, bool automatic = false) { value_.z_index = value; value_.z_index_auto = automatic; }
   void set_pointer_events(bool none, bool specified = true) { value_.pointer_events_none = none; value_.pointer_events_specified = specified; }
   void set_visibility(bool hidden, bool specified = true) { value_.visibility_hidden = hidden; value_.visibility_specified = specified; }
+  void set_scrollbar_width(scrollbar_width width) {
+    value_.scrollbar_hidden = width == scrollbar_width::none;
+    auto &bar = value_.mutable_scrollbar();
+    // Width is UA-defined; use 4 CSS pixels for thin versus the native 6px default.
+    bar.width = bar.height = width == scrollbar_width::thin ? 4.0f : 6.0f;
+  }
   void set_overflow_x(overflow_mode value) { value_.overflow_x = value; }
   void set_overflow_y(overflow_mode value) { value_.overflow_y = value; }
   void set_font_smoothing(std::string value) { value_.mutable_textual().font_smoothing = std::move(value); }

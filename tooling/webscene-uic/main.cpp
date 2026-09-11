@@ -720,6 +720,13 @@ static std::string assignments(const std::string &name,
     if (integer < INT32_MIN || integer > INT32_MAX) throw std::runtime_error("z-index outside native integer range");
     return "s.set_z_index(" + std::to_string(integer) + ");";
   }
+  if (name == "scrollbar-width") {
+    const auto keyword = ascii_keyword(value);
+    if (keyword != "auto" && keyword != "thin" && keyword != "none")
+      throw std::runtime_error("scrollbar-width requires auto, thin or none");
+    return "s.set_scrollbar_width(webscene::native_web::scrollbar_width::" +
+        std::string(keyword == "auto" ? "automatic" : keyword) + ");";
+  }
   if (name == "pointer-events" || name == "visibility") {
     auto setter = name == "pointer-events" ? "set_pointer_events" : "set_visibility";
     if (value == "inherit" || value == "unset") return std::string("s.") + setter + "(false,false);";

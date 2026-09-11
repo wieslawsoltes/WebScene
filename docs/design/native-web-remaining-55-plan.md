@@ -786,3 +786,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   undefined-symbol scan found no V8/HTML/CSS parser matches (not a complete static
   dependency audit). Full original UI, behavior, packaging and presented 60fps
   panning/resize acceptance remain outstanding.
+
+- Compiler scrollbar-width support: auto/thin/none now emit typed native style
+  calls. Native overlay widths are 6px for auto and 4px for thin; none suppresses
+  rails while preserving scrolling. Compiler tests reject lengths/unknown/multiple
+  keywords, and contracts verify emitted rail geometry and hidden-bar scrolling.
+  Compiler and contract suites pass. Fresh original Kestrel audit: 397 rules,
+  1475 declarations, **41 distinct unsupported constructs**, down from 43.
+  Inherited scrollbar-width, scrollbar-color, original app parity and performance
+  remain unfinished; this is not a full CSS Scrollbars conformance claim.

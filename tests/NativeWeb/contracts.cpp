@@ -12,6 +12,33 @@ static int style_application_count = 0;
 int main() {
   using namespace webscene::native_web;
   {
+    document bars;
+    auto scroller=bars.element(bars.body(), "div");
+    auto content=bars.element(scroller, "div");
+    rule box;box.inline_target=scroller;
+    box.declarations.push_back({false,+[](style& s) {
+      s.set_width({100,length_unit::pixels});s.set_height({40,length_unit::pixels});
+      s.set_overflow_y(overflow_mode::scroll);s.set_scrollbar_width(scrollbar_width::thin);
+    }});
+    bars.add_rule(std::move(box));
+    rule inner;inner.inline_target=content;
+    inner.declarations.push_back({false,+[](style& s) {s.set_height({200,length_unit::pixels});}});
+    bars.add_rule(std::move(inner));
+    const auto& painted=bars.render(300,300);
+    bool thin_rail=false;
+    for(const auto& command:painted.commands)
+      if(command.node_id==scroller && command.rgba==0x7F7F7F40U && command.width==4) thin_rail=true;
+    check(thin_rail,"thin scrollbar emits four-pixel rail");
+    rule hidden;hidden.inline_target=scroller;
+    hidden.declarations.push_back({false,+[](style& s) {s.set_scrollbar_width(scrollbar_width::none);}});
+    bars.add_rule(std::move(hidden));
+    const auto& no_bars=bars.render(300,300);
+    for(const auto& command:no_bars.commands)
+      check(command.node_id!=scroller || command.rgba!=0x7F7F7F40U,"none suppresses scrollbar rail");
+    bars.scroll_to(scroller,0,20);
+    check(bars.scroll_offset(scroller).second==20,"hidden scrollbar retains scrolling");
+  }
+  {
     document canvas_document;
     auto canvas = canvas_document.element(canvas_document.body(), "canvas");
     rule counted;
