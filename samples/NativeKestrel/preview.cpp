@@ -319,6 +319,23 @@ public:
     }
     view->refresh();
 #endif
+    handlers.push_back(view->document.on(view->document.find("command-input"),"keydown",[this](auto& event) {
+      if(!line_active || event.key!="Enter")return;
+      const auto input=view->document.find("command-input");
+      auto command=view->document.value(input);
+      const auto first=command.find_first_not_of(" \t\r\n");
+      command=first==std::string::npos?"":command.substr(first,command.find_last_not_of(" \t\r\n")-first+1);
+      for(auto& c:command)if(c>='a' && c<='z')c-=('a'-'A');
+      if(command=="U" || command=="UNDO")line_tool.undo_point();
+      else if(command.empty() || command=="ENTER" || command=="ESC" || command=="CANCEL") {
+        line_active=false;line_tool.cancel();
+      } else return;
+      view->document.set_value(input,"");sync_line_prompt();
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+      if(layers)layers->refresh();
+#endif
+      gpu_dirty=true;event.prevent_default();event.stop_propagation();
+    }));
     handlers.push_back(view->document.on(view->document.root(),"keydown",[this](auto& event) {
       if(!viewport)return;
       for(auto id:{"modal","command-palette"})if(auto dialog=view->document.find(id))
@@ -716,6 +733,14 @@ public:
           };
           if(entity["type"]!="LINE" || !near(entity["points"][0],*first) || !near(entity["points"][1],*second))
             throw std::runtime_error("Hosted Line coordinates differ from viewport projection");
+          const auto command=view->document.find("command-input");
+          view->document.focus(command);
+          foco::text_input_event text;text.text="u";view->text_input_received(text);
+          foco::key_event enter;enter.value=foco::key::enter;view->key_event_received(enter);
+          if(model.data!=before || line_tool.points().size()!=1 || !view->document.value(command).empty())
+            throw std::runtime_error("Hosted Line command Undo failed");
+          click(area.x+area.width*.6,area.y+area.height*.55);
+          if(model.data["entities"].size()!=before["entities"].size()+1)throw std::runtime_error("Line continuation after Undo failed");
           view->document.focus(view->document.find("viewport"));
           foco::key_event key;key.value=foco::key::escape;view->key_event_received(key);
           if(line_active || !line_tool.points().empty())throw std::runtime_error("Hosted Line cancellation failed");

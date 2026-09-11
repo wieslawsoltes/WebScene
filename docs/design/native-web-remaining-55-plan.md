@@ -2192,3 +2192,15 @@ unprojection. Native Escape cancels pending state; platform Undo restores the
 exact document snapshot. The rebuilt hosted run passed and captured with GPU
 serial 2, exiting 0. This exercises synthetic Foco view input, not physical OS
 mouse ingestion, snapping, rubber-band feedback, or a pixel check of the new line.
+
+### Line command-field options
+
+The existing compiled command input handles Line U/UNDO and empty Enter/ENTER
+finish, plus ESC/CANCEL aliases. Recognized options clear the input, update the
+original prompt and refresh native model/viewport state. The hosted Line check
+now types lowercase u through Foco text input, presses Enter through Foco key
+input, verifies exact drawing restoration with the previous endpoint retained,
+and creates another segment by pointer before Escape/global Undo. Build and
+hosted check pass (GPU serial 2, exit 0). Numeric coordinates, semicolon command
+sequences, history/suggestions and general command dispatch remain unported;
+finish aliases have not yet received a dedicated hosted assertion.
