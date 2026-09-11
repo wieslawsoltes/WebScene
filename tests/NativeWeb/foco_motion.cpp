@@ -39,6 +39,15 @@ int main() {
     event.kind=foco::pointer_event_kind::released;event.buttons=0;input->pointer_event_received(event);
     event.kind=foco::pointer_event_kind::wheel;event.wheel_delta=1;input->pointer_event_received(event);
     require(received==3);
+    foco::key_event key;key.modifiers=event.modifiers;key.value=foco::key::enter;
+    input->key_event_received(key);
+    key.value=foco::key::space;input->key_event_received(key);
+    require(received==5 && key.handled);
+    // A focus callback may close the document during in-view Tab navigation.
+    auto close=input->document.on(button,"focus",[&](auto&){input->document.dispose();});
+    input->document.focus(0);
+    require(!input->try_move_focus_within(false));
+    require(input->document.disposed());
   }
   require(view->document.bounds(node).width==40);
   const auto before=wakes;

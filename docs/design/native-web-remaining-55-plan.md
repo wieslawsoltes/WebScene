@@ -1093,3 +1093,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   input events, not a physical keyboard session. Keyboard-generated click modifier
   coverage and broader keyboard input remain separate work; full app parity and
   presented 60fps remain unfinished.
+
+- Keyboard modifier consistency: added a modifier-aware native key overload while
+  retaining the existing bool-Shift API. Foco forwards all four modifiers for
+  Enter/Space activation, and synthesized clicks carry them to native handlers.
+  Hosted tests verify modifier-preserving activation and document disposal from a
+  focus callback during Tab navigation. The host now checks disposal before
+  querying final focus. Native contracts, transitions, layer selection and compiler
+  suites pass alongside hosted motion/input tests. This does not implement general
+  text editing, shortcuts or IME; full app parity and presented 60fps remain open.

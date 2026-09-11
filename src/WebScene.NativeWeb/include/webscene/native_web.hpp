@@ -427,6 +427,7 @@ public:
   void wheel(float x, float y, float delta_y, input_modifiers = {});
   void focus(node_id);
   void key(std::string_view key, bool shift = false);
+  void key(std::string_view key, input_modifiers);
   node_id focused() const;
   void set_reduced_motion(bool enabled);
   bool advance_animations(double timestamp_ms);

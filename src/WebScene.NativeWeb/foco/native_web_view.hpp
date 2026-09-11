@@ -160,7 +160,7 @@ public:
     if(document.disposed()) return false;
     document.key("Tab", reverse);
     refresh();
-    return document.focused() != 0;
+    return !document.disposed() && document.focused() != 0;
   }
   void key_event_received(foco::key_event &e) override {
     if(document.disposed()) {refresh();return;}
@@ -169,8 +169,11 @@ public:
                            : e.value == foco::key::space ? " "
                                                          : "";
     if (!key.empty()) {
-      document.key(key,
-                   foco::has_modifier(e.modifiers, foco::key_modifiers::shift));
+      document.key(key,webscene::native_web::input_modifiers{
+        foco::has_modifier(e.modifiers,foco::key_modifiers::shift),
+        foco::has_modifier(e.modifiers,foco::key_modifiers::control),
+        foco::has_modifier(e.modifiers,foco::key_modifiers::alt),
+        foco::has_modifier(e.modifiers,foco::key_modifiers::platform)});
       request_input_refresh();
       e.handled = true;
     }

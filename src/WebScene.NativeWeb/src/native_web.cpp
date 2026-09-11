@@ -422,6 +422,10 @@ void document::pointer(std::string type, float x, float y, uint32_t buttons, inp
   }
 }
 void document::key(std::string_view key, bool shift) {
+  this->key(key,input_modifiers{shift});
+}
+void document::key(std::string_view key, input_modifiers modifiers) {
+  const bool shift=modifiers.shift;
   state_->check();
   if (!state_->keyboard_modality) {
     state_->keyboard_modality = true;
@@ -454,7 +458,7 @@ void document::key(std::string_view key, bool shift) {
   } else if ((key == "Enter" || key == " ") && state_->focus) {
     if (state_->node(state_->focus).tag == "button" &&
         !state_->node(state_->focus).attributes.contains("disabled"))
-      dispatch(state_->focus, "click");
+      dispatch(state_->focus, "click",0,0,0,0,{},0,modifiers);
   }
 }
 void document::set_external_canvas(node_id id, bool enabled) {
