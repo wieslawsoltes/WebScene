@@ -12,6 +12,22 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_shared_css_html_backend(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder);source=root/'view.html';output=root/'view.cppm'
+            css=root/'original.css';css.write_text('.item::before {content:"x"}')
+            source.write_text('<html><head><link rel="stylesheet" href="original.css"></head><body><div class="item" style="width:20px"></div></body></html>')
+            command=[UIC,source,output,'--module','test.shared','--css-backend','shared']
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            generated=output.read_text()
+            self.assertIn('make_shared_stylesheet_resolver',generated)
+            self.assertIn('r->compiled_pseudo_origin',generated)
+            self.assertNotIn('d.add_rule',generated)
+            self.assertIn('original.css',pathlib.Path(str(output)+'.d').read_text())
+            result=subprocess.run(command[:-1]+['invalid'],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+
     def test_prepared_css_module(self):
         with tempfile.TemporaryDirectory() as folder:
             root=pathlib.Path(folder);source=root/'style.css';output=root/'style.cppm'

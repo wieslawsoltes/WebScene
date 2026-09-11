@@ -1,0 +1,10 @@
+<!doctype html>
+<html style="--control-width:88px"><head>
+<link rel="stylesheet" href="SharedStyles.css" media="screen">
+<style>.row {width:52px} #target.important {width:77px!important}</style>
+<style media="(max-width:150px)">.row {width:32px}</style>
+</head><body style="margin:0">
+<button id="target" style="width:var(--control-width)">Native</button>
+<canvas id="drawing"></canvas>
+<template id="row"><div class="row" data-ref="item" style="height:19px">Inserted</div></template>
+</body></html>

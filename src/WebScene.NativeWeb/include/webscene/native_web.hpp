@@ -411,6 +411,7 @@ public:
   node_id find(std::string_view id) const;
   void add_rule(rule);
   // Alternate cascade backend; cannot be mixed with generated typed rules.
+  // Inline style attributes are permitted only while a resolver is installed.
   // Replacing the resolver invalidates styles. nullptr restores typed styles.
   void set_stylesheet_resolver(std::unique_ptr<stylesheet_resolver>);
   subscription on(node_id, std::string type, std::function<void(event &)>);

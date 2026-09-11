@@ -14,7 +14,7 @@ public:
   void resolve(webscene_native::native_document& document,
                const style_environment& environment) override {
     if(!session_) {
-      session_=std::make_unique<webscene_native::css::native_style_session>(document);
+      session_=std::make_unique<webscene_native::css::native_style_session>(document,true);
       uint32_t id=1;
       for(const auto& sheet:sheets_) session_->replace(id++,sheet);
     }

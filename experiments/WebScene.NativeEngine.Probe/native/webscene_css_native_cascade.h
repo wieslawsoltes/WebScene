@@ -6,6 +6,7 @@
 #include "webscene_css_cascade_application.h"
 #include "webscene_css_cascade_finalization.h"
 #include "webscene_css_rule_matching.h"
+#include "webscene_css_declarations.h"
 
 namespace webscene_native::css {
 // Apply one node in parent-before-child order. The host supplies resource loading,
@@ -14,12 +15,27 @@ template<class LoadSvg,class Observe>
 bool apply_native_cascade(native_document& document,dom_node& node,
     const stylesheet_owner& sheets,query_host& query,
     const std::unordered_map<std::string,std::string>& variables,
-    bool focused,LoadSvg&& load_svg,Observe&& observe)
+    bool focused,LoadSvg&& load_svg,Observe&& observe,bool inline_attributes=false)
 {
     const auto previous=node.style;
     if(node.kind!=dom_node_kind::element) {
         node.style.display=node.kind==dom_node_kind::text?display_mode::inline_flow:display_mode::none;
     } else {
+        std::vector<css_declaration> inline_values;
+        if(inline_attributes) {
+            node.style.inline_property_mask=0;
+            node.clear_authored_style();
+            const auto attribute=node.attributes.find("style");
+            if(attribute!=node.attributes.end()) inline_values=parse_declarations(attribute->second);
+            // Seed inline custom properties before matching dependent values.
+            // Preserve priority when the attribute declares the same name twice.
+            for(const auto& declaration:inline_values) {
+                auto& authored=node.mutable_authored_style();
+                if(!declaration.important && authored.important_declarations.contains(declaration.name)) continue;
+                authored.declarations[declaration.name]=declaration.value;
+                if(declaration.important) authored.important_declarations.insert(declaration.name);
+            }
+        }
         reset_cascaded_style(node,variables);
         auto indices=sheets.candidates(node,focused);
         auto matched=match_candidates(document,node,sheets.state().rules,indices,
@@ -30,6 +46,14 @@ bool apply_native_cascade(native_document& document,dom_node& node,
             apply_declaration(document,node,declaration,variables,inline_origin,result,load_svg,[](bool) {});
             observe(declaration,result);
         });
+        if(inline_attributes) {
+            for(bool important:{false,true}) for(const auto& declaration:inline_values) {
+                if(declaration.important!=important || declaration.name.starts_with("--")) continue;
+                property_result result;
+                apply_declaration(document,node,declaration,variables,true,result,load_svg,[](bool) {});
+                observe(declaration,result);
+            }
+        }
         recompute_cascaded_line_height(node,matched.ordinary,variables);
         recompute_inline_font_relative_metrics(node);
         for(const auto& [kind,rule]:matched.pseudo) {
@@ -60,7 +84,7 @@ bool apply_native_cascade(native_document& document,dom_node& node,
 // smaller invalidated subtrees; callbacks must not mutate the tree during traversal.
 template<class LoadSvg,class Observe>
 bool apply_native_document_cascade(native_document& document,
-    const stylesheet_owner& sheets,query_host& query,LoadSvg&& load_svg,Observe&& observe)
+    const stylesheet_owner& sheets,query_host& query,LoadSvg&& load_svg,Observe&& observe,bool inline_attributes=false)
 {
     std::unordered_map<std::string,std::string> variables;
     std::unordered_set<std::string> important;
@@ -72,7 +96,7 @@ bool apply_native_document_cascade(native_document& document,
         auto* node=pending.back();
         pending.pop_back();
         layout_changed|=apply_native_cascade(document,*node,sheets,query,variables,
-            node==focus,load_svg,observe);
+            node==focus,load_svg,observe,inline_attributes);
         for(auto child=node->children.rbegin();child!=node->children.rend();++child)
             if(*child) pending.push_back(*child);
     }

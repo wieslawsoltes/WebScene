@@ -12,8 +12,10 @@ class native_style_session {
     uint32_t hover_id_{},focus_id_{};
     bool focus_visible_{};
     bool pending_{true};
+    bool inline_attributes_{};
 public:
-    explicit native_style_session(native_document& document):document_(document),query_(document) {}
+    explicit native_style_session(native_document& document,bool inline_attributes=false)
+        :document_(document),query_(document),inline_attributes_(inline_attributes) {}
     native_style_session(const native_style_session&)=delete;
     native_style_session& operator=(const native_style_session&)=delete;
     void replace(uint32_t id,prepared_stylesheet sheet) {
@@ -53,7 +55,7 @@ public:
         if(!pending_) return false;
         pending_=false;
         try {
-            apply_native_document_cascade(document_,sheets_,query_,load_svg,observe);
+            apply_native_document_cascade(document_,sheets_,query_,load_svg,observe,inline_attributes_);
         } catch(...) {
             pending_=true;
             throw;

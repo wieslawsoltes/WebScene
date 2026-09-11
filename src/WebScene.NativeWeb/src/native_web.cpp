@@ -140,7 +140,7 @@ node_id document::parent(node_id id) const {
 }
 void document::attribute(node_id id, std::string name, std::string value) {
   auto &n = state_->node(id);
-  if (name == "style" || name.starts_with("on"))
+  if ((name == "style" && !state_->resolver) || name.starts_with("on"))
     throw std::invalid_argument(
         "use compiled styles and native event subscriptions");
   if (name == "id")

@@ -989,3 +989,22 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   so this is build-time stylesheet parsing, not the final parser-free backend.
   The packaged Kestrel app has not switched to this path; parity, resources and
   presented 60fps remain unfinished.
+
+- HTML compiler shared-backend selection: --css-backend shared now prepares linked
+  and embedded stylesheets into the generated HTML module, preserving stylesheet
+  order, source addresses, link dependencies and media attributes. Generated build
+  installs the optional shared resolver and accepts a diagnostic report. Inline
+  styles on the document root, body, elements and predefined templates are kept
+  as authored attributes in this transitional backend. The shared native cascade
+  now has an opt-in attribute synchronization path, including inline custom values,
+  priority and style removal; the existing V8-style path remains the default for
+  other session callers. Typed documents continue to reject textual style writes.
+  Tests verify linked/embedded/inline interaction, responsive template dimensions,
+  inherited custom-value updates, attribute removal and important precedence.
+  Shared document/style, CSS service, contracts and compiler suites pass, including
+  backend validation and linked dependency emission. Kestrel's original index.html
+  generates and Clang-precompiles with --css-backend shared --preview; preview HTML
+  warnings and script omission remain, so this is not a complete original app.
+  No default application backend changed. Runtime inline/value interpretation,
+  resource integration, actual Foco/Kestrel integration, parity and presented 60fps
+  remain unfinished.
