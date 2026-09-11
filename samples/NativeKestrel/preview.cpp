@@ -97,6 +97,34 @@ class preview_app final : public foco::application {
           throw std::runtime_error("GPU image dimensions do not match the current canvas");
         published_width=metadata.width;published_height=metadata.height;
         ++gpu_serial;
+        const auto overlay=view->document.find("overlay");
+        view->document.attribute(overlay,"width",std::to_string(w));
+        view->document.attribute(overlay,"height",std::to_string(h));
+        view->document.clear_canvas(overlay);
+        for(const auto& item:viewport->scene_content().texts) {
+          const auto& text=item.text;
+          const auto position=kestrel::geo::point(text.at("position"));
+          const auto p=viewport->camera.project(position);
+          if(p.z<0 || p.z>1 || p.x < -500 || p.x>w+500 || p.y < -200 || p.y>h+200)continue;
+          const auto axes=kestrel::geo::axes_for_text(text);
+          const auto height=text.value("height",10.0);
+          const auto q=viewport->camera.project(position+axes.x*height);
+          const auto r=viewport->camera.project(position+axes.y*height);
+          const auto pixels=std::hypot(q.x-p.x,q.y-p.y);
+          if(pixels<2 || pixels>2000)continue;
+          double xx=(q.x-p.x)/pixels,xy=(q.y-p.y)/pixels,yx=-(r.x-p.x)/pixels,yy=-(r.y-p.y)/pixels;
+          if(std::abs(xx*yy-yx*xy)<.015)continue;
+          if(item.dimension && xx<0) {xx=-xx;xy=-xy;yx=-yx;yy=-yy;}
+          uint32_t color=0;for(float channel:item.color) color=(color<<8)|uint32_t(std::clamp(channel,0.f,1.f)*255+.5f);
+          const auto content=text.value("text",std::string{});
+          size_t start=0;unsigned line=0;
+          do {
+            const auto end=content.find('\n',start);
+            view->document.fill_text(overlay,content.substr(start,end==std::string::npos?end:end-start),0,float(line++*pixels*1.35),
+                std::to_string(pixels)+"px \"Segoe UI\", Arial, sans-serif",color,text.value("align",std::string("left")),"alphabetic",{xx,xy,yx,yy,p.x,p.y});
+            if(end==std::string::npos)break;start=end+1;
+          } while(start<=content.size());
+        }
         view->set_gpu_image(node, w, h, gpu_serial,
             webscene::foco_host::make_gpu_image(node, gpu_serial, std::move(image)));
       }

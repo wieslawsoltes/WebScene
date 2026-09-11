@@ -1419,3 +1419,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   no layout-pass increase for drawing-only updates. Native render_data already
   collects drawing labels; projecting and painting those onto the preview overlay
   is next. This API addition alone does not restore visible Courtyard labels.
+
+- Courtyard native text overlay: exposes cached viewport text records and projects
+  their axes using original renderer.js visibility, scale, orientation and
+  dimension-flip rules. Native Canvas fill_text supports a scoped affine transform;
+  preview paints aligned multiline text onto the original overlay canvas with
+  matching bitmap dimensions when publishing GPU frames. Rebuilt and captured
+  /tmp/kestrel-courtyard-text.png, clean exit; inspected room labels, dimension
+  numbers, north label, drawing title and scale annotations now visible. Rebuilt
+  native_web_text and CTest passes. Dimension background masks, formatted MText,
+  custom font handling, complete original renderer overlays and performance with
+  text are still unverified/incomplete; this is not full browser parity.

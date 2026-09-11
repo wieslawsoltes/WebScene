@@ -51,6 +51,7 @@ public:
   // Direct mutations outside drawing transactions must invalidate the scene.
   void invalidate_scene() { cached_document = nullptr; }
   uint64_t scene_build_count() const { return scene_builds; }
+  const render_scene& scene_content() const {return scene;}
   bool submit(const drawing &document) {
     if (pending)
       return false;

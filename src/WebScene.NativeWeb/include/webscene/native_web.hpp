@@ -449,7 +449,8 @@ public:
                  uint32_t rgba);
   void fill_text(node_id, std::string text, float x, float y,
                  std::string font, uint32_t rgba,
-                 std::string align = "start", std::string baseline = "alphabetic");
+                 std::string align = "start", std::string baseline = "alphabetic",
+                 std::array<double,6> transform = {1,0,0,1,0,0});
   const scene &render(float width, float height);
   uint64_t layout_passes() const;
   webscene_native::layout_rect bounds(node_id) const;
