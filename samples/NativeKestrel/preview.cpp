@@ -72,6 +72,8 @@ class preview_app final : public foco::application {
   bool line_active{};
   bool drafting_shift{};
   bool drafting_snap{},drafting_ortho{},drafting_polar{};
+  bool drafting_osnap{true};
+  kestrel::object_snap_index snap_index;
   std::optional<kestrel::vec3> line_pointer;
   std::optional<std::array<double,2>> line_pointer_client;
   bool overlay_dirty{};
@@ -118,8 +120,8 @@ class preview_app final : public foco::application {
     if(!viewport)return;
     for(auto button:view->document.children(view->document.find("status-toggles"))) {
       const auto name=view->document.attribute(button,"data-action").value_or("");
-      if(name=="grid" || name=="snap" || name=="ortho" || name=="polar") {
-        const bool enabled=name=="grid"?viewport->grid_enabled:name=="snap"?drafting_snap:name=="ortho"?drafting_ortho:drafting_polar;
+      if(name=="grid" || name=="snap" || name=="ortho" || name=="polar" || name=="osnap") {
+        const bool enabled=name=="osnap"?drafting_osnap:name=="grid"?viewport->grid_enabled:name=="snap"?drafting_snap:name=="ortho"?drafting_ortho:drafting_polar;
         view->document.attribute(button,"class",enabled?"active":"");
       }
     }
@@ -165,6 +167,7 @@ class preview_app final : public foco::application {
   std::optional<kestrel::vec3> drafting_pointer(double x,double y) {
     auto point=viewport->camera.unproject(x,y,0);
     if(!point)return {};
+    if(drafting_osnap)if(auto snap=snap_index.nearest(model,viewport->camera,x,y))return snap->point;
     std::optional<std::array<double,3>> base;
     if(!line_tool.points().empty())base=line_tool.points().back();
     const auto result=kestrel::constrain_drafting_point({point->x,point->y,point->z},base,drafting_snap,100,drafting_ortho || drafting_shift,drafting_polar,15);
@@ -471,7 +474,8 @@ public:
             else if (*action == "fit") fit_drawing();
             else if (*action == "zoomin") viewport->camera.zoom_at(1.35);
             else if (*action == "zoomout") viewport->camera.zoom_at(1.0/1.35);
-            else if(*action=="snap" || *action=="ortho" || *action=="polar") {
+            else if(*action=="snap" || *action=="ortho" || *action=="polar" || *action=="osnap") {
+              if(*action=="osnap")drafting_osnap=!drafting_osnap;
               if(*action=="snap")drafting_snap=!drafting_snap;
               if(*action=="ortho") {drafting_ortho=!drafting_ortho;if(drafting_ortho)drafting_polar=false;}
               if(*action=="polar") {drafting_polar=!drafting_polar;if(drafting_polar)drafting_ortho=false;}
@@ -780,6 +784,7 @@ public:
           navigation_serial=gpu_serial;navigation_exercised=true;
         }
         if(exercise_line_draw && viewport && gpu_serial) {
+          drafting_osnap=false;sync_drafting_status(); // Coordinate fixtures deliberately bypass object snaps.
           const auto find_line=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
             if(view->document.attribute(node,"data-action")=="line")return node;
             for(auto child:view->document.children(node))if(auto found=self(self,child))return found;
@@ -889,6 +894,31 @@ public:
                 }
               throw std::runtime_error("Compiled status toggle missing");
             };
+            const auto osnap=toggle("osnap");
+            if(!drafting_osnap || view->document.attribute(osnap,"class")!="active")throw std::runtime_error("OSNAP toggle failed");
+            bool verified_snap=false;
+            for(const auto& entity:model.data["entities"]) {
+              if(!model.visible(entity))continue;
+              for(const auto& candidate:kestrel::geo::geometry(entity).snaps) {
+                const auto q=viewport->camera.project(candidate.point);
+                if(q.z<0 || q.z>1 || q.x<15 || q.y<15 || q.x>area.width-15 || q.y>area.height-15)continue;
+                const auto expected=snap_index.nearest(model,viewport->camera,q.x+2,q.y+1);
+                const auto actual=drafting_pointer(q.x+2,q.y+1);
+                if(!expected || !actual || (*actual-expected->point).length()>1e-8)throw std::runtime_error("Native drafting pointer ignored object snap");
+                const auto anchor=line_tool.points().back();
+                if(std::hypot(expected->point.x-anchor[0],expected->point.y-anchor[1],expected->point.z-anchor[2])<1e-8)continue;
+                const auto before_snap=model.data;
+                click(area.x+q.x+2,area.y+q.y+1);
+                if(model.data["entities"].size()!=before_snap["entities"].size()+1 || !near(model.data["entities"].back()["points"][1],expected->point))
+                  throw std::runtime_error("Hosted OSNAP click did not commit snapped endpoint");
+                type_command("U");
+                if(model.data!=before_snap)throw std::runtime_error("Hosted OSNAP Undo failed");
+                verified_snap=true;break;
+              }
+              if(verified_snap)break;
+            }
+            if(!verified_snap)throw std::runtime_error("Hosted OSNAP fixture has no visible candidates");
+            toggle("osnap");
             const auto ortho=toggle("ortho");
             if(!drafting_ortho || view->document.attribute(ortho,"class")!="active")throw std::runtime_error("Ortho toggle failed");
             const auto polar=toggle("polar");

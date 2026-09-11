@@ -273,6 +273,8 @@ class object_snap_index {
   const drawing* owner_{};
   uint64_t revision_{};
   std::vector<object_snap_result> candidates_;
+  struct snap_segment { geo::segment world; std::string id; };
+  std::vector<snap_segment> segments_;
   size_t builds_{};
   const kestrel::camera* camera_{};
   uint64_t camera_revision_{};
@@ -287,12 +289,16 @@ public:
   std::optional<object_snap_result> nearest(const drawing& model,const camera& camera,double x,double y,std::string_view excluded={}) {
     if(owner_!=&model || revision_!=model.revision) {
       std::vector<object_snap_result> next;
+      std::vector<snap_segment> segments;
       for(const auto& entity:model.data.at("entities")) {
         if(!model.visible(entity))continue;
         const auto id=entity.at("id").get<std::string>();
-        for(const auto& snap:geo::geometry(entity).snaps)next.push_back({snap.point,{},snap.type,id,0});
+        const auto geometry=geo::geometry(entity);
+        for(const auto& snap:geometry.snaps)next.push_back({snap.point,{},snap.type,id,0});
+        if(entity["type"]=="LINE" || entity["type"]=="POLYLINE")
+          for(const auto& segment:geometry.segments)if(std::abs(segment[0].z-segment[1].z)<1e-7)segments.push_back({segment,id});
       }
-      candidates_=std::move(next);owner_=&model;revision_=model.revision;++builds_;camera_=nullptr;
+      segments_=std::move(segments);candidates_=std::move(next);owner_=&model;revision_=model.revision;++builds_;camera_=nullptr;
     }
     if(camera_!=&camera || camera_revision_!=camera.revision) {
       cells_.clear();
@@ -318,6 +324,25 @@ public:
           best=candidate;best->distance=distance;best_order=order;
         }
       }
+    }
+    std::vector<const snap_segment*> cutting;
+    for(const auto& segment:segments_) {
+      if(segment.id==excluded)continue;
+      const auto a=camera.project(segment.world[0]),b=camera.project(segment.world[1]);
+      const auto dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
+      const auto t=length>0?std::clamp(((x-a.x)*dx+(y-a.y)*dy)/length,0.0,1.0):0;
+      if(std::hypot(x-a.x-t*dx,y-a.y-t*dy)<22)cutting.push_back(&segment);
+      if(cutting.size()>40)break;
+    }
+    for(size_t i=0;i<cutting.size();++i)for(size_t j=i+1;j<cutting.size();++j) {
+      const auto& a=cutting[i]->world;const auto& b=cutting[j]->world;
+      if(std::abs(a[0].z-b[0].z)>1e-6)continue;
+      const auto hit=line_intersection(a[0],a[1],b[0],b[1]);
+      if(!hit || hit->t < -epsilon || hit->t > 1+epsilon || hit->u < -epsilon || hit->u > 1+epsilon)continue;
+      const auto screen=camera.project(hit->point);
+      if(screen.z<0 || screen.z>1)continue;
+      const auto distance=std::hypot(screen.x-x,screen.y-y);
+      if(distance<11 && (!best || distance<best->distance))best=object_snap_result{hit->point,screen,"intersection",cutting[i]->id,distance};
     }
     return best;
   }

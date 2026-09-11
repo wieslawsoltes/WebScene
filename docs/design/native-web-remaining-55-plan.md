@@ -2424,3 +2424,22 @@ invalidation checks and zero examined candidates for an empty-area query.
 This is candidate spatial lookup, not intersection indexing or measured complete
 OSNAP frame performance. Camera changes must use revision-updating camera APIs;
 direct model writes still require explicit invalidation.
+
+### Native intersection snaps and hosted OSNAP commit
+
+Retained LINE/POLYLINE segments now supply same-elevation intersections using
+original segment-distance (<22), 41-candidate cap, intersection bounds tolerance
+and nearest-snap (<11) rules. Existing equal-distance midpoint wins, as upstream.
+Native render-data tests pass off-midpoint crossing, midpoint tie priority and
+different-elevation rejection. Segment nearby filtering currently scans retained
+segments, unlike upstream's entity index; dense-scene order/performance parity
+needs further work.
+
+Connected original OSNAP status action to native Line pointer/preview, enabled
+by default and taking priority over grid/ortho constraints. Hosted check toggles
+OSNAP via original button, clicks offset from a visible candidate, verifies the
+committed endpoint equals the snap and undoes to the exact prior document.
+Build and hosted check pass, GPU serial 2, exit 0. Existing geometric test fixtures
+explicitly disable OSNAP while testing raw coordinate projection. Snap marker
+rendering, default-on interaction captures, direct-model-write invalidation audit
+and OSNAP latency remain open; full Kestrel parity is not established.

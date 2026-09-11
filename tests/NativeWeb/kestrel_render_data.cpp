@@ -4,6 +4,29 @@
 import kestrel.render_data;
 int main() {
   {
+    kestrel::drawing model;model.data["entities"]=kestrel::json::array();
+    model.add("LINE",{{"points",{{-100,-20,0},{200,40,0}}}});
+    const auto second=model.add("LINE",{{"points",{{-20,100,0},{40,-200,0}}}});
+    kestrel::camera camera;camera.resize(800,600);camera.set_view("top");
+    const auto p=camera.project({0,0,0});kestrel::object_snap_index index;
+    const auto hit=index.nearest(model,camera,p.x,p.y);
+    if(!hit || hit->type!="intersection" || std::hypot(hit->point.x,hit->point.y)>1e-8)throw std::runtime_error(std::string("Crossing snap failed: ")+(hit?hit->type:"none"));
+    const auto tied=camera.project({50,10,0});
+    const auto midpoint=index.nearest(model,camera,tied.x,tied.y);
+    if(!midpoint || midpoint->type!="midpoint")throw std::runtime_error("Existing midpoint candidate lost priority");
+    model.transaction("Symmetric crossing",[&] {
+      model.data["entities"][0]["points"]=kestrel::json{{-100,-20,0},{100,20,0}};
+      (*model.find(second))["points"]=kestrel::json{{-20,100,0},{20,-100,0}};
+    });
+    const auto equal=index.nearest(model,camera,p.x,p.y);
+    if(!equal || equal->type!="midpoint")throw std::runtime_error("Intersection displaced an equal-distance midpoint");
+    model.undo();
+    model.transaction("Raise",[&]{for(auto& point:(*model.find(second))["points"])point[2]=10;});
+    const auto raised=index.nearest(model,camera,p.x,p.y);
+    if(raised && raised->type=="intersection")throw std::runtime_error("Different elevations intersected");
+  }
+
+  {
     kestrel::drawing model;
     model.data["entities"]=kestrel::json::array();
     const auto id=model.add("LINE",{{"points",{{0,0,0},{100,0,0}}}});
