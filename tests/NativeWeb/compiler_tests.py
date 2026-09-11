@@ -1055,9 +1055,10 @@ class CompilerTests(unittest.TestCase):
     def test_template_scripts_rejected(self):
         result,_=self.compile('<template id="item"><script>alert(1)</script></template>')
         self.assertNotEqual(result.returncode,0)
-    def test_template_global_ids_rejected(self):
-        result,_=self.compile('<template id="item"><div id="duplicate"></div></template>')
-        self.assertNotEqual(result.returncode,0);self.assertIn('data-ref',result.stderr)
+    def test_template_global_ids_preserved(self):
+        result,out=self.compile('<template id="item"><div id="original"></div></template>')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('"id","original"',out.read_text())
     def test_template_duplicate_references_rejected(self):
         result,_=self.compile('<template id="item"><div data-ref="x"></div><div data-ref="x"></div></template>')
         self.assertNotEqual(result.returncode,0)

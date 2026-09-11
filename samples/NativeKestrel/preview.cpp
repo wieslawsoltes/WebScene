@@ -21,6 +21,7 @@ static bool exercise_layer_edit=false;
 static bool exercise_line_edit=false;
 static bool exercise_color_picker=false;
 static bool show_color_picker=false;
+static bool show_group_dialog=false;
 static bool exercise_shortcuts=false;
 static bool exercise_drag_selection=false;
 static bool benchmark_pan=false;
@@ -66,6 +67,7 @@ class preview_app final : public foco::application {
   kestrel::drawing model;
 #ifdef KESTREL_PREVIEW_SHARED_CSS
   std::unique_ptr<kestrel::layer_panel> layers;
+  std::unique_ptr<kestrel::group_dialog> group_dialog;
   foco::ref<foco::color_picker> color_picker;
   bool color_picker_pending{};
   std::unordered_set<std::string> color_selection;
@@ -266,6 +268,7 @@ public:
       model.add("MESH",kestrel::geo::box({double(i%40)*8-160,double(i/40)*8-100,0},6,6,5));
 #ifdef KESTREL_PREVIEW_SHARED_CSS
     layers=std::make_unique<kestrel::layer_panel>(view->document,model,[this]{gpu_dirty=true;view->refresh();});
+    group_dialog=std::make_unique<kestrel::group_dialog>(view->document,model,[this]{layers->refresh();gpu_dirty=true;view->refresh();});
     color_picker=foco::make_ref<foco::color_picker>();
     color_picker->set_is_compact(true);color_picker->set_alpha_enabled(false);
     color_picker->set_horizontal_alignment(foco::horizontal_alignment::left);
@@ -356,6 +359,11 @@ public:
               }
               if(!removed) {if(!classes.empty())classes+=' ';classes+=name;}
               view->document.attribute(workbench,"class",classes);view->refresh();
+            }
+            else if (*action == "group") {
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+              group_dialog->open();
+#endif
             }
             else if (*action == "wireframe") viewport->options.style = kestrel::display_style::wireframe;
             else if (*action == "shaded") viewport->options.style = kestrel::display_style::shaded;
@@ -475,6 +483,13 @@ public:
       try {
 #ifdef KESTREL_PREVIEW_SHARED_CSS
         const bool opening_picker=color_picker_pending;
+        if(show_group_dialog && gpu_serial) {
+          model.selection.clear();for(const auto& entity:model.data["entities"])if(model.editable(entity)) {
+            model.selection.insert(entity["id"].get<std::string>());if(model.selection.size()==2)break;
+          }
+          if(!group_dialog->open())throw std::runtime_error("Native group dialog failed to open");
+          show_group_dialog=false;
+        }
         if(color_picker_pending) {color_picker_pending=false;color_picker->set_open(true);}
         else if(color_picker && !color_picker->is_open())color_picker->set_visibility(foco::visibility::collapsed);
         if(color_test_before && color_picker->is_open() && !show_color_picker && !opening_picker) {
@@ -865,6 +880,7 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-layer-edit") {exercise_picking=true;exercise_layer_edit=true;}
     else if(std::string_view(argv[i])=="--exercise-picking") exercise_picking=true;
     else if(std::string_view(argv[i])=="--exercise-theme") exercise_theme=true;
+    else if(std::string_view(argv[i])=="--show-group-dialog") show_group_dialog=true;
     else if(std::string_view(argv[i])=="--exercise-failure") exercise_failure=true;
     else if(std::string_view(argv[i])=="--exercise-navigation") exercise_navigation=true;
     else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;

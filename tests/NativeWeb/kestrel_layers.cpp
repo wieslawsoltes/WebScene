@@ -30,6 +30,21 @@ struct inspector_fixture {
   }
 };
 int main() {
+  {
+    kestrel::drawing model;auto a=model.add("POINT",{{"position",{0,0,0}}});auto b=model.add("POINT",{{"position",{1,0,0}}});model.selection={a,b};
+    document doc;auto trigger=doc.element(doc.body(),"button");auto modal=doc.element(doc.body(),"dialog");doc.attribute(modal,"id","modal");
+    for(auto id:{"modal-body","modal-title","modal-error","modal-submit","modal-close","modal-cancel"}) {
+      auto node=doc.element(modal,std::string_view(id)=="modal-body"?"div":"button");doc.attribute(node,"id",id);
+    }
+    kestrel::group_dialog dialog(doc,model,[&]{doc.render(800,600);});doc.focus(trigger);const auto before=model.data;
+    require(dialog.open() && doc.focused()==doc.find("field-name"));
+    doc.set_value(doc.find("field-name"),"Building");doc.key("Enter");
+    require(!dialog.is_open() && model.find(a)->at("groupName")=="Building" && model.find(a)->at("group")==model.find(b)->at("group"));
+    require(doc.focused()==trigger && model.undo()=="Create group" && model.data==before);
+    require(dialog.open());doc.key("Escape");require(!dialog.is_open() && model.data==before);
+    require(dialog.open());doc.set_value(doc.find("field-name"),"");doc.key("Enter");require(dialog.is_open() && model.data==before);
+    doc.dispatch(doc.find("modal-cancel"),"click");require(!dialog.is_open());
+  }
   require(kestrel::mtext_paragraph_count("")==1);
   require(kestrel::mtext_paragraph_count("a\\Pb\\Nc\r\nd\re\nf")==6);
   require(kestrel::mtext_paragraph_count("a\\\\Pb\\{x\\}")==1);

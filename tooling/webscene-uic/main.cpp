@@ -1499,9 +1499,6 @@ struct compiler {
           !((n.tag == "td" || n.tag == "th") && (k == "colspan" || k == "rowspan")) &&
           !(std::set<std::string>{"viewBox","viewbox","xmlns","d","points","fill","stroke","stroke-width","stroke-linecap","stroke-linejoin","x","y","x1","x2","y1","y2","cx","cy","r","rx","ry"}.contains(k)))
         { if (!preview) throw std::runtime_error("unsupported attribute: " + k); warning("generic native attribute: " + k); }
-      if (in_template && k == "id")
-        throw std::runtime_error(
-            "template elements use data-ref instead of document-global id");
       if (k == "id" || (in_template && k == "data-ref")) {
         if (!ids.insert(v).second)
           throw std::runtime_error("duplicate id: " + v);

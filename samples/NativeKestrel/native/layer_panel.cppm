@@ -18,6 +18,57 @@ import kestrel.drawing;
 import kestrel.geometry;
 import kestrel.layer_templates;
 export namespace kestrel {
+class group_dialog {
+  webscene::native_web::document& doc_;
+  drawing& model_;
+  std::function<void()> refresh_;
+  std::vector<webscene::native_web::subscription> handlers_;
+  std::vector<webscene::native_web::node_id> roots_;
+  std::vector<std::string> selection_;
+  webscene::native_web::node_id input_{},previous_focus_{};
+  bool open_{};
+public:
+  group_dialog(webscene::native_web::document& doc,drawing& model,std::function<void()> refresh)
+    :doc_(doc),model_(model),refresh_(std::move(refresh)) {
+    for(auto id:{"modal-close","modal-cancel"})if(auto node=doc_.find(id))
+      handlers_.push_back(doc_.on(node,"click",[this](auto& event){event.prevent_default();close();}));
+    if(auto node=doc_.find("modal-submit"))handlers_.push_back(doc_.on(node,"click",[this](auto& event){event.prevent_default();submit();}));
+    if(auto node=doc_.find("modal"))handlers_.push_back(doc_.on(node,"keydown",[this](auto& event){
+      if(!open_)return;
+      if(event.key=="Escape"){event.prevent_default();event.stop_propagation();close();}
+      else if(event.key=="Enter" && event.target==input_){event.prevent_default();event.stop_propagation();submit();}
+    }));
+  }
+  bool is_open() const {return open_;}
+  bool open() {
+    auto selected=model_.selected(true);if(selected.size()<2)return false;
+    auto modal=doc_.find("modal"),body=doc_.find("modal-body");if(!modal || !body)return false;
+    close();selection_=std::move(selected);previous_focus_=doc_.focused();
+    for(auto root:roots_)doc_.remove(root);roots_.clear();
+    auto content=kestrel_layers::instantiate(doc_,body,"group-dialog-body");roots_=content.roots;input_=content.named("name");
+    doc_.set_text(content.named("description"),std::to_string(selection_.size())+" entities will share a selection group. Geometry remains directly editable.");
+    size_t grouped=0;for(const auto& entity:model_.data["entities"])if(entity.contains("group") && entity["group"].is_string() && !entity["group"].get<std::string>().empty())++grouped;
+    doc_.set_value(input_,"Group "+std::to_string(grouped));
+    doc_.set_text(doc_.find("modal-title"),"Group selected objects");doc_.set_text(doc_.find("modal-submit"),"Create group");
+    doc_.attribute(doc_.find("modal-error"),"hidden","");
+    open_=doc_.set_modal(modal,true);refresh_();if(open_)doc_.focus(input_);refresh_();return open_;
+  }
+  void close() {
+    if(!open_ || doc_.disposed())return;
+    open_=false;doc_.set_modal(doc_.find("modal"),false);
+    if(previous_focus_) {try{doc_.focus(previous_focus_);}catch(const std::invalid_argument&) {}}
+    refresh_();
+  }
+  void submit() {
+    if(!open_)return;
+    const auto name=doc_.value(input_);
+    size_t units=0;for(unsigned char ch:name)if((ch&0xc0)!=0x80)units+=(ch>=0xf0?2:1);
+    if(name.empty() || units>80 || !model_.group_entities(selection_,name)) {
+      auto error=doc_.find("modal-error");doc_.set_text(error,"Enter a group name and select at least two editable objects.");doc_.remove_attribute(error,"hidden");refresh_();return;
+    }
+    close();
+  }
+};
 class layer_panel {
   webscene::native_web::document& document_;
   drawing& model_;

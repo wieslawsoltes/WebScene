@@ -8,6 +8,18 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Compiled Group dialog integration in progress: original body/field markup is a
+predefined template; native handlers populate the name/count, submit captured
+entities, cancel/Escape, restore focus and display validation errors. The existing
+Group ribbon action is connected. Compiler templates now preserve authored IDs
+(with named references), required by the original label/input association. Native
+dialog creation/cancel/validation/focus tests and all 114 compiler tests pass.
+The hosted build and --show-group-dialog capture run succeed, but the captured
+original app does NOT visibly show the modal. Native modal registration and
+top-layer painting exist; UA modal positioning/layout needs investigation before
+this UI is usable. Do not count Group as complete. Unicode trim parity, label
+activation and browser-equivalent form validation remain open as well.
+
 Native modal scope API: document::set_modal connects a native HTML dialog to the
 existing engine modal stack and open attribute. It clears focus when blocked or
 closed; the caller owns initial/restored focus and cancel/submit behavior. Native
