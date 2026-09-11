@@ -9,6 +9,18 @@ using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
   {
+    kestrel::drawing model;model.add("LINE",{{"points",{{0,0,0},{10,0,0}}}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    const auto target=model.data["layers"][0]["id"].get<std::string>();
+    model.data["layers"][0]["locked"]=true;
+    const auto before=model.data;
+    require(!model.change_selected_layer("missing"));
+    require(model.change_selected_layer(target));
+    require(model.find(id)->at("layer")==target);
+    require(!model.change_selected_layer("architecture")); // Now locked, cannot edit.
+    require(model.undo()=="Edit layer" && model.data==before);
+  }
+  {
     kestrel::drawing model;kestrel::camera camera;camera.resize(800,600);
     model.add("LINE",{{"points",{{-100,0,0},{100,0,0}}}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();

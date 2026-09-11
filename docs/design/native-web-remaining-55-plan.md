@@ -1686,3 +1686,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   --exercise-navigation exits 0; /tmp/kestrel-view-state.png confirms iso, shaded
   edges and consistent 3D modeling labels. Full workspace-switch defaults, ribbon
   changes and selected-object inspector remain unported.
+
+- Selected-object inspector layer editing: compiled original type-header variants
+  and Layer row, with multi-selection placeholder and native option population.
+  Change applies Edit layer transaction to the precomputed editable selection;
+  invalid target and fully locked selection make no change. Tests verify layer
+  changes, destination lock behavior and exact undo restoration; layer suite
+  passes. Rebuilt hosted picking capture exits 0 and shows Polyline/A-WALL in
+  /tmp/kestrel-inspector-selected.png. Remaining general/geometry property rows,
+  locked-edit error feedback and hosted layer-change interaction remain open.

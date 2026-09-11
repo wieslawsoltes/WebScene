@@ -372,6 +372,11 @@ public:
     changed(label);
     return true;
   }
+  bool change_selected_layer(const std::string& layer_id) {
+    if(!std::any_of(data["layers"].begin(),data["layers"].end(),[&](const auto& layer){return layer["id"]==layer_id;}))return false;
+    const auto ids=selected(true);if(ids.empty())return false;
+    return transaction("Edit layer",[&] {for(const auto& id:ids)if(auto* entity=find(id))(*entity)["layer"]=layer_id;});
+  }
   bool show_all_layers() {
     return transaction("Show all layers",[&] {
       for(auto& layer:data["layers"])layer["visible"]=true;

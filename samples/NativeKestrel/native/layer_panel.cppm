@@ -110,6 +110,36 @@ public:
         refresh();if(changed_)changed_();
       }));
     }
+    if(auto inspector=document_.find("inspector");inspector && !model_.selection.empty()) {
+      const auto selected=model_.selected();const auto* one=selected.size()==1?model_.find(selected[0]):nullptr;
+      std::string icon="selectall",label=std::to_string(selected.size())+" objects";
+      if(one) {
+        const auto type=one->value("type",std::string{});icon="drawing";label=type;
+        if(type=="MESH") {icon="box";label=one->value("primitive",std::string("Mesh solid"));if(label.empty())label="Mesh solid";}
+        for(auto [key,title]:{std::pair{"LINE","Line"},std::pair{"POLYLINE","Polyline"},std::pair{"CIRCLE","Circle"},
+            std::pair{"ARC","Arc"},std::pair{"ELLIPSE","Ellipse"},std::pair{"SPLINE","Spline"},std::pair{"TEXT","Text"},
+            std::pair{"DIMENSION","Aligned dimension"},std::pair{"HATCH","Hatch"},std::pair{"POINT","Point"}})
+          if(type==key){icon=lowercase(type);label=title;break;}
+      }
+      auto header=kestrel_layers::instantiate(document_,inspector,"inspector-header-"+icon);
+      auto general=kestrel_layers::instantiate(document_,inspector,"inspector-selected-layer");
+      inspector_roots_={header.named("root"),general.named("root")};
+      document_.set_text(header.named("title"),label);
+      const auto handle=one?one->value("sourceHandle",std::string{}):std::string{};
+      document_.set_text(header.named("handle"),handle.empty()?"⌄":"#"+handle);
+      if(!one) {
+        auto option=kestrel_layers::instantiate(document_,general.named("layer"),"inspector-layer-option");
+        document_.attribute(option.named("root"),"value","");document_.set_text(option.named("root"),"Multiple / choose…");
+      }
+      for(const auto& layer:model_.data["layers"]) {
+        auto option=kestrel_layers::instantiate(document_,general.named("layer"),"inspector-layer-option");
+        document_.attribute(option.named("root"),"value",layer["id"].get<std::string>());document_.set_text(option.named("root"),layer["name"].get<std::string>());
+      }
+      document_.set_value(general.named("layer"),one?one->value("layer",std::string{}):std::string{});
+      handlers_.push_back(document_.on(general.named("layer"),"change",[this,node=general.named("layer")](auto&) {
+        model_.change_selected_layer(document_.value(node));refresh();if(changed_)changed_();
+      }));
+    }
     if(auto tabs=document_.find("document-tabs")) {
       auto tab=kestrel_layers::instantiate(document_,tabs,model_.dirty?"document-dirty":"document-clean");
       document_tab_=tab.named("tab");
