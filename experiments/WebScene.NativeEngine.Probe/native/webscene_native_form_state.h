@@ -21,6 +21,18 @@ inline dom_node* containing_select(dom_node& option)
         return select;
     }
 
+inline bool option_is_disabled(const dom_node& option)
+    {
+        if (option.attributes.contains("disabled")) return true;
+        for (auto* ancestor = option.parent;
+             ancestor != nullptr && ancestor->tag != "select";
+             ancestor = ancestor->parent) {
+            if (ancestor->tag == "optgroup"
+                && ancestor->attributes.contains("disabled")) return true;
+        }
+        return false;
+    }
+
 inline bool option_is_selected(dom_node& option)
     {
         if (option.form_control().selectedness_initialized) {
@@ -53,22 +65,68 @@ inline bool option_is_selected(dom_node& option)
         return !options.empty() && options.front() == &option;
     }
 
+inline std::string option_text(const dom_node& option)
+    {
+        std::string text;
+        const auto append=[&](auto&& self,const dom_node& node)->void {
+            if(node.kind==dom_node_kind::text) text+=node.text_content;
+            for(auto* child:node.children) if(child) self(self,*child);
+        };
+        append(append,option);
+        std::string result;bool space=false;
+        for(char c:text) {
+            if(c==' ' || c=='\t' || c=='\n' || c=='\r' || c=='\f') {space=!result.empty();continue;}
+            if(space) result+=' ';
+            result+=c;space=false;
+        }
+        return result;
+    }
+
+inline std::string option_label(const dom_node& option)
+    {
+        if (auto authored = option.attributes.find("label");
+            authored != option.attributes.end() && !authored->second.empty()) {
+            return authored->second;
+        }
+        return option_text(option);
+    }
+
 inline std::string option_value(const dom_node& option) {
     if(auto authored=option.attributes.find("value");authored!=option.attributes.end()) return authored->second;
-    std::string text;
-    const auto append=[&](auto&& self,const dom_node& node)->void {
-        if(node.kind==dom_node_kind::text) text+=node.text_content;
-        for(auto* child:node.children) if(child) self(self,*child);
-    };
-    append(append,option);
-    std::string result;bool space=false;
-    for(char c:text) {
-        if(c==' ' || c=='\t' || c=='\n' || c=='\r' || c=='\f') {space=!result.empty();continue;}
-        if(space) result+=' ';
-        result+=c;space=false;
-    }
-    return result;
+    return option_text(option);
 }
+
+inline std::vector<dom_node*> select_options(dom_node& select)
+    {
+        std::vector<dom_node*> options;
+        collect_descendants_by_tag(select,"option",options);
+        return options;
+    }
+
+inline dom_node* selected_option(dom_node& select)
+    {
+        auto options=select_options(select);
+        const auto selected=std::find_if(options.begin(),options.end(),[](auto* option){
+            return option!=nullptr && option_is_selected(*option);
+        });
+        return selected==options.end()?nullptr:*selected;
+    }
+
+inline bool select_option(dom_node& select,dom_node& option)
+    {
+        if(containing_select(option)!=&select || option_is_disabled(option)) return false;
+        auto options=select_options(select);
+        if(std::find(options.begin(),options.end(),&option)==options.end()) return false;
+        const auto* previous=selected_option(select);
+        select.mutable_form_control().selection_explicitly_empty=false;
+        for(auto* candidate:options) {
+            auto& state=candidate->mutable_form_control();
+            state.selectedness_initialized=true;
+            state.selectedness=candidate==&option;
+        }
+        return previous!=&option;
+    }
+
 inline void set_select_value(dom_node& select,std::string_view value) {
     std::vector<dom_node*> options;collect_descendants_by_tag(select,"option",options);
     bool matched=false;
