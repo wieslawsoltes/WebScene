@@ -8,6 +8,12 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+TEXT native control verification: the inspector test now types multiline content
+into the compiled textarea, confirms Enter does not commit it, and commits on
+focus departure. Rotation and height are entered through numeric controls and
+committed with Enter. Direction removal, stored values and exact undo pass without
+manually dispatching change. Hosted text editing, IME and full parity remain open.
+
 TEXT inspector: original Position, Text height, Rotation and textarea content now
 use compiled rows and native change handlers. Rotation converts degrees to radians
 and removes explicit direction as the original app does. Model tests cover content,

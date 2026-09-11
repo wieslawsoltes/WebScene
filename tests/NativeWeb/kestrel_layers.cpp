@@ -13,9 +13,25 @@ int main() {
   {
     kestrel::drawing model;model.add("TEXT",{{"position",{0,0,0}},{"height",10},{"text","Label"},{"direction",{1,0,0}}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
-    const auto before=model.data;require(model.change_text_property("text","Room\nA"));require(model.change_text_property("rotationDeg",90));
+    document doc;doc.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
+    auto inspector=doc.element(doc.body(),"div");doc.attribute(inspector,"id","inspector");
+    auto list=doc.element(doc.body(),"div");doc.attribute(list,"id","explorer-list");
+    kestrel::layer_panel panel(doc,model,[]{});
+    const auto find=[&](auto&& self,node_id node,const std::string& property)->node_id {
+      if(doc.attribute(node,"data-prop")==property)return node;
+      for(auto child:doc.children(node))if(auto result=self(self,child,property))return result;
+      return 0;
+    };
+    const auto edit=[&](const std::string& property,const std::string& value) {
+      const auto input=find(find,inspector,property);require(input!=0);
+      doc.focus(input);doc.set_selection(input,0,doc.value(input).size());doc.text_input(value);
+      if(property=="text") {
+        doc.key("Enter");require(model.find(id)->at("text")=="Label");doc.focus(0);
+      } else doc.key("Enter");
+    };
+    const auto before=model.data;edit("text","Room\nA");require(model.find(id)->at("text")=="Room\nA");edit("rotationDeg","90");
     require(!model.find(id)->contains("direction"));require(std::abs(model.find(id)->at("rotation").get<double>()-std::numbers::pi/2)<1e-12);
-    require(!model.change_text_property("height",0));require(model.change_text_property("height",20));
+    require(!model.change_text_property("height",0));edit("height","20");require(model.find(id)->at("height")==20);
     require(model.undo()=="Edit height" && model.undo()=="Edit rotationDeg" && model.undo()=="Edit text" && model.data==before);
   }
   {
