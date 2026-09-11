@@ -69,6 +69,7 @@ class preview_app final : public foco::application {
   kestrel::drawing model;
   kestrel::line_command line_tool{model};
   bool line_active{};
+  std::array<double,3> last_drafting_point{};
   void sync_line_prompt() {
     auto& d=view->document;
     if(line_active)d.remove_attribute(d.find("tool-banner"),"hidden");
@@ -329,6 +330,16 @@ public:
       if(command=="U" || command=="UNDO")line_tool.undo_point();
       else if(command.empty() || command=="ENTER" || command=="ESC" || command=="CANCEL") {
         line_active=false;line_tool.cancel();
+      } else if(command.find(',')!=std::string::npos || command.find('<')!=std::string::npos) {
+        try {
+          const auto base=line_tool.points().empty()?last_drafting_point:line_tool.points().back();
+          const auto point=kestrel::parse_drafting_point(command,base);
+          if(line_tool.point(point) && line_tool.points().size()>1)last_drafting_point=point;
+        } catch(const std::invalid_argument& error) {
+          view->document.set_value(input,"");
+          view->document.set_text(view->document.find("tool-banner-text"),error.what());
+          view->refresh();event.prevent_default();event.stop_propagation();return;
+        }
       } else return;
       view->document.set_value(input,"");sync_line_prompt();
 #ifdef KESTREL_PREVIEW_SHARED_CSS
@@ -459,7 +470,8 @@ public:
               const auto area=view->document.bounds(view->document.find("scene"));
               if(auto point=viewport->camera.unproject(event.client_x-area.x,event.client_y-area.y,0)) {
                 try {
-                  line_tool.point({point->x,point->y,point->z});
+                  if(line_tool.point({point->x,point->y,point->z}) && line_tool.points().size()>1)
+                    last_drafting_point={point->x,point->y,point->z};
                   sync_line_prompt();
 #ifdef KESTREL_PREVIEW_SHARED_CSS
                   if(layers)layers->refresh();
@@ -746,6 +758,22 @@ public:
           if(line_active || !line_tool.points().empty())throw std::runtime_error("Hosted Line cancellation failed");
           key={};key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
           if(model.data!=before)throw std::runtime_error("Hosted Line Undo failed");
+          box=view->document.bounds(button);click(box.x+box.width/2,box.y+box.height/2);
+          const auto type_command=[&](std::string value) {
+            view->document.focus(command);foco::text_input_event input;input.text=std::move(value);view->text_input_received(input);
+            foco::key_event key;key.value=foco::key::enter;view->key_event_received(key);
+          };
+          type_command("100,200,5");type_command("@10,20");
+          if(model.data["entities"].size()!=before["entities"].size()+1 ||
+              model.data["entities"].back()["points"]!=kestrel::json{{100,200,5},{110,220,5}})
+            throw std::runtime_error("Hosted typed relative Line failed");
+          const auto valid=model.data;type_command("1x,2");
+          if(model.data!=valid || line_tool.points().size()!=2)throw std::runtime_error("Invalid typed coordinate changed drawing");
+          type_command("");
+          if(line_active || !line_tool.points().empty() || model.data!=valid)throw std::runtime_error("Empty Enter did not finish Line");
+          view->document.focus(view->document.find("viewport"));
+          key={};key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
+          if(model.data!=before)throw std::runtime_error("Typed Line Undo failed");
           exercise_line_draw=false;
           std::cout<<"Hosted original Line ribbon, pointer geometry, Escape and Undo passed\n";
         }

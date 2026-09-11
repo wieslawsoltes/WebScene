@@ -2216,3 +2216,17 @@ lastPoint and scalar distance entry remain open. std::stod numeric conversion
 also requires a separate JavaScript Number compatibility audit (binary/octal,
 Unicode whitespace, locale and hex forms); these tests do not prove full grammar
 parity. No runtime HTML or JavaScript was introduced.
+
+### Hosted typed Line coordinates
+
+Connected parse_drafting_point to the original compiled command input. Pending
+endpoints take precedence over the last committed drafting point for relative
+coordinates. Pointer and typed segment commits both update that stored base;
+malformed coordinate input leaves the model and pending points unchanged and
+shows the error in the existing banner. The hosted Line exercise now types
+100,200,5 then @10,20, verifies exact XYZ endpoints, rejects 1x,2 without mutation,
+finishes with empty Enter without deleting geometry, and undoes to the exact
+original document. Rebuilt hosted run passes, GPU serial 2, exit 0. Polar input
+uses the same native parser but has only unit-level evidence so far. Scalar
+lengths, snapping, preview, general command dispatch and JavaScript Number grammar
+parity remain open.
