@@ -520,6 +520,25 @@ public:
       else (*entity)[key]=value;
     });
   }
+  bool ungroup_selected() {
+    std::unordered_set<std::string> groups;
+    for(const auto& id:selected(true)) {
+      const auto* entity=find(id);
+      if(entity && entity->contains("group") && (*entity)["group"].is_string()) {
+        const auto group=(*entity)["group"].get<std::string>();
+        if(!group.empty())groups.insert(group);
+      }
+    }
+    if(groups.empty())return false;
+    return transaction("Ungroup",[&] {
+      for(auto& entity:data["entities"]) {
+        if(!editable(entity) || !entity.contains("group") || !entity["group"].is_string())continue;
+        if(groups.contains(entity["group"].get<std::string>())) {
+          entity.erase("group");entity.erase("groupName");
+        }
+      }
+    });
+  }
   size_t erase_selected() {
     const auto ids=selected(true);
     if(ids.empty())return 0;

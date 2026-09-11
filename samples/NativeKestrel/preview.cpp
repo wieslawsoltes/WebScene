@@ -372,9 +372,10 @@ public:
 #endif
               view->refresh();
             }
-            else if (*action == "erase" || *action == "undo" || *action == "redo" || *action=="all-layers-on") {
+            else if (*action == "erase" || *action == "undo" || *action == "redo" || *action=="all-layers-on" || *action=="ungroup") {
               if(*action=="all-layers-on") model.show_all_layers();
               else if(*action=="erase") model.erase_selected();
+              else if(*action=="ungroup") model.ungroup_selected();
               else if(*action=="undo") model.undo();else model.redo();
 #ifdef KESTREL_PREVIEW_SHARED_CSS
               if(layers) layers->refresh();

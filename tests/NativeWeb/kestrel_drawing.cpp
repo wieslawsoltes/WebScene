@@ -16,6 +16,24 @@ static void check(bool v, const char *message) {
     throw std::runtime_error(message);
 }
 int main() {
+  {
+    kestrel::drawing model;
+    const auto a=model.add("POINT",{{"position",{0,0,0}},{"group","g"},{"groupName","Group"}});
+    const auto b=model.add("POINT",{{"position",{1,0,0}},{"group","g"},{"groupName","Group"}});
+    const auto c=model.add("POINT",{{"position",{2,0,0}},{"group","other"}});
+    auto locked_layer=model.data["layers"][0];locked_layer["id"]="locked-group-layer";
+    locked_layer["name"]="Locked group";locked_layer["locked"]=true;
+    model.data["layers"].push_back(locked_layer);
+    const auto locked=model.add("POINT",{{"position",{3,0,0}},{"group","g"},{"layer","locked-group-layer"}});
+    const auto hidden=model.add("POINT",{{"position",{4,0,0}},{"group","g"},{"hidden",true}});
+    model.selection.insert(a);const auto before=model.data;
+    check(model.ungroup_selected(),"ungroup did not change model");
+    check(!model.find(a)->contains("group") && !model.find(b)->contains("groupName"),"group peers not detached");
+    check(model.find(c)->at("group")=="other","unrelated group changed");
+    check(model.find(locked)->at("group")=="g" && model.find(hidden)->at("group")=="g","noneditable group members changed");
+    check(model.undo()=="Ungroup" && model.data==before,"ungroup undo failed");
+    model.selection.clear();check(!model.ungroup_selected(),"empty ungroup changed history");
+  }
   kestrel::drawing d;
   std::string line;
   check(!d.transaction("empty", [] {}), "empty transaction changed history");

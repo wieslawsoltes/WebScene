@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Native Ungroup action: the existing compiled ribbon action now calls the native
+model, collecting groups from editable selected entities and removing group and
+groupName from all editable members of those groups, matching the original
+app.js action. Model tests verify unselected peers, unrelated groups, locked and
+hidden members, exact undo and empty selection. The native drawing suite and
+hosted app build pass. Browser-style empty-selection feedback, interactive ribbon
+verification and the separate Group dialog remain open.
+
 Compiled color-scheme coverage: SharedStyles.css now includes a dark media rule;
 the parsed/generated integration sequence switches light/dark/light and requires
 80/95/80px widths plus identical serialized scenes for both stylesheet producers.
