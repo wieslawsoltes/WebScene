@@ -66,6 +66,18 @@ class preview_app final : public foco::application {
   std::vector<webscene::native_web::node_id> ribbon_roots;
 #ifdef KESTREL_PREVIEW_GPU
   kestrel::drawing model;
+  kestrel::line_command line_tool{model};
+  bool line_active{};
+  void sync_line_prompt() {
+    auto& d=view->document;
+    if(line_active)d.remove_attribute(d.find("tool-banner"),"hidden");
+    else d.attribute(d.find("tool-banner"),"hidden","");
+    d.set_text(d.find("tool-banner-name"),line_active?"LINE":"");
+    d.set_text(d.find("tool-banner-text"),line_active?line_tool.prompt():"");
+    d.set_text(d.find("command-prefix"),line_active?std::string("LINE: ")+line_tool.prompt():"Command:");
+    d.attribute(d.find("command-input"),"placeholder",line_active?"Enter coordinates, a value, or an option…":"Type a command or search…");
+    view->refresh();
+  }
 #ifdef KESTREL_PREVIEW_SHARED_CSS
   std::unique_ptr<kestrel::layer_panel> layers;
   std::unique_ptr<kestrel::group_dialog> group_dialog;
@@ -311,6 +323,7 @@ public:
       for(auto id:{"modal","command-palette"})if(auto dialog=view->document.find(id))
         if(view->document.attribute(dialog,"open"))return;
       if(event.key=="Escape") {
+        line_active=false;line_tool.cancel();sync_line_prompt();
         panning=false;selection_pressed=false;view->document.attribute(view->document.find("selection-window"),"hidden","");model.selection.clear();
       } else {
         for(auto node=event.target;node;node=view->document.parent(node)) {
@@ -360,6 +373,11 @@ public:
               }
               if(!removed) {if(!classes.empty())classes+=' ';classes+=name;}
               view->document.attribute(workbench,"class",classes);view->refresh();
+            }
+            else if (*action == "line") {
+              line_tool.cancel();line_active=true;selection_pressed=false;
+              if(std::abs(viewport->camera.direction.z)<.015)set_camera_view("top");
+              sync_line_prompt();view->document.focus(view->document.find("viewport"));
             }
             else if (*action == "group") {
 #ifdef KESTREL_PREVIEW_SHARED_CSS
@@ -419,6 +437,22 @@ public:
         [this](auto &event) {
           if(!viewport)return;
           if((event.buttons&1u) && (event.target==view->document.find("viewport") || event.target==view->document.find("scene") || event.target==view->document.find("overlay"))) {
+            if(line_active) {
+              const auto area=view->document.bounds(view->document.find("scene"));
+              if(auto point=viewport->camera.unproject(event.client_x-area.x,event.client_y-area.y,0)) {
+                try {
+                  line_tool.point({point->x,point->y,point->z});
+                  sync_line_prompt();
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+                  if(layers)layers->refresh();
+#endif
+                  gpu_dirty=true;
+                } catch(const std::invalid_argument& error) {
+                  view->document.set_text(view->document.find("tool-banner-text"),error.what());view->refresh();
+                }
+              }
+              event.prevent_default();return;
+            }
             selection_pressed=true;selection_dragging=false;selection_x=event.client_x;selection_y=event.client_y;selection_modifiers=event.modifiers;
           }
           if(!(event.buttons&4u))return;

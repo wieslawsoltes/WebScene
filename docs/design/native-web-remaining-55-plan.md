@@ -2169,3 +2169,15 @@ passes, covering chained segments, 1e-8 duplicate tolerance, defaults, Undo,
 locked-layer rejection and cancellation. This is command state only: connecting
 the original ribbon, viewport coordinates, snapping, rubber-band preview, numeric
 input and command prompts remains necessary before claiming Line tool parity.
+
+### Original ribbon and viewport Line wiring
+
+The original compiled ribbon Line action now starts native line_command; primary
+viewport pointer input unprojects onto the XY plane and commits connected
+segments, bypassing selection while the command is active. Near-edge-on views
+switch to top, Escape cancels, and the original banner/prefix display prompts or
+locked-layer errors. Existing middle-button navigation is retained. Foco preview
+build and startup/capture smoke pass (GPU serial 1, clean exit). This smoke does
+not verify physical Line pointer interaction. Rubber-band preview, snapping,
+command-line Undo/numeric entry, drawing-default UI synchronization and complete
+application tool transitions remain unfinished; do not claim Line parity yet.
