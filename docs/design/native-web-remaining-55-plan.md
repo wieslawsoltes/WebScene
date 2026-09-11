@@ -1570,3 +1570,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   success marker in /tmp/kestrel-original-panel-pointer.log. This closes the
   original-control hit-routing gap for these two actions, not OS event delivery
   or intermediate resize presentation timing.
+
+- Actual macOS window resize exercised using CGEvent corner drag: 360 steps
+  shrink 300x180 points and restore. Native trace reports 361 resize events,
+  357 content frames, zero deadline misses, selected/native cadence 60 Hz.
+  Presentation timestamps are almost entirely zero, so displayed FPS cannot be
+  established from this run. See native-web-os-resize-evidence.json for isolated
+  gesture counts. No claim of visual no-stretch or displayed 60fps. Raw logs are
+  /tmp/kestrel-window-resize-current.log and matching .jsonl; app remains running
+  under exec session 91177 for further investigation.

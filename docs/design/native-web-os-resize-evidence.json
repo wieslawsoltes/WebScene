@@ -1,0 +1,11 @@
+{
+  "test": "OS CGEvent corner drag, 300x180 points inward and back, 360 steps",
+  "start": 63910.721123,
+  "end": 63917.818877,
+  "duration_seconds": 7.097753999994893,
+  "layer_size_events": 358,
+  "submissions": 426,
+  "valid_presented_timestamps": 1,
+  "retained_submissions": 51,
+  "conclusion": "Native live resize exercised; physical presentation rate and visual stretching remain unproven."
+}
