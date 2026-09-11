@@ -11,9 +11,11 @@ int main() {
     const auto screen=camera.project({0,0,0});
     kestrel::object_snap_index index;
     if(!index.nearest(model,camera,screen.x,screen.y))throw std::runtime_error("Retained snap missing");
-    index.nearest(model,camera,screen.x+1,screen.y);camera.pan(10,0);
+    index.nearest(model,camera,screen.x+1,screen.y);
+    if(index.projection_builds()!=1)throw std::runtime_error("Pointer movement rebuilt screen snap index");
+    camera.pan(10,0);
     const auto moved=camera.project({0,0,0});
-    if(!index.nearest(model,camera,moved.x,moved.y) || index.geometry_builds()!=1)
+    if(!index.nearest(model,camera,moved.x,moved.y) || index.geometry_builds()!=1 || index.projection_builds()!=2)
       throw std::runtime_error("Pointer/camera movement rebuilt snap geometry");
     model.transaction("Hide",[&]{(*model.find(id))["hidden"]=true;});
     if(index.nearest(model,camera,moved.x,moved.y) || index.geometry_builds()!=2)throw std::runtime_error("Snap cache missed transaction");
@@ -22,6 +24,10 @@ int main() {
     (*model.find(id))["hidden"]=true;index.invalidate();
     if(index.nearest(model,camera,moved.x,moved.y))throw std::runtime_error("Explicit snap invalidation failed");
     (*model.find(id))["hidden"]=false;camera.pan(-10,0);
+    index.invalidate();
+    index.nearest(model,camera,100000,100000);
+    if(index.examined_candidates()!=0)throw std::runtime_error("Empty spatial query scanned candidates");
+
     auto snap=kestrel::nearest_object_snap(model,camera,screen.x+2,screen.y+1);
     if(!snap || snap->entity_id!=id || snap->type!="endpoint" || snap->point.x!=0)
       throw std::runtime_error("Endpoint snap failed");

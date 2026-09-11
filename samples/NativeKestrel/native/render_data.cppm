@@ -9,6 +9,7 @@ module;
 #include <string>
 #include <type_traits>
 #include <vector>
+#include <map>
 export module kestrel.render_data;
 export import kestrel.geometry;
 export import kestrel.camera;
@@ -273,9 +274,16 @@ class object_snap_index {
   uint64_t revision_{};
   std::vector<object_snap_result> candidates_;
   size_t builds_{};
+  const kestrel::camera* camera_{};
+  uint64_t camera_revision_{};
+  size_t projections_{},examined_{};
+  std::map<std::pair<double,double>,std::vector<size_t>> cells_;
+
 public:
   void invalidate() { owner_=nullptr; }
   size_t geometry_builds() const { return builds_; }
+  size_t projection_builds() const { return projections_; }
+  size_t examined_candidates() const { return examined_; }
   std::optional<object_snap_result> nearest(const drawing& model,const camera& camera,double x,double y,std::string_view excluded={}) {
     if(owner_!=&model || revision_!=model.revision) {
       std::vector<object_snap_result> next;
@@ -284,16 +292,31 @@ public:
         const auto id=entity.at("id").get<std::string>();
         for(const auto& snap:geo::geometry(entity).snaps)next.push_back({snap.point,{},snap.type,id,0});
       }
-      candidates_=std::move(next);owner_=&model;revision_=model.revision;++builds_;
+      candidates_=std::move(next);owner_=&model;revision_=model.revision;++builds_;camera_=nullptr;
     }
-    std::optional<object_snap_result> best;
-    for(const auto& candidate:candidates_) {
-      if(candidate.entity_id==excluded)continue;
-      const auto screen=camera.project(candidate.point);
-      if(screen.z<0 || screen.z>1)continue;
-      const auto distance=std::hypot(screen.x-x,screen.y-y);
-      if(distance<11 && (!best || distance<best->distance)) {
-        best=candidate;best->screen=screen;best->distance=distance;
+    if(camera_!=&camera || camera_revision_!=camera.revision) {
+      cells_.clear();
+      for(size_t i=0;i<candidates_.size();++i) {
+        auto& candidate=candidates_[i];candidate.screen=camera.project(candidate.point);
+        const auto p=candidate.screen;
+        if(p.z<0 || p.z>1 || !std::isfinite(p.x) || !std::isfinite(p.y))continue;
+        cells_[{std::floor(p.x/11),std::floor(p.y/11)}].push_back(i);
+      }
+      camera_=&camera;camera_revision_=camera.revision;++projections_;
+    }
+    examined_=0;
+    if(!std::isfinite(x) || !std::isfinite(y))return {};
+    std::optional<object_snap_result> best;size_t best_order=candidates_.size();
+    const auto cx=std::floor(x/11),cy=std::floor(y/11);
+    for(int row=-1;row<=1;++row)for(int column=-1;column<=1;++column) {
+      const auto cell=cells_.find({cx+column,cy+row});if(cell==cells_.end())continue;
+      for(auto order:cell->second) {
+        ++examined_;const auto& candidate=candidates_[order];
+        if(candidate.entity_id==excluded)continue;
+        const auto distance=std::hypot(candidate.screen.x-x,candidate.screen.y-y);
+        if(distance<11 && (!best || distance<best->distance || (distance==best->distance && order<best_order))) {
+          best=candidate;best->distance=distance;best_order=order;
+        }
       }
     }
     return best;

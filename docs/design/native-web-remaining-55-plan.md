@@ -2412,3 +2412,15 @@ verify reuse, pan reprojection, transaction/Undo refresh and explicit invalidati
 The class currently scans retained candidates; despite its index name it is not
 yet a spatial index. Screen-space lookup, intersection candidates and application
 OSNAP wiring/markers remain open. No pointer performance acceptance claim yet.
+
+### Screen-space object-snap cells
+
+object_snap_index now caches projected candidates in 11-pixel cells and queries
+only the surrounding 3x3 cells. Camera identity/revision changes rebuild screen
+projection, while model changes rebuild geometry and projection. Equal-distance
+candidates preserve source order explicitly across cell traversal. Native
+render-data tests pass pointer projection reuse, camera reprojection, existing
+invalidation checks and zero examined candidates for an empty-area query.
+This is candidate spatial lookup, not intersection indexing or measured complete
+OSNAP frame performance. Camera changes must use revision-updating camera APIs;
+direct model writes still require explicit invalidation.
