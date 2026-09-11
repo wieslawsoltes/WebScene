@@ -4,6 +4,7 @@
 #include <fstream>
 #include <chrono>
 #include <set>
+#include <sstream>
 #ifdef KESTREL_PREVIEW_SHARED_CSS
 #include <webscene/shared_css.hpp>
 #endif
@@ -241,7 +242,19 @@ public:
           for (auto node = event.target; node; node = view->document.parent(node)) {
             auto action = view->document.attribute(node, "data-action");
             if (!action) continue;
-            if (*action == "wireframe") viewport->options.style = kestrel::display_style::wireframe;
+            if(*action=="toggle-explorer" || *action=="toggle-properties") {
+              const auto workbench=view->document.find("workbench");
+              const std::string name=*action=="toggle-explorer"?"hide-explorer":"hide-properties";
+              std::istringstream input(view->document.attribute(workbench,"class").value_or(""));
+              std::string token,classes;bool removed=false;
+              while(input>>token) {
+                if(token==name) {removed=true;continue;}
+                if(!classes.empty())classes+=' ';classes+=token;
+              }
+              if(!removed) {if(!classes.empty())classes+=' ';classes+=name;}
+              view->document.attribute(workbench,"class",classes);view->refresh();
+            }
+            else if (*action == "wireframe") viewport->options.style = kestrel::display_style::wireframe;
             else if (*action == "shaded") viewport->options.style = kestrel::display_style::shaded;
             else if (*action == "xray") viewport->options.style = kestrel::display_style::xray;
             else if (*action == "shaded-edges") viewport->options.style = kestrel::display_style::shaded_edges;
@@ -389,6 +402,23 @@ public:
           view->document.focus(style_select);press_key(foco::key::home);press_key(foco::key::down);
           if(viewport->options.style!=kestrel::display_style::shaded_edges)
             throw std::runtime_error("Style dropdown did not update native renderer");
+          const auto toggle_panel=[&](std::string_view action) {
+            const auto button=view->document.element(view->document.body(),"button");
+            view->document.attribute(button,"data-action",std::string(action));
+            view->document.dispatch(button,"click");
+            view->document.remove(button);
+            view->document.render(host.width,host.height);
+            return view->document.bounds(view->document.find("scene")).width;
+          };
+          const auto initial_width=view->document.bounds(view->document.find("scene")).width;
+          const auto no_explorer=toggle_panel("toggle-explorer");
+          const auto no_panels=toggle_panel("toggle-properties");
+          if(no_explorer<=initial_width || no_panels<=no_explorer)
+            throw std::runtime_error("Original panel CSS did not expand viewport");
+          toggle_panel("toggle-explorer");
+          const auto restored_width=toggle_panel("toggle-properties");
+          if(std::abs(restored_width-initial_width)>.1f)
+            throw std::runtime_error("Panel toggle did not restore viewport width");
           navigation_serial=gpu_serial;navigation_exercised=true;
         }
         const auto tick_start=std::chrono::steady_clock::now();

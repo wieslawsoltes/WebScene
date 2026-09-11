@@ -1541,3 +1541,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   a new GPU image. Rebuilt preview exits 0 with success marker and GPU serial 2;
   inspected /tmp/kestrel-keyboard-select.png including focused control styling.
   This verifies injected host events, not physical keyboard or popup operation.
+
+- Native panel actions now toggle the original workbench hide-explorer and
+  hide-properties classes, preserving unrelated classes and unchanged CSS. Hosted
+  navigation injects temporary native action buttons, verifies each hide expands
+  canvas width and restoring both recovers the initial width; run exits 0 with
+  success marker. The original painted-button lookup failed, so this is action/
+  layout validation only, not proof original icon buttons are visible/clickable.
+  Original shell data-icon hydration remains an interaction/visual gap. This
+  same-tick layout check does not measure intermediate GPU sizes or resize FPS.
