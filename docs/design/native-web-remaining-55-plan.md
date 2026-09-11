@@ -1196,3 +1196,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   camera movement, not physical pointer latency, display presentation timestamps,
   full Kestrel model throughput or live-resize validation. It establishes that
   this preview's single-pending-snapshot pipeline can sustain 60Hz publication.
+
+- Larger hosted panning workload: --benchmark-pan-large populates 1,000 native
+  mesh entities, then runs the same 360-tick camera/publication probe. Rebuilt
+  FocoKestrelPreview and ran successfully: 360 images in 5.9784 seconds (60.2168/s),
+  mean CPU tick 0.386052 ms, maximum 0.779708 ms and zero geometry rebuilds.
+  /tmp/kestrel-pan-large.log contains the result. This supports cached-scene
+  panning scalability for this synthetic workload, not full original Kestrel
+  geometry coverage or display-presented FPS. Single-run timing differences
+  from the one-box run are not evidence of a performance improvement.

@@ -11,6 +11,7 @@ static std::string capture_path;
 static bool exercise_layer_filter=false;
 static bool exercise_objects=false;
 static bool benchmark_pan=false;
+static bool benchmark_large=false;
 #include <array>
 #include <functional>
 #include <cmath>
@@ -142,6 +143,8 @@ public:
     }
     view->refresh();
     model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
+    if(benchmark_large) for(unsigned i=1;i<1000;++i)
+      model.add("MESH",kestrel::geo::box({double(i%40)*8-160,double(i/40)*8-100,0},6,6,5));
 #ifdef KESTREL_PREVIEW_SHARED_CSS
     layers=std::make_unique<kestrel::layer_panel>(view->document,model,[this]{gpu_dirty=true;view->refresh();});
     if(exercise_layer_filter) {
@@ -226,6 +229,7 @@ public:
           if(pan_samples==360) {
             const auto seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-pan_start).count();
             std::cout<<"Pan pipeline: seconds="<<seconds<<" host_ticks="<<pan_samples
+                <<" entities="<<model.data["entities"].size()
                 <<" published_images="<<(gpu_serial-pan_initial_serial)
                 <<" images_per_second="<<(gpu_serial-pan_initial_serial)/seconds
                 <<" tick_mean_ms="<<pan_tick_ms/pan_samples<<" tick_max_ms="<<pan_tick_max_ms
@@ -259,6 +263,7 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
     else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;
     else if(std::string_view(argv[i])=="--benchmark-pan") benchmark_pan=true;
+    else if(std::string_view(argv[i])=="--benchmark-pan-large") {benchmark_pan=true;benchmark_large=true;}
   }
   if (argc == 2 && std::string_view(argv[1]) == "--check-input-coalescing") {
     auto view = foco::make_ref<webscene::foco_host::view>();
