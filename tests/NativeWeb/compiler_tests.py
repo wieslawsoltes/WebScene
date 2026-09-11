@@ -588,8 +588,16 @@ class CompilerTests(unittest.TestCase):
         for line in [2,3,4,5]:
             self.assertIn('#line '+str(line)+' "'+str(source)+'"',generated)
 
+    def test_native_text_controls(self):
+        result,output=self.compile('<input id="name" value="Ada" placeholder="Name"><textarea id="notes" readonly>Notes</textarea>')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=output.read_text()
+        self.assertIn('"input"',generated)
+        self.assertIn('"textarea"',generated)
+        self.assertIn('"value","Ada"',generated)
+
     def test_element_rejections_use_current_parser_line(self):
-        for element,message in [('<input>', 'unsupported Native Web element'),
+        for element,message in [('<video>', 'unsupported Native Web element'),
                                 ('<script></script>', 'excludes scripts'),
                                 ('<template></template>', 'requires a nonempty id'),
                                 ('<link>', 'only local stylesheet links')]:

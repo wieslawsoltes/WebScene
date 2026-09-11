@@ -71,10 +71,19 @@ if(MSVC)
         "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-add_library(webscene_native_engine SHARED
-    native/graphics/windows_gpu_interop.cpp
-    native/webscene_native_engine.cpp
-    native/webscene_native_dom.cpp)
+option(WEBSCENE_NATIVE_ENGINE_STATIC "Build a reusable statically linked runtime" OFF)
+if(WEBSCENE_NATIVE_ENGINE_STATIC)
+    set(webscene_runtime_kind STATIC)
+else()
+    set(webscene_runtime_kind SHARED)
+endif()
+add_library(webscene_native_engine ${webscene_runtime_kind} native/webscene_native_engine.cpp)
+if(TARGET webscene_core)
+    target_link_libraries(webscene_native_engine PRIVATE webscene_core)
+else()
+    target_sources(webscene_native_engine PRIVATE
+        native/graphics/windows_gpu_interop.cpp native/webscene_native_dom.cpp)
+endif()
 
 target_compile_features(webscene_native_engine PRIVATE cxx_std_20)
 target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_BUILD)

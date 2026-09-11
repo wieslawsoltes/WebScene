@@ -182,12 +182,14 @@
                 return true;
             },
             [this] {
+                notify_host_work();
                 if (host_request_available_callback_ != nullptr) {
                     host_request_available_callback_(
                         host_request_available_user_data_);
                 }
             },
             [this] {
+                notify_host_work();
                 if (interop_callback_available_callback_ != nullptr) {
                     interop_callback_available_callback_(
                         interop_callback_available_user_data_);
@@ -455,14 +457,16 @@
                         true,
                         std::memory_order_acq_rel)
                     && host_animation_frame_requested_.load(
-                            std::memory_order_acquire) == 0U
-                    && animation_frame_requested_callback_ != nullptr) {
+                            std::memory_order_acquire) == 0U) {
                     // Chromium queues ordinary mousemove input for the next
                     // BeginMainFrame. Wake an otherwise-idle host compositor so
                     // the same rule does not strand pointer input on fallback
                     // renderers that only request frames on demand.
-                    animation_frame_requested_callback_(
-                        animation_frame_requested_user_data_);
+                    notify_host_work();
+                    if (animation_frame_requested_callback_ != nullptr) {
+                        animation_frame_requested_callback_(
+                            animation_frame_requested_user_data_);
+                    }
                 }
             };
             while (applied_input_groups < 8U) {
@@ -904,6 +908,11 @@
                     if (url->initial_viewport) apply(*url->initial_viewport);
                     bool loaded = false;
                     if (runtime_ != nullptr) {
+                        if (url->compiled_package) {
+                            auto package = *url->compiled_package;
+                            package.base_url = url->url;
+                            loaded = runtime_->load_compiled_document(package);
+                        } else
 #if defined(WEBSCENE_COMPILED_APPLICATION)
                         if (!url->compiled_name.empty()) {
                             auto package = webscene_native::compiled_application(url->compiled_name, url->url);

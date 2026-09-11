@@ -1450,7 +1450,7 @@ struct compiler {
     static const std::set<std::string> tags = {
         "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup", "col",
         "body", "main", "article", "aside", "hgroup", "search", "section", "div", "span", "br", "p",      "h1",     "h2",
-        "svg", "g", "text", "tspan", "path", "polygon", "rect", "circle", "ellipse", "line", "polyline", "h3",   "button", "canvas",  "ul",  "li",   "header", "footer", "nav"};
+        "svg", "g", "text", "tspan", "path", "polygon", "rect", "circle", "ellipse", "line", "polyline", "h3", "input", "textarea", "button", "canvas",  "ul",  "li",   "header", "footer", "nav"};
     if (preview && (n.tag == "script" || n.tag == "noscript")) { warning("skipped " + n.tag); return; }
     if (!tags.contains(n.tag)) {
       if (!preview) throw std::runtime_error("unsupported Native Web element: " + n.tag);
@@ -1494,6 +1494,8 @@ struct compiler {
       }
       if (k != "title" && k != "hidden" && k != "id" && k != "class" && k != "width" && k != "height" &&
           k != "tabindex" && k != "disabled" && k != "type" && k != "role" &&
+          !((n.tag == "input" || n.tag == "textarea") &&
+            (k == "value" || k == "placeholder" || k == "readonly" || k == "checked")) &&
           !k.starts_with("aria-") && !k.starts_with("data-") &&
           !(n.tag == "col" && k == "span") &&
           !((n.tag == "td" || n.tag == "th") && (k == "colspan" || k == "rowspan")) &&

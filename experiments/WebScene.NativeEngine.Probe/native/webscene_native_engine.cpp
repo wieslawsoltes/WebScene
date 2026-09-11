@@ -1,4 +1,5 @@
 #include "webscene_native_engine.h"
+#include "webscene/compiled_document.hpp"
 #include "webscene_native_dom.h"
 #include "webscene_v8_runtime.h"
 #include "webscene_runtime_diagnostics.h"
@@ -291,6 +292,7 @@ struct url_request final {
     std::vector<webscene_native::document_start_script> document_start_scripts;
     std::optional<webscene_input_event> initial_viewport;
     std::string compiled_name;
+    std::shared_ptr<const webscene_native::compiled_document> compiled_package;
 };
 
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -370,6 +372,11 @@ struct webscene_engine final {
 #include "webscene_native_engine_interop_api.inc"
 #include "webscene_native_engine_diagnostics.inc"
 #include "webscene_native_engine_metrics.inc"
+    void set_work_available_callback(webscene_work_available_callback_v1 callback, void* data) {
+        std::lock_guard lock(host_observer_mutex_);
+        host_observer_ = callback;
+        host_observer_data_ = data;
+    }
     void configure_diagnostics(uint32_t flags, webscene_diagnostic_available_callback callback, void* data) {
         diagnostics_.configure(flags, callback, data);
     }
@@ -390,6 +397,13 @@ private:
 #include "webscene_native_engine_metric_updates.inc"
 #include "webscene_native_engine_scene.inc"
 #include "webscene_native_engine_errors.inc"
+    void notify_host_work() {
+        std::lock_guard lock(host_observer_mutex_);
+        if (host_observer_ != nullptr) host_observer_(host_observer_data_);
+    }
+    std::mutex host_observer_mutex_;
+    webscene_work_available_callback_v1 host_observer_{nullptr};
+    void* host_observer_data_{nullptr};
     webscene_frame_trace frame_trace_;
     uint32_t command_count_;
     std::string compilation_cache_directory_;
@@ -449,6 +463,7 @@ private:
 #endif
     std::deque<script_work_request> script_work_;
     std::mutex script_mutex_;
+    std::unordered_map<std::string, std::shared_ptr<const webscene_native::compiled_document>> compiled_packages_;
     std::shared_ptr<interop_result_pool_v3> interop_result_pool_{
         std::make_shared<interop_result_pool_v3>()};
     std::shared_ptr<interop_callback_pool_v3> interop_callback_pool_{
@@ -734,6 +749,16 @@ private:
     std::jthread worker_;
 };
 
+extern "C" uint8_t webscene_engine_register_compiled_document_v1(
+    webscene_engine* engine, const char* name, size_t length,
+    const webscene_native::compiled_document* package)
+{
+    if (!engine || !name || !length || length>256 || !package) return 0;
+    try { return engine->register_compiled_package(std::string(name,length),*package) ? 1U:0U; }
+    catch (...) { return 0; }
+}
+
+
 struct webscene_scene_lease final {
     std::shared_ptr<const scene> value;
     std::shared_ptr<acknowledgement_state> acknowledgement;
@@ -945,6 +970,12 @@ webscene_engine* webscene_engine_create_with_options(const webscene_engine_optio
     } catch (...) {
         return nullptr;
     }
+}
+
+void webscene_engine_set_work_available_callback_v1(
+    webscene_engine* engine, webscene_work_available_callback_v1 callback, void* user_data)
+{
+    if (engine != nullptr) engine->set_work_available_callback(callback, user_data);
 }
 
 void webscene_engine_destroy(webscene_engine* engine)

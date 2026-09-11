@@ -1,0 +1,14 @@
+# Pass with -DCMAKE_TOOLCHAIN_FILE=<SDK>/lib/cmake/WebScene/WebSceneToolchain.cmake.
+# Override WEBSCENE_LLVM_ROOT when LLVM is installed outside Homebrew.
+set(WEBSCENE_LLVM_ROOT "/opt/homebrew/opt/llvm" CACHE PATH "LLVM 22.1.1 installation")
+set(CMAKE_C_COMPILER "${WEBSCENE_LLVM_ROOT}/bin/clang" CACHE FILEPATH "")
+set(CMAKE_CXX_COMPILER "${WEBSCENE_LLVM_ROOT}/bin/clang++" CACHE FILEPATH "")
+set(CMAKE_OBJCXX_COMPILER "${WEBSCENE_LLVM_ROOT}/bin/clang++" CACHE FILEPATH "")
+if(NOT CMAKE_OSX_SYSROOT)
+  execute_process(COMMAND xcrun --sdk macosx --show-sdk-path OUTPUT_VARIABLE sdk_path
+    OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+  set(CMAKE_OSX_SYSROOT "${sdk_path}" CACHE PATH "macOS SDK")
+endif()
+set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "")
+set(CMAKE_OSX_DEPLOYMENT_TARGET 26.0 CACHE STRING "")
+set(CMAKE_CXX_STANDARD 20 CACHE STRING "")

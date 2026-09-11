@@ -41,7 +41,18 @@ test('native engine publishes only the versioned leased interop surface', async 
 
   assert.doesNotMatch(header, /\bwebscene_engine_evaluate_json\b/);
   assert.doesNotMatch(exports, /_webscene_engine_evaluate_json\b/);
-  assert.doesNotMatch(header, /\bwebscene_(?:engine|interop)_[a-z0-9_]+_v[12]\b/);
+  // File services and compiled-document hosting have independent ABI versions;
+  // they are not the retired v1/v2 JavaScript invocation transport.
+  const independentHostApis = new Set([
+    'webscene_engine_enable_file_service_v1',
+    'webscene_engine_take_file_request_v1',
+    'webscene_engine_complete_file_request_v1',
+    'webscene_engine_load_compiled_document_v1',
+    'webscene_engine_set_work_available_callback_v1'
+  ]);
+  for (const [symbol] of header.matchAll(/\bwebscene_(?:engine|interop)_[a-z0-9_]+_v[12]\b/g)) {
+    assert.ok(independentHostApis.has(symbol), `Retired interop ABI exported: ${symbol}`);
+  }
   assert.match(
     header,
     /webscene_interop_result_release_v3\s*\([^)]*uint64_t lease_id\s*\)/s);

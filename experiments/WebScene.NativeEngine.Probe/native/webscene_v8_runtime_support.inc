@@ -401,6 +401,19 @@ std::filesystem::path native_module_directory()
 #endif
 }
 
+std::filesystem::path native_runtime_assets_directory()
+{
+    const auto directory = native_module_directory();
+#if defined(__APPLE__)
+    // A statically linked app keeps non-code resources out of Contents/MacOS
+    // so the bundle can be sealed by codesign. Shared-engine layouts retain
+    // their existing adjacent-assets convention.
+    if (directory.filename() == "MacOS" && directory.parent_path().filename() == "Contents")
+        return directory.parent_path() / "Resources" / "Runtime";
+#endif
+    return directory;
+}
+
 #if defined(WEBSCENE_V8_BOOTSTRAP_SNAPSHOT)
 std::once_flag startup_snapshot_once;
 std::vector<char> startup_snapshot_bytes;
@@ -409,7 +422,7 @@ v8::StartupData startup_snapshot_data{};
 void configure_startup_snapshot(v8::Isolate::CreateParams& params)
 {
     std::call_once(startup_snapshot_once, [] {
-        const auto directory = native_module_directory();
+        const auto directory = native_runtime_assets_directory();
         const auto metadata_path =
             directory / WEBSCENE_V8_SNAPSHOT_METADATA_FILENAME;
         const auto blob_path = directory / WEBSCENE_V8_SNAPSHOT_FILENAME;
@@ -752,7 +765,7 @@ void initialize_v8_process()
         }
 #if defined(WEBSCENE_V8_ICU_DATA_FILENAME)
         const auto icu_data_path =
-            native_module_directory() / WEBSCENE_V8_ICU_DATA_FILENAME;
+            native_runtime_assets_directory() / WEBSCENE_V8_ICU_DATA_FILENAME;
         if (!std::filesystem::is_regular_file(icu_data_path)
             || !v8::V8::InitializeICU(icu_data_path.string().c_str())) {
             throw std::runtime_error(

@@ -513,6 +513,7 @@
             publication_nanoseconds,
             std::memory_order_relaxed);
         store_maximum(maximum_scene_publication_nanoseconds_, publication_nanoseconds);
+        notify_host_work();
         if (scene_published_callback_ != nullptr) {
             scene_published_callback_(
                 scene_published_user_data_,
