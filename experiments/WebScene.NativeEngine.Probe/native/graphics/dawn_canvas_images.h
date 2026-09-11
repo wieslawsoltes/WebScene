@@ -60,6 +60,28 @@ public:
             });
         return submitted_frame{std::move(*image),std::move(status)};
     }
+    // Native applications submit their own command buffers before presenting.
+    // Even if retaining a snapshot hits the ticket limit, keep the producer
+    // reserved until ALL work already submitted to its queue has completed.
+    std::optional<submitted_frame> retire_submitted(frame&& input,
+        std::shared_ptr<completion_wake> completion={}) {
+        check_thread();
+        if (!input.producer.belongs_to(storage_.get()))
+            throw std::invalid_argument("foreign canvas producer");
+        auto status=std::make_shared<std::atomic<submission_status>>(submission_status::pending);
+        auto pending=std::make_shared<frame>(std::move(input));
+        pending->producer.begin();
+        auto image=pending->producer.publish();
+        storage_->device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
+            [pending,status,completion](wgpu::QueueWorkDoneStatus result,wgpu::StringView) {
+                pending->producer.complete();
+                status->store(result==wgpu::QueueWorkDoneStatus::Success
+                    ? submission_status::success : submission_status::failed,std::memory_order_release);
+                if (completion) completion->signal();
+            });
+        if (!image) return {}; // callback still owns the submitted producer
+        return submitted_frame{std::move(*image),std::move(status)};
+    }
     dawn_canvas_images(wgpu::Device device,uint64_t byte_limit,size_t tickets=128,std::shared_ptr<completion_wake> wake={})
         :storage_(std::make_shared<storage>(std::move(device))),pool_(storage_,tickets,std::move(wake)),byte_limit_(byte_limit) {
         if (!storage_->device || !byte_limit) throw std::invalid_argument("Dawn image storage requires device and budget");

@@ -1,0 +1,45 @@
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+include("${CMAKE_CURRENT_LIST_DIR}/WebSceneLinuxBuild.cmake")
+if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)$")
+  message(FATAL_ERROR "This WebScene SDK is Linux x86_64")
+endif()
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL WebScene_SDK_COMPILER_ID OR
+   NOT CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL WebScene_SDK_COMPILER_VERSION)
+  message(FATAL_ERROR "Use this SDK's compiler: ${WebScene_SDK_COMPILER_ID} ${WebScene_SDK_COMPILER_VERSION}")
+endif()
+get_filename_component(WebScene_SDK_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+function(_ws_linux_static name file)
+  add_library(WebScene::${name} STATIC IMPORTED GLOBAL)
+  set_target_properties(WebScene::${name} PROPERTIES
+    IMPORTED_LOCATION "${WebScene_SDK_ROOT}/lib/${file}"
+    INTERFACE_INCLUDE_DIRECTORIES "${WebScene_SDK_ROOT}/include"
+    INTERFACE_COMPILE_FEATURES cxx_std_20)
+endfunction()
+_ws_linux_static(Core libwebscene_core.a)
+_ws_linux_static(NativeWeb libwebscene_native_web.a)
+set_property(TARGET WebScene::NativeWeb PROPERTY INTERFACE_LINK_LIBRARIES "WebScene::Core;Threads::Threads;${CMAKE_DL_LIBS}")
+_ws_linux_static(_Parser libwebscene_html_parser.a)
+set_property(TARGET WebScene::_Parser PROPERTY INTERFACE_LINK_LIBRARIES "Threads::Threads;${CMAKE_DL_LIBS};m")
+_ws_linux_static(SharedCSS libwebscene_native_web_shared_css.a)
+set_property(TARGET WebScene::SharedCSS PROPERTY INTERFACE_LINK_LIBRARIES "WebScene::NativeWeb;WebScene::_Parser")
+if(WebScene_SDK_WEBGPU)
+  add_library(WebScene::_Dawn SHARED IMPORTED GLOBAL)
+  set_target_properties(WebScene::_Dawn PROPERTIES
+    IMPORTED_LOCATION "${WebScene_SDK_ROOT}/lib/libwebgpu_dawn.so"
+    INTERFACE_INCLUDE_DIRECTORIES "${WebScene_SDK_ROOT}/include")
+  add_library(WebScene::WebGPU INTERFACE IMPORTED GLOBAL)
+  set_target_properties(WebScene::WebGPU PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${WebScene_SDK_ROOT}/include/graphics"
+    INTERFACE_LINK_LIBRARIES "WebScene::Core;WebScene::_Dawn;Threads::Threads;${CMAKE_DL_LIBS}")
+endif()
+add_executable(WebScene::Compiler IMPORTED GLOBAL)
+set_property(TARGET WebScene::Compiler PROPERTY IMPORTED_LOCATION "${WebScene_SDK_ROOT}/bin/webscene-uic")
+include("${CMAKE_CURRENT_LIST_DIR}/WebSceneApplication.cmake")
+foreach(component IN LISTS WebScene_FIND_COMPONENTS)
+  if(NOT TARGET WebScene::${component})
+    set(WebScene_FOUND FALSE)
+    set(WebScene_NOT_FOUND_MESSAGE "Component ${component} is not in this native-only Linux SDK")
+    return()
+  endif()
+endforeach()

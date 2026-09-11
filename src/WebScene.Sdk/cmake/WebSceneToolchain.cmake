@@ -1,3 +1,11 @@
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+  find_program(_ws_clang NAMES clang-18 REQUIRED)
+  find_program(_ws_clangxx NAMES clang++-18 REQUIRED)
+  set(CMAKE_C_COMPILER "${_ws_clang}" CACHE FILEPATH "")
+  set(CMAKE_CXX_COMPILER "${_ws_clangxx}" CACHE FILEPATH "")
+  set(CMAKE_CXX_STANDARD 20 CACHE STRING "")
+  return()
+endif()
 # Pass with -DCMAKE_TOOLCHAIN_FILE=<SDK>/lib/cmake/WebScene/WebSceneToolchain.cmake.
 # Override WEBSCENE_LLVM_ROOT when LLVM is installed outside Homebrew.
 set(WEBSCENE_LLVM_ROOT "/opt/homebrew/opt/llvm" CACHE PATH "LLVM 22.1.1 installation")
