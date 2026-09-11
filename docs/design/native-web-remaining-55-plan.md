@@ -2243,3 +2243,12 @@ exposed libc++ underflow failbit; validated zero underflow now follows Number.
 Native drawing suite passes after that correction. This is tested grammar
 alignment, not exhaustive floating-point conversion conformance or hosted proof;
 the next hosted build must incorporate the updated drawing module.
+
+### Native Canvas stroke API for drafting overlays
+
+Exposed document::stroke_line using the existing Canvas command stream (saved
+paint state, identity transform, stroke color/width, begin/move/line/stroke,
+restore). Invalid coordinates and nonpositive widths are ignored; non-canvas
+nodes reject the operation. Native library build and existing text regression
+suite pass. Dedicated stroke-command/pixel tests and Line rubber-band integration
+are still required; this change alone does not provide visible preview behavior.

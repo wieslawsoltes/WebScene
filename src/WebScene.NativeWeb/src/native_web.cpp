@@ -755,6 +755,24 @@ void document::fill_rect(node_id id, float x, float y, float w, float h,
   ++canvas.generation;
   state_->dom.mark_scene_changed();
 }
+void document::stroke_line(node_id id,float x1,float y1,float x2,float y2,float width,uint32_t rgba) {
+  auto& node=state_->node(id);
+  if(node.tag!="canvas")throw std::invalid_argument("not a canvas");
+  for(float value:{x1,y1,x2,y2,width})if(!std::isfinite(value))return;
+  if(width<=0)return;
+  auto& canvas=node.mutable_canvas();
+  const auto emit=[&](uint32_t kind,float x=0,float y=0) {
+    webscene_canvas_command command{};command.kind=kind;
+    command.data.values[0]=x;command.data.values[1]=y;canvas.commands.push_back(command);
+  };
+  emit(1); // Preserve paint state shared with other native Canvas commands.
+  emit(3);
+  char color[10];std::snprintf(color,sizeof(color),"#%08x",rgba);
+  webscene_canvas_command paint{};paint.kind=41;paint.resource_id=static_cast<uint32_t>(canvas.strings.size());
+  canvas.strings.emplace_back(color);canvas.commands.push_back(paint);
+  emit(42,width);emit(9);emit(11,x1,y1);emit(12,x2,y2);emit(20);emit(2);
+  ++canvas.generation;state_->dom.mark_scene_changed();
+}
 void document::fill_text(node_id id, std::string text, float x, float y,
                          std::string font, uint32_t rgba,
                          std::string align, std::string baseline, std::array<double,6> transform) {

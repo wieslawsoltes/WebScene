@@ -456,6 +456,7 @@ public:
   void clear_canvas(node_id);
   void fill_rect(node_id, float x, float y, float width, float height,
                  uint32_t rgba);
+  void stroke_line(node_id, float x1, float y1, float x2, float y2, float width, uint32_t rgba);
   void fill_text(node_id, std::string text, float x, float y,
                  std::string font, uint32_t rgba,
                  std::string align = "start", std::string baseline = "alphabetic",
