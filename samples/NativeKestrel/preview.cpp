@@ -7,6 +7,7 @@
 #include <webscene/shared_css.hpp>
 #endif
 static std::string capture_path;
+static bool exercise_layer_filter=false;
 #include <array>
 #include <functional>
 #include <cmath>
@@ -136,6 +137,12 @@ public:
     model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
 #ifdef KESTREL_PREVIEW_SHARED_CSS
     layers=std::make_unique<kestrel::layer_panel>(view->document,model,[this]{gpu_dirty=true;view->refresh();});
+    if(exercise_layer_filter) {
+      view->document.focus(view->document.find("explorer-search"));
+      foco::text_input_event input;input.text="a-wall";view->text_input_received(input);
+      if(!input.handled || layers->entries().size()!=1 || layers->entries()[0].id!="architecture")
+        throw std::runtime_error("native layer filter exercise failed");
+    }
     view->refresh();
 #endif
     handlers.push_back(view->document.on(view->document.root(), "click",
@@ -208,7 +215,10 @@ public:
   }
 };
 int main(int argc, char **argv) {
-  for(int i=1;i+1<argc;++i) if(std::string_view(argv[i])=="--capture") capture_path=argv[++i];
+  for(int i=1;i<argc;++i) {
+    if(std::string_view(argv[i])=="--capture" && i+1<argc) capture_path=argv[++i];
+    else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
+  }
   if (argc == 2 && std::string_view(argv[1]) == "--check-input-coalescing") {
     auto view = foco::make_ref<webscene::foco_host::view>();
     auto node = view->document.element(view->document.body(), "button");

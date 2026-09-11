@@ -84,5 +84,10 @@ above. Added `data-ref` attributes identify native binding targets. Four predefi
 templates represent visible/hidden and locked/unlocked states. Native
 `kestrel.layer_panel` binds drawing layers, counts and colors, handles current-layer
 selection and visibility/lock transactions, and removes subscriptions with rows.
-The shared/GPU diagnostic preview mounts this panel. Shift-click selects visible objects on the chosen layer. Filtering, ribbon
-synchronization and the object explorer remain unported here.
+The shared/GPU diagnostic preview mounts this panel. Shift-click selects visible
+objects on the chosen layer. The original explorer
+search input filters native layer rows and uses a compiled empty-state template.
+macOS uses its Unicode lowercase service; the additional-platform fallback is
+currently ASCII-only. Ribbon synchronization and the object explorer remain
+unported here. `--exercise-layer-filter --capture /absolute/path.png` exercises
+the Foco text-event route before capturing the filtered preview.

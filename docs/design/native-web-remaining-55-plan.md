@@ -1130,3 +1130,18 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   native-text-input regression passes. This is scalar-safe, not full grapheme or
   word editing. Modifier-based deletion, caret navigation, clipboard, IME, full
   application parity and presented 60fps remain unfinished.
+
+- Native layer filtering: the original explorer-search input now filters native
+  rows through input events. A persistent filter subscription survives row refresh;
+  the original empty-state markup is a predefined compiled template. macOS uses
+  CoreFoundation Unicode lowercase; the additional-platform fallback is explicitly
+  ASCII-only. Tests pass for matching, empty-state scene text, restored lists,
+  accented names on macOS, retained focus and no drawing/GPU change notification.
+  Built and ran --exercise-layer-filter --capture successfully; inspected
+  /tmp/kestrel-native-filter.png, showing a-wall in the native field and only A-WALL
+  in the original panel (GPU serial 1, clean exit). This uses injected Foco committed
+  text, not a physical keyboard session. The capture also exposes a form-rendering
+  gap after value initialization: input[type=color] paints its hex value as text.
+  Correct non-text control rendering next; this is not a full app-parity result.
+  Ribbon/object/property integration, broader text editing and presented 60fps
+  remain unfinished.

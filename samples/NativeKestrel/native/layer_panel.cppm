@@ -4,6 +4,9 @@ module;
 #include <functional>
 #include <string>
 #include <vector>
+#ifdef __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 export module kestrel.layer_panel;
 import kestrel.drawing;
 import kestrel.layer_templates;
@@ -17,24 +20,54 @@ public:
   struct entry {std::string id;webscene::native_web::node_id row,visibility,lock;};
 private:
   std::vector<entry> rows_;
+  webscene::native_web::subscription filter_handler_;
+  webscene::native_web::node_id empty_{};
+  static std::string lowercase(std::string text) {
+#ifdef __APPLE__
+    auto source=CFStringCreateWithBytes(kCFAllocatorDefault,reinterpret_cast<const UInt8*>(text.data()),text.size(),kCFStringEncodingUTF8,false);
+    if(!source) throw std::invalid_argument("invalid UTF-8 layer filter");
+    auto lower=CFStringCreateMutableCopy(kCFAllocatorDefault,0,source);CFRelease(source);
+    if(!lower) throw std::bad_alloc();
+    struct release_string {CFMutableStringRef value;~release_string(){CFRelease(value);}} owned{lower};
+    CFStringLowercase(lower,nullptr);
+    auto length=CFStringGetLength(lower);
+    text.resize(CFStringGetMaximumSizeForEncoding(length,kCFStringEncodingUTF8));
+    CFIndex used=0;
+    CFStringGetBytes(lower,CFRangeMake(0,length),kCFStringEncodingUTF8,0,false,reinterpret_cast<UInt8*>(text.data()),text.size(),&used);
+    text.resize(used);
+#else
+    // Additional platform Unicode case services remain part of platform expansion.
+    for(auto& c:text) if(c>='A' && c<='Z') c+=('a'-'A');
+#endif
+    return text;
+  }
   void clear() {
     handlers_.clear();
     if(!document_.disposed()) for(const auto& row:rows_) document_.remove(row.row);
+    if(empty_ && !document_.disposed()) document_.remove(empty_);
+    empty_=0;
     rows_.clear();
   }
 public:
   // Document/model outlive this panel. State belongs to the drawing, not templates.
   layer_panel(webscene::native_web::document& document,drawing& model,std::function<void()> changed)
-      :document_(document),model_(model),changed_(std::move(changed)) {refresh();}
+      :document_(document),model_(model),changed_(std::move(changed)) {
+    if(auto filter=document_.find("explorer-search"))
+      filter_handler_=document_.on(filter,"input",[this](auto&){refresh();});
+    refresh();
+  }
   ~layer_panel() {clear();}
   const std::vector<entry>& entries() const {return rows_;}
   void refresh() {
     clear();
     const auto parent=document_.find("explorer-list");
     if(!parent) throw std::logic_error("layer panel requires explorer-list");
+    const auto filter=document_.find("explorer-search");
+    const auto query=filter?lowercase(document_.value(filter)):std::string{};
     for(const auto& layer:model_.data["layers"]) {
       const auto id=layer["id"].get<std::string>();
       const auto name=layer["name"].get<std::string>();
+      if(lowercase(name).find(query)==std::string::npos) continue;
       const bool visible=layer.value("visible",true),locked=layer.value("locked",false);
       auto view=kestrel_layers::instantiate(document_,parent,
           std::string(visible?"visible":"hidden")+(locked?"-locked":"-unlocked"));
@@ -67,6 +100,7 @@ public:
           refresh();if(changed_) changed_();
         }));
     }
+    if(rows_.empty()) empty_=kestrel_layers::instantiate(document_,parent,"empty").named("empty");
     const auto text=[&](const char* id,std::string value) {
       if(auto node=document_.find(id)) document_.set_text(node,std::move(value));
     };

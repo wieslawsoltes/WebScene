@@ -9,10 +9,22 @@ int main() {
   document d;d.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
   auto list=d.element(d.body(),"div");d.attribute(list,"id","explorer-list");
   auto badge=d.element(d.body(),"span");d.attribute(badge,"id","layer-count");
+  auto search=d.element(d.body(),"input");d.attribute(search,"id","explorer-search");
   kestrel::drawing model;unsigned changes=0;
   {
     kestrel::layer_panel panel(d,model,[&]{++changes;});
     require(panel.entries().size()==model.data["layers"].size());
+    d.focus(search);d.text_input("a-wall");require(panel.entries().size()==1 && panel.entries()[0].id=="architecture");
+    d.text_input("not-found");require(panel.entries().empty());
+    const auto& empty=d.render(300,300);
+    require(std::string(empty.bytes.begin(),empty.bytes.end()).find("No layers match this filter.")!=std::string::npos);
+    d.set_value(search,"");d.dispatch(search,"input");require(panel.entries().size()==8);
+#ifdef __APPLE__
+    model.data["layers"][0]["name"]="ÉCOLE";
+    d.set_value(search,"école");d.dispatch(search,"input");require(panel.entries().size()==1 && panel.entries()[0].id=="0");
+    model.data["layers"][0]["name"]="0";d.set_value(search,"");d.dispatch(search,"input");
+#endif
+    require(d.focused()==search && changes==0); // Filtering leaves model/render state alone.
     auto first=panel.entries().front();
     d.dispatch(first.visibility,"click");
     require(!model.data["layers"][0]["visible"].get<bool>() && changes==1);
