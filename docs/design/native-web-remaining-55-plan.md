@@ -2157,3 +2157,15 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   passes. Rebuilt hosted picking capture exits 0 and shows Polyline/A-WALL in
   /tmp/kestrel-inspector-selected.png. Remaining general/geometry property rows,
   locked-edit error feedback and hosted layer-change interaction remain open.
+
+### Native continuous Line command state
+
+Ported the original app's continuous Line point/segment state into the exported
+C++ drawing module. Each nonduplicate segment uses a Line transaction and current
+layer, color and lineweight; command Undo removes the last segment/point, and
+cancel clears pending points without deleting committed geometry. Locked-layer
+failure preserves both document and pending endpoint. The native drawing suite
+passes, covering chained segments, 1e-8 duplicate tolerance, defaults, Undo,
+locked-layer rejection and cancellation. This is command state only: connecting
+the original ribbon, viewport coordinates, snapping, rubber-band preview, numeric
+input and command prompts remains necessary before claiming Line tool parity.

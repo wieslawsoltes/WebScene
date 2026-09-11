@@ -18,6 +18,28 @@ static void check(bool v, const char *message) {
 int main() {
   {
     kestrel::drawing model;
+    kestrel::line_command line(model);
+    const auto before=model.data;
+    check(line.point({0,0,0}) && model.data==before,"first Line point creates geometry");
+    check(!line.point({1e-9,0,0}),"near duplicate Line point accepted");
+    line.color="#123456";line.lineweight=.5;
+    check(line.point({10,0,0}) && line.point({10,10,0}),"continuous Line failed");
+    const auto& entity=model.data["entities"].back();
+    check(entity["color"]=="#123456" && entity["lineweight"]==.5,"Line defaults lost");
+    check(line.undo_point() && line.points().size()==2,"Line Undo did not remove endpoint");
+    check(line.undo_point() && model.data==before,"Line Undo did not restore drawing");
+    check(line.undo_point() && !line.undo_point(),"first point Undo failed");
+    model.data["layers"][0]["locked"]=true;
+    model.data["currentLayer"]=model.data["layers"][0]["id"];
+    const auto locked=model.data;
+    line.point({0,0,0});bool rejected=false;
+    try { line.point({1,0,0}); } catch(const std::invalid_argument&) { rejected=true; }
+    check(rejected && model.data==locked && line.points().size()==1,"locked Line partially committed");
+    line.cancel();check(line.points().empty() && model.data==locked,"cancel changed committed geometry");
+  }
+
+  {
+    kestrel::drawing model;
     const auto a=model.add("POINT",{{"position",{0,0,0}},{"group","old"}});
     const auto b=model.add("POINT",{{"position",{1,0,0}}});
     const auto c=model.add("POINT",{{"position",{2,0,0}},{"group","old"}});

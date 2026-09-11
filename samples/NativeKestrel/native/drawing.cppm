@@ -605,4 +605,38 @@ public:
     return item.label;
   }
 };
+// Stateful continuous Line command, independent of generated views and input mapping.
+class line_command {
+  drawing& model_;
+  std::vector<std::array<double,3>> points_;
+public:
+  explicit line_command(drawing& model):model_(model) {}
+  std::string color{"bylayer"};
+  double lineweight{};
+  const auto& points() const { return points_; }
+  const char* prompt() const { return points_.empty()?"Specify first point":"Specify next point or [Undo]"; }
+  void cancel() { points_.clear(); }
+  bool point(std::array<double,3> p) {
+    for(auto value:p)if(!std::isfinite(value))return false;
+    if(!points_.empty()) {
+      const auto a=points_.back();
+      if(std::hypot(p[0]-a[0],p[1]-a[1],p[2]-a[2])<1e-8)return false;
+      if(model_.layer(json{{"layer",model_.data["currentLayer"]}}).value("locked",false))
+        throw std::invalid_argument("The current layer is locked. Choose an unlocked layer.");
+      model_.transaction("Line",[&] {
+        json properties={{"points",{a,p}},{"color",color}};
+        if(lineweight!=0)properties["lineweight"]=lineweight;
+        model_.add("LINE",std::move(properties));
+      });
+    }
+    points_.push_back(p);
+    return true;
+  }
+  bool undo_point() {
+    if(points_.empty())return false;
+    if(points_.size()>1)model_.undo();
+    points_.pop_back();
+    return true;
+  }
+};
 } // namespace kestrel
