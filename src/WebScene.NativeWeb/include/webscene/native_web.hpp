@@ -421,6 +421,7 @@ public:
   webscene_native::layout_rect bounds(node_id) const;
   std::string text_content(node_id) const;
   void dispose();
+  bool disposed() const noexcept;
 
 private:
   std::shared_ptr<document_state> state_;

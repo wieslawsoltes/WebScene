@@ -8,6 +8,41 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+### CSS architecture review
+
+The compiler audit currently reports 30 distinct unsupported source constructs,
+not 30 isolated parser changes or a percentage of browser compatibility. Continue
+using the original stylesheet as evidence, but separate compiler emission gaps
+from missing native layout, paint and interaction behavior.
+
+The preferred direction is to reuse WebScene's existing Rust CSS parser and native
+cascade for both parsed and compiled documents. Build-time preparation should
+emit stylesheet data into generated C++ modules, consumed by the same native
+engine. Do not expand a second implementation of CSS semantics as the long-term
+architecture. The extracted prepared_stylesheet, stylesheet_owner and
+native_style_session are groundwork; they are not yet connected to native_web's
+compiled document and do not yet prove parser-free execution. Declaration values,
+media conditions and functional selector arguments still contain text interpreted
+by the shared machinery; emitting these records alone would not satisfy the
+no-runtime-CSS-parsing requirement.
+
+An embedded-CSS runtime-parser route is a proposed intermediate comparison mode,
+not a change to the final acceptance contract. It can establish which original UI
+features the shared engine actually renders before completing build-time lowering.
+Keep HTML construction and dynamic templates compiled in every mode. Keep the
+default application parser-free until an alternative mode is explicitly selected.
+
+Next integration gates:
+
+1. Define the prepared-style handoff and connect native document mutation, focus,
+   hover, preferences, viewport changes and disposal to the shared style session.
+2. Compare parsed preparation and generated preparation on identical native trees,
+   including dynamic updates; retain unsupported-feature diagnostics.
+3. Complete typed value/selector/media preparation wherever shared execution still
+   reparses text, then verify the packaged binary's parser dependencies.
+4. Address actual engine gaps once for both authoring paths, and test original
+   Kestrel behavior and presented frame performance separately from syntax coverage.
+
 WebScene owns compiler lowering, native style/cascade/layout/paint, animation and
 DOM APIs. Foco supplies cursor/window/input, preference projection, compositor and
 frame scheduling. Reuse native engine behavior where verified; accepted syntax
@@ -908,3 +943,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Fresh original CSS audit: **30 distinct unsupported constructs**. Multiple
   properties, fill transitions, cubic/steps timing, compiled keyframes and broader
   cancellation semantics remain unfinished. No full parity or 60fps claim.
+
+- Animation callback disposal: native documents expose disposal state and clear
+  queued transition events and scene output during disposal. Foco drops retained
+  composition packets and GPU ownership, avoids advancing disposed documents and
+  returns to idle. Generated transition tests verify target removal suppresses
+  later queued events; hosted motion tests dispose from transitionend and verify
+  no retained stream or frame demand. Native contracts, compiler, transitions and
+  hosted motion tests pass. This does not establish general callback-disposal
+  safety for every input path, original Kestrel parity or presented 60fps.

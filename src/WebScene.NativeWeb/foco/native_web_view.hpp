@@ -27,17 +27,26 @@ public:
     refresh();
   }
   bool requires_host_frames() const noexcept override {
+    if(document.disposed()) return !packet_.empty() || bool(gpu_owner_);
     return input_refresh_pending_ || host_reduced_motion()!=reduced_motion_ || document.has_active_animations();
   }
   bool advance_host_frame(double timestamp_ms) override {
     if (!requires_host_frames()) return false;
     const auto previous = revision_;
-    document.advance_animations(timestamp_ms);
+    if(!document.disposed()) document.advance_animations(timestamp_ms);
     refresh();
     return revision_ != previous;
   }
   void refresh() {
     input_refresh_pending_ = false;
+    if(document.disposed()) {
+      if(!packet_.empty() || gpu_owner_) {
+        packet_.clear();gpu_owner_.reset();gpu_node_=0;gpu_dirty_=false;
+        ++revision_;invalidate_render();
+      }
+      clear_cursor();
+      return;
+    }
     auto b = bounds();
     if (b.width <= 0 || b.height <= 0)
       return;
@@ -107,7 +116,7 @@ public:
   }
   std::optional<foco::composition_command_stream_view>
   composition_command_stream() const noexcept override {
-    if (packet_.empty())
+    if (document.disposed() || packet_.empty())
       return std::nullopt;
     return foco::composition_command_stream_view{
         packet_, revision_,
@@ -120,10 +129,12 @@ public:
             std::isfinite(available.height) ? available.height : 700.f};
   }
   void arrange_override(foco::size size) override {
+    if(document.disposed()) {refresh();return;}
     document.render(std::max(1.f, size.width), std::max(1.f, size.height));
     refresh();
   }
   void pointer_event_received(foco::pointer_event &e) override {
+    if(document.disposed()) {refresh();return;}
     pointer_position_=foco::point{e.position.x-bounds().x,e.position.y-bounds().y};
     update_cursor();
     if(e.kind==foco::pointer_event_kind::wheel){
@@ -141,11 +152,13 @@ public:
     e.handled = true;
   }
   bool try_move_focus_within(bool reverse) override {
+    if(document.disposed()) return false;
     document.key("Tab", reverse);
     refresh();
     return document.focused() != 0;
   }
   void key_event_received(foco::key_event &e) override {
+    if(document.disposed()) {refresh();return;}
     std::string_view key = e.value == foco::key::tab     ? "Tab"
                            : e.value == foco::key::enter ? "Enter"
                            : e.value == foco::key::space ? " "

@@ -24,4 +24,13 @@ int main() {
   d.attribute(d.find("fade"),"class","stop");d.render(100,100);
   d.advance_animations(151);
   if(d.has_active_animations() || cancels!=1 || ends!=1) return 5;
+  webscene::native_web::document removed;
+  compiled_ui::build(removed);removed.advance_animations(0);removed.render(100,100);
+  auto victim=removed.find("fade");
+  int delivered=0;
+  auto deletion=removed.on(victim,"transitionrun",[&](auto&){++delivered;removed.remove(victim);});
+  auto stale=removed.on(victim,"transitionstart",[&](auto&){++delivered;});
+  removed.attribute(victim,"class","changed");removed.render(100,100);
+  removed.advance_animations(20);
+  if(delivered!=1 || removed.find("fade") || removed.has_active_animations()) return 6;
 }

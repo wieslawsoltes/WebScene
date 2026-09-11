@@ -82,12 +82,15 @@ void subscription::dispose() noexcept {
 document::document(webscene_text_measure_callback cb, void *data)
     : state_(std::make_shared<document_state>(cb, data)) {}
 document::~document() { state_->alive = false; }
+bool document::disposed() const noexcept { return !state_->alive; }
 void document::dispose() {
   state_->check();
   state_->alive = false;
   std::lock_guard lock(state_->listener_mutex);
   state_->listeners.clear();
   state_->rules.clear();
+  state_->pending_transition_events.clear();
+  state_->output = {};
   state_->dom.clear();
 }
 node_id document::root() const {

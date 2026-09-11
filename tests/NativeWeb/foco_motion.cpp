@@ -51,6 +51,15 @@ int main() {
   require(view->requires_host_frames()); // Pending cancellation must be delivered.
   view->advance_host_frame(154);
   require(cancelled==1 && !view->requires_host_frames());
+  rule final_fade;final_fade.inline_target=node;
+  final_fade.declarations.push_back({false,+[](style& s) {s.set_opacity_transition(100);s.set_opacity(0);}});
+  auto shutdown=view->document.on(node,"transitionend",[&](auto&){view->document.dispose();});
+  view->document.add_rule(std::move(final_fade));view->refresh();
+  require(view->requires_host_frames());
+  view->advance_host_frame(254);
+  require(view->document.disposed() && !view->requires_host_frames());
+  require(!view->composition_command_stream());
+  require(!view->advance_host_frame(255));
   publisher.set_host_frame_request_callback({});
   std::cout<<"Foco native reduced-motion propagation passed\n";
 }
