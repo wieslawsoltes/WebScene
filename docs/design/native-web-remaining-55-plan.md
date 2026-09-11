@@ -2252,3 +2252,15 @@ restore). Invalid coordinates and nonpositive widths are ignored; non-canvas
 nodes reject the operation. Native library build and existing text regression
 suite pass. Dedicated stroke-command/pixel tests and Line rubber-band integration
 are still required; this change alone does not provide visible preview behavior.
+
+### Initial native Line overlay wiring
+
+Extracted overlay text drawing into redraw_overlay and added pending Line preview
+from the last endpoint to the current unprojected pointer. It uses native Canvas
+strokes with original dark/light colors, 1.45 width and 5/4 dash lengths. Pointer
+motion marks only overlay state dirty; GPU publication redraws text and preview
+for camera changes. Prompt changes invalidate preview cleanup. Hosted build and
+existing Line creation/typed-input/Undo regression pass, GPU serial 2. These
+checks do not yet assert a rendered preview: dedicated motion/capture, clipping
+for distant endpoints, stroke command verification and preview latency remain
+required. Snapping and dynamic dimension labels remain open.

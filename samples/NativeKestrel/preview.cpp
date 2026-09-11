@@ -69,8 +69,11 @@ class preview_app final : public foco::application {
   kestrel::drawing model;
   kestrel::line_command line_tool{model};
   bool line_active{};
+  std::optional<kestrel::vec3> line_pointer;
+  bool overlay_dirty{};
   std::array<double,3> last_drafting_point{};
   void sync_line_prompt() {
+    overlay_dirty=true;
     auto& d=view->document;
     if(line_active)d.remove_attribute(d.find("tool-banner"),"hidden");
     else d.attribute(d.find("tool-banner"),"hidden","");
@@ -145,34 +148,7 @@ class preview_app final : public foco::application {
     }
     viewport->camera.fit(points);gpu_dirty=true;
   }
-  void tick() {
-    auto node = view->document.find("scene");
-    auto bounds = view->document.bounds(node);
-    if (bounds.width < 1 || bounds.height < 1) return;
-    auto w = static_cast<uint32_t>(bounds.width);
-    auto h = static_cast<uint32_t>(bounds.height);
-    if (!viewport) {
-      viewport = std::make_unique<kestrel::viewport>(node, w, h);
-      viewport->options.style = (benchmark_pan && !benchmark_courtyard) || exercise_objects || exercise_layer_filter
-          ? kestrel::display_style::shaded_edges : kestrel::display_style::wireframe;
-      if((!benchmark_pan || benchmark_courtyard) && !exercise_objects && !exercise_layer_filter) {
-        fit_drawing();
-      }
-    }
-    if (w != gpu_width || h != gpu_height) {
-      viewport->resize(w, h);
-      if(benchmark_canvas_resize && pan_samples) ++resize_samples;
-      gpu_width = w; gpu_height = h; gpu_dirty = true;
-    }
-    const auto publish = [&] {
-      if (auto image = viewport->poll(true)) {
-        const auto metadata=image->value.describe();
-        if(metadata.width!=w || metadata.height!=h)
-          throw std::runtime_error("GPU image dimensions do not match the current canvas");
-        published_width=metadata.width;published_height=metadata.height;
-        ++gpu_serial;
-        if(gpu_serial==1) if(auto label=view->document.find("engine-label"))
-          view->document.set_text(label,"WebGPU");
+  void redraw_overlay(uint32_t w,uint32_t h) {
         const auto overlay=view->document.find("overlay");
         view->document.attribute(overlay,"width",std::to_string(w));
         view->document.attribute(overlay,"height",std::to_string(h));
@@ -201,6 +177,51 @@ class preview_app final : public foco::application {
             if(end==std::string::npos)break;start=end+1;
           } while(start<=content.size());
         }
+    if(line_active && line_pointer && !line_tool.points().empty()) {
+      const auto point=line_tool.points().back();
+      const auto a=viewport->camera.project({point[0],point[1],point[2]});
+      const auto b=viewport->camera.project(*line_pointer);
+      if(a.z>=0 && a.z<=1 && b.z>=0 && b.z<=1) {
+        const auto dx=b.x-a.x,dy=b.y-a.y,length=std::hypot(dx,dy);
+        const uint32_t color=viewport->options.light_theme?0x16869cff:0x8ce0e5ff;
+        for(double distance=0;distance<length;distance+=9) {
+          const auto finish=std::min(distance+5,length);
+          view->document.stroke_line(overlay,a.x+dx*distance/length,a.y+dy*distance/length,
+              a.x+dx*finish/length,a.y+dy*finish/length,1.45f,color);
+        }
+      }
+    }
+    overlay_dirty=false;
+  }
+  void tick() {
+    auto node = view->document.find("scene");
+    auto bounds = view->document.bounds(node);
+    if (bounds.width < 1 || bounds.height < 1) return;
+    auto w = static_cast<uint32_t>(bounds.width);
+    auto h = static_cast<uint32_t>(bounds.height);
+    if (!viewport) {
+      viewport = std::make_unique<kestrel::viewport>(node, w, h);
+      viewport->options.style = (benchmark_pan && !benchmark_courtyard) || exercise_objects || exercise_layer_filter
+          ? kestrel::display_style::shaded_edges : kestrel::display_style::wireframe;
+      if((!benchmark_pan || benchmark_courtyard) && !exercise_objects && !exercise_layer_filter) {
+        fit_drawing();
+      }
+    }
+    if (w != gpu_width || h != gpu_height) {
+      viewport->resize(w, h);
+      if(benchmark_canvas_resize && pan_samples) ++resize_samples;
+      gpu_width = w; gpu_height = h; gpu_dirty = true;
+    }
+    const auto publish = [&] {
+      if (auto image = viewport->poll(true)) {
+        const auto metadata=image->value.describe();
+        if(metadata.width!=w || metadata.height!=h)
+          throw std::runtime_error("GPU image dimensions do not match the current canvas");
+        published_width=metadata.width;published_height=metadata.height;
+        ++gpu_serial;
+        if(gpu_serial==1) if(auto label=view->document.find("engine-label"))
+          view->document.set_text(label,"WebGPU");
+        redraw_overlay(w,h);
         view->set_gpu_image(node, w, h, gpu_serial,
             webscene::foco_host::make_gpu_image(node, gpu_serial, std::move(image)));
       }
@@ -210,6 +231,7 @@ class preview_app final : public foco::application {
       gpu_dirty = false;
       publish(); // Foco waits on the retained producer fences before sampling.
     }
+    if(overlay_dirty) {redraw_overlay(w,h);view->refresh();}
     if(benchmark_canvas_resize && pan_samples &&
         (published_width!=w || published_height!=h)) ++missing_resize_images;
   }
@@ -404,7 +426,7 @@ public:
               view->document.attribute(workbench,"class",classes);view->refresh();
             }
             else if (*action == "line") {
-              line_tool.cancel();line_active=true;selection_pressed=false;
+              line_tool.cancel();line_pointer.reset();line_active=true;selection_pressed=false;
               if(std::abs(viewport->camera.direction.z)<.015)set_camera_view("top");
               sync_line_prompt();view->document.focus(view->document.find("viewport"));
             }
@@ -491,6 +513,12 @@ public:
         }));
     handlers.push_back(view->document.on(view->document.root(), "pointermove",
         [this](auto &event) {
+          if(line_active && viewport) {
+            const auto area=view->document.bounds(view->document.find("scene"));
+            const auto x=event.client_x-area.x,y=event.client_y-area.y;
+            line_pointer=(x>=0 && y>=0 && x<=area.width && y<=area.height)?viewport->camera.unproject(x,y,0):std::nullopt;
+            overlay_dirty=true;
+          }
           if(selection_pressed) {
             selection_dragging=selection_dragging || std::hypot(event.client_x-selection_x,event.client_y-selection_y)>4;
 #ifdef KESTREL_PREVIEW_SHARED_CSS
