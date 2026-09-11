@@ -1,0 +1,49 @@
+name: Linux native SDK
+on:
+  push:
+    branches: [codex/linux-headless-sdk]
+  pull_request:
+    paths:
+      - 'src/WebScene.NativeWeb/**'
+      - 'src/WebScene.Sdk/**'
+      - 'tests/NativeWeb/**'
+      - 'eng/graphics/**'
+      - '.github/workflows/linux-native-sdk.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: linux-native-sdk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record source input
+        run: |
+          mkdir -p artifacts/linux-native
+          git rev-parse HEAD > artifacts/linux-native/source-revision.txt
+          git archive --format=tar.gz HEAD > artifacts/linux-native/source.tar.gz
+      - name: Install compiler and native prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 clang-tools-18 ninja-build libfontconfig1-dev libfreetype-dev libvulkan-dev mesa-vulkan-drivers vulkan-tools
+          python3 -m pip install --break-system-packages cmake==3.31.6
+      - name: Build native document, shared CSS and UI compiler
+        run: |
+          cmake -S src/WebScene.NativeWeb -B artifacts/linux-native/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++-18
+          cmake --build artifacts/linux-native/build --parallel 2
+          ctest --test-dir artifacts/linux-native/build --output-on-failure
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-native-evidence
+          path: |
+            artifacts/linux-native/source.tar.gz
+            artifacts/linux-native/source-revision.txt
+            artifacts/linux-native/build/Testing/Temporary/*.log
+          if-no-files-found: error
+          retention-days: 7
