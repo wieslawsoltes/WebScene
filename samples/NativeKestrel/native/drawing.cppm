@@ -442,6 +442,13 @@ public:
       for(auto& layer:data["layers"])layer["visible"]=true;
     });
   }
+  bool change_arc_angle(bool end,double degrees) {
+    if(!std::isfinite(degrees))return false;
+    const auto ids=selected(true);if(ids.size()!=1)return false;
+    auto* entity=find(ids.front());if(!entity || entity->value("type",std::string{})!="ARC")return false;
+    const auto key=end?"endAngle":"startAngle";
+    return transaction(std::string("Edit ")+key+"Deg",[&] {(*entity)[key]=degrees*(std::numbers::pi/180.0);});
+  }
   size_t erase_selected() {
     const auto ids=selected(true);
     if(ids.empty())return 0;

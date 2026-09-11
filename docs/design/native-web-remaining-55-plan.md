@@ -8,6 +8,12 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Arc Start/End angle rows now use compiled numeric fields with native degree/radian
+conversion and undo. Circle Area uses the original radius-based formula and
+three-decimal squared-unit display. Tests type 270 degrees into End angle, verify
+the stored radians and exact undo, and verify radius-5 area text. Ellipse radii,
+remaining inspector sections and hosted conic interaction verification remain open.
+
 Circle/arc Radius now uses the compiled coordinate row and native change handler.
 The model requires a positive finite radius and editable single selection, derives
 the previous conic X-axis magnitude, and scales explicit axes as the original app

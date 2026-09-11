@@ -8,6 +8,7 @@ module;
 #include <iomanip>
 #include <locale>
 #include <cmath>
+#include <numbers>
 #include <vector>
 #ifdef __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
@@ -228,6 +229,27 @@ public:
               if(valid && used==text.size())model_.change_conic_radius(radius);
               refresh();if(changed_)changed_();
             }));
+          }
+          if(conic_entity && entity_type=="ARC")for(bool end:{false,true}) {
+            const auto label=end?"End angle":"Start angle";const auto key=end?"endAngle":"startAngle";
+            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
+            document_.set_text(row.named("label"),label);document_.attribute(row.named("input"),"aria-label",label);
+            document_.attribute(row.named("input"),"data-prop",std::string(key)+"Deg");
+            std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(4)<<one->value(key,0.0)*180.0/std::numbers::pi;
+            auto value=text.str();while(value.ends_with('0'))value.pop_back();if(value.ends_with('.'))value.pop_back();
+            document_.set_value(row.named("input"),value=="-0"?"0":value);
+            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),end](auto&) {
+              const auto text=document_.value(node);double degrees=0;size_t used=0;bool valid=true;
+              try {degrees=std::stod(text,&used);}catch(const std::exception&){valid=false;}
+              if(valid && used==text.size())model_.change_arc_angle(end,degrees);
+              refresh();if(changed_)changed_();
+            }));
+          }
+          if(conic_entity && entity_type=="CIRCLE") {
+            auto area=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");
+            const double radius=one->value("radius",0.0)?one->value("radius",0.0):1.0;
+            std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(3)<<std::numbers::pi*radius*radius<<" "<<model_.data.value("units",std::string("mm"))<<"²";
+            document_.set_text(area.named("label"),"Area");document_.set_text(area.named("value"),text.str());document_.attribute(area.named("value"),"title",text.str());
           }
           if(!single_coordinate) {
           auto length=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");

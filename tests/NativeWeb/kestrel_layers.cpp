@@ -1,6 +1,8 @@
 #include "../../samples/NativeKestrel/third_party/nlohmann/json.hpp"
 #include <webscene/shared_css.hpp>
 #include <iostream>
+#include <cmath>
+#include <numbers>
 import kestrel.drawing;
 import kestrel.render_data;
 import kestrel.examples;
@@ -24,6 +26,18 @@ int main() {
     const auto before=model.data;doc.focus(input);doc.set_selection(input,0,doc.value(input).size());doc.text_input("42");doc.key("Enter");
     require(model.find(id)->at("center")[0]==42);
     require(model.undo()=="Edit center.0" && model.data==before);
+    panel.refresh();
+    if(std::string_view(type)=="CIRCLE")require(doc.text_content(inspector).find("78.540 mm²")!=std::string::npos);
+    if(std::string_view(type)=="ARC") {
+      const auto angle=[&](auto&& self,node_id node)->node_id {
+        if(doc.attribute(node,"data-prop")=="endAngleDeg")return node;
+        for(auto child:doc.children(node))if(auto result=self(self,child))return result;
+        return 0;
+      };
+      auto input=angle(angle,inspector);require(input!=0);doc.focus(input);doc.set_selection(input,0,doc.value(input).size());doc.text_input("270");doc.key("Enter");
+      require(std::abs(model.find(id)->at("endAngle").get<double>()-1.5*std::numbers::pi)<1e-12);
+      require(model.undo()=="Edit endAngleDeg" && model.data==before);
+    }
     if(std::string_view(type)!="ELLIPSE") {
       (*model.find(id))["axisX"]={3,4,0};(*model.find(id))["axisY"]={-4,3,0};
       const auto original=model.data;
