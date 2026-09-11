@@ -2,9 +2,14 @@
 
 ## The recommended native app model
 
-**Author the interface in HTML and CSS, compile it into C++20 modules at build time, and implement application behavior in C++20 modules. Ship a native application with no runtime HTML parsing, CSS parsing, or JavaScript execution. Do not create application header files.**
+The default recommended native app model is:
 
-HTML and CSS are design-time inputs. The WebScene UI compiler emits native document construction and typed style operations. At runtime, the compiled application constructs and updates a native WebScene document; layout, input, focus, painting and composition remain live. Resizing does not require reparsing source markup or executing a script.
+1. **Compile HTML into C++ at build time.** Use compiled HTML templates for dynamic structure; do not parse or insert HTML strings at runtime.
+2. **Select `CSS_BACKEND shared`.** Use WebScene's full native CSS engine and its supported CSS coverage without introducing V8 or JavaScript. Runtime CSS parsing is allowed.
+3. **Use no JavaScript and no JavaScript runtime.** Native C++ owns application behavior.
+4. **Implement application code in C++20 modules.** Use `import` and no handwritten application headers.
+
+The UI compiler emits native document construction and prepared stylesheet data. At runtime, the shared native CSS engine resolves styles and performs layout without JavaScript. CSS text can also be parsed natively when needed. This model requires neither an HTML parser for application UI nor a JavaScript engine; it does not require a CSS-parser-free process. “Full CSS engine” means WebScene's shared engine coverage, not a guarantee that every browser CSS feature is implemented.
 
 Use `.cppm` interfaces and `import` for application boundaries. Keep a small `main.cpp` entry point that imports the application module. Existing SDK and system headers can be included in a module's global fragment where those dependencies do not yet publish modules. This does not mean adding handwritten application `.h` or `.hpp` files. Platform implementation files such as macOS `.mm` files are appropriate behind a module interface.
 
@@ -16,8 +21,8 @@ Use this native app model for new applications and as the target when extending 
 
 | Area | Recommendation |
 |---|---|
-| UI | Compile HTML, CSS and reusable templates at build time; ship required assets only. |
-| Styles | Select `CSS_BACKEND typed`; update native state, compiled classes and typed properties instead of generating CSS strings. |
+| UI | Compile HTML and reusable templates into C++; prepare authored stylesheets at build time; ship required assets only. |
+| Styles | Select `CSS_BACKEND shared` and link `WebScene::SharedCSS`; native CSS parsing and dynamic style updates are allowed without V8. |
 | Application code | Use C++20 modules and `import`, with no application headers; keep platform implementations behind module interfaces. |
 | Host | Use AppScene's Native host and existing document/composition APIs. Add NativeWebGPU only when application GPU work requires it. |
 | Media | Stream through native platform APIs and retain decoded GPU-compatible surfaces through image leases. |
@@ -28,7 +33,7 @@ Use this native app model for new applications and as the target when extending 
 
 | Component | Responsibility |
 |---|---|
-| WebScene UI compiler | Reads HTML/CSS and templates at build time; generates C++ modules and typed styles. |
+| WebScene UI compiler | Reads HTML/CSS and templates at build time; generates C++ modules and prepared stylesheets for the shared CSS engine. |
 | WebScene native document | Maintains native nodes, events, style state, layout and canvas commands. |
 | AppScene native host | Owns the window, input dispatch, scheduling, text integration and GPU composition. |
 | Application modules | Own behavior, state, service calls, resource policy and platform integration. |
@@ -51,7 +56,7 @@ platform/Services.mm          # Only when a macOS implementation is needed
 assets/
 ```
 
-Add a `templates/` directory when the application has reusable compiled templates. Instantiate those templates through generated/native APIs. Set user-provided text and values through document APIs; do not assemble HTML or CSS strings at runtime.
+Add a `templates/` directory when the application has reusable compiled templates. Instantiate those templates through generated/native APIs. Set user-provided text and values through document APIs; do not assemble HTML strings at runtime. Update styles through native classes or CSS APIs as appropriate; CSS parsing does not require JavaScript.
 
 Do not ship `views/`, `styles/`, generated source modules, or application scripts as runtime resources. Stage only required assets, such as images, fonts and media, with the SDK asset packaging helper.
 
@@ -65,18 +70,21 @@ appscene_add_application(counter COMPONENT Native SOURCES main.cpp
   IDENTIFIER dev.example.counter)
 target_sources(counter PRIVATE FILE_SET CXX_MODULES
   FILES controls/Application.cppm)
-webscene_compile_html(counter views/Main.html MODULE counter.ui CSS_BACKEND typed)
+webscene_compile_html(counter views/Main.html MODULE counter.ui CSS_BACKEND shared)
+target_link_libraries(counter PRIVATE WebScene::SharedCSS)
 ```
 
 The default compiler mode is native. Do not select `MODE hybrid`, add a compiled-package runtime registrar, or link the Runtime component for this application model. A hybrid package can contain precompiled markup while still running JavaScript; interface compilation alone does not make an application native-only.
 
-### Choose typed CSS for this model
+### Use shared CSS by default
 
-`CSS_BACKEND typed` is the default and the recommended setting. It generates typed C++ style operations at build time. Layout, the cascade, interaction state and responsive style updates still run natively at runtime; the application does not need to parse CSS text to perform them.
+Explicitly select `CSS_BACKEND shared` and link `WebScene::SharedCSS` as shown above. This is the recommended application setting even though the compiler helper currently defaults to `typed` when the option is omitted. The shared backend prepares authored stylesheets at build time and installs WebScene's native shared CSS resolver at runtime. It links CSS parser support and permits dynamic CSS strings. It does not require V8, JavaScript, the Runtime component, or reparsing the original stylesheet at startup.
 
-`CSS_BACKEND shared` is a separate compatibility choice. It prepares authored stylesheets at build time and installs WebScene's shared CSS resolver at runtime. It links CSS parser support and permits dynamic CSS strings. It does **not** by itself require JavaScript or imply that the original stylesheet is reparsed at startup. However, it is outside this guide's recommended parser-free native app profile. Do not select it, or link `WebScene::SharedCSS`, as an automatic workaround for typed-compiler diagnostics.
+Native code can update classes, values and CSS styles, including `document.attribute(node, "style", css_text)` where appropriate. Prefer reusable style rules for stable presentation. Dynamic CSS is compatible with this model; dynamic HTML insertion is not. Compile repeated UI structures as templates and instantiate them through native APIs.
 
-For changing styles, use compiled classes, supported typed native APIs, numeric element attributes where appropriate, and native canvas drawing. Do not call `document.attribute(node, "style", css_text)` with generated CSS for progress widths, slider gradients or other interactive state. If the desired design needs an unsupported property or element, address compiler/API support or explicitly qualify a supported design adjustment. Keep remaining gaps visible instead of silently switching application profiles.
+`CSS_BACKEND typed` is an optional stricter profile for applications whose styles fit its current supported subset. It emits typed C++ style operations and can avoid runtime CSS parsing, but it is not a complete replacement for the shared CSS engine today. Do not simplify an application's intended design merely to fit typed CSS when shared CSS supports it. Kestrel's current stylesheet is not accepted by the typed compiler; its delivered app also still uses JavaScript through the separate hybrid profile. Shared CSS alone does not port that application behavior to C++.
+
+Resolve unsupported HTML/compiler features and shared-engine CSS gaps explicitly. Selecting shared CSS broadens CSS coverage but does not guarantee arbitrary markup support or complete browser parity.
 
 `views/Main.html`:
 
@@ -142,7 +150,7 @@ The compiler tracks referenced CSS dependencies and reports unsupported native C
 
 ## Scene Player: the native video reference
 
-[ScenePlayer](https://github.com/SceneTech/ScenePlayer) is also distributed as AppScene's `samples/VideoPlayer`. It follows the standard application model:
+[ScenePlayer](https://github.com/SceneTech/ScenePlayer) is also distributed as AppScene's `samples/VideoPlayer`. It demonstrates native application ownership and the retained-surface media path. The current sample uses the optional typed CSS profile; use explicit shared CSS for new applications and designs needing the shared engine's coverage:
 
 - `views/ScenePlayer.html` and `styles/ScenePlayer.css` are compiled into `sceneplayer.ui` at build time.
 - `controls/PlaybackControls.cppm` implements controls, keyboard behavior, native document updates and responsive video sizing.
@@ -170,14 +178,14 @@ Mutate the document on its owner thread. Retain event subscriptions for as long 
 
 Use platform streaming APIs for large media and retain decoded surfaces until GPU consumers finish. Avoid whole-file buffering and synchronous expensive work on the UI thread. Native APIs still have their platform thread and lifetime requirements.
 
-Validate the installed SDK consumer, not only a source-tree build. Exercise real native events, playback where applicable, resize, error recovery and shutdown. Inspect the final bundle and link inputs: a native sample must have no JavaScript runtime, runtime web-engine library, HTML/CSS source resources or application script payloads. GPU/image lease retirement should complete at shutdown. Record the SDK version and source revisions used for qualification, and test the actual UI compiler, platform implementation, link and packaged application. A browser/WASM preview, screenshot or syntax check with substitute declarations does not establish native compatibility, visual parity, media performance or correct shutdown. Measure sustained playback, memory and presentation when making performance claims. Keep any hybrid qualification separate from this check.
+Validate the installed SDK consumer, not only a source-tree build. Exercise real native events, playback where applicable, resize, error recovery and shutdown. Inspect the final bundle and link inputs: the default native sample must have no JavaScript runtime, runtime web-engine library, runtime HTML UI resources or application script payloads. Shared CSS engine/parser libraries are expected and must not be mistaken for JavaScript runtime dependencies. The compiled UI uses prepared authored stylesheets; explicitly managed runtime CSS is also permitted. GPU/image lease retirement should complete at shutdown. Record the SDK version and source revisions used for qualification, and test the actual UI compiler, platform implementation, link and packaged application. A browser/WASM preview, screenshot or syntax check with substitute declarations does not establish native compatibility, visual parity, media performance or correct shutdown. Measure sustained playback, memory and presentation when making performance claims. Keep any hybrid qualification separate from this check.
 
-## Optional compatibility profiles
+## Application profiles
 
 | Profile | Interface | Behavior | Runtime parsing/execution |
 |---|---|---|---|
-| Native — default for new applications | Build-time compiled HTML/CSS | C++ modules | No HTML/CSS parser or JavaScript execution |
-| Native with shared CSS — compatibility opt-in | Compiled HTML and prepared stylesheets | Native C++ | Shared CSS resolver and parser support; dynamic CSS strings can be parsed; no JavaScript required |
+| Native with shared CSS — recommended default | Compiled HTML/templates and prepared stylesheets | C++ modules | Native CSS parsing/resolution allowed; no runtime HTML parsing, JavaScript or V8 |
+| Native with typed CSS — optional stricter profile | Compiled HTML/templates and typed styles within supported subset | C++ modules | No runtime HTML/CSS parsing or JavaScript |
 | Hybrid — explicit opt-in | Compiled interface with runtime document operations | C++ and JavaScript/TypeScript | JavaScript runtime; parsing depends on APIs used |
 | Existing web content — explicit opt-in | Runtime-loaded HTML/CSS | Existing JavaScript/TypeScript | Runtime HTML/CSS and JavaScript |
 
