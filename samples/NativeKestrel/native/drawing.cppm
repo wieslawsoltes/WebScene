@@ -268,6 +268,11 @@ public:
   bool editable(const json &e) const {
     return visible(e) && !layer(e).value("locked", false);
   }
+  void select_all_editable() {
+    selection.clear();
+    for(const auto& entity:data["entities"])
+      if(editable(entity)) selection.insert(entity["id"].get<std::string>());
+  }
   std::vector<std::string> selected(bool editable_only = false) {
     std::vector<std::string> result;
     for (auto &id : selection)

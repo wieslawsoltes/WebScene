@@ -1448,3 +1448,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   of the diagnostic 1.25/0.8 values. FocoKestrelPreview rebuilds successfully.
   Physical action clicks and wider command/ribbon synchronization remain to be
   verified; this change does not establish full UI behavior parity.
+
+- Original selection actions: native drawing now exposes select_all_editable,
+  replacing selection with visible entities on unlocked layers as original app.js
+  does. Preview wires selectall and clear-selection data-actions, refreshes explorer
+  selection/summary state and invalidates GPU content. Regression verifies prior
+  selection replacement, hidden entity exclusion and locked layer exclusion;
+  rebuilt kestrel_native_layers CTest passes and FocoKestrelPreview builds.
+  Clear-selection's original tool-cancellation behavior and inspector updates
+  remain pending with the broader native application controller port.

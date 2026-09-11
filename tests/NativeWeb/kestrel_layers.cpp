@@ -48,6 +48,10 @@ int main() {
       {{"id","visible"},{"layer","architecture"},{"hidden",false}},
       {{"id","hidden"},{"layer","architecture"},{"hidden",true}},
       {{"id","other"},{"layer","openings"},{"hidden",false}}};
+    model.data["layers"][2]["locked"]=true;
+    model.selection={"obsolete"};model.select_all_editable();
+    require(model.selection.size()==1 && model.selection.contains("visible"));
+    model.data["layers"][2]["locked"]=false;
     model.selection={"other"};
     const auto current=model.data["currentLayer"];
     d.dispatch(panel.entries()[1].row,"click",0,0,0,0,{},0,{true});

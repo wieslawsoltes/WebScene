@@ -243,6 +243,13 @@ public:
             else if (*action == "zoomin") viewport->camera.zoom_at(1.35);
             else if (*action == "zoomout") viewport->camera.zoom_at(1.0/1.35);
             else if (*action == "grid") viewport->grid_enabled = !viewport->grid_enabled;
+            else if (*action == "selectall" || *action == "clear-selection") {
+              if(*action=="selectall") model.select_all_editable();else model.selection.clear();
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+              if(layers) layers->refresh();
+#endif
+              view->refresh();
+            }
             else if (action->starts_with("view-")) viewport->camera.set_view(action->substr(5));
             else return;
             gpu_dirty = true;
