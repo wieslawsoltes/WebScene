@@ -1533,3 +1533,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Disposal from input prevents the subsequent change dispatch. Native text tests
   cover these behaviors and pass. Foco forwards the four navigation keys.
   Multiple selection, native popup interaction and typeahead remain unfinished.
+
+- Hosted select keyboard verification: navigation exercise now uses Foco key
+  events (Home, Down, Up) for original view/style controls instead of setting
+  values and dispatching change manually. It asserts focus, handled events, front
+  camera orientation, iso selection and shaded-edges renderer state, followed by
+  a new GPU image. Rebuilt preview exits 0 with success marker and GPU serial 2;
+  inspected /tmp/kestrel-keyboard-select.png including focused control styling.
+  This verifies injected host events, not physical keyboard or popup operation.

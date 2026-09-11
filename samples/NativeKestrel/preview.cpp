@@ -374,12 +374,19 @@ public:
           if(viewport->camera.revision!=cancelled_revision)
             throw std::runtime_error("Navigation continued after cancellation");
           const auto view_select=view->document.find("view-select");
-          view->document.set_value(view_select,"front");view->document.dispatch(view_select,"change");
+          const auto press_key=[&](foco::key key) {
+            foco::key_event event;event.value=key;view->key_event_received(event);
+            if(!event.handled) throw std::runtime_error("Hosted select key was not handled");
+          };
+          view->document.focus(view_select);
+          if(view->document.focused()!=view_select) throw std::runtime_error("View select could not receive focus");
+          press_key(foco::key::home);press_key(foco::key::down);press_key(foco::key::down);
           if(std::abs(viewport->camera.pitch)>1e-10)
             throw std::runtime_error("View dropdown did not update native camera");
-          view->document.set_value(view_select,"iso");view->document.dispatch(view_select,"change");
+          press_key(foco::key::up);
+          if(view->document.value(view_select)!="iso") throw std::runtime_error("View select keyboard navigation failed");
           const auto style_select=view->document.find("style-select");
-          view->document.set_value(style_select,"shaded-edges");view->document.dispatch(style_select,"change");
+          view->document.focus(style_select);press_key(foco::key::home);press_key(foco::key::down);
           if(viewport->options.style!=kestrel::display_style::shaded_edges)
             throw std::runtime_error("Style dropdown did not update native renderer");
           navigation_serial=gpu_serial;navigation_exercised=true;
