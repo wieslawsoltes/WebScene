@@ -1342,3 +1342,15 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Next extend the native adapter's consumer lifetime and dependency callbacks
   using existing lease ABI, then retry same-tick publication with synchronization.
   Do not remove the rejection alone: that would permit unfinished GPU sampling.
+
+- Native GPU fence handoff: make_gpu_image now validates producer dependencies,
+  retains them in consumers, and exposes dependency_count/get_metal_event to Foco.
+  Required waits without valid dependencies are rejected. Viewport poll has an
+  explicit GPU-wait option (completed-only remains default); preview uses it and
+  publishes again immediately after submit so resized frames need not wait an
+  extra host tick. Rebuilt and ran 1,000-entity pan: 360 image publications, 359
+  compositor presentations, zero skipped; 358 valid Metal timestamps, aggregate
+  59.8321 FPS, p95 16.666833 ms, maximum 33.333542 ms (one doubled interval).
+  /tmp/kestrel-native-fences.log and /tmp/kestrel-native-fences.jsonl. This verifies
+  actual hosted fence import without the earlier adapter rejection; focused
+  dependency lifetime tests and live-resize deadlines remain to be verified.

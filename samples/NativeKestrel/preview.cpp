@@ -77,12 +77,18 @@ class preview_app final : public foco::application {
       viewport->resize(w, h);
       gpu_width = w; gpu_height = h; gpu_dirty = true;
     }
-    if (auto image = viewport->poll()) {
-      ++gpu_serial;
-      view->set_gpu_image(node, w, h, gpu_serial,
-          webscene::foco_host::make_gpu_image(node, gpu_serial, std::move(image)));
+    const auto publish = [&] {
+      if (auto image = viewport->poll(true)) {
+        ++gpu_serial;
+        view->set_gpu_image(node, w, h, gpu_serial,
+            webscene::foco_host::make_gpu_image(node, gpu_serial, std::move(image)));
+      }
+    };
+    publish();
+    if (gpu_dirty && viewport->submit(model)) {
+      gpu_dirty = false;
+      publish(); // Foco waits on the retained producer fences before sampling.
     }
-    if (gpu_dirty && viewport->submit(model)) gpu_dirty = false;
   }
 #endif
   void select_tab(size_t selected) {

@@ -83,13 +83,13 @@ public:
       throw std::runtime_error("Viewport submission produced no snapshot");
     return true;
   }
-  std::shared_ptr<const webscene_gpu_image_lease_v3> poll() {
+  std::shared_ptr<const webscene_gpu_image_lease_v3> poll(bool gpu_waits = false) {
     surface.process_events();
     if (surface.failed())
       throw std::runtime_error("Viewport GPU failed");
     if (!pending)
       return {};
-    auto image = pending->resolve();
+    auto image = gpu_waits ? pending->resolve_with_gpu_waits() : pending->resolve();
     if (image)
       pending.reset();
     return image;
