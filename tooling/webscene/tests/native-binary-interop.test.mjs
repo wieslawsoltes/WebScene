@@ -19,12 +19,15 @@ test('native invoker is a bidirectional ABI 3 binary adapter', async () => {
 });
 
 test('native engine publishes only the versioned leased interop surface', async () => {
-  const [header, exports] = await Promise.all([
+  const [header, exports, compiledHeader] = await Promise.all([
     readFile(new URL(
       '../../../experiments/WebScene.NativeEngine.Probe/native/webscene_native_engine.h',
       import.meta.url), 'utf8'),
     readFile(new URL(
       '../../../experiments/WebScene.NativeEngine.Probe/native/webscene_native_engine.exports',
+      import.meta.url), 'utf8'),
+    readFile(new URL(
+      '../../../experiments/WebScene.NativeEngine.Probe/native/webscene/compiled_document.hpp',
       import.meta.url), 'utf8')
   ]);
 
@@ -47,11 +50,20 @@ test('native engine publishes only the versioned leased interop surface', async 
     'webscene_engine_enable_file_service_v1',
     'webscene_engine_take_file_request_v1',
     'webscene_engine_complete_file_request_v1',
+    'webscene_file_request_release_v1',
     'webscene_engine_load_compiled_document_v1',
+    'webscene_engine_register_compiled_document_v1',
     'webscene_engine_set_work_available_callback_v1'
   ]);
-  for (const [symbol] of header.matchAll(/\bwebscene_(?:engine|interop)_[a-z0-9_]+_v[12]\b/g)) {
-    assert.ok(independentHostApis.has(symbol), `Retired interop ABI exported: ${symbol}`);
+  for (const symbol of independentHostApis) {
+    assert.match(header + compiledHeader, new RegExp(`\\b${symbol}\\b`));
+    assert.match(exports, new RegExp(`_${symbol}\\b`));
+  }
+  for (const [name, source] of [['header', header + compiledHeader], ['exports', exports]]) {
+    const legacySymbols = [...source.matchAll(
+      /\b_?(webscene_(?:engine|interop)_[a-z0-9_]+_v[12])\b/g
+    )].map(match => match[1]).filter(symbol => !independentHostApis.has(symbol));
+    assert.deepEqual(legacySymbols, [], `${name} must not expose legacy interop`);
   }
   assert.match(
     header,
