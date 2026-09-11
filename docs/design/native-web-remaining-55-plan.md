@@ -1612,3 +1612,15 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   rebuilt/reran shared generated-document CSS suite after parentless :root fix;
   linked/embedded/inline CSS test passes. Physical command interaction and full
   layer manager remain separate gaps.
+
+- Native viewport click selection: added screen-space segment distance/depth
+  picking, basic multiline text bounds and shaded mesh-face depth, with browser
+  distance thresholds/tie-breaking. Selection handles visible groups, modifier
+  toggling, Ctrl/Meta group bypass and empty-click clearing. Native tests cover
+  lines, tolerance, visibility, groups and empty clicks and pass. Primary pointer
+  clicks invoke picking; movement over four pixels cancels click selection.
+  Hosted test exposed original canvas pointer-events:none, so viewport itself
+  is accepted as the authored click target. Rebuilt hosted --exercise-picking
+  exits 0 and capture /tmp/kestrel-native-picked.png shows selected count 1 and
+  updated drawing. Spatial indexing, rich/composed text hit bounds, dedicated
+  mesh/text picking tests, drag-box selection, grips and hover remain incomplete.

@@ -14,6 +14,7 @@ static bool exercise_layer_filter=false;
 static bool exercise_objects=false;
 static bool exercise_navigation=false;
 static bool exercise_theme=false;
+static bool exercise_picking=false;
 static bool benchmark_pan=false;
 static bool benchmark_courtyard=false;
 static bool benchmark_large=false;
@@ -73,6 +74,9 @@ class preview_app final : public foco::application {
   double pan_tick_ms{}, pan_tick_max_ms{};
   bool gpu_dirty{true}, panning{}, orbiting{};
   float pan_x{}, pan_y{};
+  bool selection_pressed{};
+  float selection_x{},selection_y{};
+  webscene::native_web::input_modifiers selection_modifiers;
   void fit_drawing() {
     if(!viewport)return;
     std::vector<kestrel::vec3> points;
@@ -317,12 +321,17 @@ public:
         }));
     handlers.push_back(view->document.on(view->document.find("viewport"), "pointerdown",
         [this](auto &event) {
-          if (!viewport || !(event.buttons & 4u)) return;
+          if(!viewport)return;
+          if((event.buttons&1u) && (event.target==view->document.find("viewport") || event.target==view->document.find("scene") || event.target==view->document.find("overlay"))) {
+            selection_pressed=true;selection_x=event.client_x;selection_y=event.client_y;selection_modifiers=event.modifiers;
+          }
+          if(!(event.buttons&4u))return;
           panning = true; orbiting = event.modifiers.shift; pan_x = event.client_x; pan_y = event.client_y;
           event.prevent_default();
         }));
     handlers.push_back(view->document.on(view->document.root(), "pointermove",
         [this](auto &event) {
+          if(selection_pressed && std::hypot(event.client_x-selection_x,event.client_y-selection_y)>4)selection_pressed=false;
           if (!panning || !viewport) return;
           if (!(event.buttons & 4u)) { panning = false; return; }
           if(orbiting) {
@@ -332,6 +341,18 @@ public:
           pan_x = event.client_x; pan_y = event.client_y;
           gpu_dirty = true;
         }));
+    handlers.push_back(view->document.on(view->document.root(),"pointerup",[this](auto& event) {
+      if(!std::exchange(selection_pressed,false) || !viewport)return;
+      const auto area=view->document.bounds(view->document.find("scene"));
+      const bool control=selection_modifiers.control || selection_modifiers.meta;
+      kestrel::select_at(model,viewport->camera,viewport->options.style,event.client_x-area.x,event.client_y-area.y,
+          selection_modifiers.shift || control,control);
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+      if(layers)layers->refresh();
+#endif
+      gpu_dirty=true;view->refresh();
+    }));
+    handlers.push_back(view->document.on(view->document.root(),"pointercancel",[this](auto&){selection_pressed=false;}));
     for (auto type : {"pointerup", "pointercancel"})
       handlers.push_back(view->document.on(view->document.root(), type,
           [this](auto &) { panning = false; }));
@@ -445,6 +466,25 @@ public:
             throw std::runtime_error("Panel toggle did not restore viewport width");
           navigation_serial=gpu_serial;navigation_exercised=true;
         }
+        if(exercise_picking && viewport && gpu_serial) {
+          const auto area=view->document.bounds(view->document.find("scene"));
+          bool found=false;
+          for(const auto& entity:model.data["entities"]) {
+            if(!model.visible(entity))continue;
+            const auto geometry=kestrel::geo::geometry(entity);
+            for(const auto& segment:geometry.segments) {
+              const auto point=viewport->camera.project((segment[0]+segment[1])*.5);
+              if(point.x<30 || point.x>area.width-30 || point.y<50 || point.y>area.height-40)continue;
+              foco::pointer_event click;click.position={float(view->bounds().x+area.x+point.x),float(view->bounds().y+area.y+point.y)};
+              click.kind=foco::pointer_event_kind::pressed;click.buttons=1;view->pointer_event_received(click);
+              click.kind=foco::pointer_event_kind::released;click.buttons=0;view->pointer_event_received(click);
+              found=!model.selection.empty();break;
+            }
+            if(found)break;
+          }
+          if(!found)throw std::runtime_error("Hosted geometry click did not select an entity");
+          exercise_picking=false;std::cout<<"Hosted geometry selection passed\n";
+        }
         if(exercise_theme && viewport && gpu_serial) {
           const auto find_theme=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
             if(view->document.attribute(node,"data-action")=="theme")return node;
@@ -525,6 +565,7 @@ int main(int argc, char **argv) {
   for(int i=1;i<argc;++i) {
     if(std::string_view(argv[i])=="--capture" && i+1<argc) capture_path=argv[++i];
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
+    else if(std::string_view(argv[i])=="--exercise-picking") exercise_picking=true;
     else if(std::string_view(argv[i])=="--exercise-theme") exercise_theme=true;
     else if(std::string_view(argv[i])=="--exercise-failure") exercise_failure=true;
     else if(std::string_view(argv[i])=="--exercise-navigation") exercise_navigation=true;

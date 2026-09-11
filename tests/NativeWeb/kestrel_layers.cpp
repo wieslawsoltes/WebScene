@@ -2,11 +2,36 @@
 #include <webscene/shared_css.hpp>
 #include <iostream>
 import kestrel.drawing;
+import kestrel.render_data;
 import kestrel.examples;
 import kestrel.layer_panel;
 using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
+  {
+    kestrel::drawing model;kestrel::camera camera;camera.resize(800,600);
+    model.add("LINE",{{"points",{{-50,0,0},{50,0,0}}}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();
+    auto point=camera.project({0,0,0});
+    kestrel::select_at(model,camera,kestrel::display_style::wireframe,point.x,point.y);
+    require(model.selection.contains(id));
+    kestrel::select_at(model,camera,kestrel::display_style::wireframe,point.x,point.y,true);
+    require(model.selection.empty());
+    require(!kestrel::pick(model,camera,kestrel::display_style::wireframe,point.x,point.y+10));
+    model.data["entities"].back()["group"]="pair";
+    model.add("LINE",{{"points",{{-50,30,0},{50,30,0}}},{"group","pair"}});
+    kestrel::select_at(model,camera,kestrel::display_style::wireframe,point.x,point.y);
+    require(model.selection.size()==2);
+    kestrel::select_at(model,camera,kestrel::display_style::wireframe,point.x,point.y,false,true);
+    require(model.selection.size()==1 && model.selection.contains(id));
+    kestrel::select_at(model,camera,kestrel::display_style::wireframe,0,0,true);
+    require(model.selection.size()==1);
+    kestrel::select_at(model,camera,kestrel::display_style::wireframe,0,0);
+    require(model.selection.empty());
+    model.data["entities"][0]["hidden"]=true;
+
+    require(!kestrel::pick(model,camera,kestrel::display_style::wireframe,point.x,point.y));
+  }
   {
     kestrel::drawing drawing;
     drawing.data["layers"][0]["visible"]=false;

@@ -216,4 +216,81 @@ inline render_data build_grid(const camera &camera, vec3 origin,
                   render_color("#a16169", false, .55f), .9f, 0);
   return data;
 }
+// Native equivalent of app.js hit/selectAt. Spatial indexing can be added
+// without changing the screen-space distance and depth ordering below.
+struct pick_result {std::string id;double distance,depth;};
+inline std::optional<pick_result> pick(const drawing& model,const camera& camera,
+    display_style style,double x,double y) {
+  std::optional<pick_result> best;
+  const auto segment_distance=[&](vec3 a,vec3 b) {
+    const auto dx=b.x-a.x,dy=b.y-a.y,length=dx*dx+dy*dy;
+    const auto t=length>0?std::clamp(((x-a.x)*dx+(y-a.y)*dy)/length,0.0,1.0):0;
+    return std::pair{std::hypot(x-a.x-t*dx,y-a.y-t*dy),a.z*(1-t)+b.z*t};
+  };
+  const auto inside=[&](const auto& points) {
+    bool result=false;
+    for(size_t i=0,j=points.size()-1;i<points.size();j=i++) {
+      const auto a=points[i],b=points[j];
+      if((a.y>y)!=(b.y>y) && x<(b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x) result=!result;
+    }
+    return result;
+  };
+  for(const auto& entity:model.data["entities"]) {
+    if(!model.visible(entity))continue;
+    const auto geometry=geo::geometry(entity);
+    double distance=std::numeric_limits<double>::infinity(),depth=1;
+    const auto& segments=entity["type"]=="MESH" && style==display_style::wireframe?
+      geometry.wire_segments:geometry.segments;
+    for(const auto& segment:segments) {
+      auto [d,z]=segment_distance(camera.project(segment[0]),camera.project(segment[1]));
+      if(d<distance){distance=d;depth=z;}
+    }
+    for(const auto& text:geometry.texts) {
+      const auto axes=geo::axes_for_text(text);const auto position=geo::point(text.at("position"));
+      const auto height=text.value("height",10.0);
+      const auto content=text.value("text",std::string{});size_t lines=1,longest=0,current=0;
+      for(char c:content){if(c=='\n'){longest=std::max(longest,current);current=0;++lines;}else if((static_cast<unsigned char>(c)&0xc0)!=0x80)++current;}
+      longest=std::max(longest,current);
+      const auto width=std::max(height,double(longest)*height*.66);
+      const auto align=text.value("align",std::string("left"));
+      const auto left=align=="center"?-width/2:align=="right"?-width:0;
+      const auto bottom=-height*.25-double(lines-1)*height*1.35,top=height*.9;
+      std::array<vec3,4> quad{camera.project(position+axes.x*left+axes.y*bottom),
+        camera.project(position+axes.x*(left+width)+axes.y*bottom),
+        camera.project(position+axes.x*(left+width)+axes.y*top),camera.project(position+axes.x*left+axes.y*top)};
+      bool hit=inside(quad);for(size_t i=0;i<4;++i)hit=hit || segment_distance(quad[i],quad[(i+1)%4]).first<4;
+      if(hit){distance=2;depth=camera.project(position).z;}
+    }
+    if(distance>8 && entity["type"]=="MESH" && style!=display_style::wireframe) {
+      double face_depth=std::numeric_limits<double>::infinity();
+      for(const auto& triangle:geometry.triangles) {
+        std::array<vec3,3> face;for(size_t i=0;i<3;++i)face[i]=camera.project(triangle.points[i]);
+        if(!inside(face))continue;
+        const auto a=face[0],b=face[1],c=face[2];
+        const auto den=(b.y-c.y)*(a.x-c.x)+(c.x-b.x)*(a.y-c.y);if(std::abs(den)<1e-10)continue;
+        const auto u=((b.y-c.y)*(x-c.x)+(c.x-b.x)*(y-c.y))/den;
+        const auto v=((c.y-a.y)*(x-c.x)+(a.x-c.x)*(y-c.y))/den;
+        const auto z=u*a.z+v*b.z+(1-u-v)*c.z;if(z>=0 && z<=1)face_depth=std::min(face_depth,z);
+      }
+      if(std::isfinite(face_depth)){distance=7.5;depth=face_depth;}
+    }
+    if(distance<=9 && (!best || distance<best->distance-.3 ||
+        (std::abs(distance-best->distance)<.3 && depth<best->depth)))
+      best=pick_result{entity.at("id").get<std::string>(),distance,depth};
+  }
+  return best;
+}
+inline void select_at(drawing& model,const camera& camera,display_style style,
+    double x,double y,bool add=false,bool ignore_group=false) {
+  const auto hit=pick(model,camera,style,x,y);
+  if(!hit){if(!add)model.selection.clear();return;}
+  std::vector<std::string> ids{hit->id};
+  for(const auto& e:model.data["entities"])if(e.at("id")==hit->id && !ignore_group && e.contains("group") && !e["group"].is_null() && e["group"]!="") {
+    ids.clear();for(const auto& other:model.data["entities"])if(other.value("group",json{})==e["group"] && model.visible(other))ids.push_back(other.at("id").get<std::string>());break;
+  }
+  const bool remove=add && model.selection.contains(hit->id);
+  if(!add)model.selection.clear();
+  for(const auto& id:ids)if(remove)model.selection.erase(id);else model.selection.insert(id);
+}
+
 } // namespace kestrel
