@@ -2264,3 +2264,14 @@ existing Line creation/typed-input/Undo regression pass, GPU serial 2. These
 checks do not yet assert a rendered preview: dedicated motion/capture, clipping
 for distant endpoints, stroke command verification and preview latency remain
 required. Snapping and dynamic dimension labels remain open.
+
+### Bounded Line preview clipping
+
+Moved preview dash expansion into the native render-data module. Parametric
+viewport clipping precedes dash generation, preserving the original 5/4 phase
+while making command count depend on visible length rather than endpoint distance.
+Native render-data tests pass for a two-billion-unit segment, edge phase,
+fully offscreen and zero-length segments. Floating comparisons use a 1e-9
+tolerance. Preview calls this shared helper; hosted rebuild and visual motion
+verification remain required. This closes excessive offscreen dash generation,
+not the broader preview fidelity or performance acceptance gates.

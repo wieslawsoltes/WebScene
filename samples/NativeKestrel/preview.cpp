@@ -182,13 +182,9 @@ class preview_app final : public foco::application {
       const auto a=viewport->camera.project({point[0],point[1],point[2]});
       const auto b=viewport->camera.project(*line_pointer);
       if(a.z>=0 && a.z<=1 && b.z>=0 && b.z<=1) {
-        const auto dx=b.x-a.x,dy=b.y-a.y,length=std::hypot(dx,dy);
         const uint32_t color=viewport->options.light_theme?0x16869cff:0x8ce0e5ff;
-        for(double distance=0;distance<length;distance+=9) {
-          const auto finish=std::min(distance+5,length);
-          view->document.stroke_line(overlay,a.x+dx*distance/length,a.y+dy*distance/length,
-              a.x+dx*finish/length,a.y+dy*finish/length,1.45f,color);
-        }
+        for(const auto& dash:kestrel::preview_dashes(a.x,a.y,b.x,b.y,w,h))
+          view->document.stroke_line(overlay,dash[0],dash[1],dash[2],dash[3],1.45f,color);
       }
     }
     overlay_dirty=false;

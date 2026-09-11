@@ -14,6 +14,32 @@ export import kestrel.geometry;
 export import kestrel.camera;
 
 export namespace kestrel {
+// Clip before dash expansion so work scales with the viewport, not world extent.
+inline std::vector<std::array<double,4>> preview_dashes(double x,double y,double end_x,double end_y,double width,double height) {
+  for(auto v:{x,y,end_x,end_y,width,height})if(!std::isfinite(v))return {};
+  if(width<=0 || height<=0)return {};
+  const auto dx=end_x-x,dy=end_y-y,length=std::hypot(dx,dy);
+  if(!std::isfinite(length) || length==0)return {};
+  double enter=0,leave=1;
+  const auto clip=[&](double p,double q) {
+    if(p==0)return q>=0;
+    const auto r=q/p;
+    if(p<0)enter=std::max(enter,r);else leave=std::min(leave,r);
+    return enter<=leave;
+  };
+  if(!clip(-dx,x) || !clip(dx,width-x) || !clip(-dy,y) || !clip(dy,height-y))return {};
+  const auto first=enter*length,last=leave*length;
+  std::vector<std::array<double,4>> result;
+  // Reduce phase once; repeated additions stay at viewport-sized magnitudes.
+  const auto phase=std::fmod(first,9.0);
+  for(double offset=-phase;offset<last-first;offset+=9) {
+    const auto a=std::max(0.0,offset),b=std::min(last-first,offset+5);
+    if(b<=a)continue;
+    result.push_back({x+dx*enter+dx/length*a,y+dy*enter+dy/length*a,
+                      x+dx*enter+dx/length*b,y+dy*enter+dy/length*b});
+  }
+  return result;
+}
 // Matches renderer.js line-instance and triangle-vertex shader layouts.
 struct line_instance {
   std::array<float, 3> start, end;

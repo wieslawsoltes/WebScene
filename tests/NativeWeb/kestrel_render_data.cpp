@@ -3,6 +3,18 @@
 #include <stdexcept>
 import kestrel.render_data;
 int main() {
+  {
+    const auto d=kestrel::preview_dashes(-1000000000,50,1000000000,50,100,100);
+    if(d.empty() || d.size()>13)throw std::runtime_error("Distant preview not bounded by viewport");
+    for(const auto& line:d)if(line[0]<-.001 || line[2]>100.001 || line[1]!=50 || line[3]!=50)
+      throw std::runtime_error("Preview escaped viewport");
+    const auto phase=kestrel::preview_dashes(-2,5,20,5,10,10);
+    if(phase.size()!=2 || std::abs(phase[0][0])>1e-9 || std::abs(phase[0][2]-3)>1e-9 || std::abs(phase[1][0]-7)>1e-9 || std::abs(phase[1][2]-10)>1e-9)
+      throw std::runtime_error("Clipping shifted dash phase");
+    if(!kestrel::preview_dashes(-2,-2,-2,20,10,10).empty() || !kestrel::preview_dashes(1,1,1,1,10,10).empty())
+      throw std::runtime_error("Invisible preview produced commands");
+  }
+
   kestrel::render_data data;
   data.origin = {1e12, 1e12, 1e12};
   data.add_line({data.origin + kestrel::vec3{.25, .5, .75},
