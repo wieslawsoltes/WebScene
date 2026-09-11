@@ -2309,3 +2309,15 @@ passes horizontal/vertical/tie, negative grid tie and negative polar tie cases.
 This is a reusable native helper only: original status toggles, Shift tracking,
 shared preview/commit integration and object-snap candidate selection remain to
 be connected. No snapping capability is claimed in the running app yet.
+
+### Shared pointer constraint path and Shift wiring
+
+Native Line preview reprojection and pointer commit now use drafting_pointer,
+which applies the tested native ortho constraint when Shift is held. Pointer
+modifiers update state, and keydown/keyup modifier changes invalidate the overlay
+for stationary-pointer feedback. Typed coordinates remain explicit and bypass
+pointer constraints as in the original app. Foco build and existing hosted Line,
+camera alignment and cleanup regressions pass (GPU serial 2). A dedicated hosted
+Shift press/release/commit assertion is still required. Grid/polar/status toggles
+are not wired yet; original status-toggles HTML is generated in upstream app.js
+and needs a predefined compiled template. Object snaps remain separate work.

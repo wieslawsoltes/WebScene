@@ -70,6 +70,7 @@ class preview_app final : public foco::application {
   kestrel::drawing model;
   kestrel::line_command line_tool{model};
   bool line_active{};
+  bool drafting_shift{};
   std::optional<kestrel::vec3> line_pointer;
   std::optional<std::array<double,2>> line_pointer_client;
   bool overlay_dirty{};
@@ -150,11 +151,19 @@ class preview_app final : public foco::application {
     }
     viewport->camera.fit(points);gpu_dirty=true;
   }
+  std::optional<kestrel::vec3> drafting_pointer(double x,double y) {
+    auto point=viewport->camera.unproject(x,y,0);
+    if(!point)return {};
+    std::optional<std::array<double,3>> base;
+    if(!line_tool.points().empty())base=line_tool.points().back();
+    const auto result=kestrel::constrain_drafting_point({point->x,point->y,point->z},base,false,100,drafting_shift,false,15);
+    return kestrel::vec3{result[0],result[1],result[2]};
+  }
   void redraw_overlay(uint32_t w,uint32_t h) {
     if(line_active && line_pointer_client) {
       const auto area=view->document.bounds(view->document.find("scene"));
       const auto x=(*line_pointer_client)[0]-area.x,y=(*line_pointer_client)[1]-area.y;
-      line_pointer=(x>=0 && y>=0 && x<=area.width && y<=area.height)?viewport->camera.unproject(x,y,0):std::nullopt;
+      line_pointer=(x>=0 && y>=0 && x<=area.width && y<=area.height)?drafting_pointer(x,y):std::nullopt;
     }
 
         const auto overlay=view->document.find("overlay");
@@ -373,6 +382,9 @@ public:
 #endif
       gpu_dirty=true;event.prevent_default();event.stop_propagation();
     }));
+    for(auto type:{"keydown","keyup"})handlers.push_back(view->document.on(view->document.root(),type,[this](auto& event) {
+      if(drafting_shift!=event.modifiers.shift) {drafting_shift=event.modifiers.shift;overlay_dirty=true;}
+    }));
     handlers.push_back(view->document.on(view->document.root(),"keydown",[this](auto& event) {
       if(!viewport)return;
       for(auto id:{"modal","command-palette"})if(auto dialog=view->document.find(id))
@@ -494,7 +506,8 @@ public:
           if((event.buttons&1u) && (event.target==view->document.find("viewport") || event.target==view->document.find("scene") || event.target==view->document.find("overlay"))) {
             if(line_active) {
               const auto area=view->document.bounds(view->document.find("scene"));
-              if(auto point=viewport->camera.unproject(event.client_x-area.x,event.client_y-area.y,0)) {
+              drafting_shift=event.modifiers.shift;
+              if(auto point=drafting_pointer(event.client_x-area.x,event.client_y-area.y)) {
                 try {
                   if(line_tool.point({point->x,point->y,point->z}) && line_tool.points().size()>1)
                     last_drafting_point={point->x,point->y,point->z};
@@ -518,10 +531,11 @@ public:
     handlers.push_back(view->document.on(view->document.root(), "pointermove",
         [this](auto &event) {
           if(line_active && viewport) {
+            drafting_shift=event.modifiers.shift;
             line_pointer_client=std::array<double,2>{event.client_x,event.client_y};
             const auto area=view->document.bounds(view->document.find("scene"));
             const auto x=event.client_x-area.x,y=event.client_y-area.y;
-            line_pointer=(x>=0 && y>=0 && x<=area.width && y<=area.height)?viewport->camera.unproject(x,y,0):std::nullopt;
+            line_pointer=(x>=0 && y>=0 && x<=area.width && y<=area.height)?drafting_pointer(x,y):std::nullopt;
             overlay_dirty=true;
           }
           if(selection_pressed) {
