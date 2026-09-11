@@ -27,11 +27,12 @@ public:
     refresh();
   }
   bool requires_host_frames() const noexcept override {
-    return input_refresh_pending_ || host_reduced_motion()!=reduced_motion_;
+    return input_refresh_pending_ || host_reduced_motion()!=reduced_motion_ || document.has_active_animations();
   }
-  bool advance_host_frame(double) override {
+  bool advance_host_frame(double timestamp_ms) override {
     if (!requires_host_frames()) return false;
     const auto previous = revision_;
+    document.advance_animations(timestamp_ms);
     refresh();
     return revision_ != previous;
   }

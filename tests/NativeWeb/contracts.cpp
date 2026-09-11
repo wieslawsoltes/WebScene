@@ -12,6 +12,25 @@ static int style_application_count = 0;
 int main() {
   using namespace webscene::native_web;
   {
+    document animated;
+    auto node=animated.element(animated.body(),"div");
+    rule base;base.inline_target=node;
+    base.declarations.push_back({false,+[](style& s) {s.set_opacity_transition(100);s.set_opacity(1);}});
+    animated.add_rule(std::move(base));animated.advance_animations(0);animated.render(100,100);
+    int ended=0;
+    auto subscription=animated.on(node,"transitionend",[&](event& e) {
+      check(e.property_name=="opacity","transition property metadata");++ended;
+    });
+    rule faded;faded.inline_target=node;
+    faded.declarations.push_back({false,+[](style& s) {s.set_opacity(0);}});
+    animated.add_rule(std::move(faded));animated.render(100,100);
+    check(animated.has_active_animations(),"compiled native transition starts");
+    animated.advance_animations(50);
+    check(animated.has_active_animations(),"transition remains active halfway");
+    animated.advance_animations(100);
+    check(!animated.has_active_animations() && ended==1,"transition completes on host clock");
+  }
+  {
     document motion;
     auto node=motion.element(motion.body(),"div");
     rule normal;normal.inline_target=node;

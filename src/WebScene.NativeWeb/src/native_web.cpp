@@ -222,7 +222,7 @@ subscription document::on(node_id node, std::string type,
   state_->listeners.emplace(id, listener{node, std::move(type), std::move(cb)});
   return subscription(state_, id);
 }
-bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y, uint32_t buttons) {
+bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y, uint32_t buttons, std::string property_name, float elapsed_time_seconds) {
   auto &n = state_->node(target);
   std::vector<node_id> path;
   for (auto *p = &n; p; p = p->parent)
@@ -232,6 +232,8 @@ bool document::dispatch(node_id target, std::string type, float client_x, float 
   e.client_y = client_y;
   e.delta_y = delta_y;
   e.buttons = buttons;
+  e.property_name = std::move(property_name);
+  e.elapsed_time_seconds = elapsed_time_seconds;
   for (auto id : path) {
     if (!state_->alive)
       return false;
@@ -305,6 +307,23 @@ void document::focus(node_id id) {
 node_id document::focused() const {
   state_->check();
   return state_->focus;
+}
+bool document::has_active_animations() const {
+  state_->check();return state_->dom.has_active_animations();
+}
+bool document::advance_animations(double timestamp_ms) {
+  state_->check();
+  if(!std::isfinite(timestamp_ms) || timestamp_ms<0)
+    throw std::invalid_argument("invalid animation timestamp");
+  state_->dom.signal_animation_frame(timestamp_ms);
+  const auto changed=state_->dom.advance_animations();
+  const auto events=state_->dom.take_transition_events();
+  for(const auto& event:events) {
+    if(!state_->alive) break;
+    if(state_->dom.find_by_native_id(event.node_id))
+      dispatch(event.node_id,event.type,0,0,0,0,event.property_name,event.elapsed_time_seconds);
+  }
+  return changed;
 }
 void document::set_reduced_motion(bool enabled) {
   state_->check();
@@ -617,6 +636,7 @@ const scene &document::render(float width, float height) {
     n.style.clip = x != overflow_mode::visible || y != overflow_mode::visible;
     n.style.scroll_x_enabled = x == overflow_mode::automatic || x == overflow_mode::scroll;
     n.style.scroll_y_enabled = y == overflow_mode::automatic || y == overflow_mode::scroll;
+    s.dom.update_style_animations(n);
     for (auto *c : n.children)
       self(self, *c, variables);
   };

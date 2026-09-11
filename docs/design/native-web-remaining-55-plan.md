@@ -886,3 +886,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   changing the machine's accessibility settings. Compiled animations/transitions,
   original Kestrel parity and presented 60fps validation remain unfinished; audit
   remains 31 distinct unsupported constructs.
+
+- Native animation clock integration: compiled document cascades now notify the
+  existing native animation machines, and document.advance_animations feeds their
+  monotonic host clock. Native transition events dispatch with property/elapsed
+  metadata. Foco views request host frames while animations remain active and
+  stop afterward. Native C++ style authoring exposes a linear opacity transition;
+  document tests verify start/midpoint/completion and transitionend, while hosted
+  tests verify frame demand ends at completion. Compiler suite also passes.
+  Compiler transition/keyframe syntax, richer timings, cancellation/disposal edge
+  cases and visual animation parity remain open. Audit stays at 31; this is clock
+  plumbing, not proof of Kestrel animation or presented 60fps behavior.

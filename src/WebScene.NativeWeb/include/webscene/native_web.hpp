@@ -68,6 +68,10 @@ public:
     return found == variables_.end() ? nullptr : &found->second;
   }
   void set_align_self(align_mode mode, bool specified = true) { value_.align_self = mode; value_.align_self_specified = specified; }
+  void set_opacity_transition(float duration_ms) {
+    auto &timing=value_.mutable_animations().opacity_transition;
+    timing={std::max(0.0f,duration_ms),0,0,0,1,1};
+  }
   void set_cursor(std::string value) { value_.mutable_textual().cursor=std::move(value); }
   void set_table_layout_fixed(bool fixed) { value_.table_layout_fixed = fixed; }
   void set_grid_full_columns(bool enabled) {
@@ -331,6 +335,8 @@ struct event {
   bool propagation_stopped{}, default_prevented{};
   float client_x{}, client_y{}, delta_y{};
   uint32_t buttons{};
+  std::string property_name;
+  float elapsed_time_seconds{};
   void stop_propagation() { propagation_stopped = true; }
   void prevent_default() { default_prevented = true; }
 };
@@ -388,13 +394,16 @@ public:
   // Returns false when a listener prevents the default action or disposes the
   // document.
   bool dispatch(node_id, std::string type, float client_x = 0,
-                float client_y = 0, float delta_y = 0, uint32_t buttons = 0);
+                float client_y = 0, float delta_y = 0, uint32_t buttons = 0,
+                std::string property_name = {}, float elapsed_time_seconds = 0);
   void pointer(std::string type, float x, float y, uint32_t buttons = 1);
   void wheel(float x, float y, float delta_y);
   void focus(node_id);
   void key(std::string_view key, bool shift = false);
   node_id focused() const;
   void set_reduced_motion(bool enabled);
+  bool advance_animations(double timestamp_ms);
+  bool has_active_animations() const;
   std::string cursor_at(float x, float y) const;
   void set_external_canvas(node_id, bool enabled);
   void clear_canvas(node_id);
