@@ -23,6 +23,18 @@ int main() {
     require(model.data["layers"][0]["locked"].get<bool>());
     d.dispatch(panel.entries()[0].row,"click");require(model.data["currentLayer"]=="0");
     model.undo();panel.refresh();require(!model.data["layers"][0]["locked"].get<bool>());
+    model.data["entities"]={
+      {{"id","visible"},{"layer","architecture"},{"hidden",false}},
+      {{"id","hidden"},{"layer","architecture"},{"hidden",true}},
+      {{"id","other"},{"layer","openings"},{"hidden",false}}};
+    model.selection={"other"};
+    const auto current=model.data["currentLayer"];
+    d.dispatch(panel.entries()[1].row,"click",0,0,0,0,{},0,{true});
+    require(model.selection.size()==1 && model.selection.contains("visible"));
+    require(model.data["currentLayer"]==current);
+    model.data["layers"][1]["visible"]=false;
+    d.dispatch(panel.entries()[1].row,"click",0,0,0,0,{},0,{true});
+    require(model.selection.empty());
     auto obsolete=panel.entries()[0].row;
     panel.refresh();
     bool removed=false;try {d.bounds(obsolete);} catch(const std::invalid_argument&) {removed=true;}

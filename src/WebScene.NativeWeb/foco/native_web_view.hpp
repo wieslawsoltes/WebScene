@@ -135,11 +135,16 @@ public:
   }
   void pointer_event_received(foco::pointer_event &e) override {
     if(document.disposed()) {refresh();return;}
+    const webscene::native_web::input_modifiers modifiers{
+      foco::has_modifier(e.modifiers,foco::key_modifiers::shift),
+      foco::has_modifier(e.modifiers,foco::key_modifiers::control),
+      foco::has_modifier(e.modifiers,foco::key_modifiers::alt),
+      foco::has_modifier(e.modifiers,foco::key_modifiers::platform)};
     pointer_position_=foco::point{e.position.x-bounds().x,e.position.y-bounds().y};
     update_cursor();
     if(e.kind==foco::pointer_event_kind::wheel){
       document.wheel(e.position.x-bounds().x,e.position.y-bounds().y,
-                     -e.wheel_delta*(e.wheel_is_precise?1.f:48.f));
+                     -e.wheel_delta*(e.wheel_is_precise?1.f:48.f),modifiers);
       request_input_refresh();e.handled=true;return;
     }
     auto type = e.kind == foco::pointer_event_kind::pressed    ? "pointerdown"
@@ -147,7 +152,7 @@ public:
                 : e.kind == foco::pointer_event_kind::released ? "pointerup"
                                                                : "pointermove";
     document.pointer(type, e.position.x - bounds().x,
-                     e.position.y - bounds().y, e.buttons);
+                     e.position.y - bounds().y, e.buttons,modifiers);
     request_input_refresh();
     e.handled = true;
   }

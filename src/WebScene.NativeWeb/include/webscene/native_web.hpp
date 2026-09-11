@@ -336,6 +336,7 @@ struct rule {
   float min_height{}, max_height{1e9f};
   std::optional<bool> reduced_motion;
 };
+struct input_modifiers {bool shift{},control{},alt{},meta{};};
 struct event {
   std::string type;
   node_id target{}, current_target{};
@@ -344,6 +345,7 @@ struct event {
   uint32_t buttons{};
   std::string property_name;
   float elapsed_time_seconds{};
+  input_modifiers modifiers;
   void stop_propagation() { propagation_stopped = true; }
   void prevent_default() { default_prevented = true; }
 };
@@ -419,9 +421,10 @@ public:
   // document.
   bool dispatch(node_id, std::string type, float client_x = 0,
                 float client_y = 0, float delta_y = 0, uint32_t buttons = 0,
-                std::string property_name = {}, float elapsed_time_seconds = 0);
-  void pointer(std::string type, float x, float y, uint32_t buttons = 1);
-  void wheel(float x, float y, float delta_y);
+                std::string property_name = {}, float elapsed_time_seconds = 0,
+                input_modifiers modifiers = {});
+  void pointer(std::string type, float x, float y, uint32_t buttons = 1, input_modifiers = {});
+  void wheel(float x, float y, float delta_y, input_modifiers = {});
   void focus(node_id);
   void key(std::string_view key, bool shift = false);
   node_id focused() const;

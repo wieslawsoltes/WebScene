@@ -1081,3 +1081,15 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Filtering, Shift-click selection, ribbon synchronization, object/property panels,
   complete app behavior and presented 60fps remain unfinished. The demo geometry
   is still a box, not the original full browser demonstration document.
+
+- Native modifier propagation and layer selection: native events now carry Shift,
+  Control, Alt and Meta state; Foco pointer/wheel routing preserves the host flags,
+  including the synthesized click on release. Shift-clicking an original layer row
+  replaces selection with visible entities on that layer without changing the
+  current layer, matching the pinned upstream explorer handler. Tests cover hidden
+  entities/layers, selection replacement and current-layer preservation. Hosted
+  motion/input tests verify all four flags on pointerdown, click and wheel; layer,
+  native contract, transition and compiler suites pass. This verifies injected Foco
+  input events, not a physical keyboard session. Keyboard-generated click modifier
+  coverage and broader keyboard input remain separate work; full app parity and
+  presented 60fps remain unfinished.

@@ -19,6 +19,27 @@ int main() {
   view->document.add_rule(std::move(reduced));
   root->measure({300,300});root->arrange({0,0,300,300});view->refresh();
   auto require=[](bool ok) {if(!ok) throw std::runtime_error("Foco reduced-motion propagation");};
+  {
+    auto input=foco::make_ref<webscene::foco_host::view>();
+    auto button=input->document.element(input->document.body(),"button");
+    rule box;box.inline_target=button;
+    box.declarations.push_back({false,+[](style& s){s.set_width({40,length_unit::pixels});s.set_height({30,length_unit::pixels});}});
+    input->document.add_rule(std::move(box));input->measure({100,100});input->arrange({0,0,100,100});
+    unsigned received=0;
+    auto capture=[&](auto& event) {
+      require(event.modifiers.shift && event.modifiers.control && event.modifiers.alt && event.modifiers.meta);
+      ++received;
+    };
+    auto down=input->document.on(button,"pointerdown",capture);
+    auto click=input->document.on(button,"click",capture);
+    auto wheel=input->document.on(button,"wheel",capture);
+    foco::pointer_event event;event.position={1,1};event.buttons=1;
+    event.modifiers=foco::key_modifiers::shift|foco::key_modifiers::control|foco::key_modifiers::alt|foco::key_modifiers::platform;
+    event.kind=foco::pointer_event_kind::pressed;input->pointer_event_received(event);
+    event.kind=foco::pointer_event_kind::released;event.buttons=0;input->pointer_event_received(event);
+    event.kind=foco::pointer_event_kind::wheel;event.wheel_delta=1;input->pointer_event_received(event);
+    require(received==3);
+  }
   require(view->document.bounds(node).width==40);
   const auto before=wakes;
   publisher.set_reduced_motion(true);

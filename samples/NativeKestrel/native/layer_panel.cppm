@@ -50,8 +50,13 @@ public:
         document_.attribute(node,"title",std::string(verb)+" layer");
         document_.attribute(node,"aria-label",std::string(verb)+" "+name);
       }
-      handlers_.push_back(document_.on(root,"click",[this,id](auto&) {
-        model_.data["currentLayer"]=id;refresh();if(changed_) changed_();
+      handlers_.push_back(document_.on(root,"click",[this,id](auto& event) {
+        if(event.modifiers.shift) {
+          model_.selection.clear();
+          for(const auto& entity:model_.data["entities"])
+            if(entity["layer"]==id && model_.visible(entity)) model_.selection.insert(entity["id"].get<std::string>());
+        } else model_.data["currentLayer"]=id;
+        refresh();if(changed_) changed_();
       }));
       for(auto [node,property]:{std::pair{visibility,"visible"},std::pair{lock,"locked"}})
         handlers_.push_back(document_.on(node,"click",[this,id,property](auto& event) {

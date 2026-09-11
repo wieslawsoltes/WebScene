@@ -84,5 +84,5 @@ above. Added `data-ref` attributes identify native binding targets. Four predefi
 templates represent visible/hidden and locked/unlocked states. Native
 `kestrel.layer_panel` binds drawing layers, counts and colors, handles current-layer
 selection and visibility/lock transactions, and removes subscriptions with rows.
-The shared/GPU diagnostic preview mounts this panel. Filtering, Shift-click
-selection, ribbon synchronization and the object explorer remain unported here.
+The shared/GPU diagnostic preview mounts this panel. Shift-click selects visible objects on the chosen layer. Filtering, ribbon
+synchronization and the object explorer remain unported here.

@@ -237,7 +237,7 @@ subscription document::on(node_id node, std::string type,
   state_->listeners.emplace(id, listener{node, std::move(type), std::move(cb)});
   return subscription(state_, id);
 }
-bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y, uint32_t buttons, std::string property_name, float elapsed_time_seconds) {
+bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y, uint32_t buttons, std::string property_name, float elapsed_time_seconds, input_modifiers modifiers) {
   auto &n = state_->node(target);
   std::vector<node_id> path;
   for (auto *p = &n; p; p = p->parent)
@@ -249,6 +249,7 @@ bool document::dispatch(node_id target, std::string type, float client_x, float 
   e.buttons = buttons;
   e.property_name = std::move(property_name);
   e.elapsed_time_seconds = elapsed_time_seconds;
+  e.modifiers = modifiers;
   for (auto id : path) {
     if (!state_->alive)
       return false;
@@ -356,14 +357,14 @@ std::string document::cursor_at(float x, float y) const {
     if(!current->style.textual().cursor.empty()) return current->style.textual().cursor;
   return "auto";
 }
-void document::wheel(float x, float y, float delta_y) {
+void document::wheel(float x, float y, float delta_y, input_modifiers modifiers) {
   state_->check();
   if (!std::isfinite(delta_y)) throw std::invalid_argument("non-finite wheel delta");
   auto *node = state_->dom.hit_test(state_->dom.body(), x, y);
   if (!node) return;
   std::vector<node_id> ancestors;
   for (auto *p = node; p; p = p->parent) ancestors.push_back(p->id);
-  if (!dispatch(node->id, "wheel", x, y, delta_y)) return;
+  if (!dispatch(node->id, "wheel", x, y, delta_y, 0, {}, 0, modifiers)) return;
   for (auto id : ancestors) {
     auto *current = state_->dom.find_by_native_id(id);
     if (!current || !current->style.scroll_y_enabled) continue;
@@ -372,7 +373,7 @@ void document::wheel(float x, float y, float delta_y) {
     if (current->scroll_top != before) break;
   }
 }
-void document::pointer(std::string type, float x, float y, uint32_t buttons) {
+void document::pointer(std::string type, float x, float y, uint32_t buttons, input_modifiers modifiers) {
   state_->check();
   auto *n = state_->dom.hit_test(state_->dom.body(), x, y);
   auto id = n ? n->id : 0;
@@ -401,7 +402,7 @@ void document::pointer(std::string type, float x, float y, uint32_t buttons) {
     state_->styles_dirty = true;
     state_->dom.mark_dirty();
   }
-  const bool default_allowed = !id || dispatch(id, type, x, y, 0, buttons);
+  const bool default_allowed = !id || dispatch(id, type, x, y, 0, buttons, {}, 0, modifiers);
   if (!state_->alive)
     return;
   if (type == "pointerdown" && default_allowed) {
@@ -417,7 +418,7 @@ void document::pointer(std::string type, float x, float y, uint32_t buttons) {
     state_->styles_dirty = true;
     state_->dom.mark_dirty();
     if (id && id == pressed && state_->dom.find_by_native_id(id))
-      dispatch(id, "click", x, y);
+      dispatch(id, "click", x, y, 0, buttons, {}, 0, modifiers);
   }
 }
 void document::key(std::string_view key, bool shift) {
