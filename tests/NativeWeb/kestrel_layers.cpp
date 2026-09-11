@@ -11,6 +11,14 @@ using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
   {
+    kestrel::drawing model;model.add("HATCH",{{"points",{{0,0,0},{3,0,0},{3,4,0}}},{"pattern","ANSI31"},{"spacing",10}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    const auto before=model.data;require(model.change_hatch_property("spacing",2.5));require(model.change_hatch_property("pattern","cross"));
+    require(model.find(id)->at("spacing")==2.5 && model.find(id)->at("pattern")=="cross");
+    require(!model.change_hatch_property("spacing",0));require(!model.change_hatch_property("pattern","invalid"));
+    require(model.undo()=="Edit pattern" && model.undo()=="Edit spacing" && model.data==before);
+  }
+  {
     kestrel::drawing model;model.add("SPLINE",{{"controlPoints",{{0,0,0},{2,3,0},{4,3,0},{6,0,0}}},{"degree",3}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
     const auto before=model.data;require(kestrel::geo::change_spline_degree(model,1.5));

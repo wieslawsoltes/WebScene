@@ -454,6 +454,14 @@ public:
     auto* entity=find(ids.front());if(!entity || entity->value("type",std::string{})!="POLYLINE")return false;
     return transaction("Edit closed",[&] {(*entity)["closed"]=closed;});
   }
+  bool change_hatch_property(const std::string& key,const json& value) {
+    if(key=="spacing") {if(!value.is_number() || !std::isfinite(value.get<double>()) || value.get<double>()<=0)return false;}
+    else if(key=="pattern") {if(value!="ANSI31" && value!="cross" && value!="solid")return false;}
+    else return false;
+    const auto ids=selected(true);if(ids.size()!=1)return false;
+    auto* entity=find(ids.front());if(!entity || entity->value("type",std::string{})!="HATCH")return false;
+    return transaction("Edit "+key,[&] {(*entity)[key]=value;});
+  }
   size_t erase_selected() {
     const auto ids=selected(true);
     if(ids.empty())return 0;

@@ -181,21 +181,22 @@ public:
           read("Group",group_name.empty()?group:group_name);
         }
         const bool spline=one->value("type",std::string{})=="SPLINE";
+        const bool hatch=one->value("type",std::string{})=="HATCH";
         const auto point_key=one->contains("controlPoints")?"controlPoints":"points";
-        if((spline || one->value("type",std::string{})=="POLYLINE") && one->contains(point_key) && (*one)[point_key].is_array()) {
+        if((spline || hatch || one->value("type",std::string{})=="POLYLINE") && one->contains(point_key) && (*one)[point_key].is_array()) {
           auto geometry=kestrel_layers::instantiate(document_,inspector,"inspector-geometry");inspector_roots_.push_back(geometry.named("root"));
           const auto info=[&](const std::string& label,const std::string& value) {
             auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");
             document_.set_text(row.named("label"),label);document_.set_text(row.named("value"),value);document_.attribute(row.named("value"),"title",value);
           };
           info("Vertices",std::to_string((*one)[point_key].size()));
-          if(!spline) {
+          if(!spline && !hatch) {
           auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-polyline-closed");
           document_.set_checked(row.named("input"),one->value("closed",false));
           handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input")](auto&) {
             model_.change_polyline_closed(document_.checked(node));refresh();if(changed_)changed_();
           }));
-          } else {
+          } else if(spline) {
             auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
             document_.set_text(row.named("label"),"Degree");document_.attribute(row.named("input"),"aria-label","Degree");document_.attribute(row.named("input"),"data-prop","degree");
             document_.attribute(row.named("input"),"step","1");document_.attribute(row.named("input"),"min","1");
@@ -215,6 +216,20 @@ public:
           const auto metric=[&](double value,const std::string& suffix) {std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(3)<<value<<" "<<model_.data.value("units",std::string("mm"))<<suffix;return text.str();};
           info("Length",metric(length,""));
           if(geo::closed(*one))info("Plan area",metric(std::abs(polygon_area(points)),"²"));
+          if(hatch) {
+            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-hatch");
+            document_.set_value(row.named("spacing"),std::to_string(one->value("spacing",10.0)));
+            document_.set_value(row.named("pattern"),one->value("pattern",std::string("ANSI31")));
+            for(auto key:{"spacing","pattern"})handlers_.push_back(document_.on(row.named(key),"change",[this,node=row.named(key),key=std::string(key)](auto&) {
+              const auto text=document_.value(node);
+              if(key=="pattern")model_.change_hatch_property(key,text);
+              else {double value=0;size_t used=0;bool valid=true;
+                try {value=std::stod(text,&used);}catch(const std::exception&){valid=false;}
+                if(valid && used==text.size())model_.change_hatch_property(key,value);
+              }
+              refresh();if(changed_)changed_();
+            }));
+          }
         }
         const bool point_entity=one->value("type",std::string{})=="POINT" && one->contains("position") && (*one)["position"].is_array();
         const auto entity_type=one->value("type",std::string{});

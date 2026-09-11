@@ -8,6 +8,12 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Hatch inspector: HATCH now shares Vertices/Length/Plan area measurements and exposes
+compiled Spacing and Pattern controls. Native edits validate positive finite
+spacing and supported pattern names and use undo transactions. Model tests cover
+edits, invalid input and exact undo. Native document/host interaction verification
+for these new controls remains open, as does complete application parity.
+
 Spline inspector: compiled Degree field and shared Vertices/Length/Plan area
 readouts now cover SPLINE alongside polyline metrics. Native degree edits round
 as in the original app, clamp to 1..min(10, point count - 1), regenerate uniform
