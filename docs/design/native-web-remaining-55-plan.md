@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Compiled color-scheme coverage: SharedStyles.css now includes a dark media rule;
+the parsed/generated integration sequence switches light/dark/light and requires
+80/95/80px widths plus identical serialized scenes for both stylesheet producers.
+The regenerated C++ CSS module builds and the shared-style suite passes. This
+closes the generated-data verification gap from the previous runtime-only fixture,
+without claiming OS preference notifications or broader browser parity.
+
 Color-scheme environment gap fixed: shared_css previously hardcoded the light
 media environment. Native documents now expose set_dark_color_scheme, invalidate
 styles when it changes, and pass it to the existing shared media evaluator. Foco's

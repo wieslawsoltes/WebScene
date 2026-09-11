@@ -28,6 +28,8 @@ std::vector<std::string> exercise(const webscene_native::css::prepared_styleshee
   const auto target=d.find("target");
   render(300,200);
   require(d.bounds(target).width==80 && d.bounds(target).height==20);
+  d.set_dark_color_scheme(true);render(300,200);require(d.bounds(target).width==95);
+  d.set_dark_color_scheme(false);render(300,200);require(d.bounds(target).width==80);
   d.pointer("pointermove",1,1,0);render(300,200);require(d.bounds(target).width==90);
   d.pointer("pointermove",299,199,0);render(300,200);require(d.bounds(target).width==80);
   d.attribute(target,"class","changed");d.set_text(target,"Native update");

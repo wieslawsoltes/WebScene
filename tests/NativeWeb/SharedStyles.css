@@ -8,6 +8,7 @@
     canvas {width:40px; height:40px;}
     @media (max-width:150px) {#target {width:60px;}}
     @media (prefers-reduced-motion:reduce) {#target:focus {height:10px;}}
+    @media (prefers-color-scheme:dark) {#target {width:95px;}}
   
 @keyframes fade {from {opacity:0} to {opacity:1}}
 
