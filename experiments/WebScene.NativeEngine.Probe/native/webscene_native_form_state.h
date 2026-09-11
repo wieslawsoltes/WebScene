@@ -95,4 +95,18 @@ inline void ensure_text_value(dom_node& node) {
     control.selection_direction=text_selection_direction::none;
 }
 
+inline size_t previous_utf8_boundary(const std::string& value,size_t index) {
+    index=std::min(index,value.size());
+    if(!index) return 0;
+    --index;
+    while(index && (static_cast<unsigned char>(value[index])&0xc0U)==0x80U) --index;
+    return index;
+}
+inline size_t next_utf8_boundary(const std::string& value,size_t index) {
+    if(index>=value.size()) return value.size();
+    ++index;
+    while(index<value.size() && (static_cast<unsigned char>(value[index])&0xc0U)==0x80U) ++index;
+    return index;
+}
+
 }

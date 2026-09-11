@@ -2264,24 +2264,12 @@
 
     static size_t previous_utf8_boundary(const std::string& value, size_t index)
     {
-        if (index == 0) return 0;
-        --index;
-        while (index > 0
-            && (static_cast<unsigned char>(value[index]) & 0xC0U) == 0x80U) {
-            --index;
-        }
-        return index;
+        return webscene_native::forms::previous_utf8_boundary(value,index);
     }
 
     static size_t next_utf8_boundary(const std::string& value, size_t index)
     {
-        if (index >= value.size()) return value.size();
-        ++index;
-        while (index < value.size()
-            && (static_cast<unsigned char>(value[index]) & 0xC0U) == 0x80U) {
-            ++index;
-        }
-        return index;
+        return webscene_native::forms::next_utf8_boundary(value,index);
     }
 
     bool dispatch_keyboard_or_text(const webscene_input_event& input)

@@ -434,6 +434,9 @@ public:
   // Live input/textarea value; programmatic updates do not emit input events.
   std::string value(node_id) const;
   void set_value(node_id,std::string);
+  // UTF-8 byte offsets; offsets inside a scalar are rejected.
+  void set_selection(node_id,size_t start,size_t end);
+  std::pair<size_t,size_t> selection(node_id) const;
   // Committed text only. Returns whether the focused control consumed it.
   bool text_input(std::string);
   void set_reduced_motion(bool enabled);

@@ -47,6 +47,10 @@ int main() {
     input->document.focus(field);
     foco::text_input_event text;text.text="Café🙂";input->text_input_received(text);
     require(text.handled && input->document.value(field)=="Café🙂");
+    foco::key_event editing;editing.value=foco::key::backspace;input->key_event_received(editing);
+    require(editing.handled && input->document.value(field)=="Café");
+    input->document.set_selection(field,0,0);editing.value=foco::key::delete_key;input->key_event_received(editing);
+    require(input->document.value(field)=="afé");
     // A focus callback may close the document during in-view Tab navigation.
     auto close=input->document.on(button,"focus",[&](auto&){input->document.dispose();});
     input->document.focus(0);

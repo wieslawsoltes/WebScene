@@ -357,6 +357,25 @@ void document::set_value(node_id id,std::string value) {
   control.selection_direction=text_selection_direction::none;
   state_->styles_dirty=true;state_->dom.mark_dirty();
 }
+void document::set_selection(node_id id,size_t start,size_t end) {
+  auto& node=state_->node(id);
+  if(node.tag!="input" && node.tag!="textarea") throw std::invalid_argument("selection requires a text control");
+  forms::ensure_text_value(node);auto& control=node.mutable_form_control();
+  const auto boundary=[&](size_t offset) {
+    return offset<=control.value.size() && (offset==control.value.size() ||
+        (static_cast<unsigned char>(control.value[offset])&0xc0U)!=0x80U);
+  };
+  if(start>end || !boundary(start) || !boundary(end)) throw std::invalid_argument("invalid UTF-8 selection range");
+  control.selection_start=start;control.selection_end=end;
+  control.selection_direction=text_selection_direction::none;control.selection_explicitly_set=true;
+  state_->dom.mark_scene_changed();
+}
+std::pair<size_t,size_t> document::selection(node_id id) const {
+  auto& node=state_->node(id);
+  if(node.tag!="input" && node.tag!="textarea") throw std::invalid_argument("selection requires a text control");
+  forms::ensure_text_value(node);const auto& control=node.form_control();
+  return {control.selection_start,control.selection_end};
+}
 bool document::text_input(std::string text) {
   state_->check();
   const auto id=state_->focus;
@@ -487,6 +506,36 @@ void document::key(std::string_view key, input_modifiers modifiers) {
     state_->keyboard_modality = true;
     state_->styles_dirty = true;
     state_->dom.mark_dirty();
+  }
+  if(key=="Backspace" || key=="Delete") {
+    if(modifiers.control || modifiers.alt || modifiers.meta) return;
+    const auto id=state_->focus;
+    auto* node=state_->dom.find_by_native_id(id);
+    if(!forms::is_text_control(node) || node->attributes.contains("readonly") || state_->dom.is_inert(*node)) return;
+    forms::ensure_text_value(*node);
+    const auto range=[&](const auto& control) {
+      auto start=std::min(control.selection_start,control.value.size());
+      auto end=std::min(std::max(control.selection_start,control.selection_end),control.value.size());
+      if(start==end) {
+        if(key=="Backspace") start=forms::previous_utf8_boundary(control.value,start);
+        else end=forms::next_utf8_boundary(control.value,end);
+      }
+      return std::pair{start,end};
+    };
+    if(range(node->form_control()).first==range(node->form_control()).second) return;
+    const std::string type=key=="Backspace"?"deleteContentBackward":"deleteContentForward";
+    if(!dispatch(id,"beforeinput",0,0,0,0,{},0,modifiers,{},type)) return;
+    node=state_->dom.find_by_native_id(id);
+    if(!node || !state_->connected(*node) || !forms::is_text_control(node) ||
+       node->attributes.contains("readonly") || state_->dom.is_inert(*node)) return;
+    auto& control=node->mutable_form_control();auto [start,end]=range(control);
+    if(start==end) return;
+    control.value.erase(start,end-start);control.dirty_value=true;
+    control.selection_start=control.selection_end=start;control.selection_direction=text_selection_direction::none;
+    control.selection_explicitly_set=true;control.caret_visible=true;
+    state_->styles_dirty=true;state_->dom.mark_dirty();
+    dispatch(id,"input",0,0,0,0,{},0,modifiers,{},type);
+    return;
   }
   if (key == "Tab") {
     std::vector<node_id> nodes;

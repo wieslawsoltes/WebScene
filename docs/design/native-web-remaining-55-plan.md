@@ -1117,3 +1117,16 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   pass. No runtime HTML parsing was added. This is committed-text groundwork:
   deletion/navigation, selection APIs, clipboard, input-type sanitization, caret
   blinking and IME composition remain incomplete, as do full Kestrel and 60fps.
+
+- Native text deletion and selection: shared UTF-8 boundary helpers now serve the
+  existing runtime and native Backspace/Delete path. Added explicit selection
+  get/set APIs using UTF-8 byte offsets, rejecting offsets inside a scalar.
+  Deletion emits cancellable beforeinput and input metadata, rechecks target
+  lifetime/read-only/inert state after callbacks, and updates the live caret.
+  Foco forwards Backspace/Delete. Tests verify emoji/accent deletion, forward and
+  selected-range deletion, no-op boundaries, invalid offsets, cancellation,
+  read-only controls, replacement of selected text, and hosted keyboard delivery.
+  Native text/contracts/compiler and hosted input tests pass; rebuilt runtime
+  native-text-input regression passes. This is scalar-safe, not full grapheme or
+  word editing. Modifier-based deletion, caret navigation, clipboard, IME, full
+  application parity and presented 60fps remain unfinished.
