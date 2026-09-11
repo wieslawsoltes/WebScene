@@ -658,3 +658,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   variable/inheritance, transition/keyframe and iframe cascade regressions pass.
   Candidate selection, final font metrics, pseudo routing and document invalidation
   still need integration; this is not a complete native stylesheet lifecycle.
+
+- Pseudo application extraction: pseudo selector suffix routing, variable-aware
+  pseudo property application and scrollbar declarations now use native helpers.
+  Tests cover generated text/color from custom properties and important scrollbar
+  visibility without hiding the originating element. Native service and runtime
+  active pseudo border, scrollbar drag/style and overflow navigation regressions
+  pass. Existing suffix grammar, unsupported scrollbar-corner behavior and pseudo
+  cascade limitations remain; native document lifecycle integration is unfinished.

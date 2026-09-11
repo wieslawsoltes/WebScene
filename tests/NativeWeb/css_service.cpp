@@ -24,6 +24,7 @@
 #include "webscene_css_application.h"
 #include "webscene_css_cascade_reset.h"
 #include "webscene_css_cascade_application.h"
+#include "webscene_css_pseudo_application.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -694,5 +695,19 @@ int main(int argc,char** argv) {
     ordered_document.layout(500,200);
     if(ordered_node.layout.width!=120 || ordered_node.layout.height!=40 ||
        ordered_node.style.inline_property_mask!=property_mask("height")) return 128;
+    std::string pseudo_origin;
+    if(webscene_native::css::split_pseudo_element_selector(".view::before",pseudo_origin)!=1 ||
+       pseudo_origin!=".view") return 129;
+    ordered_node.style.mutable_custom_properties().values["--tone"]="red";
+    webscene_native::css::property_result pseudo_result;
+    auto& before=ordered_node.style.mutable_before_pseudo();
+    webscene_native::css::apply_pseudo_declaration(ordered_node,before,{"content","'label'",false},
+        variable_root,pseudo_result,[](bool) {});
+    webscene_native::css::apply_pseudo_declaration(ordered_node,before,{"color","var(--tone)",false},
+        variable_root,pseudo_result,[](bool) {});
+    if(!before.generated || before.content!="label" || before.foreground_rgba!=0xFF0000FF) return 130;
+    webscene_native::css::apply_scrollbar_declaration(ordered_node,3,{"display","none",true},variable_root);
+    webscene_native::css::apply_scrollbar_declaration(ordered_node,3,{"display","block",false},variable_root);
+    if(!ordered_node.style.scrollbar_hidden || ordered_node.style.display==webscene_native::display_mode::none) return 131;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

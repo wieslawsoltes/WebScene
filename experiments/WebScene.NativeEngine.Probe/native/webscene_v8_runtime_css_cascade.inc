@@ -1,67 +1,5 @@
-    void apply_scrollbar_css_declaration(
-        dom_node& node,
-        int pseudo_kind,
-        const css_declaration& declaration)
-    {
-        auto& style = node.style;
-        const auto contains_variable = declaration.value.find("var(") != std::string::npos;
-        auto resolved_value = std::string{};
-        const auto& value = contains_variable
-            ? (resolved_value = resolve_css_value(node, declaration.value))
-            : declaration.value;
-        if (value.empty() && contains_variable) return;
-        const auto lower = lower_html_name(trim_css(value));
-        auto& scrollbar = style.mutable_scrollbar();
-        if (pseudo_kind == 3) {
-            if (declaration.name == "display") {
-                if (style.scrollbar_visibility_important && !declaration.important) return;
-                style.scrollbar_hidden = lower == "none";
-                style.scrollbar_visibility_important = declaration.important;
-            } else if (declaration.name == "width") {
-                const auto length = native_document::parse_length(value);
-                if (length.unit == length_unit::pixels) {
-                    scrollbar.width = std::max(0.0F, length.value);
-                    scrollbar.overlay_inset = 0;
-                }
-            } else if (declaration.name == "height") {
-                const auto length = native_document::parse_length(value);
-                if (length.unit == length_unit::pixels) {
-                    scrollbar.height = std::max(0.0F, length.value);
-                    scrollbar.overlay_inset = 0;
-                }
-            }
-            return;
-        }
-        if (pseudo_kind == 4) {
-            if (declaration.name == "background" || declaration.name == "background-color") {
-                scrollbar.thumb_rgba = lower == "initial" ? 0U
-                    : native_document::parse_color(value);
-            } else if (declaration.name == "border-radius") {
-                scrollbar.thumb_radius = std::max(
-                    0.0F, native_document::parse_length(value).value);
-            } else if (declaration.name == "border" || declaration.name == "border-width") {
-                std::istringstream stream(value);
-                for (std::string token; stream >> token;) {
-                    if (!token.empty() && (std::isdigit(static_cast<unsigned char>(token.front()))
-                            || token.front() == '.')) {
-                        scrollbar.thumb_border_width = std::max(
-                            0.0F, native_document::parse_length(token).value);
-                        break;
-                    }
-                }
-            }
-            return;
-        }
-        if (pseudo_kind == 5) {
-            if (declaration.name == "background" || declaration.name == "background-color") {
-                scrollbar.track_rgba = lower == "initial" ? 0U
-                    : native_document::parse_color(value);
-            } else if (declaration.name == "border-radius") {
-                scrollbar.track_radius = std::max(
-                    0.0F, native_document::parse_length(value).value);
-            }
-        }
-    }
+    void apply_scrollbar_css_declaration(dom_node& node,int kind,const css_declaration& declaration)
+    { css::apply_scrollbar_declaration(node,kind,declaration,css_variables); }
 
     static bool layout_length_equal(css_length left, css_length right) noexcept
     {
@@ -255,24 +193,11 @@
             "css",
             "pseudo-property:" + declaration.name,
             "pseudo-style-application");
-        const auto contains_variable = declaration.value.find("var(") != std::string::npos;
-        auto resolved_value = std::string{};
-        const auto& value = contains_variable
-            ? (resolved_value = resolve_css_value(node, declaration.value))
-            : declaration.value;
-        if (value.empty() && contains_variable) {
-            decision.classification = "invalid-authoring";
-            decision.semantic_slice = "unresolved custom property at computed-value time";
-            return;
-        }
-        const auto& name = declaration.name;
-        if (contains_variable && is_paint_property(name)) {
-            record_composition("css-custom-property-to-paint", node.id);
-        }
-        const auto result = css::apply_pseudo_value(
-            pseudo, node.style.foreground_rgba, name, value);
-        decision.classification = result.classification;
-        decision.semantic_slice = result.semantic_slice;
+        css::apply_pseudo_declaration(node,pseudo,declaration,css_variables,decision,
+            [&](bool contains_variable) {
+                if(contains_variable && is_paint_property(declaration.name))
+                    record_composition("css-custom-property-to-paint",node.id);
+            });
     }
 
     static std::optional<std::string> first_css_url(const std::string& value)

@@ -1639,19 +1639,5 @@
             scope_root);
     }
 
-    static int split_pseudo_element_selector(const std::string& selector, std::string& origin)
-    {
-        const auto split_suffix = [&](std::string_view suffix, int kind) {
-            if (!selector.ends_with(suffix)) return 0;
-            origin = trim_css(std::string_view(selector).substr(0, selector.size() - suffix.size()));
-            return kind;
-        };
-        if (const auto kind = split_suffix("::before", 1); kind != 0) return kind;
-        if (const auto kind = split_suffix("::after", 2); kind != 0) return kind;
-        if (const auto kind = split_suffix("::-webkit-scrollbar-thumb", 4); kind != 0) return kind;
-        if (const auto kind = split_suffix("::-webkit-scrollbar-track", 5); kind != 0) return kind;
-        if (const auto kind = split_suffix("::-webkit-scrollbar-corner", 6); kind != 0) return kind;
-        if (const auto kind = split_suffix("::-webkit-scrollbar", 3); kind != 0) return kind;
-        if (const auto kind = split_suffix(":before", 1); kind != 0) return kind;
-        return split_suffix(":after", 2);
-    }
+    static int split_pseudo_element_selector(const std::string& selector,std::string& origin)
+    { return css::split_pseudo_element_selector(selector,origin); }
