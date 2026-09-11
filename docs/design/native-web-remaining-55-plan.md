@@ -2333,3 +2333,14 @@ Stationary Shift release remains unproven: Foco key_event has no press/release
 field, so a DOM keyup listener alone does not prove host release delivery. Audit
 that input seam before claiming stationary modifier fidelity. Grid/polar toggles,
 object snaps and overall performance/parity gates remain open.
+
+### Native key-release delivery seam
+
+Foco already routes ordinary Cocoa keyUp through route_key_released and virtual
+key_released_received; the native WebScene view lacked that override. Added
+native document::key_release (keyup only, no default editing), host forwarding
+and a shared key-name mapping for press/release. Native text tests pass focused
+target/bubbling, modifier propagation, no Backspace edit on release and disposal
+during dispatch. The hosted adapter requires rebuild/verification. Modifier-only
+Cocoa flagsChanged delivery and missing modifier key names remain open; this
+change does not yet prove stationary Shift release works.

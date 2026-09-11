@@ -602,6 +602,11 @@ void document::pointer(std::string type, float x, float y, uint32_t buttons, inp
       activate(id,x,y,buttons,modifiers);
   }
 }
+void document::key_release(std::string_view key,input_modifiers modifiers) {
+  state_->check();
+  const auto target=state_->focus?state_->focus:root();
+  dispatch(target,"keyup",0,0,0,0,{},0,modifiers,{},{},std::string(key));
+}
 void document::key(std::string_view key, bool shift) {
   this->key(key,input_modifiers{shift});
 }

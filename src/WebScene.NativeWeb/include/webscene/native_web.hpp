@@ -436,6 +436,7 @@ public:
   bool set_modal(node_id dialog, bool enabled);
   void key(std::string_view key, bool shift = false);
   void key(std::string_view key, input_modifiers);
+  void key_release(std::string_view key, input_modifiers = {});
   node_id focused() const;
   // Live input/textarea value; programmatic updates do not emit input events.
   std::string value(node_id) const;

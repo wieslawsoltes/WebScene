@@ -4,6 +4,14 @@ using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
   {
+    document d;auto input=d.element(d.body(),"input");d.set_value(input,"abc");d.focus(input);
+    int releases=0;
+    auto handler=d.on(d.root(),"keyup",[&](auto& event){require(event.target==input && event.key=="Backspace" && event.modifiers.shift);++releases;});
+    d.key_release("Backspace",{true,false,false,false});require(releases==1 && d.value(input)=="abc");
+    auto dispose=d.on(input,"keyup",[&](auto&){d.dispose();});d.key_release("Backspace");require(d.disposed());
+  }
+
+  {
     document d;auto label=d.element(d.body(),"label");d.attribute(label,"for","name");d.set_text(label,"Name");
     auto input=d.element(d.body(),"input");d.attribute(input,"id","name");
     const auto click=[&](node_id node) {d.render(300,200);auto b=d.bounds(node);d.pointer("pointerdown",b.x+1,b.y+1);d.pointer("pointerup",b.x+1,b.y+1,0);};

@@ -172,23 +172,26 @@ public:
     refresh();
     return !document.disposed() && document.focused() != 0;
   }
+  static std::string_view dom_key(foco::key value) {
+    return value == foco::key::backspace ? "Backspace"
+                           : value == foco::key::delete_key ? "Delete"
+                           : value == foco::key::escape ? "Escape"
+                           : value == foco::key::a ? "a"
+                           : value == foco::key::z ? "z"
+                           : value == foco::key::y ? "y"
+                           : value == foco::key::f7 ? "F7"
+                           : value == foco::key::down ? "ArrowDown"
+                           : value == foco::key::up ? "ArrowUp"
+                           : value == foco::key::home ? "Home"
+                           : value == foco::key::end ? "End"
+                           : value == foco::key::tab     ? "Tab"
+                           : value == foco::key::enter ? "Enter"
+                           : value == foco::key::space ? " "
+                                                         : "";
+  }
   void key_event_received(foco::key_event &e) override {
     if(document.disposed()) {refresh();return;}
-    std::string_view key = e.value == foco::key::backspace ? "Backspace"
-                           : e.value == foco::key::delete_key ? "Delete"
-                           : e.value == foco::key::escape ? "Escape"
-                           : e.value == foco::key::a ? "a"
-                           : e.value == foco::key::z ? "z"
-                           : e.value == foco::key::y ? "y"
-                           : e.value == foco::key::f7 ? "F7"
-                           : e.value == foco::key::down ? "ArrowDown"
-                           : e.value == foco::key::up ? "ArrowUp"
-                           : e.value == foco::key::home ? "Home"
-                           : e.value == foco::key::end ? "End"
-                           : e.value == foco::key::tab     ? "Tab"
-                           : e.value == foco::key::enter ? "Enter"
-                           : e.value == foco::key::space ? " "
-                                                         : "";
+    const auto key=dom_key(e.value);
     if (!key.empty()) {
       document.key(key,webscene::native_web::input_modifiers{
         foco::has_modifier(e.modifiers,foco::key_modifiers::shift),
@@ -198,6 +201,16 @@ public:
       request_input_refresh();
       e.handled = true;
     }
+  }
+  void key_released_received(foco::key_event& e) override {
+    if(document.disposed()) {refresh();return;}
+    const auto key=dom_key(e.value);
+    if(key.empty())return;
+    document.key_release(key,{foco::has_modifier(e.modifiers,foco::key_modifiers::shift),
+      foco::has_modifier(e.modifiers,foco::key_modifiers::control),
+      foco::has_modifier(e.modifiers,foco::key_modifiers::alt),
+      foco::has_modifier(e.modifiers,foco::key_modifiers::platform)});
+    request_input_refresh();e.handled=true;
   }
   void text_input_received(foco::text_input_event& event) override {
     if(document.disposed()) {refresh();return;}
