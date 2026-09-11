@@ -1832,6 +1832,19 @@ void test_resize_updates_device_pixel_ratio(webscene_engine* engine)
         fail("devicePixelRatio did not restore after the host scale transition: " + restored);
     }
 }
+void wait_for_document_visibility(webscene_engine* engine, bool hidden)
+{
+    // Host visibility is signalled asynchronously, independently of the script
+    // queue. An evaluation admitted in the current worker turn can precede it.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    const auto expected = hidden ? "true" : "false";
+    while (evaluate(engine, "document.hidden", "document-visibility-ready.js") != expected) {
+        require(std::chrono::steady_clock::now() < deadline,
+            "host visibility did not reach the document");
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+}
+
 void test_document_direction_and_visibility_are_native_properties()
 {
     auto* engine = webscene_engine_create(0);
@@ -1875,6 +1888,7 @@ void test_document_direction_and_visibility_are_native_properties()
     require(
         webscene_engine_set_visible(engine, 0U) != 0,
         "document state engine rejected hidden visibility");
+    wait_for_document_visibility(engine, true);
     const auto hidden = evaluate(engine, R"JS(
         ({
           hidden: document.hidden,
@@ -1893,6 +1907,7 @@ void test_document_direction_and_visibility_are_native_properties()
     require(
         webscene_engine_set_visible(engine, 1U) != 0,
         "document state engine rejected visible visibility");
+    wait_for_document_visibility(engine, false);
     const auto visible = evaluate(engine, R"JS(
         ({
           hidden: document.hidden,
@@ -1928,10 +1943,7 @@ void test_hidden_document_defers_presentation_work()
     require(
         webscene_engine_set_visible(engine, 0U) != 0,
         "hidden-presentation fixture rejected hidden state");
-    require(
-        evaluate(engine, "document.hidden", "hidden-presentation-ready.js")
-            == "true",
-        "hidden-presentation state did not reach the document");
+    wait_for_document_visibility(engine, true);
 
     webscene_engine_metrics before{};
     webscene_engine_get_metrics(engine, &before);
