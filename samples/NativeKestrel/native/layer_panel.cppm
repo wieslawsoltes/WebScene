@@ -217,10 +217,16 @@ public:
           info("Length",metric(length,""));
           if(geo::closed(*one))info("Plan area",metric(std::abs(polygon_area(points)),"²"));
           if(hatch) {
-            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-hatch");
-            document_.set_value(row.named("spacing"),std::to_string(one->value("spacing",10.0)));
-            document_.set_value(row.named("pattern"),one->value("pattern",std::string("ANSI31")));
-            for(auto key:{"spacing","pattern"})handlers_.push_back(document_.on(row.named(key),"change",[this,node=row.named(key),key=std::string(key)](auto&) {
+            for(auto key:{"spacing","pattern"}) {
+              auto row=kestrel_layers::instantiate(document_,geometry.named("root"),std::string("inspector-hatch-")+key);
+              std::string value;
+              if(std::string_view(key)=="pattern")value=one->value("pattern",std::string("ANSI31"));
+              else {
+                std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(4)<<one->value("spacing",10.0);
+                value=text.str();while(value.ends_with('0'))value.pop_back();if(value.ends_with('.'))value.pop_back();
+              }
+              document_.set_value(row.named("input"),value);
+              handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),key=std::string(key)](auto&) {
               const auto text=document_.value(node);
               if(key=="pattern")model_.change_hatch_property(key,text);
               else {double value=0;size_t used=0;bool valid=true;
@@ -229,6 +235,7 @@ public:
               }
               refresh();if(changed_)changed_();
             }));
+            }
           }
         }
         const bool point_entity=one->value("type",std::string{})=="POINT" && one->contains("position") && (*one)["position"].is_array();

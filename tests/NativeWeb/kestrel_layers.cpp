@@ -13,7 +13,20 @@ int main() {
   {
     kestrel::drawing model;model.add("HATCH",{{"points",{{0,0,0},{3,0,0},{3,4,0}}},{"pattern","ANSI31"},{"spacing",10}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
-    const auto before=model.data;require(model.change_hatch_property("spacing",2.5));require(model.change_hatch_property("pattern","cross"));
+    document doc;doc.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
+    auto inspector=doc.element(doc.body(),"div");doc.attribute(inspector,"id","inspector");
+    auto list=doc.element(doc.body(),"div");doc.attribute(list,"id","explorer-list");
+    kestrel::layer_panel panel(doc,model,[]{});
+    const auto find=[&](auto&& self,node_id node,const std::string& property)->node_id {
+      if(doc.attribute(node,"data-prop")==property)return node;
+      for(auto child:doc.children(node))if(auto result=self(self,child,property))return result;
+      return 0;
+    };
+    const auto before=model.data;
+    auto spacing=find(find,inspector,"spacing");require(spacing!=0 && doc.value(spacing)=="10");
+    require(doc.attribute(doc.parent(doc.parent(spacing)),"class")=="property-section");
+    doc.focus(spacing);doc.set_selection(spacing,0,doc.value(spacing).size());doc.text_input("2.5");doc.key("Enter");
+    auto pattern=find(find,inspector,"pattern");require(pattern!=0);doc.focus(pattern);doc.key("ArrowDown");
     require(model.find(id)->at("spacing")==2.5 && model.find(id)->at("pattern")=="cross");
     require(!model.change_hatch_property("spacing",0));require(!model.change_hatch_property("pattern","invalid"));
     require(model.undo()=="Edit pattern" && model.undo()=="Edit spacing" && model.data==before);

@@ -8,6 +8,12 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Hatch control verification: tests now type Spacing and commit with Enter, select
+Pattern using ArrowDown and verify model values and exact undo. Removed the added
+wrapper around hatch rows so each original property-row is directly in its section;
+the test checks this parent structure. Spacing display now trims trailing decimal
+zeros. Native inspector regressions pass; hosted hatch interaction remains open.
+
 Hatch inspector: HATCH now shares Vertices/Length/Plan area measurements and exposes
 compiled Spacing and Pattern controls. Native edits validate positive finite
 spacing and supported pattern names and use undo transactions. Model tests cover
