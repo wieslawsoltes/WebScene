@@ -119,14 +119,14 @@ if [[ "$partition_alloc" == true ]]; then
 fi
 build_variant+=-inspector
 
-if [[ -z "$package_version" ]]; then
+if [[ -z "$package_version" && "${WEBSCENE_NATIVE_V8_ONLY:-0}" != 1 ]]; then
   package_version="$(
     dotnet msbuild "$repo_root/src/WebScene.Core/WebScene.Core.csproj" \
       -getProperty:PackageVersion -nologo |
       tail -n 1 | tr -d '\r'
   )"
 fi
-if [[ -z "$package_version" ]]; then
+if [[ -z "$package_version" && "${WEBSCENE_NATIVE_V8_ONLY:-0}" != 1 ]]; then
   echo "Unable to resolve the native runtime package version." >&2
   exit 1
 fi
@@ -298,6 +298,13 @@ if [[ "$partition_alloc" == true \
       || ! grep -Eq '^use_partition_alloc_as_malloc *= *false$' "$v8_args"; }; then
   echo "The V8 SDK at '$v8_root' enables unsafe process-wide allocator interposition." >&2
   exit 1
+fi
+
+# SDK producers only need the verified V8 inputs, not a second engine build
+# and NuGet/package smoke pipeline. Normal runtime packaging remains the default.
+if [[ "${WEBSCENE_NATIVE_V8_ONLY:-0}" == 1 ]]; then
+  echo "Verified V8 dependency: $v8_output_root"
+  exit 0
 fi
 
 build_dir="$repo_root/artifacts/native-engine-runtime-build/$rid$build_variant"
