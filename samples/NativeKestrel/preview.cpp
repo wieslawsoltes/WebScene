@@ -272,9 +272,8 @@ public:
     color_picker->set_vertical_alignment(foco::vertical_alignment::top);
     color_picker->set_visibility(foco::visibility::collapsed);window->add_child(color_picker);
     color_picker->on_color_changed([this](foco::color value) {
-      if(model.selection!=color_selection)return;
+      if(model.selection!=color_selection) {color_picker->set_open(false);return;}
       std::ostringstream text;text<<'#'<<std::hex<<std::setfill('0')<<std::setw(2)<<unsigned(value.r)<<std::setw(2)<<unsigned(value.g)<<std::setw(2)<<unsigned(value.b);
-      color_picker->set_open(false);color_picker->set_visibility(foco::visibility::collapsed);
       model.change_selected_appearance("color",text.str());layers->refresh();gpu_dirty=true;view->refresh();
     });
     handlers.push_back(view->document.on(view->document.root(),"click",[this](auto& event) {
@@ -477,10 +476,17 @@ public:
         if(color_picker_pending) {color_picker_pending=false;color_picker->set_open(true);}
         else if(color_picker && !color_picker->is_open())color_picker->set_visibility(foco::visibility::collapsed);
         if(color_test_before && color_picker->is_open() && !show_color_picker) {
+          color_picker->set_color({0,128,255,255});
+          if(!color_picker->is_open())throw std::runtime_error("Native color picker closed during editing");
+          const auto intermediate=model.data;
           color_picker->set_color({255,0,128,255});
+          if(!color_picker->is_open())throw std::runtime_error("Native color picker closed during repeated editing");
           for(const auto& id:model.selection)if(model.find(id)->value("color",std::string{})!="#ff0080")throw std::runtime_error("Native color picker commit failed");
+          color_picker->set_open(false);
           view->document.focus(view->document.find("viewport"));
           foco::key_event key;key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
+          if(model.data!=intermediate)throw std::runtime_error("Native color picker intermediate undo failed");
+          key.handled=false;view->key_event_received(key);
           if(model.data!=*color_test_before)throw std::runtime_error("Native color picker undo failed");
           color_test_before.reset();std::cout<<"Native Foco color picker open, commit and undo passed\n";
         }

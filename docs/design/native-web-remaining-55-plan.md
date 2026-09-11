@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Picker editing lifetime: the NativeKestrel host no longer closes the flyout from
+its color-change callback, allowing successive edits in one open session. A
+selection mismatch closes it without applying the stale edit. The hosted exercise
+now applies two colors, requires the picker to remain open after both, dismisses
+it and verifies exact intermediate and original document states through two undo
+operations. Build and capture `/tmp/kestrel-picker-continuous.png` pass (exit 0).
+These remain API-driven changes, not physical pointer-routing evidence. Each
+change currently creates an undo entry; drag-session undo coalescing and native
+mouse interaction remain to be reviewed against browser behavior.
+
 Picker background follow-up: the Foco editor panel now resolves Fluent.Surface
 as its background. NativeKestrel rebuilt and the open-picker GPU capture
 (`/tmp/kestrel-picker-background.png`, exit 0) shows an opaque panel with readable
