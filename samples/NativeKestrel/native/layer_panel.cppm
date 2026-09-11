@@ -214,6 +214,21 @@ public:
             }));
             if(!single_coordinate && endpoint==0) {const double delta=coordinate(1,axis)-coordinate(0,axis);squared_length+=delta*delta;}
           }
+          if(conic_entity && entity_type!="ELLIPSE") {
+            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
+            document_.set_text(row.named("label"),"Radius");document_.attribute(row.named("input"),"aria-label","Radius");
+            document_.attribute(row.named("input"),"data-prop","radius");document_.attribute(row.named("input"),"min","0.000001");
+            const double radius=one->value("radius",0.0)?one->value("radius",0.0):drawing::conic_x_radius(*one);
+            std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(4)<<radius;
+            auto value=text.str();while(value.ends_with('0'))value.pop_back();if(value.ends_with('.'))value.pop_back();
+            document_.set_value(row.named("input"),value);
+            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input")](auto&) {
+              const auto text=document_.value(node);double radius=0;size_t used=0;bool valid=true;
+              try {radius=std::stod(text,&used);}catch(const std::exception&){valid=false;}
+              if(valid && used==text.size())model_.change_conic_radius(radius);
+              refresh();if(changed_)changed_();
+            }));
+          }
           if(!single_coordinate) {
           auto length=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");
           std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(3)<<std::sqrt(squared_length)<<" "<<model_.data.value("units",std::string("mm"));

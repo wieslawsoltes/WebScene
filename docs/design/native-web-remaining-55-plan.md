@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Circle/arc Radius now uses the compiled coordinate row and native change handler.
+The model requires a positive finite radius and editable single selection, derives
+the previous conic X-axis magnitude, and scales explicit axes as the original app
+does. Model tests cover rotated explicit axes, zero rejection and exact undo for
+both entity types; native inspector regressions pass. Ellipse radii, arc angles,
+area display and hosted radius interaction verification remain open.
+
 Conic center inspector: CIRCLE, ARC and ELLIPSE expose original Center X/Y/Z
 fields through the shared compiled coordinate template. Native center edits
 require finite values and an editable single selection. Tests instantiate each

@@ -416,6 +416,27 @@ public:
        !entity->contains("center") || !(*entity)["center"].is_array())return false;
     return transaction("Edit center."+std::to_string(axis),[&] {(*entity)["center"][axis]=value;});
   }
+  static double conic_x_radius(const json& entity) {
+    if(entity.contains("axisX") && entity.contains("axisY")) {
+      double squared=0;for(const auto& component:entity.at("axisX")) {const double n=component.get<double>();squared+=n*n;}
+      return std::sqrt(squared);
+    }
+    return std::abs(entity.value("rx",entity.value("radius",1.0)));
+  }
+  bool change_conic_radius(double radius) {
+    if(!std::isfinite(radius) || radius<=0)return false;
+    const auto ids=selected(true);if(ids.size()!=1)return false;
+    auto* entity=find(ids.front());if(!entity)return false;
+    const auto type=entity->value("type",std::string{});
+    if(type!="CIRCLE" && type!="ARC")return false;
+    const double old=conic_x_radius(*entity);
+    if(!std::isfinite(old) || old<=0)return false;
+    return transaction("Edit radius",[&] {
+      (*entity)["radius"]=radius;
+      for(auto key:{"axisX","axisY"})if(entity->contains(key))
+        for(auto& component:(*entity)[key])component=component.get<double>()*(radius/old);
+    });
+  }
   bool show_all_layers() {
     return transaction("Show all layers",[&] {
       for(auto& layer:data["layers"])layer["visible"]=true;

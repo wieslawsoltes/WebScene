@@ -24,6 +24,14 @@ int main() {
     const auto before=model.data;doc.focus(input);doc.set_selection(input,0,doc.value(input).size());doc.text_input("42");doc.key("Enter");
     require(model.find(id)->at("center")[0]==42);
     require(model.undo()=="Edit center.0" && model.data==before);
+    if(std::string_view(type)!="ELLIPSE") {
+      (*model.find(id))["axisX"]={3,4,0};(*model.find(id))["axisY"]={-4,3,0};
+      const auto original=model.data;
+      require(!model.change_conic_radius(0));require(model.change_conic_radius(10));
+      require(model.find(id)->at("axisX")==kestrel::json({6,8,0}));
+      require(model.find(id)->at("axisY")==kestrel::json({-8,6,0}));
+      require(model.undo()=="Edit radius" && model.data==original);
+    }
   }
   {
     kestrel::drawing model;model.add("POINT",{{"position",{1,2,3}}});
