@@ -1504,3 +1504,15 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   performance remain unproven. Failure shutdown currently returned process zero
   in the initial failed exercise; inspect explicit success markers until the
   preview exit-code propagation is corrected.
+
+- Original view/style dropdown change handlers now update the native camera and
+  renderer. Hosted navigation exercises front/iso and shaded-edges changes and
+  requires a subsequent GPU image; success marker confirmed after rebuild in
+  /tmp/kestrel-dropdown-final.log. Inspected /tmp/kestrel-dropdown-current.png.
+  Native popup/keyboard select interaction and workspace side effects still need
+  implementation. Added --exercise-failure to reproduce failure-exit handling.
+  Foco Cocoa terminate exits zero before returning the lifetime result. Replacing
+  terminate with stop plus a wake event exposed exit 139 on both success/failure;
+  that host change was reverted, Foco worktree is clean, and final hosted exercise
+  succeeds again. Teardown requires dedicated debugging; exit codes alone remain
+  insufficient evidence for preview validation.

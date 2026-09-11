@@ -8,6 +8,7 @@
 #include <webscene/shared_css.hpp>
 #endif
 static std::string capture_path;
+static bool exercise_failure=false;
 static bool exercise_layer_filter=false;
 static bool exercise_objects=false;
 static bool exercise_navigation=false;
@@ -270,6 +271,23 @@ public:
             return;
           }
         }));
+    handlers.push_back(view->document.on(view->document.find("view-select"),"change",
+        [this](auto&) {
+          if(!viewport)return;
+          viewport->camera.set_view(view->document.value(view->document.find("view-select")));
+          gpu_dirty=true;
+        }));
+    handlers.push_back(view->document.on(view->document.find("style-select"),"change",
+        [this](auto&) {
+          if(!viewport)return;
+          const auto style=view->document.value(view->document.find("style-select"));
+          if(style=="wireframe") viewport->options.style=kestrel::display_style::wireframe;
+          else if(style=="shaded") viewport->options.style=kestrel::display_style::shaded;
+          else if(style=="shaded-edges") viewport->options.style=kestrel::display_style::shaded_edges;
+          else if(style=="xray") viewport->options.style=kestrel::display_style::xray;
+          else return;
+          gpu_dirty=true;
+        }));
     handlers.push_back(view->document.on(view->document.find("viewport"), "pointerdown",
         [this](auto &event) {
           if (!viewport || !(event.buttons & 4u)) return;
@@ -302,6 +320,7 @@ public:
         }));
     window->frame = [this, lifetime] {
       try {
+        if(exercise_failure) throw std::runtime_error("Requested preview failure exercise");
         if(benchmark_pan && viewport) {
           if(!pan_samples) {
             pan_start=std::chrono::steady_clock::now();
@@ -354,6 +373,15 @@ public:
           send(foco::pointer_event_kind::moved,30,20,4,false);
           if(viewport->camera.revision!=cancelled_revision)
             throw std::runtime_error("Navigation continued after cancellation");
+          const auto view_select=view->document.find("view-select");
+          view->document.set_value(view_select,"front");view->document.dispatch(view_select,"change");
+          if(std::abs(viewport->camera.pitch)>1e-10)
+            throw std::runtime_error("View dropdown did not update native camera");
+          view->document.set_value(view_select,"iso");view->document.dispatch(view_select,"change");
+          const auto style_select=view->document.find("style-select");
+          view->document.set_value(style_select,"shaded-edges");view->document.dispatch(style_select,"change");
+          if(viewport->options.style!=kestrel::display_style::shaded_edges)
+            throw std::runtime_error("Style dropdown did not update native renderer");
           navigation_serial=gpu_serial;navigation_exercised=true;
         }
         const auto tick_start=std::chrono::steady_clock::now();
@@ -422,6 +450,7 @@ int main(int argc, char **argv) {
   for(int i=1;i<argc;++i) {
     if(std::string_view(argv[i])=="--capture" && i+1<argc) capture_path=argv[++i];
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
+    else if(std::string_view(argv[i])=="--exercise-failure") exercise_failure=true;
     else if(std::string_view(argv[i])=="--exercise-navigation") exercise_navigation=true;
     else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;
     else if(std::string_view(argv[i])=="--benchmark-pan") benchmark_pan=true;
