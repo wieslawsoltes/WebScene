@@ -720,6 +720,13 @@ static std::string assignments(const std::string &name,
     if (integer < INT32_MIN || integer > INT32_MAX) throw std::runtime_error("z-index outside native integer range");
     return "s.set_z_index(" + std::to_string(integer) + ");";
   }
+  if (name == "grid-column") {
+    const auto parts=component_values(value,'/');
+    if(ascii_keyword(value)=="auto") return "s.set_grid_full_columns(false);";
+    if(parts.size()==2 && trim(parts[0])=="1" && trim(parts[1])=="-1")
+      return "s.set_grid_full_columns(true);";
+    throw std::runtime_error("compiled grid-column currently supports auto or 1 / -1");
+  }
   if (name == "scrollbar-color") {
     const auto keyword=ascii_keyword(value);
     if(keyword=="auto" || keyword=="initial")

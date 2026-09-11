@@ -12,6 +12,14 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_full_grid_columns(self):
+        for value in ['1/-1', '1 / -1', 'auto']:
+            result, out = self.compile('<div></div>', 'div {grid-column:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('set_grid_full_columns', out.read_text())
+        result, _ = self.compile('<div></div>', 'div {grid-column:1/0}')
+        self.assertNotEqual(result.returncode, 0)
+
     def test_scrollbar_colors(self):
         for value in ['red transparent', 'var(--line) transparent', 'auto', 'inherit']:
             result, out = self.compile('<div></div>', 'div {scrollbar-color:'+value+'}')

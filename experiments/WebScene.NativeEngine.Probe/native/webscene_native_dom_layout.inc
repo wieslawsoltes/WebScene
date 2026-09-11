@@ -1962,7 +1962,7 @@ void native_document::layout_children(dom_node& parent)
             const auto& placement = child->style.grid();
             auto column_span = std::min(
                 column_count,
-                parse_span(
+                placement.compiled_full_columns ? column_count : parse_span(
                     placement.column_start_value,
                     placement.column_end_value,
                     column_count));
@@ -1970,10 +1970,10 @@ void native_document::layout_children(dom_node& parent)
                 placement.row_start_value,
                 placement.row_end_value,
                 std::max<size_t>(parent_grid.template_rows.size(), 1U));
-            const auto authored_column_start = parse_line(
-                placement.column_start_value);
-            const auto authored_column_end = parse_line(
-                placement.column_end_value);
+            const auto authored_column_start = placement.compiled_full_columns
+                ? std::optional<int32_t>{1} : parse_line(placement.column_start_value);
+            const auto authored_column_end = placement.compiled_full_columns
+                ? std::optional<int32_t>{-1} : parse_line(placement.column_end_value);
             const auto authored_row = parse_line(placement.row_start_value);
             auto row = authored_row.has_value() && *authored_row > 0
                 ? static_cast<size_t>(*authored_row - 1) : auto_row;
@@ -4361,7 +4361,7 @@ float native_document::compute_intrinsic_size(
             const auto& placement = child->style.grid();
             const auto column_span = std::min(
                 column_count,
-                span_for(
+                placement.compiled_full_columns ? column_count : span_for(
                     placement.column_start_value,
                     placement.column_end_value,
                     column_count));
@@ -4369,7 +4369,8 @@ float native_document::compute_intrinsic_size(
                 placement.row_start_value,
                 placement.row_end_value,
                 std::max<size_t>(grid.template_rows.size(), 1U));
-            const auto authored_column = parse_line(placement.column_start_value);
+            const auto authored_column = placement.compiled_full_columns
+                ? std::optional<int32_t>{1} : parse_line(placement.column_start_value);
             const auto authored_row = parse_line(placement.row_start_value);
             auto row = authored_row.has_value() && *authored_row > 0
                 ? static_cast<size_t>(*authored_row - 1) : auto_row;

@@ -75,6 +75,7 @@ inline bool grid_layout_equal(
             && left.row_start_value == right.row_start_value
             && left.row_end_value == right.row_end_value
             && left.column_value == right.column_value
+            && left.compiled_full_columns == right.compiled_full_columns
             && left.column_start_value == right.column_start_value
             && left.column_end_value == right.column_end_value;
     }

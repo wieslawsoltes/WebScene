@@ -806,3 +806,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   **40 distinct unsupported constructs**. currentColor/color-mix forms, forced-color
   handling and browser differential validation remain incomplete. No app parity
   or presented-frame performance claim follows from the audit count.
+
+- Compiler full grid column span: grid-column:1/-1 and auto now emit a typed flag;
+  used and intrinsic grid layout consume it without parsing a placement string.
+  Contracts verify spanning three tracks and resetting to one track; compiler
+  tests cover whitespace and invalid line zero. Compiler/contracts and rebuilt
+  runtime compact-go-to/symbol-search grid regressions pass. Fresh original Kestrel
+  audit: 397 rules, 1475 declarations, **39 distinct unsupported constructs**.
+  General numeric/named grid lines and spans remain unsupported in this compiler
+  path. Full original app parity and 60fps acceptance remain unfinished.

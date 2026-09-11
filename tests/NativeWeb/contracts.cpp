@@ -12,6 +12,25 @@ static int style_application_count = 0;
 int main() {
   using namespace webscene::native_web;
   {
+    document grid_doc;
+    auto grid=grid_doc.element(grid_doc.body(),"div");
+    auto full=grid_doc.element(grid,"div");
+    rule parent;parent.inline_target=grid;
+    parent.declarations.push_back({false,+[](style& s) {
+      s.set_display(display_mode::grid);s.set_width({300,length_unit::pixels});
+      grid_track t;t.kind=grid_track::sizing::fractional;t.fraction=1;
+      s.set_grid_template_columns({t,t,t});
+    }});grid_doc.add_rule(std::move(parent));
+    rule child;child.inline_target=full;
+    child.declarations.push_back({false,+[](style& s) {s.set_grid_full_columns(true);s.set_height({20,length_unit::pixels});}});
+    grid_doc.add_rule(std::move(child));grid_doc.render(500,300);
+    check(grid_doc.bounds(full).width==300,"compiled full grid span covers all tracks");
+    rule reset;reset.inline_target=full;
+    reset.declarations.push_back({false,+[](style& s) {s.set_grid_full_columns(false);}});
+    grid_doc.add_rule(std::move(reset));grid_doc.render(500,300);
+    check(grid_doc.bounds(full).width==100,"auto restores a single grid track");
+  }
+  {
     document bars;
     auto scroller=bars.element(bars.body(), "div");
     auto content=bars.element(scroller, "div");

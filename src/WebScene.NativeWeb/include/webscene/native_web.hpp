@@ -69,6 +69,10 @@ public:
   }
   void set_align_self(align_mode mode, bool specified = true) { value_.align_self = mode; value_.align_self_specified = specified; }
   void set_table_layout_fixed(bool fixed) { value_.table_layout_fixed = fixed; }
+  void set_grid_full_columns(bool enabled) {
+    auto &grid=value_.mutable_grid();grid.compiled_full_columns=enabled;
+    grid.column_start_value=grid.column_end_value="auto";
+  }
   void set_grid_template_columns(std::vector<grid_track> tracks) {
     auto &grid = value_.mutable_grid();
     grid.subgrid_columns = false;

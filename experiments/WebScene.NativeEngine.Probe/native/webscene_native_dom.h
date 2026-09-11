@@ -317,6 +317,7 @@ struct node_style final {
         bool auto_flow_column{false};
         bool fractional_rows{false};
         bool span_all{false};
+        bool compiled_full_columns{false};
         int32_t column_start{0};
         std::string area_value{"auto"};
         std::string row_value{"auto"};
