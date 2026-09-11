@@ -431,6 +431,9 @@ public:
   void pointer(std::string type, float x, float y, uint32_t buttons = 1, input_modifiers = {});
   void wheel(float x, float y, float delta_y, input_modifiers = {});
   void focus(node_id);
+  // Structural modal scope for a connected HTML dialog. The application chooses
+  // initial/restored focus and handles cancellation/submission events.
+  bool set_modal(node_id dialog, bool enabled);
   void key(std::string_view key, bool shift = false);
   void key(std::string_view key, input_modifiers);
   node_id focused() const;

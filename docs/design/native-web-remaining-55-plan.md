@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Native modal scope API: document::set_modal connects a native HTML dialog to the
+existing engine modal stack and open attribute. It clears focus when blocked or
+closed; the caller owns initial/restored focus and cancel/submit behavior. Native
+tests cover background focus rejection, Tab wrap, nested modal precedence,
+close/removal cleanup, non-dialog rejection and disposal during blur. The native
+text/input suite passes. This is a structural native seam, not a complete browser
+showModal implementation; the compiled Group dialog still needs connection.
+
 Modal prerequisite: native document focus and Tab candidate collection now consult
 the existing engine is_inert check, which covers explicit inert ancestors and
 registered modal scopes. Tests verify direct focus rejection, forward/reverse Tab

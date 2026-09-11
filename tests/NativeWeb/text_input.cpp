@@ -4,6 +4,25 @@ using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
   {
+    document d;auto outside=d.element(d.body(),"button");
+    auto dialog=d.element(d.body(),"dialog");auto first=d.element(dialog,"input");auto last=d.element(dialog,"button");
+    d.focus(outside);require(!d.set_modal(outside,true));
+    require(d.set_modal(dialog,true));require(d.focused()==0 && d.attribute(dialog,"open").has_value());
+    d.focus(first);require(d.focused()==first);d.focus(outside);require(d.focused()==first);
+    d.key("Tab");require(d.focused()==last);d.key("Tab");require(d.focused()==first);
+    auto nested=d.element(d.body(),"dialog");auto nested_input=d.element(nested,"input");
+    require(d.set_modal(nested,true));d.focus(nested_input);d.focus(first);require(d.focused()==nested_input);
+    require(d.set_modal(nested,false));d.focus(first);require(d.focused()==first);
+    require(d.set_modal(dialog,false));require(d.focused()==0 && !d.attribute(dialog,"open").has_value());
+    d.focus(outside);require(d.focused()==outside);
+    require(d.set_modal(dialog,true));d.remove(dialog);d.focus(outside);require(d.focused()==outside);
+  }
+  {
+    document d;auto outside=d.element(d.body(),"button");auto dialog=d.element(d.body(),"dialog");
+    d.focus(outside);auto blur=d.on(outside,"blur",[&](auto&){d.dispose();});
+    require(!d.set_modal(dialog,true) && d.disposed());
+  }
+  {
     document d;auto first=d.element(d.body(),"button");
     auto background=d.element(d.body(),"div");d.attribute(background,"inert","");
     auto input=d.element(background,"input");d.attribute(input,"tabindex","1");

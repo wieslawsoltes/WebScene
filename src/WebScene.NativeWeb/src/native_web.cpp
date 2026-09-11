@@ -350,6 +350,24 @@ void document::focus(node_id id) {
   if (state_->alive && state_->focus==id && id && state_->dom.find_by_native_id(id))
     dispatch(id, "focus");
 }
+bool document::set_modal(node_id id,bool enabled) {
+  state_->check();
+  auto& dialog=state_->node(id);
+  if(dialog.tag!="dialog" || dialog.namespace_uri()!=dom_node::html_namespace_uri)return false;
+  if(enabled) {
+    if(!state_->dom.register_modal_dialog(state_->dom.body(),dialog))return false;
+    attribute(id,"open","");
+    if(auto* current=state_->dom.find_by_native_id(state_->focus);current && state_->dom.is_inert(*current))focus(0);
+  } else {
+    bool contains_focus=false;
+    for(auto* current=state_->dom.find_by_native_id(state_->focus);current;current=current->parent)
+      if(current->id==id){contains_focus=true;break;}
+    state_->dom.unregister_modal_dialog(dialog);
+    remove_attribute(id,"open");
+    if(contains_focus)focus(0);
+  }
+  return state_->alive && state_->dom.find_by_native_id(id)!=nullptr;
+}
 node_id document::focused() const {
   state_->check();
   return state_->focus;
