@@ -1186,3 +1186,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   missing text seen in the explorer capture, but does not implement ::placeholder
   styling, placeholder-specific line handling, or case-insensitive input types;
   current painting inherits the field text style. Visual recapture remains pending.
+
+- Hosted panning publication probe: FocoKestrelPreview --benchmark-pan drives
+  camera motion for 360 host ticks and reports publication count, elapsed time,
+  CPU tick cost and native geometry rebuild count. Rebuilt app and ran successfully:
+  360 images / 5.98349 seconds = 60.1655 images/second; mean tick 0.495921 ms,
+  maximum 0.770667 ms, zero scene rebuilds during motion. Log:
+  /tmp/kestrel-pan-pipeline.log. This is a single small demo-box run with synthetic
+  camera movement, not physical pointer latency, display presentation timestamps,
+  full Kestrel model throughput or live-resize validation. It establishes that
+  this preview's single-pending-snapshot pipeline can sustain 60Hz publication.

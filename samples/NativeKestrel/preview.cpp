@@ -2,6 +2,7 @@
 #include <foco/app_builder.hpp>
 #include <iostream>
 #include <fstream>
+#include <chrono>
 #include <set>
 #ifdef KESTREL_PREVIEW_SHARED_CSS
 #include <webscene/shared_css.hpp>
@@ -9,6 +10,7 @@
 static std::string capture_path;
 static bool exercise_layer_filter=false;
 static bool exercise_objects=false;
+static bool benchmark_pan=false;
 #include <array>
 #include <functional>
 #include <cmath>
@@ -49,6 +51,10 @@ class preview_app final : public foco::application {
   uint32_t gpu_width{}, gpu_height{};
   uint64_t gpu_serial{};
   unsigned ticks{};
+  unsigned pan_samples{};
+  uint64_t pan_initial_serial{}, pan_initial_builds{};
+  std::chrono::steady_clock::time_point pan_start;
+  double pan_tick_ms{}, pan_tick_max_ms{};
   bool gpu_dirty{true}, panning{};
   float pan_x{}, pan_y{};
   void tick() {
@@ -204,7 +210,30 @@ public:
         }));
     window->frame = [this, lifetime] {
       try {
+        if(benchmark_pan && viewport) {
+          if(!pan_samples) {
+            pan_start=std::chrono::steady_clock::now();
+            pan_initial_serial=gpu_serial;pan_initial_builds=viewport->scene_build_count();
+          }
+          viewport->camera.pan(2,0);gpu_dirty=true;
+          ++pan_samples;
+        }
+        const auto tick_start=std::chrono::steady_clock::now();
         tick();
+        if(benchmark_pan && pan_samples) {
+          const auto milliseconds=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-tick_start).count();
+          pan_tick_ms+=milliseconds;pan_tick_max_ms=std::max(pan_tick_max_ms,milliseconds);
+          if(pan_samples==360) {
+            const auto seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-pan_start).count();
+            std::cout<<"Pan pipeline: seconds="<<seconds<<" host_ticks="<<pan_samples
+                <<" published_images="<<(gpu_serial-pan_initial_serial)
+                <<" images_per_second="<<(gpu_serial-pan_initial_serial)/seconds
+                <<" tick_mean_ms="<<pan_tick_ms/pan_samples<<" tick_max_ms="<<pan_tick_max_ms
+                <<" scene_rebuilds="<<(viewport->scene_build_count()-pan_initial_builds)
+                <<" (publication timing, not display presentation timing)\n";
+            window->close();lifetime->shutdown(0);return;
+          }
+        }
         if(!capture_path.empty() && ++ticks==120) {
           if(!gpu_serial) {lifetime->shutdown(3);return;}
           auto png=foco::capture_platform_compositor_png(*window,1.f);
@@ -229,6 +258,7 @@ int main(int argc, char **argv) {
     if(std::string_view(argv[i])=="--capture" && i+1<argc) capture_path=argv[++i];
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
     else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;
+    else if(std::string_view(argv[i])=="--benchmark-pan") benchmark_pan=true;
   }
   if (argc == 2 && std::string_view(argv[1]) == "--check-input-coalescing") {
     auto view = foco::make_ref<webscene::foco_host::view>();
