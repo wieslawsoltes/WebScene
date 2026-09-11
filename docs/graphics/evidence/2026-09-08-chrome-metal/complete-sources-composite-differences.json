@@ -1,0 +1,117 @@
+{
+  "scope": "Decoded pixel comparison of the incomplete Chrome matrix, not WebScene output",
+  "comparisons": [
+    {
+      "case": "lines-10000-dpr1-light",
+      "phase": "before",
+      "changedPixels": 237203,
+      "boundsAnyColor": [
+        0,
+        0,
+        1446,
+        743
+      ],
+      "channelExtrema": [
+        [
+          0,
+          8
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "case": "lines-10000-dpr1-light",
+      "phase": "after",
+      "changedPixels": 239136,
+      "boundsAnyColor": [
+        0,
+        0,
+        1446,
+        743
+      ],
+      "channelExtrema": [
+        [
+          0,
+          8
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "case": "lines-100000-dpr1-light",
+      "phase": "before",
+      "changedPixels": 1,
+      "boundsAnyColor": [
+        13,
+        57,
+        14,
+        58
+      ],
+      "channelExtrema": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "case": "lines-100000-dpr1-light",
+      "phase": "after",
+      "changedPixels": 0,
+      "boundsAnyColor": null,
+      "channelExtrema": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    }
+  ],
+  "finding": "Inspected before images show the same visible UI and drawing; differences are color-value changes. Cause unproven; exact repeatability is not established."
+}

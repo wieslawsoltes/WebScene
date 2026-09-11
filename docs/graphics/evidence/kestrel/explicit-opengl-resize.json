@@ -1,0 +1,349 @@
+{
+  "host": "Explicit AvaloniaNativeRenderingMode.OpenGl only",
+  "producer": "Dawn WebGPU",
+  "exitCode": 0,
+  "resizeGeometries": [
+    {
+      "window": [
+        980,
+        680
+      ],
+      "canvas": [
+        1610,
+        750
+      ],
+      "css": [
+        805,
+        375
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            175,
+            196,
+            805,
+            375
+          ],
+          "height": "375px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            196,
+            980,
+            375
+          ],
+          "height": "375px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            980,
+            680
+          ],
+          "height": "680px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1440,
+        900
+      ],
+      "canvas": [
+        1932,
+        1126
+      ],
+      "css": [
+        966,
+        563
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            222,
+            205,
+            966,
+            563
+          ],
+          "height": "563px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1440,
+            563
+          ],
+          "height": "563px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1440,
+            900
+          ],
+          "height": "900px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1100,
+        740
+      ],
+      "canvas": [
+        1362,
+        806
+      ],
+      "css": [
+        681,
+        403
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            195,
+            205,
+            681,
+            403
+          ],
+          "height": "403px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1100,
+            403
+          ],
+          "height": "403px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1100,
+            740
+          ],
+          "height": "740px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1280,
+        800
+      ],
+      "canvas": [
+        1612,
+        926
+      ],
+      "css": [
+        806,
+        463
+      ],
+      "ancestors": [
+        {
+          "id": "viewport",
+          "tag": "SECTION",
+          "rect": [
+            222,
+            205,
+            806,
+            463
+          ],
+          "height": "463px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "workbench",
+          "tag": "MAIN",
+          "rect": [
+            0,
+            205,
+            1280,
+            463
+          ],
+          "height": "463px",
+          "minHeight": "140px",
+          "display": "grid"
+        },
+        {
+          "id": "shell",
+          "tag": "DIV",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "flex"
+        },
+        {
+          "id": "",
+          "tag": "BODY",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "block"
+        },
+        {
+          "id": "",
+          "tag": "HTML",
+          "rect": [
+            0,
+            0,
+            1280,
+            800
+          ],
+          "height": "800px",
+          "minHeight": "",
+          "display": "block"
+        }
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    }
+  ],
+  "physicalPresentationVerified": false,
+  "limitations": [
+    "This verifies the OpenGL compositor host, not WebGL API support or fallback.",
+    "Explicit-host sidebar run failed gesture validation and is not counted as a pass.",
+    "No native user-drag or visual flicker qualification."
+  ]
+}

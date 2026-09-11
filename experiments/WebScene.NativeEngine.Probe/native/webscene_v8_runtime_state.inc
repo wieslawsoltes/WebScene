@@ -11,7 +11,7 @@
     std::unordered_map<uint32_t, pending_frame_preparation>
         pending_frame_preparations;
     std::shared_ptr<shared_isolate_state> shared_isolate;
-    v8::ArrayBuffer::Allocator* allocator{nullptr};
+    std::shared_ptr<v8::ArrayBuffer::Allocator> allocator;
     v8::Isolate* isolate{nullptr};
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     v8::CpuProfiler* cpu_profiler{nullptr};
@@ -39,7 +39,9 @@
     v8::Global<v8::FunctionTemplate> element_template;
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
     v8::Global<v8::FunctionTemplate> html_element_template;
+    v8::Global<v8::FunctionTemplate> svg_element_template;
     v8::Global<v8::FunctionTemplate> html_table_cell_element_template;
+    v8::Global<v8::FunctionTemplate> html_dialog_element_template;
     v8::Global<v8::FunctionTemplate> html_form_element_template;
     v8::Global<v8::FunctionTemplate> html_select_element_template;
     v8::Global<v8::FunctionTemplate> html_script_element_template;
@@ -119,6 +121,7 @@
     std::vector<std::unique_ptr<media_query_list_state>> media_query_lists;
     std::vector<timer_task> timers;
     std::deque<pending_window_message> pending_window_messages;
+    std::vector<pending_dialog_close_event> pending_dialog_close_events;
     std::vector<pending_programmatic_scroll_event>
         pending_programmatic_scroll_events;
     native_websocket_transport websocket_transport;
@@ -153,6 +156,8 @@
     // the authored Blob text, while an <a download> activation needs the exact
     // byte payload and MIME type. Keep both representations under the same URL.
     std::unordered_map<std::string, std::string> object_url_download_payloads;
+    struct binary_object_url {std::string bytes,origin;};
+    std::unordered_map<std::string,binary_object_url> object_url_binary;
     // Canvas.toBlob() intentionally carries no encoded bytes. Preserve its
     // retained canvas identity across URL.createObjectURL() so an anchor
     // download can ask the desktop compositor for the exact PNG pixels.
@@ -339,6 +344,7 @@
     float scrollbar_drag_thumb_travel{0};
     dom_node* hover_target{nullptr};
     uint32_t current_cursor_kind_value{WEBSCENE_CURSOR_DEFAULT};
+    bool pointer_cursor_update_pending{false};
     dom_node* current_related_target{nullptr};
     double pointer_down_x{0};
     double pointer_down_y{0};

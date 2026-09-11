@@ -1,0 +1,14 @@
+{
+  "test": "webscene_graphics_metal_event_handoff_tests",
+  "result": "passed",
+  "durationSeconds": 0.39,
+  "checks": [
+    "reject null dependency before encoding",
+    "submit waits without CPU completion wait",
+    "first producer completion insufficient while second event unsignaled",
+    "subsequent consumer command buffer reads expected data after both waits"
+  ],
+  "productionConsumerIntegrated": false,
+  "physicalPresentationVerified": false,
+  "initialFailure": "Overstrict event.device identity check rejected valid MTLSharedEvent; removed because shared events support cross-device synchronization"
+}

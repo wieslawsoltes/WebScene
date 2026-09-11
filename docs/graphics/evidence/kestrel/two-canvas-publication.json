@@ -1,0 +1,27 @@
+{
+  "test": "test_native_gpu_scene_leases",
+  "coverage": [
+    "Production capture/commit with a first-ever pending second canvas",
+    "Second producer completes before first: no partial publication",
+    "First producer completes before second: no partial publication",
+    "Published GPU paint indices map to exact canvas identities/content serials",
+    "Failed second producer rejected while first remains pending",
+    "Same-size bitmap reset of second dependency rejected while first remains pending",
+    "Previous complete scene remains intact"
+  ],
+  "before": {
+    "failure": "Later failed producer not inspected while first dependency pending",
+    "line": 208,
+    "gpuRuntimePassed": false
+  },
+  "after": {
+    "nativeEnginePassed": true,
+    "nativeEngineSeconds": 12.55,
+    "gpuRuntimePassed": true,
+    "gpuRuntimeSeconds": 0.67
+  },
+  "limitations": [
+    "Controlled native snapshots; no physical hardware queue stall.",
+    "No physical presentation or browser performance qualification."
+  ]
+}

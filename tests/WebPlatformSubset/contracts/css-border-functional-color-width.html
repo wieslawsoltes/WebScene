@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8">
+<title>Border shorthand functional colors preserve width</title>
+<link rel="help" href="https://drafts.csswg.org/css-backgrounds/#border-shorthands">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<style>
+#row { width:200px;height:33px;box-sizing:border-box;color:rgb(220,228,237);border-bottom:1px solid color-mix(in srgb, rgb(42,54,69) 40%, transparent); }
+</style><div id="row">Layer</div>
+<script>
+test(()=>{
+ const n=document.getElementById('row'),s=getComputedStyle(n);
+ assert_equals(s.borderBottomWidth,'1px');
+ assert_equals(n.getBoundingClientRect().height,33);
+ assert_not_equals(s.borderBottomColor,s.color,'Functional border color must not become currentColor');
+},'Color-mix percentage must not overwrite border width');
+</script>

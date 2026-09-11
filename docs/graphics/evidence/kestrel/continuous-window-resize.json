@@ -1,0 +1,101 @@
+{
+  "validated": true,
+  "exitCode": 0,
+  "submittedUpdates": 80,
+  "activeUpdateSpanMilliseconds": 3436.036125,
+  "publishedScenes": 103,
+  "drawnScenes": 56,
+  "distinctPublishedViewportSizes": 41,
+  "maximumDrawCallbackGapMilliseconds": 88.04025,
+  "finalGeometry": {
+    "window": [
+      1280,
+      800
+    ],
+    "canvas": [
+      1612,
+      926
+    ],
+    "css": [
+      806,
+      463
+    ],
+    "ancestors": [
+      {
+        "id": "viewport",
+        "tag": "SECTION",
+        "rect": [
+          222,
+          205,
+          806,
+          463
+        ],
+        "height": "463px",
+        "minHeight": "",
+        "display": "block"
+      },
+      {
+        "id": "workbench",
+        "tag": "MAIN",
+        "rect": [
+          0,
+          205,
+          1280,
+          463
+        ],
+        "height": "463px",
+        "minHeight": "140px",
+        "display": "grid"
+      },
+      {
+        "id": "shell",
+        "tag": "DIV",
+        "rect": [
+          0,
+          0,
+          1280,
+          800
+        ],
+        "height": "800px",
+        "minHeight": "",
+        "display": "flex"
+      },
+      {
+        "id": "",
+        "tag": "BODY",
+        "rect": [
+          0,
+          0,
+          1280,
+          800
+        ],
+        "height": "800px",
+        "minHeight": "",
+        "display": "block"
+      },
+      {
+        "id": "",
+        "tag": "HTML",
+        "rect": [
+          0,
+          0,
+          1280,
+          800
+        ],
+        "height": "800px",
+        "minHeight": "",
+        "display": "block"
+      }
+    ],
+    "dpr": 2,
+    "backend": "WebGPU \u00b7 GPU pipeline",
+    "errors": 0
+  },
+  "physicalPresentationVerified": false,
+  "nativeUserDragVerified": false,
+  "limitations": [
+    "Scripted window dimensions, not a native user drag.",
+    "Requested 16ms delays did not produce 16ms update cadence; actual update span is recorded.",
+    "Earlier development runs failed because monitoring was disabled and then required ancestor diagnostic data was missing; excluded from qualification."
+  ]
+}

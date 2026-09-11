@@ -157,7 +157,8 @@ native_document::allocation_metrics native_document::read_allocation_metrics() c
             return values.bucket_count() * sizeof(void*)
                 + values.size() * (sizeof(value_type) + 2U * sizeof(void*));
         };
-        result.canvas_storage_bytes += hash_bytes(canvas.string_indices);
+        result.canvas_storage_bytes += hash_bytes(canvas.string_indices)
+            + hash_bytes(canvas.canvas_dependencies);
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         result.canvas_storage_bytes +=
             hash_bytes(canvas.probable_volume_by_generation)

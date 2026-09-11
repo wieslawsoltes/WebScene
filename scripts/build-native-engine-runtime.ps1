@@ -10,6 +10,7 @@ param(
     [string] $V8Root,
     [string] $V8Workspace,
     [string] $V8Revision = "15.3.10",
+    [string] $GraphicsSdk,
 
     [ValidateSet("legacy", "html5ever")]
     [string] $HtmlParser = "html5ever",
@@ -43,6 +44,12 @@ $buildVariant = "-$HtmlParser-$CssParser-$SelectorParser-$DomBindings-$V8Snapsho
 $buildVariant += if ($ThinLto) { "-thinlto" } else { "" }
 $buildVariant += if ($PartitionAlloc) { "-partitionalloc" } else { "" }
 $buildVariant += "-inspector"
+$graphicsCMake = "OFF"
+if ($GraphicsSdk) {
+    $GraphicsSdk = (Resolve-Path $GraphicsSdk).Path
+    $graphicsCMake = "ON"
+    $buildVariant += "-graphics"
+}
 if (($CssParser -eq "cssparser" -or $SelectorParser -eq "servo") -and $HtmlParser -ne "html5ever") {
     throw "Servo CSS components require -HtmlParser html5ever."
 }
@@ -199,6 +206,9 @@ $buildDir = if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
 & cmake -S (Join-Path $repoRoot "experiments/WebScene.NativeEngine.Probe") -B $buildDir `
     -A $(if ($cpu -eq "arm64") { "ARM64" } else { "x64" }) `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON `
+    -DWEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA=ON `
+    "-DWEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=$graphicsCMake" `
+    "-DWEBSCENE_GRAPHICS_SDK_ROOT=$GraphicsSdk" `
     -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON `
     -DWEBSCENE_V8_POINTER_COMPRESSION=ON `
     -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON `
@@ -227,11 +237,15 @@ if ($V8Snapshot -eq "bootstrap") {
     Copy-Item $snapshotPath (Join-Path $buildDir "Release/webscene_bootstrap_snapshot.bin") -Force
     Copy-Item $snapshotMetadataPath (Join-Path $buildDir "Release/webscene_bootstrap_snapshot.meta") -Force
 }
-& ctest --test-dir $buildDir -C Release --output-on-failure
+$ctestArgs = @('--test-dir', $buildDir, '-C', 'Release', '--output-on-failure')
+if ($env:WEBSCENE_NATIVE_SKIP_HARDWARE_TESTS -eq '1') { $ctestArgs += @('-LE', 'hardware') }
+& ctest @ctestArgs
 if ($LASTEXITCODE -ne 0) { throw "Native WebScene engine tests failed." }
 
 $nativePath = Join-Path $buildDir "Release/webscene_native_engine.dll"
 if (-not (Test-Path $nativePath)) { throw "Native engine build did not produce '$nativePath'." }
+$miniaudioLicense = Join-Path $buildDir "webscene-miniaudio-LICENSE"
+if (-not (Test-Path $miniaudioLicense)) { throw "Miniaudio license is missing from the media-enabled native build." }
 $ixWebSocketLicense = Join-Path $buildDir "_deps/webscene_ixwebsocket-src/LICENSE.txt"
 $mbedTlsLicense = Join-Path $buildDir "_deps/webscene_mbedtls-src/LICENSE"
 if (-not (Test-Path $ixWebSocketLicense)) {
@@ -247,6 +261,8 @@ $packArguments = @(
     "-p:WebSceneNativeEngineRid=$Rid",
     "-p:WebSceneNativeEnginePath=$nativePath",
     "-p:WebSceneNativeEngineIcuDataPath=$icuData",
+    "-p:WebSceneNativeEngineMedia=true",
+    "-p:WebSceneNativeEngineMiniaudioLicensePath=$miniaudioLicense",
     "-p:WebSceneNativeEngineV8LicensePath=$v8License",
     "-p:WebSceneNativeEngineIcuLicensePath=$icuLicense",
     "-p:WebSceneNativeEngineIXWebSocketLicensePath=$ixWebSocketLicense",
@@ -273,6 +289,13 @@ if ($HtmlParser -eq "html5ever") {
     $packArguments += "-p:WebSceneNativeEngineHtmlParserNoticesPath=$(Join-Path $repoRoot 'experiments/WebScene.NativeEngine.Probe/native/html_parser/THIRD-PARTY-NOTICES.md')"
 }
 $packArguments += "-p:PackageVersion=$PackageVersion"
+if ($GraphicsSdk) {
+    $graphicsStage = Join-Path $buildDir ("graphics-package-" + [guid]::NewGuid().ToString('N'))
+    & python (Join-Path $repoRoot 'eng/graphics/stage-runtime.py') --sdk $GraphicsSdk `
+        --native (Join-Path $buildDir 'Release') --rid $Rid --output $graphicsStage
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to stage verified graphics dependencies.' }
+    $packArguments += "-p:WebSceneGraphicsPackageProps=$(Join-Path $graphicsStage 'GraphicsPackage.props')"
+}
 & dotnet @packArguments
 if ($LASTEXITCODE -ne 0) { throw "Failed to pack the native WebScene engine." }
 
@@ -297,6 +320,11 @@ try {
         --native-cache-directory (Join-Path $buildDir "code-cache") `
         --output (Join-Path $buildDir "wpt-results")
     if ($LASTEXITCODE -ne 0) { throw "Required native compatibility profile failed." }
+
+    & dotnet run --project (Join-Path $repoRoot "tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj") `
+        -c Release -- --manifest (Join-Path $repoRoot "tests/WebPlatformSubset/webscene-media-runtime-profile.json") `
+        --selection required --native-library $packageNativePath --output (Join-Path $buildDir "media-contracts")
+    if ($LASTEXITCODE -ne 0) { throw "Required native media/audio contracts failed." }
 
     $previousNativeEnginePath = $env:WEBSCENE_NATIVE_ENGINE_PATH
     $previousTestNativeLibrary = $env:WEBSCENE_TEST_NATIVE_LIBRARY
@@ -354,6 +382,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Failed to build the native runtime package consumer." }
     $consumerOutput = Join-Path $consumerDir "bin/Release/net8.0/$Rid"
     $copiedAssets = @("webscene_native_engine.dll", "icudtl.dat", "webscene-native-runtime.json")
+    if ($GraphicsSdk) {
+        $copiedAssets += @("webgpu_dawn.dll", "d3dcompiler_47.dll", "libEGL.dll", "libGLESv2.dll", "webscene-graphics-runtime.json")
+    }
     if ($V8Snapshot -eq "bootstrap") {
         $copiedAssets += @("webscene_bootstrap_snapshot.bin", "webscene_bootstrap_snapshot.meta")
     }

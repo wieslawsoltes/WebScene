@@ -1,0 +1,37 @@
+{
+  "profile": "webscene-aureon-runtime-1",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "deviceScaleFactor": 2
+  },
+  "required": [],
+  "candidate": [
+    {
+      "path": "contracts/module-worker-clone.html",
+      "type": "contract",
+      "capabilities": [
+        "javascript-modules",
+        "module-workers",
+        "structured-clone",
+        "arraybuffer-transfer"
+      ],
+      "reason": "Project-owned regression contract; full upstream WPT conformance remains separate.",
+      "nativeNavigation": true
+    },
+    {
+      "path": "contracts/svg-inline-style.html",
+      "type": "contract",
+      "nativeNavigation": true,
+      "capabilities": [
+        "svg-inline-style",
+        "svg-interface-identity"
+      ],
+      "reason": "Protect original Aureon transform controls when entering path-tracing mode."
+    }
+  ],
+  "harnessBlocked": [],
+  "excluded": []
+}

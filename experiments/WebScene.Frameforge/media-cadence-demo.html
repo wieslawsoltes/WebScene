@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Video in WebScene</title>
+<style>
+body{margin:0;padding:24px;background:#142132;color:#eef5ff;font:16px sans-serif}
+h1{font-size:24px}#screen{width:100%;overflow:hidden;border-radius:16px;background:#080d14}
+video{display:block;width:100%;height:auto}button{padding:12px;margin:8px 8px 8px 0;background:#294661;color:white;border:0;border-radius:6px}
+#status{margin:12px 0;color:#b6ccdf}
+</style>
+<h1>Video cadence in WebScene</h1>
+<p>Compare 60fps motion, a 24fps film trailer and 4K HEVC, all with audio.</p>
+<div><button data-clip="big-buck-bunny-60fps">Big Buck Bunny · 60fps</button><button data-clip="sintel-trailer-24fps">Sintel trailer · 24fps</button><button data-clip="tears-of-steel">Tears of Steel · 24fps HEVC</button></div>
+<div id="screen"><video id="movie" playsinline loop preload="auto"></video></div>
+<div><button id="play">Play</button><button id="pause">Pause</button><button id="back">Back 2s</button><button id="forward">Forward 2s</button><button id="mute">Mute</button></div>
+<p>Blender Foundation · Big Buck Bunny / Sintel / Tears of Steel. HEVC sample provided by Microsoft.</p>
+<p id="status">Loading…</p>
+<script>
+const movie=document.getElementById('movie'),status=document.getElementById('status');
+function report(error){status.textContent=String(error.message||error);console.error(String(error));}
+async function play(){try{await movie.play();}catch(error){report(error);}}
+document.getElementById('play').onclick=play;
+document.getElementById('pause').onclick=()=>movie.pause();
+document.getElementById('back').onclick=()=>{movie.currentTime=Math.max(0,movie.currentTime-2);};
+document.getElementById('forward').onclick=()=>{if(Number.isFinite(movie.duration))movie.currentTime=Math.min(movie.duration,movie.currentTime+2);};
+document.getElementById('mute').onclick=()=>{movie.muted=!movie.muted;document.getElementById('mute').textContent=movie.muted?'Unmute':'Mute';};
+for(const button of document.querySelectorAll('[data-clip]'))button.onclick=()=>{movie.src='assets/'+button.getAttribute('data-clip')+'.mp4';play();};
+movie.addEventListener('error',()=>report(movie.error?.message||'Video failed to load'));
+setInterval(()=>{if(!movie.error)status.textContent=(movie.paused?'Paused':'Playing')+' · '+movie.currentTime.toFixed(1)+' / '+(Number.isFinite(movie.duration)?movie.duration.toFixed(1):'…')+' seconds · '+movie.videoWidth+' × '+movie.videoHeight;},250);
+movie.volume=.5;movie.src='assets/big-buck-bunny-60fps.mp4';play();
+</script>

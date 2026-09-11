@@ -46,7 +46,15 @@ public readonly record struct NativeRendererMemoryMetrics(
     int SvgPictureCount,
     int ProcessSvgPictureCount,
     int ProcessSvgPictureReferenceCount,
-    long ProcessSvgPictureMemoryHits);
+    long ProcessSvgPictureMemoryHits)
+{
+    public long CanvasCheckpointSubmissions { get; init; }
+    public long MaximumRetainedCanvasCommands { get; init; }
+    public double MaximumCanvasCheckpointMilliseconds { get; init; }
+    public long CanvasCheckpointDeferredReadbacks { get; init; }
+    public long CanvasCheckpointFencePolls { get; init; }
+    public long CanvasCheckpointWorkerReadbacks { get; init; }
+}
 
 internal sealed class SharedSvgPictureLease : IDisposable
 {

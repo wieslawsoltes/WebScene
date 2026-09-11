@@ -26,6 +26,7 @@
 
     void ensure_layout(const dom_node* reusable_client_geometry_subject = nullptr)
     {
+        webscene_frame_trace::scope trace(frame_trace, "layout-start", "layout-end", current_input_sequence);
         flush_pending_style_recascades();
         if (!document.dirty()) return;
         if (reusable_client_geometry_subject != nullptr
@@ -777,6 +778,11 @@
                 return task.target_context.Get(isolate) == local_context;
             });
         std::erase_if(
+            pending_dialog_close_events,
+            [&](const auto& task) {
+                return task.context.Get(isolate) == local_context;
+            });
+        std::erase_if(
             pending_programmatic_scroll_events,
             [&](const auto& task) {
                 return task.context.Get(isolate) == local_context;
@@ -1459,6 +1465,8 @@
             ? (node.namespace_uri() == dom_node::html_namespace_uri
                 ? (node.tag == "slot"
                     ? html_slot_element_template.Get(isolate)
+                    : node.tag == "dialog"
+                        ? html_dialog_element_template.Get(isolate)
                     : node.tag == "form"
                         ? html_form_element_template.Get(isolate)
                     : node.tag == "select"
@@ -1470,7 +1478,8 @@
                     : node.tag == "td" || node.tag == "th"
                         ? html_table_cell_element_template.Get(isolate)
                     : html_element_template.Get(isolate))
-                : element_template.Get(isolate))
+                : node.namespace_uri() == "http://www.w3.org/2000/svg"
+                    ? svg_element_template.Get(isolate) : element_template.Get(isolate))
             : node.kind == dom_node_kind::document_fragment
                 ? (document.is_shadow_root(node)
                     ? shadow_root_template.Get(isolate)
@@ -1521,6 +1530,9 @@
                 js_string(isolate, "form"),
                 get_form_owner).Check();
         }
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        attach_media_prototype(local_context,node,object);
+#endif
         auto& wrapper = node_wrappers[key];
         wrapper.Reset(isolate, object);
         if (!is_connected(node)) wrapper.SetWeak();
@@ -1634,6 +1646,7 @@
             if (detached_document_roots.contains(ancestor->id)) return;
         }
         if (node.tag == "script") {
+            bool module_script = false;
             const auto authored_type = node.attributes.find("type");
             if (authored_type != node.attributes.end()) {
                 auto type = lower_html_name(authored_type->second);
@@ -1642,6 +1655,7 @@
                 type = first == std::string::npos
                     ? std::string{}
                     : type.substr(first, last - first + 1U);
+                module_script = type == "module";
                 const auto executable = type.empty() || type == "module"
                     || type == "text/javascript"
                     || type == "application/javascript"
@@ -1685,12 +1699,11 @@
                             wrapper).Check();
                     }
                     std::string error;
-                    const auto executed = execute_in_context(
-                        resource_context,
-                        source,
-                        name,
-                        error,
-                        false);
+                    if (module_script && !document_value.IsEmpty() && document_value->IsObject())
+                        document_value.As<v8::Object>()->Set(resource_context,js_string(isolate,"currentScript"),v8::Null(isolate)).Check();
+                    const auto executed = module_script
+                        ? execute_module(resource_context, source, name, error)
+                        : execute_in_context(resource_context, source, name, error, false);
                     if (!document_value.IsEmpty() && document_value->IsObject()) {
                         document_value.As<v8::Object>()->Set(
                             resource_context,
@@ -3283,6 +3296,8 @@
             ? std::optional<std::string>(state->owner->attributes.at(state->name))
             : std::nullopt;
         state->owner->attributes[state->name] = text;
+        if (state->namespace_uri.empty() && (state->name == "width" || state->name == "height"))
+            reset_canvas_backing_store(*self, *state->owner);
         if (state->name == "id") state->owner->id_attribute = text;
         else if (state->name == "class") state->owner->class_name = text;
         if (state->name == "class") {
@@ -3353,6 +3368,8 @@
             ? std::optional<std::string>(owner->attributes.at(state->name))
             : std::nullopt;
         owner->attributes[state->name] = value;
+        if (state->namespace_uri.empty() && (state->name == "width" || state->name == "height"))
+            reset_canvas_backing_store(*self, *owner);
         if (state->name == "id") owner->id_attribute = value;
         else if (state->name == "class") owner->class_name = value;
         if (state->name == "class") {
@@ -3390,6 +3407,8 @@
         }
         const auto old_value = owner->attributes.at(state->name);
         owner->attributes.erase(state->name);
+        if (state->namespace_uri.empty() && (state->name == "width" || state->name == "height"))
+            reset_canvas_backing_store(*self, *owner);
         if (state->name == "id") owner->id_attribute.clear();
         else if (state->name == "class") owner->class_name.clear();
         state->value = old_value;

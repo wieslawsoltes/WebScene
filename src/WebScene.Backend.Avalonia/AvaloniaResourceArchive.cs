@@ -1,11 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using WebScene.Core;
 
 namespace WebScene.Backends.Avalonia;
 
-internal sealed class AvaloniaResourceArchive
+internal sealed partial class AvaloniaResourceArchive
 {
     private const int CurrentSchemaVersion = 2;
     private const string ManifestFileName = "manifest.json";
@@ -51,8 +52,8 @@ internal sealed class AvaloniaResourceArchive
                 manifestPath);
         }
 
-        var manifest = JsonSerializer.Deserialize<ResourceArchiveManifest>(
-                           File.ReadAllText(manifestPath))
+        var manifest = JsonSerializer.Deserialize(
+                           File.ReadAllText(manifestPath), ArchiveJsonContext.Default.ResourceArchiveManifest)
                        ?? throw new InvalidDataException(
                            $"WebScene resource replay manifest '{manifestPath}' is empty.");
         if (manifest.SchemaVersion is < 1 or > CurrentSchemaVersion)
@@ -90,7 +91,7 @@ internal sealed class AvaloniaResourceArchive
                 + "Use an empty WebScene resource cache for the capture run.");
         }
 
-        var content = Encoding.UTF8.GetBytes(resource.Content);
+        var content = resource.BinaryContent?.ToArray() ?? Encoding.UTF8.GetBytes(resource.Content);
         lock (_gate)
         {
             var key = TextKey(address, kind, context.Origin);
@@ -127,6 +128,7 @@ internal sealed class AvaloniaResourceArchive
             resource.DisplayName,
             resource.Directory)
         {
+            BinaryContent = kind == WebSceneResourceKind.Data ? resource.Content : (ReadOnlyMemory<byte>?)null,
             EntityTag = resource.EntityTag,
             LastModified = resource.LastModified,
             FreshUntil = resource.FreshUntil,
@@ -234,7 +236,7 @@ internal sealed class AvaloniaResourceArchive
                 temporaryPath,
                 JsonSerializer.Serialize(
                     manifest,
-                    new JsonSerializerOptions { WriteIndented = true }));
+                    ArchiveJsonContext.Default.ResourceArchiveManifest));
             File.Move(temporaryPath, manifestPath, overwrite: true);
             _dirty = false;
         }
@@ -306,6 +308,10 @@ internal sealed class AvaloniaResourceArchive
         => $"text:{(int)kind}:{address}";
 
     private static string BinaryKey(Uri address) => $"binary:{address}";
+
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    [JsonSerializable(typeof(ResourceArchiveManifest))]
+    private partial class ArchiveJsonContext : JsonSerializerContext { }
 
     private sealed class ResourceArchiveManifest
     {

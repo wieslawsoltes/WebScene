@@ -10,6 +10,17 @@
 #include <utility>
 #include <vector>
 
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+namespace webscene::graphics {
+class graphics_service;
+struct completion_wake;
+struct completion_record;
+enum class webgpu_canvas_interop;
+}
+#endif
+
+struct webscene_gpu_image_lease_v3;
+
 namespace webscene_native {
 
 class native_document;
@@ -261,9 +272,13 @@ public:
     bool has_pending_inspector_tasks() const noexcept;
     bool dispatch_resize();
     bool deliver_resize_observers();
+    bool has_open_gpu_output() const;
+    void update_gpu_presentation_images(const std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images);
     bool refresh_media_environment();
     bool set_visible(bool visible);
-    bool dispatch_input(const webscene_input_event& event);
+    bool dispatch_input(const webscene_input_event& event, bool defer_cursor_update = false);
+    // Worker-only: call after publication layout and ResizeObserver delivery.
+    void refresh_pointer_cursor_after_layout();
     bool dispatch_transition_events();
     uint32_t current_cursor_kind() const noexcept;
     void notify_low_memory();
@@ -271,6 +286,23 @@ public:
     bool pump_animation_frame_task();
     bool has_pending_animation_frame_task() const noexcept;
     uint8_t host_animation_frame_demand() const noexcept;
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    // Native binding initialization, on the owning runtime thread. Install the
+    // completion dispatcher before issuing backend operations. No JS API is
+    // exposed merely by creating this service.
+    // Normal engine disposal: terminate records before releasing the context.
+    void shutdown_graphics();
+    // Host-only opt-in, before application scripts. The host must establish the
+    // document's secure-context status and negotiate the presenter policy.
+    // Denied exposure does not initialize graphics. Reinstall after navigation.
+    void set_webgpu_policy(std::shared_ptr<webscene::graphics::completion_wake> wake,
+        std::function<webscene::graphics::webgpu_canvas_interop(const std::string&)> policy);
+    bool install_webgpu(std::shared_ptr<webscene::graphics::completion_wake> wake,
+        bool secure_context,webscene::graphics::webgpu_canvas_interop interop);
+    webscene::graphics::graphics_service& initialize_graphics(
+        std::shared_ptr<webscene::graphics::completion_wake> wake,
+        std::function<void(webscene::graphics::completion_record)> deliver);
+#endif
     bool pump_task();
     bool has_pending_tasks() const noexcept;
     std::chrono::milliseconds recommended_idle_wait(

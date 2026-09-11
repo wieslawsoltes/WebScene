@@ -1,13 +1,13 @@
 void native_document::build_scene(
     std::vector<webscene_scene_command>& commands,
     std::vector<webscene_scene_string>& strings,
-    std::vector<char>& string_bytes) const
+    std::vector<char>& string_bytes, bool ordered_canvas, bool capture_gpu_outputs) const
 {
     commands.clear();
     commands.reserve(nodes_.size());
     strings.clear();
     string_bytes.clear();
-    append_scene(*body_, commands, strings, string_bytes, false, true);
+    append_scene(*body_, commands, strings, string_bytes, false, true, false, nullptr, nullptr, ordered_canvas, false, capture_gpu_outputs);
     std::vector<dom_node*> fixed;
     for (auto* child : composed_children(*body_)) {
         collect_outermost_fixed_positioned_nodes(*this, *child, fixed);
@@ -19,7 +19,7 @@ void native_document::build_scene(
             return left->paint_z_index < right->paint_z_index;
         });
     for (const auto* fixed_node : fixed) {
-        if (!display_tree_allows_render(*this, *fixed_node)) continue;
+        if (is_in_modal_layer(*fixed_node) || !display_tree_allows_render(*this, *fixed_node)) continue;
         auto inherited_visibility_hidden = false;
         std::vector<const dom_node*> ancestors;
         for (auto* ancestor = composed_parent(*fixed_node);
@@ -38,7 +38,109 @@ void native_document::build_scene(
             strings,
             string_bytes,
             inherited_visibility_hidden,
-            false);
+            false, false, nullptr, nullptr, ordered_canvas, false, capture_gpu_outputs);
+    }
+    // Modal roots leave their DOM stacking context and are emitted exactly
+    // once, in registration order, after ordinary/fixed document content.
+    for (const auto& entry : modal_dialogs()) {
+        if (entry.dialog_id > native_id_index_.size()) continue;
+        const auto* modal = native_id_index_[entry.dialog_id - 1U];
+        if (modal == nullptr || !display_tree_allows_render(*this, *modal)) continue;
+        bool hidden = false;
+        std::vector<const dom_node*> ancestors;
+        for (auto* ancestor = composed_parent(*modal); ancestor != nullptr;
+             ancestor = composed_parent(*ancestor)) ancestors.push_back(ancestor);
+        for (auto ancestor = ancestors.rbegin(); ancestor != ancestors.rend(); ++ancestor) {
+            if ((*ancestor)->style.visibility_specified) hidden = (*ancestor)->style.visibility_hidden;
+        }
+        append_scene(*modal, commands, strings, string_bytes, hidden,
+            false, false, nullptr, nullptr, ordered_canvas, true, capture_gpu_outputs);
+    }
+}
+
+void native_document::publish_gpu_canvas_image(dom_node& node,
+    std::shared_ptr<const webscene_gpu_image_lease_v3> image)
+{
+    if ((node.tag!="canvas" && node.tag!="video") || find_by_native_id(node.id)!=&node)
+        throw std::invalid_argument("GPU canvas belongs to another document or is not a canvas");
+    auto& canvas=node.mutable_canvas();
+    const bool changed=canvas.gpu_image!=image;
+    canvas.publish_gpu_image(std::move(image));
+    if (changed) {
+        // Submission already invalidated the document and captured this output.
+        // Completion resolves that dependency; it does not create new content.
+        // Keep ordinary completed-image publication invalidating as before.
+        if(canvas.gpu_snapshot && canvas.gpu_snapshot->state()!=webscene_gpu_image_snapshot::status::failed) {
+            const auto captured=canvas.gpu_snapshot->describe();
+            const auto completed=canvas.gpu_image->value.describe();
+            if(captured.canvas==completed.canvas && captured.allocation==completed.allocation
+                && captured.allocation_generation==completed.allocation_generation
+                && captured.content_serial==completed.content_serial)return;
+        }
+        mark_scene_changed();
+    }
+}
+
+bool native_document::validate_gpu_canvas_binding(const gpu_canvas_scene_binding& binding) const
+{
+    const auto* node=binding.node_id==0 || binding.node_id>native_id_index_.size()
+        ? nullptr : native_id_index_[binding.node_id-1];
+    if(!node || (node->tag!="canvas" && node->tag!="video") || !is_connected(*node))return false;
+    const auto& backing=node->canvas().backing;
+    if(binding.presentation_generation) {
+        return binding.completed && !binding.pending
+            && node->canvas().gpu_presentation_image==binding.completed
+            && backing.identity()==binding.metadata.canvas
+            && backing.allocation_generation()==binding.presentation_generation;
+    }
+    return backing.identity()==binding.metadata.canvas
+        && backing.allocation_generation()==binding.metadata.allocation_generation
+        && backing.accepts_completed_content(binding.metadata.content_serial)
+        && backing.width()==binding.metadata.width && backing.height()==binding.metadata.height;
+}
+
+void native_document::build_gpu_canvas_bindings(
+    std::vector<gpu_canvas_scene_binding>& bindings) const
+{
+    bindings.clear();
+    for(const auto& node:nodes_) {
+        if((node->tag!="canvas" && node->tag!="video") || !is_connected(*node) || !node->visible
+            || !display_tree_allows_render(*this,*node))continue;
+        const auto& canvas=node->canvas();
+        if(!canvas.gpu_snapshot&&!canvas.gpu_image) {
+            if(canvas.gpu_presentation_image) {
+                const auto metadata=canvas.gpu_presentation_image->value.describe();
+                if(metadata.canvas==canvas.backing.identity())
+                    bindings.push_back({node->id,metadata,nullptr,canvas.gpu_presentation_image,
+                        canvas.backing.allocation_generation()});
+            }
+            continue;
+        }
+        const auto metadata=canvas.gpu_snapshot ? canvas.gpu_snapshot->describe()
+            : canvas.gpu_image->value.describe();
+        if(metadata.canvas!=canvas.backing.identity()
+            || metadata.allocation_generation!=canvas.backing.allocation_generation()
+            || !canvas.backing.accepts_completed_content(metadata.content_serial))continue;
+        bindings.push_back({node->id,metadata,canvas.gpu_snapshot,
+            canvas.gpu_snapshot ? nullptr : canvas.gpu_image});
+    }
+}
+
+void native_document::build_gpu_canvas_images(
+    std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images) const
+{
+    images.clear();
+    for (const auto& node : nodes_) {
+        if ((node->tag!="canvas" && node->tag!="video") || !is_connected(*node) || !node->visible
+            || !display_tree_allows_render(*this,*node)) continue;
+        const auto& canvas=node->canvas();
+        if (!canvas.gpu_image) continue;
+        const auto m=canvas.gpu_image->value.describe();
+        // A bitmap reset invalidates the presented content. Retained scenes
+        // still own the previous frame until their consumers finish.
+        if (m.allocation_generation!=canvas.backing.allocation_generation()
+            || !canvas.backing.accepts_completed_content(m.content_serial)) continue;
+        images.push_back(canvas.gpu_image);
     }
 }
 
@@ -100,9 +202,20 @@ void native_document::build_canvas_display_lists(
         added_dependency = false;
         for (const auto& node : nodes_) {
             if (!retained_canvas_ids.contains(node->id)) continue;
-            for (const auto& command : node->canvas().commands) {
-                if (command.kind == 27U
-                    && retained_canvas_ids.insert(command.resource_id).second) {
+            const auto& canvas = node->canvas();
+            if (canvas.dependency_generation != canvas.generation
+                || canvas.dependency_command_count > canvas.commands.size()) {
+                canvas.canvas_dependencies.clear();
+                canvas.dependency_command_count = 0;
+                canvas.dependency_generation = canvas.generation;
+            }
+            for (auto index = canvas.dependency_command_count; index < canvas.commands.size(); ++index) {
+                const auto& command = canvas.commands[index];
+                if (command.kind == 27U) canvas.canvas_dependencies.insert(command.resource_id);
+            }
+            canvas.dependency_command_count = canvas.commands.size();
+            for (const auto dependency : canvas.canvas_dependencies) {
+                if (retained_canvas_ids.insert(dependency).second) {
                     added_dependency = true;
                 }
             }
@@ -171,6 +284,16 @@ void native_document::retain_canvas_for_export(dom_node& node) noexcept
     mark_scene_changed();
 }
 
+bool native_document::has_canvas_references(uint32_t node_id) const
+{
+    for (const auto& node : nodes_) {
+        if (node->tag != "canvas") continue;
+        for (const auto& command : node->canvas().commands)
+            if (command.kind == 27U && command.resource_id == node_id) return true;
+    }
+    return false;
+}
+
 bool native_document::release_canvas_export(uint32_t node_id) noexcept
 {
     if (node_id == 0U || retained_export_canvas_id_ != node_id) return false;
@@ -188,8 +311,12 @@ void native_document::append_scene(
     bool defer_fixed_descendants,
     bool defer_positive_descendants,
     const dom_node* paint_target,
-    const node_style::pseudo_element* paint_pseudo_target) const
+    const node_style::pseudo_element* paint_pseudo_target,
+    bool ordered_canvas,
+    bool paint_modal_root,
+    bool capture_gpu_outputs) const
 {
+    if (!paint_modal_root && is_modal_dialog(node)) return;
     const auto elevated_target = paint_target == &node;
     const auto pseudo_only = elevated_target && paint_pseudo_target != nullptr;
     if (paint_target == &node) paint_target = nullptr;
@@ -308,7 +435,7 @@ void native_document::append_scene(
             // backgrounds must be emitted after retained chart canvases, just
             // like their text and SVG foreground commands.
         }
-        return node.paints_after_retained_canvas || fixed_layer || outermost_z_index > 0;
+        return is_in_modal_layer(node) || node.paints_after_retained_canvas || fixed_layer || outermost_z_index > 0;
     }();
     struct resolved_radii final {
         float top_left;
@@ -1193,7 +1320,26 @@ void native_document::append_scene(
         append_pseudo(node.style.after_pseudo());
     }
     const auto& canvas = node.canvas();
-    if (paint_self
+    const auto gpu_metadata=capture_gpu_outputs && canvas.gpu_snapshot
+        ? std::optional(canvas.gpu_snapshot->describe())
+        : canvas.gpu_image ? std::optional(canvas.gpu_image->value.describe()) : std::nullopt;
+    const bool presentation_gpu=capture_gpu_outputs && !gpu_metadata && canvas.gpu_presentation_image
+        && canvas.gpu_presentation_image->value.describe().canvas==canvas.backing.identity();
+    const bool paints_gpu=presentation_gpu || (gpu_metadata
+        && gpu_metadata->allocation_generation==canvas.backing.allocation_generation()
+        && canvas.backing.accepts_completed_content(gpu_metadata->content_serial));
+    if (paint_self && (node.tag=="canvas" || node.tag=="video") && paints_gpu) {
+        // Native DOM output carries the node ID. Publication resolves it to the
+        // scene-local image index before exposing the command to consumers.
+        commands.push_back(webscene_scene_command{
+            WEBSCENE_SCENE_COMMAND_GPU_IMAGE,0U,node.layout.x,node.layout.y,
+            node.layout.width,node.layout.height,0U,node.id,0,0,0,0,0});
+    }
+    if (ordered_canvas && paint_self && !paints_gpu && node.tag=="canvas" && !canvas.commands.empty()) {
+        commands.push_back(webscene_scene_command{
+            WEBSCENE_SCENE_COMMAND_CANVAS_LAYER,0U,0,0,0,0,0U,node.id,0,0,0,0,0});
+    }
+    if (paint_self && !paints_gpu
         && node.tag == "canvas"
         && canvas.commands.empty()
         && (!canvas.rects.empty() || !canvas.lines.empty())) {
@@ -1641,7 +1787,7 @@ void native_document::append_scene(
                 defer_fixed_descendants,
                 true,
                 paint_target,
-                paint_pseudo_target);
+                paint_pseudo_target, ordered_canvas, false, capture_gpu_outputs);
         } else if (entry.pseudo != nullptr) {
             if (!pseudo_only && entry.z_index > 0) continue;
             append_pseudo(*entry.pseudo);
@@ -1680,7 +1826,7 @@ void native_document::append_scene(
             // Walk only this branch. Ancestors retain overflow clips and
             // visibility inheritance but do not duplicate backgrounds or SVGs.
             append_scene(*branch, commands, strings, string_bytes,
-                visibility_hidden, defer_fixed_descendants, true, target, entry.pseudo);
+                visibility_hidden, defer_fixed_descendants, true, target, entry.pseudo, ordered_canvas, false, capture_gpu_outputs);
         }
     }
     if (clip_contents) {

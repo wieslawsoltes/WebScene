@@ -1,0 +1,33 @@
+<!doctype html><meta charset="utf-8"><title>Frameforge native media verification</title>
+<style>body{background:#142132;color:white;font:16px sans-serif;padding:24px}video{width:640px;height:360px;border-radius:16px}#video{width:640px;height:360px;overflow:hidden;border-radius:16px;opacity:.9}#status{white-space:pre-wrap}</style>
+<h1>Frameforge native media verification</h1><div id="video"></div><pre id="status">Loading original media engine…</pre>
+<script type="module">
+import {MediaEngine} from './src/media.js';
+import {createDemo,renderPlan} from './src/core.js';
+const status=document.getElementById('status');const evidence={revision:'f414cd44896b659a5c6da2e4fc596a2ded055f2a',complete:false,passed:false,steps:[]};globalThis.mediaVerification=evidence;
+const check=(value,message)=>{if(!value)throw Error(message);evidence.steps.push(message);status.textContent=JSON.stringify(evidence,null,2);};
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const engine=new MediaEngine({get:async()=>null});
+try {
+ const project=createDemo();await engine.setProject(project);
+ for(const frame of [0,143,144,287,288,431,432,560,0]){
+  await engine.prepare(renderPlan(project,frame),project);
+  check([...engine.entries.values()].filter(e=>e.el.readyState>=2).length>0,'Prepared original cut '+frame);
+ }
+ const first=engine.entries.get('demo-0');document.getElementById('video').appendChild(first.el);
+ await engine.ensureAudio();const plan=renderPlan(project,48);await engine.prepare(plan,project);engine.sync(plan,project,48,true);await wait(250);
+ check(first.el.currentTime>2.1&&!first.el.paused,'Original transport advances on native playback clock');
+ check(engine.meter()>0.0001,'Original RMS meter reads decoded native mix');
+ engine.setVolume(.2);engine.setMute(true);await wait(50);engine.setMute(false);engine.pauseAll();
+ const paused=first.el.currentTime;await wait(60);check(Math.abs(first.el.currentTime-paused)<.001,'Pause freezes media clock');
+ const track=engine.destination.stream.getAudioTracks()[0],clone=track.clone();clone.stop();check(track.readyState==='live','Recording track clone stop leaves monitor source live');
+ const asset={...project.assets.find(a=>a.id==='score'),id:'waveform-verification'};
+ const peaks=await engine.waveform(asset);check(peaks instanceof Float32Array&&peaks.length===1024,'Original waveform worker receives transferred PCM');
+ const buffer=await engine.audio.decodeAudioData(await(await fetch(asset.path)).arrayBuffer());
+ let maximumError=0;const channels=Array.from({length:buffer.numberOfChannels},(_,i)=>buffer.getChannelData(i));
+ for(let b=0;b<512;b++){let lo=0,hi=0;for(let i=Math.floor(b*buffer.length/512);i<Math.floor((b+1)*buffer.length/512);i++){let value=channels.reduce((sum,c)=>sum+c[i],0)/channels.length;lo=Math.min(lo,value);hi=Math.max(hi,value);}maximumError=Math.max(maximumError,Math.abs(peaks[b*2]-lo),Math.abs(peaks[b*2+1]-hi));}
+ evidence.waveformMaximumError=maximumError;check(maximumError<1e-6,'Waveform matches independent PCM reduction');
+ evidence.passed=true;
+} catch(error){evidence.error=String(error.stack||error);console.error(evidence.error);}
+finally{engine.dispose();evidence.complete=true;status.textContent=JSON.stringify(evidence,null,2);}
+</script>

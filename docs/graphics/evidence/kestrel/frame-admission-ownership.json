@@ -1,0 +1,300 @@
+{
+  "method": "Temporary frame-admission stderr trace plus thread-safe image-pool ownership snapshot, filtered to first/last observed pointer events. Temporary tracing removed after collection.",
+  "originalSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "observedMoves": 66,
+  "coalescedMoves": 14,
+  "admittedSignals": 37,
+  "blockedSignals": 17,
+  "records": [
+    {
+      "timestampMilliseconds": 90240805.16,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90240821.819,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90240847.113,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90240874.474,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90240895.914,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90240918.151,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90240941.784,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90240961.937,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90240981.343,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241000.475,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241019.002,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241042.961,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241063.635,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241080.831,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241099.749,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241125.651,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241143.273,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241163.134,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241183.875,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241200.415,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241219.966,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241240.299,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241259.864,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241298.512,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241321.887,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241342.078,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241365.034,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241407.298,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241438.459,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241464.127,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241491.669,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241514.117,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241533.987,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241558.163,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241576.888,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241597.447,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241616.882,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241636.353,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241657.531,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241678.292,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241696.431,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241720.793,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241836.288,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241880.628,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90241914.149,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90241983.864,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90242011.812,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90242034.231,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90242057.777,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90242081.524,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90242106.791,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    },
+    {
+      "timestampMilliseconds": 90242131.798,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90242155.417,
+      "admitted": true
+    },
+    {
+      "timestampMilliseconds": 90242179.749,
+      "admitted": false,
+      "busyImages": 3,
+      "producerPendingImages": 0,
+      "retainedImages": 2,
+      "consumerPendingImages": 2
+    }
+  ],
+  "interpretation": "All blocked signals had three occupied images, zero unfinished producers, two images with retained references and two with outstanding consumer leases. Consumer GPU completion versus delayed fence polling is not distinguished by lease state.",
+  "limitations": [
+    "Instrumented single run; existing interactive demo remained open.",
+    "Not a performance gate, browser comparison, GPU timestamp measurement or physical presentation qualification.",
+    "Earlier admission-only run included extra manual input and is not used for controlled counts."
+  ]
+}

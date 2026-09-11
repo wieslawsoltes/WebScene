@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
+using Avalonia;
+using Avalonia.Rendering;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -115,6 +118,15 @@ internal static class NativeResizeCadenceProbe
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
+        // Avalonia 11.3.4 hides the service locator from its reference assembly.
+        // Read it only for this benchmark; do not replace or drive the timer.
+        var locator = typeof(AvaloniaLocator).GetProperty("Current")?.GetValue(null);
+        var renderTimer = locator?.GetType().GetMethod("GetService", [typeof(Type)])
+            ?.Invoke(locator, [typeof(IRenderTimer)]) as IRenderTimer;
+        var timerTicks = new ConcurrentQueue<long>();
+        Action<TimeSpan> observeRenderTick = _ => timerTicks.Enqueue(Stopwatch.GetTimestamp());
+        var tickEvent = typeof(IRenderTimer).GetEvent("Tick");
+        if (renderTimer is not null) tickEvent?.AddEventHandler(renderTimer, observeRenderTick);
         try
         {
             Pump(view.LoadAsync(source, library));
@@ -134,7 +146,11 @@ internal static class NativeResizeCadenceProbe
             var measurementStarted = Stopwatch.GetTimestamp();
             var submitted = RunCadence(
                 window, seconds, frequency, baseWidth, baseHeight, widthSpan, heightSpan);
-            var measurementElapsed = Stopwatch.GetElapsedTime(measurementStarted);
+            var measurementEnded = Stopwatch.GetTimestamp();
+            var measurementElapsed = Stopwatch.GetElapsedTime(measurementStarted, measurementEnded);
+            var measuredTimerTicks = timerTicks.Where(t => t >= measurementStarted && t <= measurementEnded).ToArray();
+            var timerIntervals = measuredTimerTicks.Zip(measuredTimerTicks.Skip(1),
+                static (a, b) => (b - a) * 1000d / Stopwatch.Frequency).ToArray();
             WaitForResizeDrain(view, TimeSpan.FromSeconds(3));
             process.Refresh();
             var cpu = process.TotalProcessorTime - cpuBefore;
@@ -191,7 +207,16 @@ internal static class NativeResizeCadenceProbe
             var json = JsonSerializer.Serialize(
                 new
                 {
-                    schema = "webscene-native-resize-cadence-v1",
+                    schema = "webscene-native-resize-cadence-v2",
+                    measurementScope = "headless-cpu-draw-callback",
+                    physicalPresentationVerified = false,
+                    headlessRenderTimer = new
+                    {
+                        available = renderTimer is not null && tickEvent is not null,
+                        tickCount = measuredTimerTicks.Length,
+                        ticksPerSecond = measuredTimerTicks.Length / measurementElapsed.TotalSeconds,
+                        intervalMilliseconds = Summary(timerIntervals)
+                    },
                     sourceKind = ReadOption(args, "--url") is null ? "deterministic-fixture" : "url",
                     composition,
                     certificationTelemetryEnabled = !certificationDiagnostics.StartsWith(
@@ -213,9 +238,9 @@ internal static class NativeResizeCadenceProbe
                         snapshot.ResizeFrames.SubmittedPairs - snapshot.ResizeFrames.AppliedPairs,
                         baseline.ResizeFrames.SubmittedPairs - baseline.ResizeFrames.AppliedPairs),
                     renderedFrames = delta.RenderedScenes,
-                    presentations = presentations.Length,
+                    drawCallbackCompletions = presentations.Length,
                     renderedFramesPerSecond = renderedFps,
-                    presentationFramesPerSecond = presentationFps,
+                    drawCallbackCompletionsPerSecond = presentationFps,
                     layoutPasses = delta.LayoutPasses,
                     layoutPassesPerAppliedResize = delta.LayoutPasses / (double)Math.Max(
                         1UL,
@@ -264,8 +289,8 @@ internal static class NativeResizeCadenceProbe
                         publicationToRenderLatencies),
                     renderLatencyMilliseconds = Summary(renderLatencies),
                     renderIntervalMilliseconds = Summary(renderIntervals),
-                    presentationIntervalMilliseconds = Summary(presentationIntervals),
-                    practicalVsyncGate = new
+                    drawCallbackIntervalMilliseconds = Summary(presentationIntervals),
+                    cpuCadenceGate = new
                     {
                         maximumP95LatencyMilliseconds = 16.7,
                         minimumFramesPerSecond = 58,
@@ -276,6 +301,7 @@ internal static class NativeResizeCadenceProbe
                         ? new
                         {
                             identity = reference.Identity,
+                            comparisonScope = "headless-draw-callback-versus-reference; not physical presentation",
                             referenceFramesPerSecond = reference.FramesPerSecond,
                             nativeFramesPerSecond = presentationFps,
                             framesPerSecondDelta =
@@ -306,6 +332,7 @@ internal static class NativeResizeCadenceProbe
         }
         finally
         {
+            if (renderTimer is not null) tickEvent?.RemoveEventHandler(renderTimer, observeRenderTick);
             Pump(view.DisposeAsync().AsTask());
             window.Close();
             Dispatcher.UIThread.RunJobs();

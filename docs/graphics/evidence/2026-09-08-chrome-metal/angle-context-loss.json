@@ -1,0 +1,26 @@
+{
+  "date": "2026-09-08",
+  "platform": "macOS arm64, Apple M4, ANGLE Metal",
+  "scope": "Native ANGLE context owner; ES2 and ES3 WebGL-compatible contexts",
+  "implementation": [
+    "Require EGL reset notification support and request lose-context-on-reset",
+    "Poll reset status at scope entry and exit; retain sticky loss state and reject reentry",
+    "Restore independent prior context; unbind instead of restoring the same lost context"
+  ],
+  "verification": {
+    "command": "ctest --test-dir artifacts/graphics-build/native-v8-enabled -R '^webscene_graphics_(angle_(es3_)?context|service)_tests$' --output-on-failure",
+    "result": "3/3 passed, 0.60 seconds after successful build",
+    "cases": [
+      "Injected GL_CHROMIUM_lose_context observed on scope exit",
+      "Lost context reentry rejected without disturbing surviving context",
+      "Nested same-context loss unbinds and outer scope restores independent context",
+      "Surviving context renders and reads expected texture pixels after loss"
+    ]
+  },
+  "limitations": [
+    "Diagnostic context loss, not physical device reset",
+    "Does not implement DOM WebGL context-lost events or restoration",
+    "Windows and Linux unqualified",
+    "Readback used for test verification only, not presentation transport"
+  ]
+}

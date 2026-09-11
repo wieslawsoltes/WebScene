@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "suite": "webgl-cts",
+  "repository": "https://github.com/KhronosGroup/WebGL.git",
+  "revision": "3b7a7538e880ab7ee7383b73fbfefb6a35179e7c",
+  "trackedFiles": 16006,
+  "status": "acquired",
+  "conformanceStatus": "not-run"
+}

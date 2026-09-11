@@ -19,6 +19,8 @@ on:
     - release/*
     paths:
     - '.github/workflows/native-runtime-packages.yml'
+    - '.github/actions/graphics-sdk/**'
+    - 'eng/graphics/**'
     - 'experiments/WebScene.NativeEngine.Probe/**'
     - 'packaging/WebScene.NativeEngine.Runtime/**'
     - 'scripts/build-native-engine-runtime.sh'
@@ -267,7 +269,21 @@ jobs:
             rm -rf "$root"
           fi
         fi
+    - name: Prepare pinned Dawn runtime dependency
+      if: matrix.rid != 'linux-x64'
+      uses: ./.github/actions/graphics-sdk
+      with:
+        rid: ${{ matrix.rid }}
+        component: dawn
+    - name: Prepare pinned Windows ANGLE composition dependency
+      if: matrix.rid == 'win-x64'
+      uses: ./.github/actions/graphics-sdk
+      with:
+        rid: ${{ matrix.rid }}
+        component: angle
     - name: Build, pack, and test macOS runtime
+      env:
+        WEBSCENE_NATIVE_SKIP_HARDWARE_TESTS: '1'
       if: matrix.rid == 'osx-arm64'
       shell: bash
       run: |
@@ -278,6 +294,7 @@ jobs:
         fi
         scripts/build-native-engine-runtime.sh \
           --rid '${{ matrix.rid }}' \
+          --graphics-sdk "$GITHUB_WORKSPACE/artifacts/graphics-sdk/${{ matrix.rid }}" \
           --package-version '${{ needs.metadata.outputs.package-version }}' \
           --v8-root "$v8_root" \
           --v8-revision '${{ matrix.v8_revision }}' \
@@ -315,6 +332,8 @@ jobs:
               --output /workspace/artifacts/nuget-packages
           "
     - name: Build, pack, and test Windows runtime
+      env:
+        WEBSCENE_NATIVE_SKIP_HARDWARE_TESTS: '1'
       if: matrix.script == 'windows'
       shell: pwsh
       run: |
@@ -325,6 +344,7 @@ jobs:
         }
         ./scripts/build-native-engine-runtime.ps1 `
           -Rid '${{ matrix.rid }}' `
+          -GraphicsSdk "$env:GITHUB_WORKSPACE/artifacts/graphics-sdk/${{ matrix.rid }}" `
           -PackageVersion '${{ needs.metadata.outputs.package-version }}' `
           -V8Root $v8Root `
           -V8Revision '${{ matrix.v8_revision }}' `

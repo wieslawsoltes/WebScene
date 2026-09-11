@@ -1,0 +1,2570 @@
+{
+  "purpose": "Current vsync scheduling investigation; not a qualified benchmark",
+  "displayReport": "Graphics/Displays:\n\n    Apple M4:\n\n      Chipset Model: Apple M4\n      Type: GPU\n      Bus: Built-In\n      Total Number of Cores: 10\n      Vendor: Apple (0x106b)\n      Metal Support: Metal 4\n      Displays:\n        LG ULTRAFINE:\n          Resolution: 3840 x 2160 (2160p/4K UHD 1 - Ultra High Definition)\n          UI Looks like: 1920 x 1080 @ 60.00Hz\n          Main Display: Yes\n          Mirror: Off\n          Online: Yes\n          Rotation: Supported\n        LG HDR 4K:\n          Resolution: 3840 x 2160 (2160p/4K UHD 1 - Ultra High Definition)\n          UI Looks like: 1920 x 1080 @ 60.00Hz\n          Mirror: Off\n          Online: Yes\n          Rotation: Supported\n\n",
+  "originalDocumentSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "records": {
+    "Kestrel pan performance": {
+      "elapsedMilliseconds": 1857.0318,
+      "baseline": {
+        "ContextId": 1,
+        "Timestamp": 91366037240166,
+        "Engine": {
+          "EnqueuedInputs": 294,
+          "DroppedInputs": 0,
+          "ConsumedInputs": 294,
+          "PublishedScenes": 68,
+          "AcquiredScenes": 67,
+          "ExecutedScripts": 0,
+          "ScriptErrors": 0,
+          "DomNodes": 1443,
+          "LayoutPasses": 135,
+          "IframeNodes": 0,
+          "IframeHtmlBytes": 0,
+          "FrameScriptsExecuted": 10,
+          "FrameScriptErrors": 0,
+          "CanvasNodes": 2,
+          "ComponentReady": 0,
+          "CompilationRequests": 14,
+          "CompilationMemoryHits": 0,
+          "CompilationPersistentHits": 0,
+          "CompilationPersistentMisses": 0,
+          "CompilationCacheRejections": 0,
+          "CompilationCacheBytesRead": 0,
+          "CompilationCacheBytesWritten": 0,
+          "CompilationTimeNanoseconds": 4866501,
+          "InputEventsDispatched": 205,
+          "InputCallbacksInvoked": 88,
+          "BusiestCanvasWidthMilli": 806000,
+          "BusiestCanvasHeightMilli": 463000,
+          "CoalescedResizeInputs": 0,
+          "AppliedResizeInputs": 1,
+          "LastResizeDispatchNanoseconds": 414417,
+          "LastScenePublicationNanoseconds": 4125,
+          "LastResizeOuterListenersNanoseconds": 0,
+          "LastResizeFrameListenersNanoseconds": 0,
+          "LastResizeLayoutNanoseconds": 0,
+          "LastResizeObserversNanoseconds": 0,
+          "CoalescedPointerMoveInputs": 149,
+          "CoalescedWheelInputs": 0,
+          "AppliedPointerMoveInputs": 79,
+          "AppliedWheelInputs": 0,
+          "AppliedAnimationFrames": 65,
+          "CoalescedAnimationFrames": 0,
+          "LastAnimationAdvanceNanoseconds": 0,
+          "LastLayoutNanoseconds": 898541,
+          "LastSceneBuildNanoseconds": 341125,
+          "MaximumScenePublicationNanoseconds": 2085291
+        },
+        "InputDispatch": {
+          "StructSize": 48,
+          "Reserved": 0,
+          "LastDispatchNanoseconds": 3431583,
+          "MaximumDispatchNanoseconds": 13340875,
+          "LastDispatchSequence": 639244573849660859,
+          "DispatchedInputs": 79,
+          "TotalDispatchNanoseconds": 162027287
+        },
+        "AnimationFrames": {
+          "StructSize": 48,
+          "Reserved": 0,
+          "DispatchedFrames": 65,
+          "TotalDispatchNanoseconds": 59287,
+          "LastDispatchNanoseconds": 834,
+          "MaximumDispatchNanoseconds": 2333,
+          "LastTimestampMicroseconds": 91365994604
+        },
+        "SceneFlow": {
+          "StructSize": 64,
+          "Reserved": 0,
+          "PublicationAttempts": 146,
+          "BlockedPublications": 6,
+          "AcknowledgedScenes": 67,
+          "TotalAcknowledgementNanoseconds": 3888895626,
+          "LastAcknowledgementNanoseconds": 53634625,
+          "MaximumAcknowledgementNanoseconds": 183506833,
+          "AcknowledgedRevision": 67
+        },
+        "ResizeFrames": {
+          "StructSize": 136,
+          "Reserved": 0,
+          "SubmittedPairs": 0,
+          "AppliedPairs": 0,
+          "PublishedPairs": 0,
+          "TotalQueueNanoseconds": 0,
+          "LastQueueNanoseconds": 0,
+          "MaximumQueueNanoseconds": 0,
+          "TotalDispatchNanoseconds": 0,
+          "LastDispatchNanoseconds": 0,
+          "MaximumDispatchNanoseconds": 0,
+          "AnimationFrameCallbacks": 0,
+          "TotalAnimationFrameBatchNanoseconds": 0,
+          "LastAnimationFrameBatchNanoseconds": 0,
+          "MaximumAnimationFrameBatchNanoseconds": 0,
+          "TotalToPublicationNanoseconds": 0,
+          "LastToPublicationNanoseconds": 0,
+          "MaximumToPublicationNanoseconds": 0
+        },
+        "ResourceCache": {
+          "StructSize": 56,
+          "Reserved": 0,
+          "Requests": 1,
+          "Hits": 0,
+          "Misses": 1,
+          "Rejections": 0,
+          "BytesRead": 0,
+          "BytesWritten": 0
+        },
+        "RuntimeWork": {
+          "StructSize": 168,
+          "Reserved": 0,
+          "TimersScheduled": 0,
+          "TimersFired": 0,
+          "TimersCancelled": 0,
+          "LateTimers": 0,
+          "TotalTimerLatenessNanoseconds": 0,
+          "AnimationFramesRequested": 0,
+          "AnimationFramesInvoked": 0,
+          "AnimationFramesCancelled": 0,
+          "MicrotaskCheckpoints": 0,
+          "WorkerWaits": 0,
+          "WorkerSignalledWakes": 0,
+          "WorkerTimeoutWakes": 0,
+          "SceneBuilds": 0,
+          "NoDamageSceneBuilds": 0,
+          "FullCheckpointSceneBuilds": 0,
+          "ArbitraryEvaluationCalls": 0,
+          "GeneratedInvokeCalls": 0,
+          "GeneratedCallbackCalls": 0,
+          "ArbitraryEvaluationSourceBytes": 0,
+          "GeneratedRequestBytes": 0
+        },
+        "ProcessCache": {
+          "StructSize": 112,
+          "Reserved": 0,
+          "CompilationMemoryHits": 0,
+          "CompilationLeaders": 14,
+          "CompilationWaiters": 0,
+          "CompilationSharedBytes": 0,
+          "ResourceMemoryHits": 0,
+          "ResourceLoadLeaders": 1,
+          "ResourceLoadWaiters": 0,
+          "ResourceSharedBytes": 0,
+          "ScriptSourceMemoryHits": 0,
+          "ScriptSourceSharedBytes": 0,
+          "SharedIsolateSlot": 18446744073709551615,
+          "SharedIsolateActiveContexts": 1,
+          "SharedIsolatePeakContexts": 1
+        },
+        "Memory": {
+          "StructSize": 608,
+          "Reserved": 0,
+          "V8TotalHeapBytes": 5439488,
+          "V8UsedHeapBytes": 3153188,
+          "V8ExecutableHeapBytes": 524288,
+          "V8PhysicalHeapBytes": 5439488,
+          "V8ExternalBytes": 442729,
+          "V8MallocedBytes": 73812,
+          "V8PeakMallocedBytes": 1798144,
+          "LatestSceneBytes": 162152,
+          "ProcessCompilationCacheBytes": 250464,
+          "ProcessResourceCacheBytes": 0,
+          "V8CodeAndMetadataBytes": 0,
+          "V8BytecodeAndMetadataBytes": 0,
+          "V8ExternalScriptSourceBytes": 785023,
+          "NativeDomNodeCount": 1051,
+          "NativeDomNodeSizeBytes": 1000,
+          "NativeDomInlineBytes": 1051000,
+          "NativeDomPseudoStorageBytes": 6800,
+          "NativeDomCanvasNodeCount": 2,
+          "NativeDomCanvasStorageBytes": 448,
+          "NativeDomAnimationCount": 3,
+          "NativeDomAnimationStorageBytes": 3801,
+          "NativeDomCustomPropertyNodeCount": 1,
+          "NativeDomCustomPropertyEntryCount": 22,
+          "NativeDomCustomPropertyStorageBytes": 2700,
+          "NativeDomBackgroundImageCount": 2,
+          "NativeDomBackgroundImageStorageBytes": 1006,
+          "NativeDomGridCount": 1,
+          "NativeDomGridStorageBytes": 569,
+          "NativeDomAuthoredStyleNodeCount": 12,
+          "NativeDomAuthoredStyleEntryCount": 14,
+          "NativeDomAuthoredStyleStorageBytes": 2692,
+          "NativeCssRuleCount": 407,
+          "NativeCssRuleStorageBytes": 16495,
+          "NativeCssIndexStorageBytes": 45535,
+          "ProcessSharedCssRuleCount": 407,
+          "ProcessSharedCssRuleStorageBytes": 369573,
+          "LowMemoryNotifications": 0,
+          "NativeDomAttributeNodeCount": 678,
+          "NativeDomAttributeEntryCount": 1848,
+          "NativeDomAttributeStorageBytes": 183026,
+          "NativeWrapperHandleCount": 269,
+          "NativeWrapperStorageBytes": 11000,
+          "NativeTextMeasurementCacheEntryCount": 425,
+          "NativeTextMeasurementCacheStorageBytes": 99812,
+          "ProcessCompilationMappedCacheBytes": 0,
+          "ProcessResourceMappedCacheBytes": 0,
+          "NativeDomTextualStyleCount": 751,
+          "NativeDomTextualStyleStorageBytes": 485542,
+          "NativeDomNodePoolReservedBytes": 1088000,
+          "NativeDomNodePoolPeakBytes": 1088000,
+          "NativeDomTableLayoutCount": 0,
+          "NativeDomTableLayoutStorageBytes": 0,
+          "NativeDomFormControlCount": 52,
+          "NativeDomFormControlStorageBytes": 4108,
+          "HiddenLowMemoryNotifications": 0,
+          "NativeEventListenerCount": 30,
+          "NativeEventListenerStorageBytes": 4685,
+          "V8YoungSpaceUsedBytes": 719816,
+          "V8YoungSpacePhysicalBytes": 2097152,
+          "V8OldSpaceUsedBytes": 1927980,
+          "V8OldSpacePhysicalBytes": 2097152,
+          "V8CodeSpaceUsedBytes": 190720,
+          "V8CodeSpacePhysicalBytes": 524288,
+          "V8MapSpaceUsedBytes": 0,
+          "V8MapSpacePhysicalBytes": 0,
+          "V8LargeObjectSpaceUsedBytes": 187472,
+          "V8LargeObjectSpacePhysicalBytes": 196608,
+          "V8ReadOnlySpaceUsedBytes": 1816740,
+          "V8ReadOnlySpacePhysicalBytes": 1835008,
+          "V8SharedSpaceUsedBytes": 0,
+          "V8SharedSpacePhysicalBytes": 0,
+          "V8TrustedSpaceUsedBytes": 127200,
+          "V8TrustedSpacePhysicalBytes": 524288,
+          "PendingSceneCount": 1,
+          "PendingSceneBytes": 162152
+        },
+        "InteropPool": {
+          "StructSize": 200,
+          "Version": 3,
+          "OutstandingResults": 0,
+          "PooledBytes": 1022,
+          "PoolHits": 3,
+          "PoolMisses": 1,
+          "OversizeAllocations": 0,
+          "HighWaterOutstandingResults": 1,
+          "PooledRequestRecords": 0,
+          "RequestPoolHits": 0,
+          "RequestPoolMisses": 0,
+          "RequestOversizeAllocations": 0,
+          "ActiveOperationSlots": 0,
+          "AvailableOperationSlots": 1,
+          "OperationSlotHighWater": 1,
+          "PooledResultBytes4K": 1022,
+          "PooledResultBytes16K": 0,
+          "PooledResultBytes64K": 0,
+          "PooledResultBytes256K": 0,
+          "PooledResultBytes1M": 0,
+          "TakenResultLeases": 0,
+          "OperationResultLeases": 0,
+          "QueuedCallbacks": 0,
+          "TakenCallbackLeases": 0,
+          "PendingCallbackPromises": 0,
+          "CallbackQueueHighWater": 0
+        },
+        "RendererMemory": {
+          "RetainedLayerCount": 0,
+          "RetainedCommandCount": 0,
+          "LogicalBitmapBytes": 0,
+          "IsolationLayerCount": 0,
+          "IsolationLogicalBitmapBytes": 0,
+          "DomCommandCount": 0,
+          "StringCount": 0,
+          "StringBytes": 0,
+          "TypefaceCount": 0,
+          "SvgPictureCount": 0,
+          "ProcessSvgPictureCount": 0,
+          "ProcessSvgPictureReferenceCount": 0,
+          "ProcessSvgPictureMemoryHits": 0
+        },
+        "Surface": {
+          "RenderedScenes": 66,
+          "RoutedInputEvents": 0,
+          "AcceptedInputEvents": 0,
+          "CompositionUiWakes": 0,
+          "PendingCompositionPublications": 1,
+          "ResizePublicationNotifications": 0
+        },
+        "ProcessWebTypefaces": {
+          "Entries": 0,
+          "References": 0,
+          "Hits": 0,
+          "Misses": 0
+        },
+        "ProcessComposition": {
+          "AnimationFrames": 0,
+          "Renders": 0,
+          "AppliedDiffs": 0,
+          "InvalidationCalls": 0,
+          "DamageRectangles": 0,
+          "ChangedLayers": 0,
+          "EmptyDamageDiffs": 0,
+          "PartialDamageDiffs": 0,
+          "FullInvalidations": 0,
+          "SuppressedLiveResizeAnimationFrames": 0,
+          "SubmittedAnimationFrames": 0,
+          "SkippedEmptyAnimationFrames": 0,
+          "RenderCallbacks": 0,
+          "UnchangedRenderCallbacks": 0,
+          "LastAnimationFrameDemand": 0
+        }
+      },
+      "after": {
+        "ContextId": 1,
+        "Timestamp": 91367896299291,
+        "Engine": {
+          "EnqueuedInputs": 593,
+          "DroppedInputs": 0,
+          "ConsumedInputs": 592,
+          "PublishedScenes": 124,
+          "AcquiredScenes": 125,
+          "ExecutedScripts": 0,
+          "ScriptErrors": 0,
+          "DomNodes": 1125,
+          "LayoutPasses": 331,
+          "IframeNodes": 0,
+          "IframeHtmlBytes": 0,
+          "FrameScriptsExecuted": 10,
+          "FrameScriptErrors": 0,
+          "CanvasNodes": 2,
+          "ComponentReady": 0,
+          "CompilationRequests": 14,
+          "CompilationMemoryHits": 0,
+          "CompilationPersistentHits": 0,
+          "CompilationPersistentMisses": 0,
+          "CompilationCacheRejections": 0,
+          "CompilationCacheBytesRead": 0,
+          "CompilationCacheBytesWritten": 0,
+          "CompilationTimeNanoseconds": 4866501,
+          "InputEventsDispatched": 619,
+          "InputCallbacksInvoked": 427,
+          "BusiestCanvasWidthMilli": 806000,
+          "BusiestCanvasHeightMilli": 463000,
+          "CoalescedResizeInputs": 0,
+          "AppliedResizeInputs": 1,
+          "LastResizeDispatchNanoseconds": 414417,
+          "LastScenePublicationNanoseconds": 880542,
+          "LastResizeOuterListenersNanoseconds": 0,
+          "LastResizeFrameListenersNanoseconds": 0,
+          "LastResizeLayoutNanoseconds": 0,
+          "LastResizeObserversNanoseconds": 0,
+          "CoalescedPointerMoveInputs": 217,
+          "CoalescedWheelInputs": 0,
+          "AppliedPointerMoveInputs": 253,
+          "AppliedWheelInputs": 0,
+          "AppliedAnimationFrames": 119,
+          "CoalescedAnimationFrames": 0,
+          "LastAnimationAdvanceNanoseconds": 0,
+          "LastLayoutNanoseconds": 664792,
+          "LastSceneBuildNanoseconds": 697208,
+          "MaximumScenePublicationNanoseconds": 2085291
+        },
+        "InputDispatch": {
+          "StructSize": 48,
+          "Reserved": 0,
+          "LastDispatchNanoseconds": 764333,
+          "MaximumDispatchNanoseconds": 13340875,
+          "LastDispatchSequence": 639244573849661103,
+          "DispatchedInputs": 255,
+          "TotalDispatchNanoseconds": 857571033
+        },
+        "AnimationFrames": {
+          "StructSize": 48,
+          "Reserved": 0,
+          "DispatchedFrames": 119,
+          "TotalDispatchNanoseconds": 109539,
+          "LastDispatchNanoseconds": 1083,
+          "MaximumDispatchNanoseconds": 2792,
+          "LastTimestampMicroseconds": 91367832964
+        },
+        "SceneFlow": {
+          "StructSize": 64,
+          "Reserved": 0,
+          "PublicationAttempts": 332,
+          "BlockedPublications": 95,
+          "AcknowledgedScenes": 124,
+          "TotalAcknowledgementNanoseconds": 6398524915,
+          "LastAcknowledgementNanoseconds": 14792500,
+          "MaximumAcknowledgementNanoseconds": 183506833,
+          "AcknowledgedRevision": 124
+        },
+        "ResizeFrames": {
+          "StructSize": 136,
+          "Reserved": 0,
+          "SubmittedPairs": 0,
+          "AppliedPairs": 0,
+          "PublishedPairs": 0,
+          "TotalQueueNanoseconds": 0,
+          "LastQueueNanoseconds": 0,
+          "MaximumQueueNanoseconds": 0,
+          "TotalDispatchNanoseconds": 0,
+          "LastDispatchNanoseconds": 0,
+          "MaximumDispatchNanoseconds": 0,
+          "AnimationFrameCallbacks": 0,
+          "TotalAnimationFrameBatchNanoseconds": 0,
+          "LastAnimationFrameBatchNanoseconds": 0,
+          "MaximumAnimationFrameBatchNanoseconds": 0,
+          "TotalToPublicationNanoseconds": 0,
+          "LastToPublicationNanoseconds": 0,
+          "MaximumToPublicationNanoseconds": 0
+        },
+        "ResourceCache": {
+          "StructSize": 56,
+          "Reserved": 0,
+          "Requests": 1,
+          "Hits": 0,
+          "Misses": 1,
+          "Rejections": 0,
+          "BytesRead": 0,
+          "BytesWritten": 0
+        },
+        "RuntimeWork": {
+          "StructSize": 168,
+          "Reserved": 0,
+          "TimersScheduled": 0,
+          "TimersFired": 0,
+          "TimersCancelled": 0,
+          "LateTimers": 0,
+          "TotalTimerLatenessNanoseconds": 0,
+          "AnimationFramesRequested": 32,
+          "AnimationFramesInvoked": 33,
+          "AnimationFramesCancelled": 0,
+          "MicrotaskCheckpoints": 447,
+          "WorkerWaits": 289,
+          "WorkerSignalledWakes": 275,
+          "WorkerTimeoutWakes": 13,
+          "SceneBuilds": 56,
+          "NoDamageSceneBuilds": 13,
+          "FullCheckpointSceneBuilds": 0,
+          "ArbitraryEvaluationCalls": 0,
+          "GeneratedInvokeCalls": 0,
+          "GeneratedCallbackCalls": 0,
+          "ArbitraryEvaluationSourceBytes": 0,
+          "GeneratedRequestBytes": 0
+        },
+        "ProcessCache": {
+          "StructSize": 112,
+          "Reserved": 0,
+          "CompilationMemoryHits": 0,
+          "CompilationLeaders": 14,
+          "CompilationWaiters": 0,
+          "CompilationSharedBytes": 0,
+          "ResourceMemoryHits": 0,
+          "ResourceLoadLeaders": 1,
+          "ResourceLoadWaiters": 0,
+          "ResourceSharedBytes": 0,
+          "ScriptSourceMemoryHits": 0,
+          "ScriptSourceSharedBytes": 0,
+          "SharedIsolateSlot": 18446744073709551615,
+          "SharedIsolateActiveContexts": 1,
+          "SharedIsolatePeakContexts": 1
+        },
+        "Memory": {
+          "StructSize": 608,
+          "Reserved": 0,
+          "V8TotalHeapBytes": 14876672,
+          "V8UsedHeapBytes": 4565688,
+          "V8ExecutableHeapBytes": 786432,
+          "V8PhysicalHeapBytes": 10797056,
+          "V8ExternalBytes": 451721,
+          "V8MallocedBytes": 49196,
+          "V8PeakMallocedBytes": 3457024,
+          "LatestSceneBytes": 117120,
+          "ProcessCompilationCacheBytes": 253776,
+          "ProcessResourceCacheBytes": 0,
+          "V8CodeAndMetadataBytes": 0,
+          "V8BytecodeAndMetadataBytes": 0,
+          "V8ExternalScriptSourceBytes": 785023,
+          "NativeDomNodeCount": 1125,
+          "NativeDomNodeSizeBytes": 1000,
+          "NativeDomInlineBytes": 1125000,
+          "NativeDomPseudoStorageBytes": 6800,
+          "NativeDomCanvasNodeCount": 2,
+          "NativeDomCanvasStorageBytes": 54687,
+          "NativeDomAnimationCount": 3,
+          "NativeDomAnimationStorageBytes": 3801,
+          "NativeDomCustomPropertyNodeCount": 1,
+          "NativeDomCustomPropertyEntryCount": 22,
+          "NativeDomCustomPropertyStorageBytes": 2700,
+          "NativeDomBackgroundImageCount": 2,
+          "NativeDomBackgroundImageStorageBytes": 1006,
+          "NativeDomGridCount": 1,
+          "NativeDomGridStorageBytes": 569,
+          "NativeDomAuthoredStyleNodeCount": 12,
+          "NativeDomAuthoredStyleEntryCount": 14,
+          "NativeDomAuthoredStyleStorageBytes": 2692,
+          "NativeCssRuleCount": 407,
+          "NativeCssRuleStorageBytes": 16495,
+          "NativeCssIndexStorageBytes": 47567,
+          "ProcessSharedCssRuleCount": 407,
+          "ProcessSharedCssRuleStorageBytes": 369573,
+          "LowMemoryNotifications": 0,
+          "NativeDomAttributeNodeCount": 668,
+          "NativeDomAttributeEntryCount": 1833,
+          "NativeDomAttributeStorageBytes": 181664,
+          "NativeWrapperHandleCount": 292,
+          "NativeWrapperStorageBytes": 12536,
+          "NativeTextMeasurementCacheEntryCount": 1553,
+          "NativeTextMeasurementCacheStorageBytes": 315966,
+          "ProcessCompilationMappedCacheBytes": 0,
+          "ProcessResourceMappedCacheBytes": 0,
+          "NativeDomTextualStyleCount": 745,
+          "NativeDomTextualStyleStorageBytes": 481666,
+          "NativeDomNodePoolReservedBytes": 1536000,
+          "NativeDomNodePoolPeakBytes": 1536000,
+          "NativeDomTableLayoutCount": 0,
+          "NativeDomTableLayoutStorageBytes": 0,
+          "NativeDomFormControlCount": 44,
+          "NativeDomFormControlStorageBytes": 3476,
+          "HiddenLowMemoryNotifications": 0,
+          "NativeEventListenerCount": 36,
+          "NativeEventListenerStorageBytes": 5852,
+          "V8YoungSpaceUsedBytes": 211308,
+          "V8YoungSpacePhysicalBytes": 2097152,
+          "V8OldSpaceUsedBytes": 3553984,
+          "V8OldSpacePhysicalBytes": 7700480,
+          "V8CodeSpaceUsedBytes": 405088,
+          "V8CodeSpacePhysicalBytes": 573440,
+          "V8MapSpaceUsedBytes": 0,
+          "V8MapSpacePhysicalBytes": 0,
+          "V8LargeObjectSpaceUsedBytes": 187472,
+          "V8LargeObjectSpacePhysicalBytes": 196608,
+          "V8ReadOnlySpaceUsedBytes": 1816740,
+          "V8ReadOnlySpacePhysicalBytes": 1835008,
+          "V8SharedSpaceUsedBytes": 0,
+          "V8SharedSpacePhysicalBytes": 0,
+          "V8TrustedSpaceUsedBytes": 207836,
+          "V8TrustedSpacePhysicalBytes": 229376,
+          "PendingSceneCount": 0,
+          "PendingSceneBytes": 0
+        },
+        "InteropPool": {
+          "StructSize": 200,
+          "Version": 3,
+          "OutstandingResults": 0,
+          "PooledBytes": 1022,
+          "PoolHits": 3,
+          "PoolMisses": 1,
+          "OversizeAllocations": 0,
+          "HighWaterOutstandingResults": 1,
+          "PooledRequestRecords": 0,
+          "RequestPoolHits": 0,
+          "RequestPoolMisses": 0,
+          "RequestOversizeAllocations": 0,
+          "ActiveOperationSlots": 0,
+          "AvailableOperationSlots": 1,
+          "OperationSlotHighWater": 1,
+          "PooledResultBytes4K": 1022,
+          "PooledResultBytes16K": 0,
+          "PooledResultBytes64K": 0,
+          "PooledResultBytes256K": 0,
+          "PooledResultBytes1M": 0,
+          "TakenResultLeases": 0,
+          "OperationResultLeases": 0,
+          "QueuedCallbacks": 0,
+          "TakenCallbackLeases": 0,
+          "PendingCallbackPromises": 0,
+          "CallbackQueueHighWater": 0
+        },
+        "RendererMemory": {
+          "RetainedLayerCount": 1,
+          "RetainedCommandCount": 327,
+          "LogicalBitmapBytes": 5970848,
+          "IsolationLayerCount": 0,
+          "IsolationLogicalBitmapBytes": 0,
+          "DomCommandCount": 484,
+          "StringCount": 5612,
+          "StringBytes": 264718,
+          "TypefaceCount": 2,
+          "SvgPictureCount": 73,
+          "ProcessSvgPictureCount": 73,
+          "ProcessSvgPictureReferenceCount": 73,
+          "ProcessSvgPictureMemoryHits": 0
+        },
+        "Surface": {
+          "RenderedScenes": 124,
+          "RoutedInputEvents": 163,
+          "AcceptedInputEvents": 163,
+          "CompositionUiWakes": 0,
+          "PendingCompositionPublications": 0,
+          "ResizePublicationNotifications": 0
+        },
+        "ProcessWebTypefaces": {
+          "Entries": 0,
+          "References": 0,
+          "Hits": 0,
+          "Misses": 0
+        },
+        "ProcessComposition": {
+          "AnimationFrames": 71,
+          "Renders": 57,
+          "AppliedDiffs": 57,
+          "InvalidationCalls": 59,
+          "DamageRectangles": 104,
+          "ChangedLayers": 30,
+          "EmptyDamageDiffs": 13,
+          "PartialDamageDiffs": 44,
+          "FullInvalidations": 0,
+          "SuppressedLiveResizeAnimationFrames": 0,
+          "SubmittedAnimationFrames": 54,
+          "SkippedEmptyAnimationFrames": 17,
+          "RenderCallbacks": 59,
+          "UnchangedRenderCallbacks": 0,
+          "LastAnimationFrameDemand": 0
+        }
+      },
+      "delta": {
+        "Elapsed": "00:00:01.8590591",
+        "EnqueuedInputs": 299,
+        "DroppedInputs": 0,
+        "ConsumedInputs": 298,
+        "ExecutedScripts": 0,
+        "ScriptErrors": 0,
+        "LayoutPasses": 196,
+        "AppliedAnimationFrames": 54,
+        "CoalescedAnimationFrames": 0,
+        "PublicationAttempts": 186,
+        "BlockedPublications": 89,
+        "PublishedScenes": 56,
+        "AcquiredScenes": 58,
+        "AcknowledgedScenes": 57,
+        "RenderedScenes": 58,
+        "CompositionUiWakes": 0,
+        "RoutedInputEvents": 163,
+        "AcceptedInputEvents": 163,
+        "ResourceRequests": 0,
+        "ResourceHits": 0,
+        "ResourceMisses": 0,
+        "InteropPoolHits": 0,
+        "InteropPoolMisses": 0,
+        "InteropRequestPoolHits": 0,
+        "InteropRequestPoolMisses": 0,
+        "TimersScheduled": 0,
+        "TimersFired": 0,
+        "TimersCancelled": 0,
+        "LateTimers": 0,
+        "TotalTimerLatenessNanoseconds": 0,
+        "AnimationFramesRequested": 32,
+        "AnimationFramesInvoked": 33,
+        "AnimationFramesCancelled": 0,
+        "MicrotaskCheckpoints": 447,
+        "WorkerWaits": 289,
+        "WorkerSignalledWakes": 275,
+        "WorkerTimeoutWakes": 13,
+        "SceneBuilds": 56,
+        "NoDamageSceneBuilds": 13,
+        "FullCheckpointSceneBuilds": 0,
+        "ArbitraryEvaluationCalls": 0,
+        "GeneratedInvokeCalls": 0,
+        "GeneratedCallbackCalls": 0,
+        "ArbitraryEvaluationSourceBytes": 0,
+        "GeneratedRequestBytes": 0,
+        "WebTypefaceCacheHits": 0,
+        "WebTypefaceCacheMisses": 0,
+        "CompositionAnimationFrames": 71,
+        "CompositionRenders": 57,
+        "CompositionAppliedDiffs": 57,
+        "CompositionInvalidations": 59,
+        "CompositionFullInvalidations": 0,
+        "CompositionSubmittedAnimationFrames": 54,
+        "CompositionSkippedEmptyAnimationFrames": 17,
+        "CompositionRenderCallbacks": 59,
+        "CompositionUnchangedRenderCallbacks": 0
+      }
+    },
+    "Kestrel pan diagnostics": {
+      "events": [
+        {
+          "type": "pointermove",
+          "x": 798.74609375,
+          "y": 446.875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91365785.643541,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 825.76953125,
+          "y": 450.078125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91365822.303875,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 825.76953125,
+          "y": 449.84765625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91365823.830333,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 837.37109375,
+          "y": 452.22265625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91365840.192041,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 845.61328125,
+          "y": 452.56640625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91365874.466458,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 846.7109375,
+          "y": 452.56640625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91365909.282,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 848.03515625,
+          "y": 452.79296875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91365944.106625,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 848.26171875,
+          "y": 452.79296875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91365976.82625,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 848.26171875,
+          "y": 453.01953125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91365994.9265,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 848.71875,
+          "y": 453.24609375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366032.279791,
+          "panning": false
+        },
+        {
+          "type": "pointerdown",
+          "x": 625,
+          "y": 436.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366042.871791,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 629,
+          "y": 437.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366043.203458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 849.17578125,
+          "y": 453.24609375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366050.575333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 849.40234375,
+          "y": 453.47265625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366055.338583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 849.859375,
+          "y": 453.47265625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366061.074541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 633,
+          "y": 438.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366065.598708,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 850.95703125,
+          "y": 453.47265625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366075.443291,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 637,
+          "y": 439.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366080.140916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 851.4140625,
+          "y": 453.69921875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366083.503291,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 851.87109375,
+          "y": 453.69921875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366091.692541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 641,
+          "y": 440.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366095.827583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 852.78515625,
+          "y": 453.69921875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366108.756958,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 645,
+          "y": 441.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366112.516625,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 853.01171875,
+          "y": 453.92578125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366117.859458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 853.8828125,
+          "y": 454.21484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366121.466125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 653,
+          "y": 443.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366144.003916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 854.33984375,
+          "y": 454.21484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366152.824333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 854.33984375,
+          "y": 453.984375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366159.392875,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 657,
+          "y": 444.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366166.142,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 854.56640625,
+          "y": 453.984375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366175.66575,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 661,
+          "y": 445.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366179.284541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 855.0234375,
+          "y": 454.2109375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366193.147916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 665,
+          "y": 446.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366200.277125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 855.25,
+          "y": 454.2109375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366210.551166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 669,
+          "y": 447.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366213.877458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 855.4765625,
+          "y": 453.75,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366216.681416,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 856.34765625,
+          "y": 453.75,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366227.094916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 673,
+          "y": 448.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366232.173041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 857.67578125,
+          "y": 453.9765625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366244.278375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 677,
+          "y": 449.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366248.83525,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 858.1328125,
+          "y": 453.9765625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366255.588,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 859.00390625,
+          "y": 453.9765625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366267.357375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 681,
+          "y": 450.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366279.720333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 862.25390625,
+          "y": 454.7890625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366285.663791,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 685,
+          "y": 451.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366290.189916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 864.10546875,
+          "y": 455.1953125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366293.770458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 689,
+          "y": 452.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366297.483541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 866.484375,
+          "y": 455.1953125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366300.708208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 868.109375,
+          "y": 455.1953125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366311.289833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 693,
+          "y": 453.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366320.167041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 868.98046875,
+          "y": 455.77734375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366327.989125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 697,
+          "y": 454.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366330.995541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 869.4375,
+          "y": 455.77734375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366337.073375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 870.30859375,
+          "y": 455.484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366340.024541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 870.765625,
+          "y": 455.484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366344.912583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 701,
+          "y": 455.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366352.017875,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 870.9921875,
+          "y": 455.484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366356.153208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 705,
+          "y": 456.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366368.551041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 871.44921875,
+          "y": 455.484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366379.141583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 709,
+          "y": 457.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366384.192625,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 870.98828125,
+          "y": 455.7109375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366396.128708,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 713,
+          "y": 458.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366403.605208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 721,
+          "y": 460.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366443.096125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 725,
+          "y": 461.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366459.273541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 729,
+          "y": 462.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366480.071458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 870.7578125,
+          "y": 455.7109375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366483.19125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 733,
+          "y": 463.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366493.790666,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 745,
+          "y": 466.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366537.593083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 753,
+          "y": 468.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366573.249541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 761,
+          "y": 470.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366609.303708,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 765,
+          "y": 471.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366624.099083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 870.296875,
+          "y": 455.9375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366635.09725,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 769,
+          "y": 472.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366640.509583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 870.06640625,
+          "y": 455.9375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366644.501041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 869.8359375,
+          "y": 455.9375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366650.498458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 773,
+          "y": 473.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366656.263208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 866.578125,
+          "y": 455.16796875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366667.82075,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 777,
+          "y": 474.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366671.951041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 864.1953125,
+          "y": 455.16796875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366679.800875,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 861.8125,
+          "y": 455.16796875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366684.155583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 781,
+          "y": 475.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366688.181083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 855.546875,
+          "y": 455.16796875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366699.93775,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 785,
+          "y": 476.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366703.971666,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 850.03125,
+          "y": 455.16796875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366719.05075,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 781,
+          "y": 475.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366723.003166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 843.765625,
+          "y": 455.16796875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366732.270625,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 777,
+          "y": 474.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366735.649666,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 840.5078125,
+          "y": 454.34765625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366750.877375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 773,
+          "y": 473.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366754.406416,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 838.41796875,
+          "y": 454.39453125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366772.539916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 769,
+          "y": 472.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366778.474666,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 837.89453125,
+          "y": 455.265625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366789.967166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 765,
+          "y": 471.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366801.114208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 837.01953125,
+          "y": 455.265625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366809.222833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 761,
+          "y": 470.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366813.207041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 833.12109375,
+          "y": 455.4921875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366818.101791,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 757,
+          "y": 469.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366824.310166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 829.11328125,
+          "y": 455.71875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366838.632041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 753,
+          "y": 468.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366842.028083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 822.84765625,
+          "y": 455.71875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366857.733833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 749,
+          "y": 467.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366862.001958,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 818.83984375,
+          "y": 455.71875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366867.831666,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 745,
+          "y": 466.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366873.318083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 810.171875,
+          "y": 455.1328125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366888.82225,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 741,
+          "y": 465.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366897.282833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 805.51171875,
+          "y": 455.71484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366903.101083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 800.8515625,
+          "y": 453.96484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366906.59375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 737,
+          "y": 464.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366912.204875,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 788.48046875,
+          "y": 453.96484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366922.049166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 733,
+          "y": 463.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366928.195833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 775.34375,
+          "y": 453.96484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366937.888333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 729,
+          "y": 462.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366942.857416,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 761.4453125,
+          "y": 453.359375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366956.738125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 725,
+          "y": 461.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366960.722291,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 746.78125,
+          "y": 453.359375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366973.117458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 721,
+          "y": 460.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366977.139916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 739.06640625,
+          "y": 453.359375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366980.483,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 731.3515625,
+          "y": 453.359375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91366989.68625,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 717,
+          "y": 459.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91366993.759333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 719.7421875,
+          "y": 453.94140625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367008.646,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 713,
+          "y": 458.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367014.565291,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 708.12890625,
+          "y": 453.94140625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367022.767458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 701.94140625,
+          "y": 453.94140625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367028.955666,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 709,
+          "y": 457.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367033.560208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 688.04296875,
+          "y": 453.94140625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367042.859166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 705,
+          "y": 456.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367048.153416,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 683.26953125,
+          "y": 454.78515625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367059.087666,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 701,
+          "y": 455.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367062.48225,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 670.8984375,
+          "y": 455.98828125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367076.320416,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 697,
+          "y": 454.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367080.609083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 663.8671875,
+          "y": 458.66015625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367095.083333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 693,
+          "y": 453.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367099.017583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 659.96875,
+          "y": 459.76953125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367101.943875,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 654.546875,
+          "y": 461.57421875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367110.340625,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 689,
+          "y": 452.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367113.849708,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 643.69921875,
+          "y": 462.19140625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367126.817458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 685,
+          "y": 451.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367129.556958,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 635.90234375,
+          "y": 461.6328125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367143.792583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 681,
+          "y": 450.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367146.457208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 622.51171875,
+          "y": 468,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367153.895958,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 677,
+          "y": 449.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367161.864333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 605.55859375,
+          "y": 473.2109375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367172.672916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 673,
+          "y": 448.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367177.87075,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 589.2578125,
+          "y": 479.7265625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367192.777041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 669,
+          "y": 447.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367196.468041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 565.2421875,
+          "y": 489.45703125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367211.522833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 665,
+          "y": 446.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367215.931125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 550.05859375,
+          "y": 500.671875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367228.189041,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 661,
+          "y": 445.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367231.632833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 539.19921875,
+          "y": 504.87890625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367245.996166,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 657,
+          "y": 444.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367251.0455,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 523.93359375,
+          "y": 518.140625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367263.331458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 653,
+          "y": 443.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367270.440333,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 517.875,
+          "y": 527.55859375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367276.9255,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 508.25390625,
+          "y": 536.48828125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367280.609791,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 649,
+          "y": 442.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367286.112125,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 495.96875,
+          "y": 556.8828125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367293.914375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 490.6875,
+          "y": 564.80078125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367297.1165,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 645,
+          "y": 441.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367304.560083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 482.26171875,
+          "y": 579.03515625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367315.371916,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 641,
+          "y": 440.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367321.392625,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 471.97265625,
+          "y": 591.2421875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367329.233791,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 637,
+          "y": 439.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367334.265458,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 465.71875,
+          "y": 603.125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367347.562208,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 633,
+          "y": 438.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367352.093375,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 462.63671875,
+          "y": 614.7265625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367364.091541,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 629,
+          "y": 437.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367369.811583,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 462.63671875,
+          "y": 622.4375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367373.974083,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 625,
+          "y": 436.5,
+          "button": 2,
+          "buttons": 2,
+          "time": 91367389.131833,
+          "panning": true
+        },
+        {
+          "type": "pointermove",
+          "x": 459.59765625,
+          "y": 639.4609375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367399.771916,
+          "panning": true
+        },
+        {
+          "type": "pointerup",
+          "x": 625,
+          "y": 436.5,
+          "button": 2,
+          "buttons": 0,
+          "time": 91367401.388791,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 455.73046875,
+          "y": 670.30078125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367424.771041,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 453.80078125,
+          "y": 680.390625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367442.742791,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 451.0625,
+          "y": 728.859375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367478.128458,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 451.0625,
+          "y": 748.09765625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367495.736,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.7578125,
+          "y": 765.046875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367516.465041,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.7578125,
+          "y": 776.6484375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367533.581958,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.13671875,
+          "y": 785.2109375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367549.526958,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.54296875,
+          "y": 788.91796875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367566.421416,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.54296875,
+          "y": 789.375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367582.607625,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.54296875,
+          "y": 789.6015625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367616.415166,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.54296875,
+          "y": 789.828125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367649.757875,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.54296875,
+          "y": 790.0546875,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367666.335041,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.54296875,
+          "y": 790.28125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367683.109291,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.54296875,
+          "y": 790.5078125,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367733.127083,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.54296875,
+          "y": 790.734375,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367833.222125,
+          "panning": false
+        },
+        {
+          "type": "pointermove",
+          "x": 449.54296875,
+          "y": 791.19140625,
+          "button": 0,
+          "buttons": 0,
+          "time": 91367899.753625,
+          "panning": false
+        }
+      ],
+      "captures": [],
+      "frames": [
+        {
+          "timestamp": 91365821.486708,
+          "start": 91365824.830958,
+          "duration": 0.5970830023288727
+        },
+        {
+          "timestamp": 91365839.72608301,
+          "start": 91365841.58925,
+          "duration": 0.5226249992847443
+        },
+        {
+          "timestamp": 91365873.902916,
+          "start": 91365875.777125,
+          "duration": 0.6460410058498383
+        },
+        {
+          "timestamp": 91365908.962916,
+          "start": 91365910.431625,
+          "duration": 0.4919160008430481
+        },
+        {
+          "timestamp": 91365976.572583,
+          "start": 91365977.987,
+          "duration": 0.5140829980373383
+        },
+        {
+          "timestamp": 91365994.604,
+          "start": 91365996.045666,
+          "duration": 0.5669170022010803
+        },
+        {
+          "timestamp": 91366041.782916,
+          "start": 91366056.585375,
+          "duration": 1.0792080014944077
+        },
+        {
+          "timestamp": 91366077.93775,
+          "start": 91366084.733833,
+          "duration": 1.2907499969005585
+        },
+        {
+          "timestamp": 91366114.393208,
+          "start": 91366122.674125,
+          "duration": 0.7472500056028366
+        },
+        {
+          "timestamp": 91366149.8925,
+          "start": 91366160.658041,
+          "duration": 1.0522920042276382
+        },
+        {
+          "timestamp": 91366172.102,
+          "start": 91366180.198375,
+          "duration": 0.7193329930305481
+        },
+        {
+          "timestamp": 91366209.32004099,
+          "start": 91366217.955666,
+          "duration": 0.6659590005874634
+        },
+        {
+          "timestamp": 91366243.12104098,
+          "start": 91366258.751583,
+          "duration": 1.086457997560501
+        },
+        {
+          "timestamp": 91366330.33787501,
+          "start": 91366341.007958,
+          "duration": 0.8586250096559525
+        },
+        {
+          "timestamp": 91366348.481041,
+          "start": 91366356.798166,
+          "duration": 0.8169589936733246
+        },
+        {
+          "timestamp": 91366401.103375,
+          "start": 91366404.300333,
+          "duration": 0.9234580099582672
+        },
+        {
+          "timestamp": 91366438.93525,
+          "start": 91366444.394375,
+          "duration": 0.7551660090684891
+        },
+        {
+          "timestamp": 91366456.72225,
+          "start": 91366459.956375,
+          "duration": 0.6547079980373383
+        },
+        {
+          "timestamp": 91366491.167166,
+          "start": 91366495.00025,
+          "duration": 0.6088330000638962
+        },
+        {
+          "timestamp": 91366534.69504099,
+          "start": 91366539.007916,
+          "duration": 0.6709589958190918
+        },
+        {
+          "timestamp": 91366569.946,
+          "start": 91366573.953958,
+          "duration": 0.7259999960660934
+        },
+        {
+          "timestamp": 91366604.70333299,
+          "start": 91366610.067708,
+          "duration": 0.646917000412941
+        },
+        {
+          "timestamp": 91366641.56579101,
+          "start": 91366645.682958,
+          "duration": 0.73854199051857
+        },
+        {
+          "timestamp": 91366695.45308301,
+          "start": 91366705.285041,
+          "duration": 0.9514589905738831
+        },
+        {
+          "timestamp": 91366747.42587501,
+          "start": 91366754.998916,
+          "duration": 0.6716669946908951
+        },
+        {
+          "timestamp": 91366805.516916,
+          "start": 91366818.896583,
+          "duration": 1.2580000013113022
+        },
+        {
+          "timestamp": 91366853.70675,
+          "start": 91366868.6085,
+          "duration": 0.8050410002470016
+        },
+        {
+          "timestamp": 91366935.086916,
+          "start": 91366944.026833,
+          "duration": 0.7535420060157776
+        },
+        {
+          "timestamp": 91366973.607,
+          "start": 91366981.69425,
+          "duration": 0.6457909941673279
+        },
+        {
+          "timestamp": 91367009.326916,
+          "start": 91367023.695375,
+          "duration": 1.3130000084638596
+        },
+        {
+          "timestamp": 91367056.51583299,
+          "start": 91367063.699791,
+          "duration": 0.6152089983224869
+        },
+        {
+          "timestamp": 91367092.433625,
+          "start": 91367103.228666,
+          "duration": 0.979750007390976
+        },
+        {
+          "timestamp": 91367150.92608301,
+          "start": 91367154.64725,
+          "duration": 1.098916009068489
+        },
+        {
+          "timestamp": 91367169.799541,
+          "start": 91367174.233958,
+          "duration": 0.791374996304512
+        },
+        {
+          "timestamp": 91367225.710875,
+          "start": 91367234.171625,
+          "duration": 0.878040999174118
+        },
+        {
+          "timestamp": 91367291.251125,
+          "start": 91367298.723375,
+          "duration": 0.7319580018520355
+        },
+        {
+          "timestamp": 91367327.045916,
+          "start": 91367335.539333,
+          "duration": 0.6548749953508377
+        },
+        {
+          "timestamp": 91367368.24004099,
+          "start": 91367375.325666,
+          "duration": 0.9786249995231628
+        },
+        {
+          "timestamp": 91367424.212,
+          "start": 91367424.825625,
+          "duration": 0.6872079968452454
+        }
+      ],
+      "panning": false,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    }
+  },
+  "limitations": [
+    "Observed events exceed the controlled 80-move workload; additional input invalidates a controlled comparison.",
+    "RAF timestamps and rendered scene counters are not physical presentation timestamps.",
+    "Both connected displays report 60Hz; this does not prove application frame rate.",
+    "Existing interactive Kestrel window was left open."
+  ]
+}

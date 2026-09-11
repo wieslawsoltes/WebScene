@@ -28,4 +28,10 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.1" />
     <PackageVersion Include="coverlet.collector" Version="6.0.0" />
   </ItemGroup>
+  <ItemGroup Condition="'$(WebSceneAvalonia12Sample)' == 'true'">
+    <PackageVersion Update="Svg.Skia" Version="4.9.1" />
+    <PackageVersion Update="SkiaSharp" Version="3.119.4" />
+    <PackageVersion Update="SkiaSharp.HarfBuzz" Version="3.119.4" />
+    <PackageVersion Update="Tmds.DBus.Protocol" Version="0.94.1" />
+  </ItemGroup>
 </Project>

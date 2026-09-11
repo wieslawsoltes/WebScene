@@ -1,0 +1,36 @@
+{
+  "platform": "macOS arm64",
+  "documentSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "input": {
+    "route": "NativeSceneSurface.SubmitWheel",
+    "count": 40,
+    "deltaY": [
+      -25,
+      25
+    ],
+    "stepsPerDirection": 20,
+    "requestedSpacingMs": 30
+  },
+  "observations": {
+    "wheelEvents": 40,
+    "handledWheelEvents": 40,
+    "resizes": [
+      [
+        556,
+        614
+      ]
+    ],
+    "bitmapMutations": [],
+    "canvas": [
+      1112,
+      1228
+    ],
+    "backend": "WebGPU \u00b7 GPU pipeline",
+    "errors": 0
+  },
+  "limitations": [
+    "No presented-frame capture or smoothness measurement.",
+    "Handled events do not independently prove the expected camera transformation.",
+    "Does not resolve white UI, flickering, or resize layout."
+  ]
+}

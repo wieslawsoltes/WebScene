@@ -1,0 +1,35 @@
+{
+  "scope": "Native completion mailbox only; not Dawn/ANGLE device loss or complete graphics service qualification",
+  "sourceBaseCommit": "ee3695f8edf64028f58cee80774380d99a1cd2c3",
+  "compiler": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /Volumes/SSD/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+  "rounds": 1000,
+  "operations": 16000,
+  "capacity": 16,
+  "saturatedReservations": 1000,
+  "endOfEveryRound": {
+    "pending": 0,
+    "ready": 0,
+    "nativePending": 0,
+    "occupied": 0
+  },
+  "validation": [
+    "Exactly-once engine-thread delivery",
+    "Cancelled-owner isolation from successful-owner completions",
+    "Late/duplicate callback rejection",
+    "Safe slot reuse after native callback retirement"
+  ],
+  "commands": [
+    {
+      "build": "clang++ -std=c++20 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -pthread -I experiments/WebScene.NativeEngine.Probe/native experiments/WebScene.NativeEngine.Probe/tests/graphics_completion_tests.cpp -o /tmp/webscene-completion-stress-asan",
+      "run": "/tmp/webscene-completion-stress-asan",
+      "exitCode": 0,
+      "sanitizerDiagnostics": false
+    },
+    {
+      "build": "clang++ -std=c++20 -g -O1 -fsanitize=thread -fno-omit-frame-pointer -pthread -I experiments/WebScene.NativeEngine.Probe/native experiments/WebScene.NativeEngine.Probe/tests/graphics_completion_tests.cpp -o /tmp/webscene-completion-stress-tsan",
+      "run": "/tmp/webscene-completion-stress-tsan",
+      "exitCode": 0,
+      "sanitizerDiagnostics": false
+    }
+  ]
+}

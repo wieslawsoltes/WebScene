@@ -1,0 +1,44 @@
+<!doctype html>
+<title>Module workers and structured clone contracts</title>
+<script>
+window.__webSceneWptState = {complete:false,harness:null,results:[],errors:[],diagnostics:[]};
+window.record = (name, condition) => __webSceneWptState.results.push({
+    name,status:condition?'PASS':'FAIL',message:condition?null:'Contract failed',stack:null
+});
+window.finish = () => {
+    const s=__webSceneWptState;
+    s.harness={status:s.results.some(r=>r.status!=='PASS')?1:0,message:null,stack:null};
+    s.complete=true;
+};
+</script>
+<script type="module">
+import {count, increment, url} from './resources/aureon/module.js';
+try {
+    increment();
+    record('Module live bindings and URL',count===2&&url.endsWith('/resources/aureon/module.js'));
+    record('Module currentScript is null',document.currentScript===null);
+    record('Dynamic import shares module instance',(await import('./resources/aureon/module.js')).count===2);
+    const original={map:new Map([[1,'value']]),date:new Date(456)};original.self=original;
+    const copy=structuredClone(original);
+    record('Structured clone retains cycles and built-in values',copy!==original&&copy.self===copy&&copy.map.get(1)==='value'&&copy.date.getTime()===456);
+    const b=new ArrayBuffer(8);
+    let rejected=false;try{structuredClone(b,{transfer:[b,b]});}catch(e){rejected=e.name==='DataCloneError';}
+    record('Duplicate transfer rejects without detaching',rejected&&b.byteLength===8);
+    const w=new Worker('./resources/aureon/worker.js',{type:'module'});
+    record('Worker inherits EventTarget with Worker identity',w instanceof Worker&&w instanceof EventTarget);
+    const data=new Uint8Array([41]);const messages=[];
+    w.onmessage=e=>{
+        messages.push(e.data);
+        if(messages.length===2){
+            record('Worker has isolated module state and transfers output',messages[0][0]===42);
+            record('Worker transfer detaches sender and has no document',messages[1].detached&&messages[1].documentType==='undefined');
+            w.terminate();w.terminate();finish();
+        }
+    };
+    w.onerror=e=>{record('Worker completed without errors',false);__webSceneWptState.errors.push(e.message);finish();};
+    w.postMessage(data,[data.buffer]);
+    record('Worker postMessage transfers input ownership',data.byteLength===0);
+} catch(e) {
+    record('Module workload completed',false);__webSceneWptState.errors.push(String(e));finish();
+}
+</script>

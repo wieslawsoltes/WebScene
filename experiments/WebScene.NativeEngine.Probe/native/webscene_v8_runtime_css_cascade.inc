@@ -2081,20 +2081,9 @@
             // initial currentColor value. Keep that dependency deferred.
             color = 0;
             current_color = true;
-            auto remaining = value;
-            auto color_start = remaining.find("rgba(");
-            if (color_start == std::string::npos) color_start = remaining.find("rgb(");
-            if (color_start != std::string::npos) {
-                const auto color_end = remaining.find(')', color_start);
-                if (color_end != std::string::npos) {
-                    color = native_document::parse_color(
-                        remaining.substr(color_start, color_end - color_start + 1U));
-                    current_color = false;
-                    remaining.erase(color_start, color_end - color_start + 1U);
-                }
-            }
-            std::istringstream stream(remaining);
-            for (std::string token; stream >> token;) {
+            // Functional colors are single CSS components. Splitting their
+            // arguments at spaces turns color-mix percentages into border widths.
+            for (const auto& token : split_transition_tokens(value)) {
                 if (token == "none") {
                     width = {};
                     color = 0;
@@ -4016,6 +4005,7 @@
         dom_node& node,
         std::string_view reason = {})
     {
+        webscene_frame_trace::scope cascade_trace(frame_trace, "recascade-start", "recascade-end", 0);
         if (!is_connected(node)) return;
         auto* previous_cascade_root = const_cast<dom_node*>(active_css_cascade_root);
         auto* node_cascade_root = css_cascade_root_for_node(node);

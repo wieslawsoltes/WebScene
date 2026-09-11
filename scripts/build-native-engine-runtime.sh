@@ -18,10 +18,11 @@ thin_lto=false
 upstream_v8=false
 disable_wasm=false
 partition_alloc=false
+graphics_sdk=
 cmake_build_type=Release
 
 usage() {
-  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--cmake-build-type Release|RelWithDebInfo] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc]" >&2
+  echo "Usage: $0 --rid osx-arm64|osx-x64|linux-arm64|linux-x64 [--output DIR] [--package-version VERSION] [--v8-root DIR] [--v8-output-root DIR] [--v8-workspace DIR] [--v8-revision REVISION] [--html-parser legacy|html5ever] [--css-parser legacy|cssparser] [--selector-parser legacy|servo] [--dom-bindings legacy|generated] [--v8-snapshot none|bootstrap] [--cmake-build-type Release|RelWithDebInfo] [--upstream-v8] [--thin-lto] [--disable-wasm] [--partition-alloc] [--graphics-sdk DIR]" >&2
 }
 
 while (($# > 0)); do
@@ -43,6 +44,7 @@ while (($# > 0)); do
     --thin-lto) thin_lto=true; shift ;;
     --disable-wasm) disable_wasm=true; shift ;;
     --partition-alloc) partition_alloc=true; shift ;;
+    --graphics-sdk) graphics_sdk="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -88,6 +90,12 @@ fi
 
 v8_configuration=Release
 build_variant="-$html_parser-$css_parser-$selector_parser-$dom_bindings-$v8_snapshot"
+graphics_cmake=OFF
+if [[ -n "$graphics_sdk" ]]; then
+  graphics_sdk="$(cd "$graphics_sdk" && pwd)"
+  graphics_cmake=ON
+  build_variant+=-graphics
+fi
 if [[ "$cmake_build_type" == RelWithDebInfo ]]; then
   build_variant+=-symbols
 fi
@@ -298,6 +306,9 @@ cmake_args=(
   -B "$build_dir"
   -DCMAKE_BUILD_TYPE="$cmake_build_type"
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8=ON
+  -DWEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA=ON
+  -DWEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS="$graphics_cmake"
+  -DWEBSCENE_GRAPHICS_SDK_ROOT="$graphics_sdk"
   -DWEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR=ON
   -DWEBSCENE_V8_POINTER_COMPRESSION=ON
   -DWEBSCENE_V8_POINTER_COMPRESSION_SHARED_CAGE=ON
@@ -367,7 +378,13 @@ fi
 cmake "${cmake_args[@]}"
 cmake --build "$build_dir" --config "$cmake_build_type" --parallel
 cmake -E copy_if_different "$icu_data" "$build_dir/icudtl.dat"
-ctest --test-dir "$build_dir" -C "$cmake_build_type" --output-on-failure
+ctest_args=(--test-dir "$build_dir" -C "$cmake_build_type" --output-on-failure)
+# Hosted package builders prove linkage and CPU contracts; real GPU execution
+# remains mandatory on the explicitly enrolled hardware qualification runners.
+if [[ "${WEBSCENE_NATIVE_SKIP_HARDWARE_TESTS:-0}" == 1 ]]; then
+  ctest_args+=(-LE hardware)
+fi
+ctest "${ctest_args[@]}"
 
 native_path="$build_dir/$native_name"
 if [[ ! -f "$native_path" ]]; then
@@ -390,6 +407,11 @@ if [[ "$v8_snapshot" == bootstrap \
   echo "Native engine build did not produce its bootstrap snapshot sidecars." >&2
   exit 1
 fi
+miniaudio_license="$build_dir/webscene-miniaudio-LICENSE"
+if [[ ! -f "$miniaudio_license" ]]; then
+  echo "Miniaudio license is missing from the media-enabled native build." >&2
+  exit 1
+fi
 ixwebsocket_license="$build_dir/_deps/webscene_ixwebsocket-src/LICENSE.txt"
 if [[ ! -f "$ixwebsocket_license" ]]; then
   echo "IXWebSocket license was not found at '$ixwebsocket_license'." >&2
@@ -410,6 +432,8 @@ pack_args=(
   "-p:WebSceneNativeEngineRid=$rid"
   "-p:WebSceneNativeEnginePath=$native_path"
   "-p:WebSceneNativeEngineIcuDataPath=$icu_data"
+  "-p:WebSceneNativeEngineMedia=true"
+  "-p:WebSceneNativeEngineMiniaudioLicensePath=$miniaudio_license"
   "-p:WebSceneNativeEngineV8LicensePath=$v8_license"
   "-p:WebSceneNativeEngineIcuLicensePath=$icu_license"
   "-p:WebSceneNativeEngineIXWebSocketLicensePath=$ixwebsocket_license"
@@ -428,6 +452,12 @@ pack_args=(
   "-p:WebSceneNativeEngineV8Snapshot=$v8_snapshot"
   "-p:WebSceneNativeEngineConfiguration=$cmake_build_type"
 )
+if [[ -n "$graphics_sdk" ]]; then
+  graphics_stage_root="$(mktemp -d "$build_dir/graphics-package.XXXXXX")"
+  python3 "$repo_root/eng/graphics/stage-runtime.py" --sdk "$graphics_sdk" --native "$build_dir" \
+    --rid "$rid" --output "$graphics_stage_root/assets"
+  pack_args+=("-p:WebSceneGraphicsPackageProps=$graphics_stage_root/assets/GraphicsPackage.props")
+fi
 if [[ "$v8_snapshot" == bootstrap ]]; then
   pack_args+=(
     "-p:WebSceneNativeEngineSnapshotPath=$snapshot_path"
@@ -458,6 +488,16 @@ WEBSCENE_VARIABLE_FONT_INSTANCING=1 dotnet run \
   --native-library "$package_native_path" \
   --native-cache-directory "$build_dir/code-cache" \
   --output "$build_dir/wpt-results"
+
+media_profiles=(webscene-media-runtime-profile.json)
+if [[ "$expected_kernel" == Darwin ]]; then
+  media_profiles+=(webscene-macos-video-runtime-profile.json)
+fi
+for profile in "${media_profiles[@]}"; do
+  dotnet run --project "$repo_root/tests/WebPlatformSubset/runner/WebScene.WebPlatformSubset.Runner.csproj" \
+    -c Release -- --manifest "$repo_root/tests/WebPlatformSubset/$profile" --selection required \
+    --native-library "$package_native_path" --output "$build_dir/$profile-results"
+done
 
 WEBSCENE_TEST_NATIVE_LIBRARY="$package_native_path" \
   WEBSCENE_VARIABLE_FONT_INSTANCING=1 \
@@ -498,6 +538,14 @@ NUGET_PACKAGES="$consumer_root/packages" dotnet restore \
 NUGET_PACKAGES="$consumer_root/packages" dotnet build \
   "$consumer_dir/consumer.csproj" -c Release -r "$rid" --no-restore
 copied_assets=("$native_name" icudtl.dat webscene-native-runtime.json)
+if [[ -n "$graphics_sdk" ]]; then
+  graphics_suffix=.so
+  if [[ "$expected_kernel" == Darwin ]]; then graphics_suffix=.dylib; fi
+  copied_assets+=("libwebgpu_dawn$graphics_suffix" webscene-graphics-runtime.json)
+  if [[ "$expected_kernel" != Darwin ]]; then
+    copied_assets+=("libEGL$graphics_suffix" "libGLESv2$graphics_suffix")
+  fi
+fi
 if [[ "$v8_snapshot" == bootstrap ]]; then
   copied_assets+=(webscene_bootstrap_snapshot.bin webscene_bootstrap_snapshot.meta)
 fi

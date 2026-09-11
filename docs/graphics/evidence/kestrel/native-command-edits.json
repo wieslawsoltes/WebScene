@@ -1,0 +1,40 @@
+{
+  "date": "2026-09-08",
+  "originalDocumentSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "input": "Focus command input via DOM; NativeSceneSurface.SubmitText followed by native keydown/keyup Enter.",
+  "commands": [
+    "LINE 0,0 1000,1000 ENTER",
+    "UNDO",
+    "REDO",
+    "UNDO"
+  ],
+  "baselineObjects": 265,
+  "steps": [
+    {
+      "objects": 266,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0,
+      "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands.CommandLINE 0,0 1000,1000 ENTERLINESpecify first pointLineCreated Line."
+    },
+    {
+      "objects": 265,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0,
+      "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands.CommandLINE 0,0 1000,1000 ENTERLINESpecify first pointLineCreated Line.CommandUNDOUndoLine"
+    },
+    {
+      "objects": 266,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0,
+      "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands.CommandLINE 0,0 1000,1000 ENTERLINESpecify first pointLineCreated Line.CommandUNDOUndoLineCommandREDORedoLine"
+    },
+    {
+      "objects": 265,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0,
+      "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands.CommandLINE 0,0 1000,1000 ENTERLINESpecify first pointLineCreated Line.CommandUNDOUndoLineCommandREDORedoLineCommandUNDOUndoLine"
+    }
+  ],
+  "exitCode": 0,
+  "qualification": "Native host-input document editing smoke test. OS hardware events, pixel comparison after editing, export and other tools remain unqualified."
+}

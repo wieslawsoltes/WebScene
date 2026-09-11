@@ -1,0 +1,72 @@
+name: Graphics SDK build validation
+
+on:
+  pull_request:
+    paths:
+      - 'eng/graphics/**'
+      - '.github/actions/graphics-sdk/**'
+      - '.github/workflows/graphics-sdk-build.yml'
+  workflow_dispatch:
+    inputs:
+      clean:
+        description: Rebuild SDKs without restoring the cache
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'eng/graphics/**'
+      - '.github/actions/graphics-sdk/**'
+      - '.github/workflows/graphics-sdk-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: graphics-sdk-build-${{ github.event.pull_request.number || github.ref }}
+  # Preserve evidence from long clean SDK builds; the latest pending commit
+  # runs after the active build completes.
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.component }} ${{ matrix.rid }} (no hardware qualification)
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        component: [dawn, angle]
+        include:
+          - rid: win-x64
+            os: windows-2022
+          - rid: linux-x64
+            os: ubuntu-22.04
+        rid: [win-x64, linux-x64]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/graphics-sdk
+      with:
+        rid: ${{ matrix.rid }}
+        component: ${{ matrix.component }}
+        clean: ${{ inputs.clean || false }}
+    - name: Compile and link diagnostic probe
+      run: |
+        cmake -S eng/graphics/probes -B artifacts/graphics-probes -G Ninja -DCMAKE_BUILD_TYPE=Release -DWEBSCENE_GRAPHICS_COMPONENTS=${{ matrix.component }} -DWEBSCENE_GRAPHICS_SDK_ROOT=${{ github.workspace }}/artifacts/graphics-sdk/${{ matrix.rid }}
+        cmake --build artifacts/graphics-probes --parallel 2
+    - name: Verify shared-handle ownership (no GPU required)
+      run: ctest --test-dir artifacts/graphics-probes -R "^webscene_nt_handle_tests$" --output-on-failure
+    # Hosted compilation proves no hardware, pixels, driver support, or conformance.
+    # GPU execution belongs to the dedicated graphics-prerequisites hardware workflow.
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: graphics-build-only-${{ matrix.component }}-${{ matrix.rid }}
+        path: |
+          artifacts/graphics-sdk/${{ matrix.rid }}/${{ matrix.component }}/
+          artifacts/graphics-probes/CMakeCache.txt
+        retention-days: 14
+        if-no-files-found: warn
+        # ANGLE installs .clang-format files covered by the sealed SDK inventory.
+        include-hidden-files: true

@@ -168,7 +168,7 @@ internal sealed partial class WptSubsetRunner
                 : test.Path.EndsWith(".any.js", StringComparison.OrdinalIgnoreCase)
                     ? PrepareWindowAnyTestHarnessDocument(source, test.Path)
                     : PrepareTestHarnessDocument(source, test.Path);
-            var state = RunHarnessDocument(html, test.Path);
+            var state = RunHarnessDocument(html, test.Path, test.NativeNavigation);
             timer.Stop();
 
             if (!state.Complete)
@@ -427,9 +427,9 @@ internal sealed partial class WptSubsetRunner
         }
     }
 
-    private HarnessState RunHarnessDocument(string html, string documentPath)
+    private HarnessState RunHarnessDocument(string html, string documentPath, bool nativeNavigation = false)
     {
-        using var environment = CreateEnvironment(html, documentPath);
+        using var environment = CreateEnvironment(html, documentPath, nativeNavigation);
         var timer = Stopwatch.StartNew();
         HarnessState? latest = null;
         while (timer.Elapsed < _options.Timeout)
@@ -487,7 +487,7 @@ internal sealed partial class WptSubsetRunner
         throw new TimeoutException($"Reftest document '{documentName}' did not reach readyState=complete.");
     }
 
-    private IWptEngineEnvironment CreateEnvironment(string html, string documentPath)
+    private IWptEngineEnvironment CreateEnvironment(string html, string documentPath, bool nativeNavigation = false)
     {
         return new NativeWptEngineEnvironment(
             _options,
@@ -495,7 +495,7 @@ internal sealed partial class WptSubsetRunner
             _upstreamRoot,
             documentPath,
             html,
-            Path.GetDirectoryName(TestDocumentPath(documentPath)));
+            Path.GetDirectoryName(TestDocumentPath(documentPath)), nativeNavigation);
     }
 
     private string PrepareTestHarnessDocument(string html, string path)
@@ -785,6 +785,8 @@ internal sealed partial class WptSubsetRunner
             {
                 throw new InvalidDataException($"Unknown test type '{test.Type}' for '{test.Path}'.");
             }
+            if (test.NativeNavigation && test.Type is not ("testharness" or "contract"))
+                throw new InvalidDataException($"Native navigation is only supported for harness/contract documents: '{test.Path}'.");
             if (test.Type == "reftest" &&
                 (string.IsNullOrWhiteSpace(test.Reference) || !File.Exists(TestDocumentPath(test.Reference))))
             {

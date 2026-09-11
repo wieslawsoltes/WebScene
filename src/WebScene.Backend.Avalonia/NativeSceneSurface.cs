@@ -38,6 +38,7 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 {
     private IntPtr _engine;
     private readonly bool _useCompositionVisual;
+    private readonly bool _enableGpuScenes;
     private readonly bool _submitAnimationFrames;
     private readonly NativeCanvasSceneRenderer _renderer = new();
     private readonly object _rendererGate = new();
@@ -69,12 +70,14 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
     private int _compositionProjectionActive;
     private long _compositionUiWakeCount;
     private CompositionCustomVisual? _customVisual;
+    private NativeSceneCompositionHandler? _compositionHandler;
 
     public NativeSceneSurface(
         IntPtr engine,
         bool useCompositionVisual = false,
-        bool submitAnimationFrames = true)
-        : this(engine, useCompositionVisual, submitAnimationFrames, null)
+        bool submitAnimationFrames = true,
+        bool enableGpuScenes = false)
+        : this(engine, useCompositionVisual, submitAnimationFrames, null, enableGpuScenes)
     {
     }
 
@@ -82,7 +85,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         IntPtr engine,
         bool useCompositionVisual,
         bool submitAnimationFrames,
-        Func<InputEvent, bool>? enqueuePointerInput)
+        Func<InputEvent, bool>? enqueuePointerInput,
+        bool enableGpuScenes = false)
     {
         _performanceInstrumentation = new NativePerformanceInstrumentation();
         _renderObserver = new NativeSceneRenderObserver(_performanceInstrumentation);
@@ -94,6 +98,9 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
                     "WEBSCENE_AVALONIA_DIRECT_DRAW"),
                 "1",
                 StringComparison.Ordinal);
+        if (enableGpuScenes && ((!OperatingSystem.IsMacOS() && !OperatingSystem.IsWindows()) || !_useCompositionVisual))
+            throw new PlatformNotSupportedException("GPU scenes require macOS or Windows composition rendering.");
+        _enableGpuScenes = enableGpuScenes;
         _submitAnimationFrames = submitAnimationFrames;
         Focusable = true;
         ClipToBounds = true;
@@ -162,6 +169,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         if (_customVisual is not null)
         {
             Volatile.Write(ref _compositionProjectionActive, 0);
+            _compositionHandler?.RevokeEngineAccess();
+            _compositionHandler = null;
             _customVisual.SendHandlerMessage(NativeSceneCompositionMessage.Stop);
             ElementComposition.SetElementChildVisual(this, null);
             _customVisual = null;
@@ -212,15 +221,16 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             var compositor = ElementComposition.GetElementVisual(this)?.Compositor;
             if (compositor is not null)
             {
-                _customVisual = compositor.CreateCustomVisual(
-                    new NativeSceneCompositionHandler(
+                _compositionHandler = new NativeSceneCompositionHandler(
                         _engine,
                         _renderObserver,
                         _compositionMailbox,
                         _compositionUiWakeGate,
                         _performanceInstrumentation,
                         ScheduleCompositionUiWake,
-                        TopLevel.GetTopLevel(this)?.RenderScaling ?? 1));
+                        TopLevel.GetTopLevel(this)?.RenderScaling ?? 1,
+                        enableGpuScenes: _enableGpuScenes);
+                _customVisual = compositor.CreateCustomVisual(_compositionHandler);
                 _customVisual.Size = new Vector2((float)Bounds.Width, (float)Bounds.Height);
                 ElementComposition.SetElementChildVisual(this, _customVisual);
                 Volatile.Write(ref _compositionProjectionActive, 1);
@@ -229,6 +239,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
             }
         }
 
+        if (_enableGpuScenes)
+            throw new InvalidOperationException("GPU scene rendering requires an attached compositor.");
         _frameLoopActive = true;
         RequestNextFrame();
     }
@@ -239,6 +251,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
         if (_customVisual is not null)
         {
             Volatile.Write(ref _compositionProjectionActive, 0);
+            _compositionHandler?.RevokeEngineAccess();
+            _compositionHandler = null;
             _customVisual.SendHandlerMessage(NativeSceneCompositionMessage.Stop);
             ElementComposition.SetElementChildVisual(this, null);
             _customVisual = null;
@@ -363,6 +377,8 @@ public sealed class NativeSceneSurface : Control, INativeWebSceneRenderDiagnosti
 
     public long[] RenderedSceneTimestamps
         => _renderObserver.RenderedSceneTimestamps;
+
+    public NativeSceneSchedulingSample[] SchedulingSamples => _renderObserver.SchedulingSamples;
 
     public NativeSceneRenderSample[] RenderedScenes
         => _renderObserver.RenderedScenes;

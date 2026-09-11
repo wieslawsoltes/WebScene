@@ -124,6 +124,7 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "async-save-publication") { test_async_save_acknowledgement_publishes_without_pointer_input(); return 0; }
         if (selected == "youtube-embed") { test_youtube_embed_fallback(); return 0; }
         if (selected == "table-cell-copy") { test_table_cell_click_copies_text_to_host(); return 0; }
         if (selected == "resource-failure-diagnostics") { test_resource_failure_diagnostics(); return 0; }
@@ -340,6 +341,7 @@ int main()
             auto* engine = webscene_engine_create(0);
             require(engine != nullptr, "inheritance engine creation failed");
             test_dimension_custom_property_inheritance(engine);
+    test_geometry_variable_positions(engine);
             webscene_engine_destroy(engine);
             return 0;
         }
@@ -375,6 +377,7 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "canvas-prefix-hint") { test_canvas_prefix_hint_tracks_append_and_reset(); return 0; }
         if (selected == "canvas-text-metrics") {
             test_canvas_text_metrics_use_host_font_axes();
             return 0;
@@ -558,6 +561,7 @@ int main()
     test_mixed_continuous_input_backlog_is_coalesced();
     test_pressed_drag_moves_remain_dispatchable_after_threshold();
     test_mouse_moves_are_raf_aligned_at_compositor_cadence();
+    test_canvas_prefix_hint_tracks_append_and_reset();
     test_controlled_switch_native_activation_matches_browser_semantics();
     test_tradingview_switch_repeated_transitions_publish_dense_scenes();
     test_loaded_document_keeps_html_and_body_cascade_distinct();

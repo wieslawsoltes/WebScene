@@ -1,0 +1,12 @@
+{
+  "route": "Dawn-IOSurface-CGL-Ganesh",
+  "renderedFrames": 32,
+  "imports": 1,
+  "gpuRetirementCompleted": true,
+  "explicitTransportCopies": 0,
+  "diagnosticReadbacks": 4,
+  "physicalPresentationVerified": false,
+  "expiredTextureSubmissionRejected": true,
+  "javascriptCanvasConnected": false,
+  "verificationCommand": "WEBSCENE_TEST_NATIVE_LIBRARY=\"$PWD/artifacts/graphics-build/native-v8-enabled/libwebscene_native_engine.dylib\" WEBSCENE_TEST_GPU_FIXTURE_LIBRARY=\"$PWD/artifacts/graphics-build/native-v8-enabled/libwebscene_graphics_iosurface_fixture.dylib\" dotnet run --project experiments/WebScene.GpuHost.Probe -- --ganesh-window --verify-window-pixels"
+}

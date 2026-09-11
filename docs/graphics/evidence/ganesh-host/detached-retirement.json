@@ -1,0 +1,12 @@
+{
+  "route": "Dawn-IOSurface-CGL-Ganesh",
+  "renderedFrames": 32,
+  "imports": 2,
+  "gpuRetirementCompleted": true,
+  "explicitTransportCopies": 0,
+  "diagnosticReadbacks": 8,
+  "physicalPresentationVerified": false,
+  "detachedBeforeRetirement": true,
+  "retirementThreadDiffersFromRenderingThread": true,
+  "normalCompositionHandlerConnected": false
+}

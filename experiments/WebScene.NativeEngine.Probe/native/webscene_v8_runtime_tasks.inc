@@ -443,6 +443,23 @@
         return true;
     }
 
+    bool drain_dialog_close_event_task()
+    {
+        auto task = std::move(pending_dialog_close_events.front());
+        pending_dialog_close_events.erase(pending_dialog_close_events.begin());
+        auto local_context = task.context.Get(isolate);
+        auto* target = document.find_by_native_id(task.target_id);
+        if (target == nullptr || local_context.IsEmpty()) return true;
+        v8::Context::Scope context_scope(local_context);
+        activate_css_cascade(local_context);
+        webscene_input_event input{};
+        v8::TryCatch try_catch(isolate);
+        if (dispatch_input_event_type(input, "close", *target)) return true;
+        last_error = "Dialog close dispatch failed: "
+            + describe_reported_exception(try_catch, local_context);
+        return false;
+    }
+
     void enqueue_programmatic_scroll_event(dom_node& target)
     {
         auto local_context = isolate->GetCurrentContext();
@@ -527,6 +544,30 @@
         // compilation and optimization work. An embedder must service that
         // queue; otherwise hot application code remains on its initial tier.
         pump_v8_platform_tasks();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        if (graphics && !graphics_delivering && graphics->has_ready_work()) {
+            struct delivery_guard {
+                bool& active;
+                explicit delivery_guard(bool& value) : active(value) { active=true; }
+                ~delivery_guard() { active=false; }
+            } guard(graphics_delivering);
+            // execute() also reaches this path after its script context scope
+            // has unwound. Enter the owning context explicitly for delivery.
+            auto graphics_context = context.Get(isolate);
+            v8::Context::Scope graphics_context_scope(graphics_context);
+            // Bound each batch and continue task arbitration to avoid starving DOM.
+            if (graphics->pump(graphics_deliver, 64))
+                perform_microtask_checkpoint();
+        }
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+        publish_ready_gpu_canvases();
+#endif
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        synchronize_media_elements();
+        if(drain_media())return true;
+#endif
+        if (has_worker_messages()) return drain_worker_message();
         if (websocket_transport.has_pending_events()) {
             return drain_websocket_event();
         }
@@ -535,6 +576,9 @@
         }
         if (has_ready_fetch_task()) {
             return drain_fetch_task();
+        }
+        if (!pending_dialog_close_events.empty()) {
+            return drain_dialog_close_event_task();
         }
         if (!pending_programmatic_scroll_events.empty()) {
             return drain_programmatic_scroll_event_task();
@@ -1385,6 +1429,7 @@
         bool* default_prevented = nullptr,
         dom_node* submitter = nullptr)
     {
+        webscene_frame_trace::scope trace(frame_trace, "event-start", "event-end", input.sequence);
         const auto previous_context = isolate->GetCurrentContext();
         auto local_context = context_for_node(target);
         v8::Context::Scope event_context_scope(local_context);
@@ -1414,14 +1459,18 @@
             event->Set(local_context, js_string(isolate, name), v8::Number::New(isolate, value)).Check();
         };
         const auto type_view = std::string_view(type);
-        const auto bubbles = type_view != "blur"
+        const auto bubbles = type_view != "beforetoggle"
+            && type_view != "close"
+            && type_view != "cancel"
+            && type_view != "blur"
             && type_view != "focus"
             && type_view != "mouseenter"
             && type_view != "mouseleave"
             && type_view != "pointerenter"
             && type_view != "pointerleave"
             && type_view != "scroll";
-        const auto cancelable = type_view != "blur"
+        const auto cancelable = type_view != "close"
+            && type_view != "blur"
             && type_view != "focus"
             && type_view != "focusin"
             && type_view != "focusout"
@@ -1438,6 +1487,11 @@
         event->Set(local_context, js_string(isolate, "bubbles"), v8::Boolean::New(isolate, bubbles)).Check();
         event->Set(local_context, js_string(isolate, "cancelable"), v8::Boolean::New(isolate, cancelable)).Check();
         event->Set(local_context, js_string(isolate, "defaultPrevented"), v8::False(isolate)).Check();
+        if (type_view == "beforetoggle") {
+            event->Set(local_context, js_string(isolate, "oldState"), js_string(isolate, "closed")).Check();
+            event->Set(local_context, js_string(isolate, "newState"), js_string(isolate, "open")).Check();
+            event->Set(local_context, js_string(isolate, "source"), v8::Null(isolate)).Check();
+        }
         if (type_view == "submit") {
             event->Set(
                 local_context,
@@ -1800,6 +1854,7 @@
         event->Set(local_context, js_string(isolate, "currentTarget"), v8::Null(isolate)).Check();
         perform_microtask_checkpoint();
         style_batch.finish();
+
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         event_callback_counts[type] +=
             input_callback_invocation_count - callback_count_before;
@@ -1946,6 +2001,7 @@
 
     bool is_effectively_visible_for_focus(const dom_node* node)
     {
+        if (node != nullptr && document.is_inert(*node)) return false;
         auto visibility_resolved = false;
         auto visibility_hidden = false;
         for (auto* current_node = node; current_node != nullptr;
@@ -2184,6 +2240,7 @@
 
     bool blur_active_element_before_detach(dom_node& detached_root)
     {
+        document.unregister_modal_subtree(detached_root);
         if (!subtree_contains(detached_root, active_element)) return true;
         webscene_input_event synthetic{};
         if (!set_active_element(nullptr, synthetic)) return false;
@@ -2253,6 +2310,9 @@
 
     bool dispatch_keyboard_or_text(const webscene_input_event& input)
     {
+        if (active_element != nullptr && document.is_inert(*active_element)) {
+            if (!set_active_element(nullptr, input)) return false;
+        }
         auto* target = active_element == nullptr ? &active_root() : active_element;
         if (input.kind == WEBSCENE_INPUT_KEY_UP) {
             pending_text_input_from_keydown = false;
@@ -2274,7 +2334,7 @@
                 target = find_node_by_native_id(active_root(), target_id);
                 if (target == nullptr) return true;
             }
-            if (!is_text_control(target)) return true;
+            if (!is_text_control(target) || document.is_inert(*target)) return true;
             bool prevented = false;
             if (!dispatch_input_event_type(input, "beforeinput", *target, &prevented)) return false;
             if (prevented) return true;
@@ -2729,7 +2789,7 @@
         return std::nullopt;
     }
 
-    bool dispatch_input(const webscene_input_event& input)
+    bool dispatch_input(const webscene_input_event& input, bool defer_cursor_update = false)
     {
         current_input_sequence = input.sequence;
         auto isolate_locker = lock_shared_isolate();
@@ -2770,6 +2830,7 @@
             hover_target = nullptr;
             current_related_target = nullptr;
             current_cursor_kind_value = WEBSCENE_CURSOR_DEFAULT;
+            pointer_cursor_update_pending = false;
             has_pointer_position = false;
             current_movement_x = current_movement_y = 0;
             recascade_hover_transition(previous, nullptr, "host-pointer-exit");
@@ -3279,6 +3340,11 @@
         if (input.kind == WEBSCENE_INPUT_POINTER_MOVE
             || input.kind == WEBSCENE_INPUT_POINTER_DOWN
             || input.kind == WEBSCENE_INPUT_POINTER_UP) {
+            if (defer_cursor_update && input.kind == WEBSCENE_INPUT_POINTER_MOVE) {
+                pointer_cursor_update_pending = true;
+                return true;
+            }
+            pointer_cursor_update_pending = false;
             ensure_layout();
             auto* cursor_target = document.hit_test(
                 document.body(),
@@ -3287,6 +3353,7 @@
             current_cursor_kind_value = cursor_target == nullptr
                 ? WEBSCENE_CURSOR_DEFAULT
                 : cursor_kind_for(*cursor_target);
+
         }
         return true;
     }

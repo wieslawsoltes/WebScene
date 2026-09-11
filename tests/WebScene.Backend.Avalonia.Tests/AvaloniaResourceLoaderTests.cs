@@ -11,6 +11,21 @@ namespace WebScene.Backend.Avalonia.Tests;
 public sealed class AvaloniaResourceLoaderTests
 {
     [Fact]
+    public void DataResourcePreservesOriginalFileBytes()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            byte[] bytes = [0, 255, 128, 195, 40];
+            File.WriteAllBytes(path, bytes);
+            var resource = new AvaloniaResourceLoader().LoadText(new WebSceneResourceRequest(new Uri(path).AbsoluteUri, null, WebSceneResourceKind.Data));
+            Assert.True(resource.BinaryContent.HasValue);
+            Assert.Equal(bytes, resource.BinaryContent.Value.ToArray());
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public async Task CrossOriginFetchSendsFrameOriginAndReferrer()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);

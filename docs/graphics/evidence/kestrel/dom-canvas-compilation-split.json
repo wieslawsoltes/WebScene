@@ -1,0 +1,30 @@
+{
+  "validated": true,
+  "temporaryTimingHooksRemoved": true,
+  "stageDurationsMilliseconds": {
+    "cpu:dom-compiled": {
+      "count": 52,
+      "median": 12.098333,
+      "maximum": 19.496292
+    },
+    "cpu:layers-compiled": {
+      "count": 52,
+      "median": 2.4543755000000003,
+      "maximum": 4.426375
+    }
+  },
+  "physicalPresentationVerified": false,
+  "limitations": [
+    "Single validated Kestrel workload; no command-kind attribution or physical FPS qualification."
+  ],
+  "orderedTextRegression": {
+    "net8.0": {
+      "passed": 5,
+      "failed": 0
+    },
+    "net10.0": {
+      "passed": 5,
+      "failed": 0
+    }
+  }
+}

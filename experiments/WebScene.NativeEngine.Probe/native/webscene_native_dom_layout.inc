@@ -1098,6 +1098,15 @@ void native_document::layout_children(dom_node& parent)
             horizontal_axis ? node.style.width : node.style.height,
             available);
     };
+    const auto positioned_auto_start_margin = [](float available, float start, float end,
+        float size, float start_margin, float end_margin, bool start_auto, bool end_auto,
+        bool horizontal_axis) {
+        if (!start_auto) return start_margin;
+        const auto free = available - start - end - size - (end_auto ? 0.0F : end_margin);
+        // CSS absolute positioning permits negative auto margins vertically.
+        // In the horizontal LTR case, excess width overflows at the right edge.
+        return end_auto ? (horizontal_axis && free < 0 ? 0.0F : free * 0.5F) : free;
+    };
     const auto layout_positioned_grid_child = [&](dom_node& child) {
         auto* containing_node = body_;
         if (child.style.position == position_mode::absolute) {
@@ -1152,11 +1161,11 @@ void native_document::layout_children(dom_node& parent)
             ? resolve_length(child, child.style.right, containing.width, 0) : 0.0F;
         const auto bottom = has_bottom
             ? resolve_length(child, child.style.bottom, containing.height, 0) : 0.0F;
-        const auto margin_left = resolve_length(
+        auto margin_left = resolve_length(
             child, child.style.margin_left, containing.width, 0);
         const auto margin_right = resolve_length(
             child, child.style.margin_right, containing.width, 0);
-        const auto margin_top = resolve_length(
+        auto margin_top = resolve_length(
             child, child.style.margin_top, containing.height, 0);
         const auto margin_bottom = resolve_length(
             child, child.style.margin_bottom, containing.height, 0);
@@ -1203,6 +1212,12 @@ void native_document::layout_children(dom_node& parent)
         };
         assigned.width = constrain_positioned_size(true, assigned.width);
         assigned.height = constrain_positioned_size(false, assigned.height);
+        if (has_left && has_right) margin_left = positioned_auto_start_margin(
+            containing.width, left, right, assigned.width, margin_left, margin_right,
+            child.style.margin_left_auto, child.style.margin_right_auto, true);
+        if (has_top && has_bottom) margin_top = positioned_auto_start_margin(
+            containing.height, top, bottom, assigned.height, margin_top, margin_bottom,
+            child.style.margin_top_auto, child.style.margin_bottom_auto, false);
         assigned.x = has_left
             ? containing.x + left + margin_left
             : has_right
@@ -1290,6 +1305,12 @@ void native_document::layout_children(dom_node& parent)
             // BR is inline-level but forces a line break. The flattened text-run
             // path has no sentinel for forced breaks, so retain it as an item.
             if (node.tag == "br") return false;
+            // Replaced inline elements contribute their intrinsic box, even
+            // without CSS width/height. Flattening them into text runs loses
+            // the box entirely (canvas fallback children are not its contents).
+            if (node.tag == "canvas" || node.tag == "video" || node.tag == "img" || node.tag == "svg"
+                || node.tag == "input" || node.tag == "select" || node.tag == "textarea")
+                return false;
             // Inline-block and inline-table descendants are atomic inline
             // boxes. Flattening their text into the surrounding line discards
             // their own padding, background, and border geometry.
@@ -1726,8 +1747,32 @@ void native_document::layout_children(dom_node& parent)
     const auto implicit_column_grid = parent_grid.auto_flow_column
         && !parent_grid.auto_columns.empty();
     if (is_grid_container(parent.style.display)
-        && (parent_grid.two_columns || implicit_column_grid)) {
+        && (parent_grid.two_columns || implicit_column_grid
+            || !parent_grid.template_columns.empty() || !parent_grid.template_rows.empty())) {
         using grid_track = node_style::grid_data::track;
+        const auto distribute_fractions = [](std::vector<float>& sizes,
+            const std::vector<grid_track>& tracks, float available, float gaps) {
+            auto remaining = available - gaps;
+            std::vector<size_t> flexible;
+            for (size_t index=0;index<sizes.size();++index) {
+                if(index<tracks.size() && tracks[index].fraction>0)flexible.push_back(index);
+                else remaining-=sizes[index];
+            }
+            while(!flexible.empty()) {
+                float weight=0;
+                for(const auto index:flexible)weight+=tracks[index].fraction;
+                const auto fraction=std::max(0.0F,remaining)/std::max(1.0F,weight);
+                bool froze=false;
+                for(auto it=flexible.begin();it!=flexible.end();) {
+                    if(fraction*tracks[*it].fraction<sizes[*it]) {
+                        remaining-=sizes[*it];it=flexible.erase(it);froze=true;
+                    } else ++it;
+                }
+                if(froze)continue;
+                for(const auto index:flexible)sizes[index]=fraction*tracks[index].fraction;
+                break;
+            }
+        };
         struct grid_item final {
             dom_node* node{nullptr};
             size_t row{0};
@@ -1786,7 +1831,7 @@ void native_document::layout_children(dom_node& parent)
         const auto column_count = inherited_subgrid_columns
             ? parent.grid_layout().column_widths.size()
             : std::max<size_t>(
-                implicit_column_grid ? 1U : 2U,
+                parent_grid.two_columns && effective_columns.empty() ? 2U : 1U,
                 effective_columns.size());
         const auto parse_line = [](std::string_view value) -> std::optional<int32_t> {
             const auto first = value.find_first_not_of(" \t\r\n");
@@ -1988,15 +2033,11 @@ void native_document::layout_children(dom_node& parent)
         if (!inherited_subgrid_columns) {
             const auto committed_width = std::accumulate(
                 column_widths.begin(), column_widths.end(), total_gap);
-            const auto fractional_space = std::max(0.0F, content.width - committed_width);
             if (fractional_weight > 0) {
-                for (size_t column = 0; column < effective_columns.size(); ++column) {
-                    const auto& track = effective_columns[column];
-                    if (track.fraction <= 0) continue;
-                    column_widths[column] = std::max(
-                        column_widths[column],
-                        fractional_space * track.fraction / fractional_weight);
-                }
+                // Flexible tracks own their share of the available space,
+                // including their minimum. Freeze undersized shares at that
+                // minimum and recompute the fraction for the remaining tracks.
+                distribute_fractions(column_widths,effective_columns,content.width,total_gap);
             } else if (committed_width < content.width && !column_widths.empty()) {
                 // `justify-content: normal` stretches auto grid tracks, not
                 // fixed tracks. Donating all free space to the final column
@@ -2024,6 +2065,7 @@ void native_document::layout_children(dom_node& parent)
         const auto row_count = std::max<size_t>(
             occupied.size(), parent_grid.template_rows.size());
         std::vector<float> row_heights(row_count, 0.0F);
+        std::vector<float> row_minimums(row_count, 0.0F);
         const auto contains_wrapping_flex = [&](const auto& self,
                                                 const dom_node& node) -> bool {
             if (is_flex_container(node.style.display) && node.style.flex_wrap) {
@@ -2073,6 +2115,26 @@ void native_document::layout_children(dom_node& parent)
             auto authored = definite_height
                 ? outer_authored_size(*item.node, false, content.height)
                 : intrinsic_size(*item.node, false, content.height);
+            const auto record_contribution = [&](float contribution) {
+                auto minimum = contribution;
+                if (!definite_height) {
+                    const auto& style = item.node->style;
+                    const auto scrollable = style.overflow_y == overflow_mode::hidden
+                        || style.overflow_y == overflow_mode::automatic
+                        || style.overflow_y == overflow_mode::scroll;
+                    if (is_specified(style.min_height) || scrollable) {
+                        const auto padding = resolve_vertical_padding(*item.node, style.padding_top, content.height, 0)
+                            + resolve_vertical_padding(*item.node, style.padding_bottom, content.height, 0)
+                            + resolve_length(*item.node, style.border_top_width, content.height, 0)
+                            + resolve_length(*item.node, style.border_bottom_width, content.height, 0);
+                        const auto authored_minimum = is_specified(style.min_height)
+                            ? resolve_length(*item.node, style.min_height, content.height, 0) : 0.0F;
+                        minimum = std::max(padding, authored_minimum + (style.border_box ? 0.0F : padding));
+                    }
+                }
+                row_minimums[item.row] = std::max(row_minimums[item.row], minimum + margins);
+                row_heights[item.row] = std::max(row_heights[item.row], contribution + margins);
+            };
             if (!definite_height) {
                 // Block-axis intrinsic sizing alone only sees an unwrapped
                 // line-height. Grid row sizing, however, happens after the
@@ -2108,8 +2170,7 @@ void native_document::layout_children(dom_node& parent)
                 const auto has_wrapping_flex = !wraps_at_used_width
                     && contains_wrapping_flex(contains_wrapping_flex, *item.node);
                 if (!wraps_at_used_width && !has_wrapping_flex) {
-                    row_heights[item.row] = std::max(
-                        row_heights[item.row], authored + margins);
+                    record_contribution(authored);
                     continue;
                 }
                 if (item.node->style.grid().subgrid_columns) {
@@ -2159,23 +2220,24 @@ void native_document::layout_children(dom_node& parent)
                             item.node->scroll_content_height,
                             flow_bounds.second - flow_bounds.first)));
             }
-            row_heights[item.row] = std::max(row_heights[item.row], authored + margins);
+            record_contribution(authored);
+        }
+        const auto single_auto_row = row_count == 1U
+            && (parent_grid.template_rows.empty()
+                || parent_grid.template_rows[0].kind == grid_track::sizing::automatic);
+        if (single_auto_row && parent.used_height_is_definite) {
+            // An auto track's max-content growth limit is not its minimum.
+            // Scrollable items and explicit min-height can allow the row to
+            // shrink, including after a larger previously arranged viewport.
+            row_heights[0] = std::max(row_minimums[0], std::min(row_heights[0], content.height));
         }
         const auto total_row_gap = row_count > 0
             ? row_gap * static_cast<float>(row_count - 1U) : 0.0F;
         const auto committed_height = std::accumulate(
             row_heights.begin(), row_heights.end(), total_row_gap);
-        const auto fractional_row_space = std::max(0.0F, content.height - committed_height);
         if (fractional_row_weight > 0) {
-            for (size_t row = 0; row < parent_grid.template_rows.size(); ++row) {
-                const auto& track = parent_grid.template_rows[row];
-                if (track.fraction <= 0) continue;
-                row_heights[row] = std::max(
-                    row_heights[row],
-                    fractional_row_space * track.fraction / fractional_row_weight);
-            }
-        } else if (row_count == 1U
-            && parent_grid.template_rows.empty()
+            distribute_fractions(row_heights,parent_grid.template_rows,content.height,total_row_gap);
+        } else if (single_auto_row
             && committed_height < content.height) {
             // The common one-row implicit grid case stretches its auto row to
             // the definite container height. Keep this compatibility path
@@ -2248,7 +2310,7 @@ void native_document::layout_children(dom_node& parent)
                     column_offsets[item.column] + margin_left,
                     row_offsets[item.row] + margin_top,
                     width,
-                    height});
+                    height}, true); // The resolved grid area supplies the stretched block size.
             };
             arrange(item.node);
         }
@@ -2566,7 +2628,7 @@ void native_document::layout_children(dom_node& parent)
     const auto contains_replaced_content = [&](const auto& self,
                                                 const dom_node& candidate) -> bool {
         if (candidate.tag == "svg" || candidate.tag == "img"
-            || candidate.tag == "canvas" || candidate.tag == "input"
+            || candidate.tag == "canvas" || candidate.tag == "video" || candidate.tag == "input"
             || candidate.tag == "select" || candidate.tag == "textarea") {
             return true;
         }
@@ -2903,7 +2965,7 @@ void native_document::layout_children(dom_node& parent)
             const auto bottom = has_bottom
                 ? resolve_length(*child, child->style.bottom, containing.height, 0)
                 : 0;
-            const auto margin_left = resolve_length(
+            auto margin_left = resolve_length(
                 *child,
                 child->style.margin_left,
                 containing.width,
@@ -2913,7 +2975,7 @@ void native_document::layout_children(dom_node& parent)
                 child->style.margin_right,
                 containing.width,
                 0);
-            const auto margin_top = resolve_length(
+            auto margin_top = resolve_length(
                 *child,
                 child->style.margin_top,
                 containing.height,
@@ -2950,6 +3012,12 @@ void native_document::layout_children(dom_node& parent)
                 false,
                 assigned.height,
                 containing.height);
+            if (has_left && has_right) margin_left = positioned_auto_start_margin(
+                containing.width, left, right, assigned.width, margin_left, margin_right,
+                child->style.margin_left_auto, child->style.margin_right_auto, true);
+            if (has_top && has_bottom) margin_top = positioned_auto_start_margin(
+                containing.height, top, bottom, assigned.height, margin_top, margin_bottom,
+                child->style.margin_top_auto, child->style.margin_bottom_auto, false);
             const auto flex_static_main_offset = [&] {
                 // An auto-inset out-of-flow child keeps the position its
                 // margin box would have occupied in normal flow. `cursor` is
@@ -3657,7 +3725,7 @@ float native_document::min_content_inline_size(
         return constrain(padding + widest_segment);
     }
     if (node.tag == "input" || node.tag == "select" || node.tag == "textarea"
-        || node.tag == "img" || node.tag == "svg" || node.tag == "canvas") {
+        || node.tag == "img" || node.tag == "svg" || node.tag == "canvas" || node.tag == "video") {
         return intrinsic_size(node, true, available);
     }
 
@@ -4063,11 +4131,18 @@ float native_document::compute_intrinsic_size(
         // applied to the wrapper and used to size its portaled listbox.
         return constrain(columns * measure_text_width("0", node) + padding);
     }
-    if (node.tag == "svg" || node.tag == "img" || node.tag == "canvas") {
+    if (node.tag == "svg" || node.tag == "img" || node.tag == "canvas" || node.tag == "video") {
 #if defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_BRANCH_BENCHMARK)
         ++intrinsic_size_branch_counts_for_benchmark[5];
 #endif
         const auto attribute = node.attributes.find(horizontal ? "width" : "height");
+        if (node.tag == "video" && attribute == node.attributes.end()) {
+            const auto& backing=node.canvas().backing;
+            return constrain(static_cast<float>(horizontal?backing.width():backing.height())+padding);
+        }
+        if (node.tag == "canvas" && attribute == node.attributes.end()) {
+            return constrain((horizontal ? 300.0F : 150.0F) + padding);
+        }
         if (attribute != node.attributes.end()) {
             const auto intrinsic = parse_number(attribute->second, 0);
             if (intrinsic > 0) return constrain(intrinsic + padding);
@@ -4419,6 +4494,28 @@ void native_document::layout_child(
     layout_rect assigned,
     bool assigned_height_is_definite)
 {
+    // A video's decoded size is intrinsic, not its used CSS height. Resolve
+    // auto height from the final content width before transforms and parent flow
+    // placement; otherwise width:100% stretches a native-resolution-tall image.
+    if (child.tag == "video" && !is_specified(child.style.height)
+        && !child.attributes.contains("height") && !assigned_height_is_definite) {
+        const auto& backing = child.canvas().backing;
+        if (backing.width() > 0 && backing.height() > 0) {
+            const auto horizontal_edges =
+                resolve_length(child, child.style.padding_left, assigned.width, 0)
+                + resolve_length(child, child.style.padding_right, assigned.width, 0)
+                + resolve_length(child, child.style.border_left_width, assigned.width, 0)
+                + resolve_length(child, child.style.border_right_width, assigned.width, 0);
+            const auto vertical_edges =
+                resolve_vertical_padding(child, child.style.padding_top, assigned.height, 0)
+                + resolve_vertical_padding(child, child.style.padding_bottom, assigned.height, 0)
+                + resolve_length(child, child.style.border_top_width, assigned.height, 0)
+                + resolve_length(child, child.style.border_bottom_width, assigned.height, 0);
+            assigned.height = std::max(0.0F, assigned.width - horizontal_edges)
+                * static_cast<float>(backing.height()) / static_cast<float>(backing.width())
+                + vertical_edges;
+        }
+    }
     // A CSS transform changes the painted and hit-test box, not the space the
     // element occupies in its parent's flow. Percentage translations resolve
     // against the transformed element's own border box.
@@ -4548,10 +4645,29 @@ void native_document::layout_child(
             child.layout.height,
             0);
         const auto previous_height = child.layout.height;
-        child.layout.height = std::max(
-            child.layout.height,
-            content_bottom - child.layout.y + padding_bottom + border_bottom);
-        if (child.layout.height > previous_height + 0.01F) {
+        const auto final_content_height = content_bottom - child.layout.y
+            + padding_bottom + border_bottom;
+        // Ordinary auto-height blocks follow their laid-out children, including
+        // replaced content whose used height shrinks after resolving its width.
+        // Keeping the provisional intrinsic height leaves a native-size blank
+        // area below responsive video and pushes following controls offscreen.
+        const auto recompute_auto_block = child.style.display == display_mode::block
+            && !has_visible_text(child.text_content)
+            && !pseudo_generates_box(child.style.before_pseudo())
+            && !pseudo_generates_box(child.style.after_pseudo());
+        const auto minimum_height = is_specified(child.style.min_height)
+            ? resolve_length(child, child.style.min_height, containing_block.height, 0)
+            : 0.0F;
+        child.layout.height = recompute_auto_block
+            ? std::max(minimum_height, final_content_height)
+            : std::max(child.layout.height, final_content_height);
+        if (recompute_auto_block && child.layout.height < previous_height - 0.01F) {
+            // Recompute overflow against the settled viewport. The provisional
+            // content height also participates in scroll extents; retaining it
+            // creates an empty scroll range after responsive content shrinks.
+            layout_children(child);
+        }
+        if (std::abs(child.layout.height - previous_height) > 0.01F) {
             // layout_children() established scroll geometry from the
             // provisional auto height. Wrapped content can then grow this box
             // without changing its public client/scroll metrics, leaving a

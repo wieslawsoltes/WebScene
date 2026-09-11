@@ -4,6 +4,51 @@ project(WebSceneNativeEngineProbe LANGUAGES C CXX)
 include(CTest)
 include(FetchContent)
 
+if(BUILD_TESTING)
+    add_executable(webscene_graphics_scene_abi_layout_tests tests/graphics_scene_abi_layout_tests.c)
+    target_compile_features(webscene_graphics_scene_abi_layout_tests PRIVATE c_std_11)
+    target_include_directories(webscene_graphics_scene_abi_layout_tests PRIVATE native)
+    add_test(NAME webscene_graphics_scene_abi_layout_tests COMMAND webscene_graphics_scene_abi_layout_tests)
+    add_executable(webscene_graphics_canvas_backing_tests tests/graphics_canvas_backing_tests.cpp)
+    target_compile_features(webscene_graphics_canvas_backing_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_canvas_backing_tests PRIVATE native)
+    add_test(NAME webscene_graphics_canvas_backing_tests COMMAND webscene_graphics_canvas_backing_tests)
+    find_package(Threads REQUIRED)
+    add_executable(webscene_graphics_image_lease_tests tests/graphics_image_lease_tests.cpp)
+    target_compile_features(webscene_graphics_image_lease_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_image_lease_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_image_lease_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_image_lease_tests COMMAND webscene_graphics_image_lease_tests)
+    add_executable(webscene_nt_handle_tests tests/graphics_nt_handle_tests.cpp)
+    target_compile_features(webscene_nt_handle_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_nt_handle_tests PRIVATE native)
+    add_test(NAME webscene_nt_handle_tests COMMAND webscene_nt_handle_tests)
+    add_executable(webscene_graphics_dxgi_contract_tests tests/graphics_dxgi_contract_tests.cpp)
+    target_compile_features(webscene_graphics_dxgi_contract_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_dxgi_contract_tests PRIVATE native)
+    add_test(NAME webscene_graphics_dxgi_contract_tests COMMAND webscene_graphics_dxgi_contract_tests)
+    add_executable(webscene_graphics_resource_tests tests/graphics_resource_tests.cpp)
+    target_compile_features(webscene_graphics_resource_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_resource_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_resource_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_resource_tests COMMAND webscene_graphics_resource_tests)
+    add_executable(webscene_graphics_queue_tests tests/graphics_queue_tests.cpp)
+    target_compile_features(webscene_graphics_queue_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_queue_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_queue_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_queue_tests COMMAND webscene_graphics_queue_tests)
+    add_executable(webscene_graphics_completion_tests tests/graphics_completion_tests.cpp)
+    target_compile_features(webscene_graphics_completion_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_completion_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_completion_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_completion_tests COMMAND webscene_graphics_completion_tests)
+    add_executable(webscene_graphics_wake_tests tests/graphics_wake_tests.cpp)
+    target_compile_features(webscene_graphics_wake_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_wake_tests PRIVATE native)
+    target_link_libraries(webscene_graphics_wake_tests PRIVATE Threads::Threads)
+    add_test(NAME webscene_graphics_wake_tests COMMAND webscene_graphics_wake_tests)
+endif()
+
 # CMake 3.24 made extracted archive timestamps deterministic through CMP0135.
 # Use the policy when available while remaining compatible with the Ubuntu
 # 22.04 runner's CMake 3.22, which does not recognize
@@ -27,12 +72,104 @@ if(MSVC)
 endif()
 
 add_library(webscene_native_engine SHARED
+    native/graphics/windows_gpu_interop.cpp
     native/webscene_native_engine.cpp
     native/webscene_native_dom.cpp)
 
 target_compile_features(webscene_native_engine PRIVATE cxx_std_20)
 target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_BUILD)
 target_include_directories(webscene_native_engine PUBLIC native)
+
+option(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA "Build native HTML media and Web Audio services" ON)
+if(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+    add_subdirectory(native/media)
+    target_link_libraries(webscene_native_engine PRIVATE webscene_media)
+    target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA=1)
+endif()
+
+
+option(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS "Link pinned native GPU dependencies for this platform" OFF)
+if(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    set(WEBSCENE_GRAPHICS_COMPONENTS dawn)
+    set(webscene_graphics_libraries dawn::webgpu_dawn)
+    # The native macOS presenter shares Metal textures directly with Skia.
+    # Windows requires ANGLE for the D3D11/EGL composition bridge.
+    if(APPLE)
+        add_compile_definitions(WEBSCENE_GRAPHICS_ENABLE_ANGLE=0)
+    else()
+        list(APPEND WEBSCENE_GRAPHICS_COMPONENTS angle)
+        list(APPEND webscene_graphics_libraries webscene_angle_EGL webscene_angle_GLESv2)
+    endif()
+    include("${CMAKE_CURRENT_LIST_DIR}/../../eng/graphics/GraphicsDependencies.cmake")
+    target_link_libraries(webscene_native_engine PRIVATE
+        ${webscene_graphics_libraries})
+    target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS=1)
+    if(WIN32)
+        target_link_libraries(webscene_native_engine PRIVATE d3d12 d3d11 dxgi)
+    endif()
+    if(APPLE)
+        target_link_libraries(webscene_native_engine PRIVATE
+            "-framework CoreFoundation" "-framework IOSurface" "-framework CoreVideo")
+    endif()
+    if(BUILD_TESTING)
+        add_executable(webscene_graphics_dawn_event_tests tests/graphics_dawn_event_tests.cpp)
+        target_compile_features(webscene_graphics_dawn_event_tests PRIVATE cxx_std_20)
+        target_include_directories(webscene_graphics_dawn_event_tests PRIVATE native)
+        target_link_libraries(webscene_graphics_dawn_event_tests PRIVATE ${webscene_graphics_libraries} Threads::Threads)
+        add_test(NAME webscene_graphics_dawn_event_tests COMMAND webscene_graphics_dawn_event_tests)
+        set_tests_properties(webscene_graphics_dawn_event_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+        foreach(library IN LISTS webscene_graphics_libraries)
+            add_custom_command(TARGET webscene_graphics_dawn_event_tests POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "$<TARGET_FILE:${library}>" "$<TARGET_FILE_DIR:webscene_graphics_dawn_event_tests>")
+        endforeach()
+        if(NOT APPLE)
+            add_executable(webscene_graphics_angle_context_tests tests/graphics_angle_context_tests.cpp)
+            target_compile_features(webscene_graphics_angle_context_tests PRIVATE cxx_std_20)
+            target_include_directories(webscene_graphics_angle_context_tests PRIVATE native)
+            target_link_libraries(webscene_graphics_angle_context_tests PRIVATE webscene_angle_EGL webscene_angle_GLESv2 Threads::Threads)
+            add_test(NAME webscene_graphics_angle_context_tests COMMAND webscene_graphics_angle_context_tests 2)
+            add_test(NAME webscene_graphics_angle_es3_context_tests COMMAND webscene_graphics_angle_context_tests 3)
+            set_tests_properties(webscene_graphics_angle_context_tests webscene_graphics_angle_es3_context_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+            add_executable(webscene_graphics_service_tests tests/graphics_service_tests.cpp)
+            target_compile_features(webscene_graphics_service_tests PRIVATE cxx_std_20)
+            target_include_directories(webscene_graphics_service_tests PRIVATE native)
+            target_link_libraries(webscene_graphics_service_tests PRIVATE ${webscene_graphics_libraries} Threads::Threads)
+            add_test(NAME webscene_graphics_service_tests COMMAND webscene_graphics_service_tests)
+            set_tests_properties(webscene_graphics_service_tests PROPERTIES LABELS "graphics;hardware" TIMEOUT 40)
+            foreach(library ${webscene_graphics_libraries})
+                add_custom_command(TARGET webscene_graphics_service_tests POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "$<TARGET_FILE:${library}>" "$<TARGET_FILE_DIR:webscene_graphics_service_tests>")
+            endforeach()
+            foreach(library EGL GLESv2)
+                add_custom_command(TARGET webscene_graphics_angle_context_tests POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_graphics_angle_context_tests>")
+            endforeach()
+        endif()
+    endif()
+    add_custom_command(TARGET webscene_native_engine POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:dawn::webgpu_dawn>" "$<TARGET_FILE_DIR:webscene_native_engine>")
+    if(WIN32)
+        add_custom_command(TARGET webscene_native_engine POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${WEBSCENE_GRAPHICS_SDK_ROOT}/dawn/bin/d3dcompiler_47.dll" "$<TARGET_FILE_DIR:webscene_native_engine>")
+    endif()
+    if(APPLE)
+        set_target_properties(webscene_native_engine PROPERTIES BUILD_RPATH "@loader_path")
+    elseif(UNIX)
+        set_target_properties(webscene_native_engine PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
+    if(NOT APPLE)
+        foreach(library EGL GLESv2)
+            add_custom_command(TARGET webscene_native_engine POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_native_engine>")
+        endforeach()
+    endif()
+endif()
 
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8 "Link the engine directly to the pinned V8 monolith" OFF)
 option(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR
@@ -372,6 +509,9 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
     endif()
     if(NOT EXISTS "${WEBSCENE_V8_ICU_DATA}")
         message(FATAL_ERROR "WebScene native engine: ICU data not found at ${WEBSCENE_V8_ICU_DATA}")
+    endif()
+    if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8_INSPECTOR)
+        include("${CMAKE_CURRENT_LIST_DIR}/cmake/VerifyV8Inspector.cmake")
     endif()
 
     # WebSocket I/O is a native implementation detail. IXWebSocket supplies a
@@ -915,7 +1055,7 @@ if(MSVC)
     # conformance switch is enabled. V8 checks __cplusplus directly when
     # enforcing its C++20 embedder requirement.
     target_compile_options(webscene_native_engine PRIVATE
-        /W4 /permissive- /GR- /wd4996 /std:c++20 /Zc:__cplusplus)
+        /W4 /permissive- /GR- /wd4996 /std:c++20 /Zc:__cplusplus /bigobj)
     target_compile_definitions(webscene_native_engine PRIVATE NOMINMAX)
     if(TARGET webscene_native_engine_tests)
         set_property(TARGET webscene_native_engine_tests PROPERTY
@@ -1008,4 +1148,49 @@ if(WEBSCENE_NATIVE_ENGINE_DENSE_LINK)
                 "LINKER:-x")
         endif()
     endif()
+endif()
+
+# White-box runtime coverage without adding test hooks to the production C ABI.
+# Compile the same source/configuration graph into a separate executable.
+if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS AND WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    get_target_property(graphics_runtime_sources webscene_native_engine SOURCES)
+    add_executable(webscene_graphics_v8_runtime_tests
+        tests/graphics_v8_runtime_tests.cpp ${graphics_runtime_sources})
+    target_compile_features(webscene_graphics_v8_runtime_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,INCLUDE_DIRECTORIES>")
+    target_compile_definitions(webscene_graphics_v8_runtime_tests PRIVATE
+        WEBSCENE_GRAPHICS_SCENE_TESTS=1
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_DEFINITIONS>")
+    target_compile_options(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_OPTIONS>")
+    target_link_libraries(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,LINK_LIBRARIES>" Threads::Threads)
+    # Preserve toolchain/LTO options, excluding the production ABI export lists.
+    target_link_options(webscene_graphics_v8_runtime_tests PRIVATE
+        "$<FILTER:$<TARGET_PROPERTY:webscene_native_engine,LINK_OPTIONS>,EXCLUDE,exported_symbols_list|version-script>")
+    get_target_property(graphics_runtime_ipo webscene_native_engine INTERPROCEDURAL_OPTIMIZATION)
+    if(graphics_runtime_ipo)
+        set_property(TARGET webscene_graphics_v8_runtime_tests PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+    add_dependencies(webscene_graphics_v8_runtime_tests webscene_native_engine)
+    add_test(NAME webscene_graphics_v8_runtime_tests COMMAND webscene_graphics_v8_runtime_tests)
+    set_tests_properties(webscene_graphics_v8_runtime_tests PROPERTIES TIMEOUT 30 LABELS "graphics;runtime;hardware")
+endif()
+
+if(BUILD_TESTING AND APPLE AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    enable_language(OBJCXX)
+    add_executable(webscene_graphics_metal_event_handoff_tests tests/graphics_metal_event_handoff.mm)
+    target_compile_features(webscene_graphics_metal_event_handoff_tests PRIVATE cxx_std_20)
+    target_compile_options(webscene_graphics_metal_event_handoff_tests PRIVATE -fobjc-arc)
+    target_link_libraries(webscene_graphics_metal_event_handoff_tests PRIVATE dawn::webgpu_dawn "-framework Foundation" "-framework Metal")
+    add_test(NAME webscene_graphics_metal_event_handoff_tests COMMAND webscene_graphics_metal_event_handoff_tests)
+    set_tests_properties(webscene_graphics_metal_event_handoff_tests PROPERTIES TIMEOUT 15 LABELS "graphics;hardware;metal")
+    # Private managed-interop fixture, deliberately excluded from install/package targets.
+    add_library(webscene_graphics_iosurface_fixture SHARED EXCLUDE_FROM_ALL tests/graphics_iosurface_fixture.cpp)
+    target_compile_features(webscene_graphics_iosurface_fixture PRIVATE cxx_std_20)
+    target_compile_options(webscene_graphics_iosurface_fixture PRIVATE -fno-rtti)
+    target_include_directories(webscene_graphics_iosurface_fixture PRIVATE native)
+    target_link_libraries(webscene_graphics_iosurface_fixture PRIVATE dawn::webgpu_dawn
+        "-framework CoreFoundation" "-framework IOSurface" "-framework CoreVideo" "-framework OpenGL")
 endif()

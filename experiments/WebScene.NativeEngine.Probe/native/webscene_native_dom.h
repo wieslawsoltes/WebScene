@@ -1,6 +1,8 @@
 #pragma once
 
 #include "webscene_native_engine.h"
+#include "graphics/canvas_backing.h"
+#include "graphics/image_lease_abi.h"
 
 #include <algorithm>
 #include <array>
@@ -9,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <memory_resource>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -824,13 +827,46 @@ struct text_layout_fragment final {
     std::string text;
 };
 
+// One immutable dependency binding captured with the CPU scene. Resolving it
+// never consults the live DOM or substitutes a newer canvas output.
+struct gpu_canvas_scene_binding final {
+    uint32_t node_id{};
+    webscene::graphics::image_metadata metadata;
+    std::shared_ptr<webscene_gpu_image_snapshot> pending;
+    std::shared_ptr<const webscene_gpu_image_lease_v3> completed;
+    uint64_t presentation_generation{};
+    std::shared_ptr<const webscene_gpu_image_lease_v3> resolve() const {
+        return pending ? pending->resolve() : completed;
+    }
+};
+
 struct canvas_node_data final {
+    webscene::graphics::canvas_backing backing;
+    std::shared_ptr<const webscene_gpu_image_lease_v3> gpu_image;
+    std::shared_ptr<webscene_gpu_image_snapshot> gpu_snapshot;
+    std::shared_ptr<const webscene_gpu_image_lease_v3> gpu_presentation_image;
+    void publish_gpu_image(std::shared_ptr<const webscene_gpu_image_lease_v3> image) {
+        if (!image) throw std::invalid_argument("missing GPU canvas image");
+        const auto m=image->value.describe();
+        if (backing.mode()==webscene::graphics::canvas_context_mode::none
+            || m.canvas!=backing.identity() || m.allocation_generation!=backing.allocation_generation()
+            || !backing.accepts_completed_content(m.content_serial) || m.width!=backing.width() || m.height!=backing.height())
+            throw std::invalid_argument("GPU image does not match canvas backing");
+        if (gpu_image && gpu_image->value.describe().content_serial>m.content_serial)
+            throw std::invalid_argument("GPU image publication cannot regress");
+        gpu_image=std::move(image);
+    }
     std::vector<canvas_rect_command> rects;
     std::vector<canvas_line_command> lines;
     uint64_t generation{1};
     std::vector<webscene_canvas_command> commands;
     std::vector<std::string> strings;
     std::unordered_map<std::string, uint32_t> string_indices;
+    // Worker-owned derived state. Canvas commands append within a generation;
+    // resets advance the generation before clearing the command list.
+    mutable uint64_t dependency_generation{0};
+    mutable size_t dependency_command_count{0};
+    mutable std::unordered_set<uint32_t> canvas_dependencies;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
     uint64_t fill_rect_calls{0};
     uint64_t probable_volume_fill_rect_calls{0};
@@ -992,6 +1028,11 @@ struct dom_node final {
         float column_gap{0};
     };
 
+    struct dialog_data final {
+        std::string return_value;
+        uint32_t previously_focused_id{};
+    };
+
     struct form_control_data final {
         std::string value;
         size_t selection_start{0};
@@ -1110,13 +1151,13 @@ struct dom_node final {
 
     uint32_t id{0};
     dom_node_kind kind{dom_node_kind::element};
+    // XML documents preserve qualified/tag and attribute name case. HTML nodes
+    // continue to apply the ASCII case-insensitive name rules at the binding.
+    bool xml_mode{false};
     std::string tag;
     std::string id_attribute;
     std::string class_name;
     std::string text_content;
-    // XML documents preserve qualified/tag and attribute name case. HTML nodes
-    // continue to apply the ASCII case-insensitive name rules at the binding.
-    bool xml_mode{false};
     attribute_collection attributes;
     std::string_view namespace_uri() const noexcept
     {
@@ -1264,6 +1305,9 @@ struct dom_node final {
     }
 
     std::unique_ptr<form_control_data> form_control_state;
+    // Dialog state is independent of authored attributes and survives wrapper GC.
+    std::unique_ptr<dialog_data> dialog_state;
+
     const replaced_image_data& replaced_image() const noexcept
     {
         static const replaced_image_data empty;
@@ -1535,13 +1579,26 @@ public:
     dom_node* find_by_native_id(uint32_t id) noexcept;
     dom_node* find_by_id(const std::string& id) noexcept;
     std::vector<dom_node*> query_selector_all(dom_node& root, const std::string& selector);
+    bool register_modal_dialog(dom_node& scope, dom_node& dialog);
+    void unregister_modal_dialog(const dom_node& dialog);
+    void unregister_modal_subtree(const dom_node& root);
+    const dom_node* active_modal_dialog(const dom_node& scope) const noexcept;
+    bool is_modal_dialog(const dom_node& node) const noexcept;
+    bool is_in_modal_layer(const dom_node& node) const noexcept;
+    bool is_inert(const dom_node& node) const noexcept;
     dom_node* hit_test(dom_node& root, float x, float y);
     void clear();
     void layout(float viewport_width, float viewport_height);
     void build_scene(
         std::vector<webscene_scene_command>& commands,
         std::vector<webscene_scene_string>& strings,
-        std::vector<char>& string_bytes) const;
+        std::vector<char>& string_bytes, bool ordered_canvas = false, bool capture_gpu_outputs = false) const;
+    // Engine-thread publication: validates document ownership and backing version,
+    // then requests a scene without forcing style/layout work.
+    void publish_gpu_canvas_image(dom_node& node,std::shared_ptr<const webscene_gpu_image_lease_v3> image);
+    bool validate_gpu_canvas_binding(const gpu_canvas_scene_binding& binding) const;
+    void build_gpu_canvas_bindings(std::vector<gpu_canvas_scene_binding>& bindings) const;
+    void build_gpu_canvas_images(std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>>& images) const;
     void build_canvas_layouts(std::vector<webscene_canvas_layout>& layouts) const;
     void build_canvas_display_lists(
         std::vector<webscene_canvas_layer>& layers,
@@ -1567,6 +1624,7 @@ public:
     std::array<uint64_t, 4U> intrinsic_view_box_parse_counts() const noexcept;
 #endif
     size_t node_count() const noexcept;
+    std::span<dom_node* const> media_elements() const noexcept { return auxiliary_nodes_ ? std::span<dom_node* const>(auxiliary_nodes_->media) : std::span<dom_node* const>{}; }
     allocation_metrics read_allocation_metrics() const noexcept;
     size_t count_tag(const std::string& tag) const noexcept;
     size_t sum_attribute_bytes(const std::string& tag, const std::string& attribute) const noexcept;
@@ -1575,6 +1633,7 @@ public:
     layout_rect busiest_canvas_layout() const noexcept;
     uint64_t scene_generation() const noexcept;
     void mark_scene_changed() noexcept;
+    bool has_canvas_references(uint32_t node_id) const;
     bool dirty() const noexcept;
     void mark_dirty() noexcept;
     void mark_out_of_flow_geometry_dirty(dom_node& node) noexcept;
@@ -1903,7 +1962,10 @@ private:
         bool defer_fixed_descendants,
         bool defer_positive_descendants = false,
         const dom_node* paint_target = nullptr,
-        const node_style::pseudo_element* paint_pseudo_target = nullptr) const;
+        const node_style::pseudo_element* paint_pseudo_target = nullptr,
+        bool ordered_canvas = false,
+        bool paint_modal_root = false,
+        bool capture_gpu_outputs = false) const;
     static bool matches_selector(const dom_node& node, const std::string& selector);
     static void collect_matches(
         dom_node& node,
@@ -1936,6 +1998,15 @@ private:
     // trimmed when possible so short-lived text-node churn does not retain an
     // ever-growing pointer table.
     std::vector<dom_node*> native_id_index_;
+    struct modal_dialog_entry final { uint32_t scope_id; uint32_t dialog_id; };
+    // Most documents never open a modal. Keep the container allocation lazy
+    // and its implementation-specific vector footprint out of every document.
+    struct auxiliary_nodes { std::vector<modal_dialog_entry> dialogs; std::vector<dom_node*> media; };
+    std::unique_ptr<auxiliary_nodes> auxiliary_nodes_;
+    std::span<const modal_dialog_entry> modal_dialogs() const noexcept {
+        return auxiliary_nodes_ ? std::span<const modal_dialog_entry>(auxiliary_nodes_->dialogs)
+                              : std::span<const modal_dialog_entry>{};
+    }
 #if !defined(WEBSCENE_NATIVE_ENGINE_INTRINSIC_SIZE_HASH_CACHE_CONTROL)
     // Mirror the native-ID index so intrinsic lookup remains direct without
     // making every DOM node pay a cross-library object-footprint tax. The

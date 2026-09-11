@@ -1,0 +1,42 @@
+{
+  "schema": "webscene-wpt-subset-result-v3",
+  "profile": "native-navigation-style-check",
+  "profileSha256": "fad42122ab4669a1d7c05540b8cdf9b010a77850fdda5e1ee4ad1932b736314f",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "engine": "native",
+  "nativeEngineIdentity": "abi=3;sha256=c9cef64d648d9e7c452b1fdd8e25f7b489177f1a5bf749252b78163f2499ba86",
+  "chromiumIdentity": null,
+  "startedAt": "2026-09-08T11:25:04.537731+00:00",
+  "duration": "00:00:01.7196702",
+  "selection": "candidate",
+  "summary": {
+    "tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "timedOut": 0,
+    "harnessErrors": 0,
+    "subtests": 1,
+    "subtestsPassed": 1,
+    "subtestsFailed": 0
+  },
+  "results": [
+    {
+      "path": "contracts/html-script-style-text-is-inert.html",
+      "type": "testharness",
+      "status": "PASS",
+      "duration": "00:00:01.7171964",
+      "message": null,
+      "subtests": [
+        {
+          "name": "Script strings, comments and template contents do not activate stylesheets",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        }
+      ],
+      "artifacts": null,
+      "chromiumOracle": null
+    }
+  ]
+}

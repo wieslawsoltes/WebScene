@@ -26,6 +26,12 @@
         std::string source_origin;
     };
 
+    struct pending_dialog_close_event final {
+        uint32_t target_id;
+        v8::Global<v8::Context> context;
+        v8::Global<v8::Object> target;
+    };
+
     struct pending_programmatic_scroll_event final {
         uint32_t target_id;
         v8::Global<v8::Context> context;
@@ -66,6 +72,7 @@
         std::string code;
         bool defer{false};
         size_t index{0};
+        bool module{false};
     };
 
     struct css_declaration final {
@@ -531,7 +538,7 @@ using css_index_string_set = std::unordered_set<std::string>;
     };
 
     struct shared_isolate_state final {
-        v8::ArrayBuffer::Allocator* allocator{nullptr};
+        std::shared_ptr<v8::ArrayBuffer::Allocator> allocator;
         v8::Isolate* isolate{nullptr};
         size_t slot_index{0U};
         std::atomic<size_t> active_contexts{0U};
@@ -554,7 +561,7 @@ using css_index_string_set = std::unordered_set<std::string>;
                 }
                 isolate->Dispose();
             }
-            delete allocator;
+            allocator.reset();
         }
     };
 
@@ -821,9 +828,9 @@ using css_index_string_set = std::unordered_set<std::string>;
         if (first_empty_slot == config.maximum_count) return {};
         auto state = std::make_shared<shared_isolate_state>();
         state->slot_index = first_empty_slot;
-        state->allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
+        state->allocator.reset(v8::ArrayBuffer::Allocator::NewDefaultAllocator());
         v8::Isolate::CreateParams params;
-        params.array_buffer_allocator = state->allocator;
+        params.array_buffer_allocator_shared = state->allocator;
         if (const auto maximum_heap_mib =
                 unsigned_environment_value("WEBSCENE_V8_MAX_HEAP_MIB");
             maximum_heap_mib.has_value() && *maximum_heap_mib > 0) {

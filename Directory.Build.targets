@@ -16,4 +16,8 @@
           PackagePath="README.md"
           Condition="Exists('$(MSBuildThisFileDirectory)docs\nuget\README.md')" />
   </ItemGroup>
+  <Target Name="PreventAvalonia12SamplePackaging" BeforeTargets="Pack"
+          Condition="'$(WebSceneAvalonia12Sample)' == 'true'">
+    <Error Text="Avalonia 12 is an opt-in sample configuration only. Pack WebScene with its default Avalonia 11 configuration." />
+  </Target>
 </Project>

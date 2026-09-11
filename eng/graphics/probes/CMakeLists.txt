@@ -1,0 +1,90 @@
+cmake_minimum_required(VERSION 3.20)
+project(WebSceneGraphicsProbes LANGUAGES C CXX)
+include(CTest)
+
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
+set(WEBSCENE_GRAPHICS_COMPONENTS "dawn;angle" CACHE STRING "SDK components to probe")
+include("${CMAKE_CURRENT_LIST_DIR}/../GraphicsDependencies.cmake")
+
+if("angle" IN_LIST WEBSCENE_GRAPHICS_COMPONENTS)
+    add_executable(webscene_angle_probe angle_probe.cpp)
+    target_compile_features(webscene_angle_probe PRIVATE cxx_std_20)
+    target_link_libraries(webscene_angle_probe PRIVATE webscene_angle_EGL webscene_angle_GLESv2)
+    foreach(library EGL GLESv2)
+        add_custom_command(TARGET webscene_angle_probe POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:webscene_angle_${library}>" "$<TARGET_FILE_DIR:webscene_angle_probe>")
+    endforeach()
+    if(WIN32)
+        set(angle_backend d3d11)
+    elseif(APPLE)
+        set(angle_backend metal)
+        set_target_properties(webscene_angle_probe PROPERTIES BUILD_RPATH "@loader_path")
+    else()
+        set(angle_backend vulkan)
+        set_target_properties(webscene_angle_probe PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
+    set(WEBSCENE_ANGLE_PROBE_BACKEND "${angle_backend}" CACHE STRING "Explicit ANGLE probe backend")
+    foreach(es_major 2 3)
+        add_test(NAME angle_es${es_major}_hardware_clear_readback
+            COMMAND webscene_angle_probe ${WEBSCENE_ANGLE_PROBE_BACKEND} ${es_major})
+        set_tests_properties(angle_es${es_major}_hardware_clear_readback PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77)
+    endforeach()
+endif()
+
+if("dawn" IN_LIST WEBSCENE_GRAPHICS_COMPONENTS)
+    add_executable(webscene_dawn_probe dawn_probe.cpp)
+    target_compile_features(webscene_dawn_probe PRIVATE cxx_std_20)
+    target_link_libraries(webscene_dawn_probe PRIVATE dawn::webgpu_dawn)
+    add_custom_command(TARGET webscene_dawn_probe POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:dawn::webgpu_dawn>" "$<TARGET_FILE_DIR:webscene_dawn_probe>")
+    if(APPLE)
+        set_target_properties(webscene_dawn_probe PROPERTIES BUILD_RPATH "@loader_path")
+    elseif(UNIX)
+        set_target_properties(webscene_dawn_probe PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
+    if(WIN32)
+        set(probe_backend d3d12)
+        add_custom_command(TARGET webscene_dawn_probe POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${WEBSCENE_GRAPHICS_SDK_ROOT}/dawn/bin/d3dcompiler_47.dll" "$<TARGET_FILE_DIR:webscene_dawn_probe>")
+        add_executable(webscene_windows_sharing_probe windows_sharing_probe.cpp)
+        target_compile_features(webscene_windows_sharing_probe PRIVATE cxx_std_20)
+        target_link_libraries(webscene_windows_sharing_probe PRIVATE dawn::webgpu_dawn d3d11 d3d12 dxgi)
+        add_custom_command(TARGET webscene_windows_sharing_probe POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:dawn::webgpu_dawn>" "$<TARGET_FILE_DIR:webscene_windows_sharing_probe>"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${WEBSCENE_GRAPHICS_SDK_ROOT}/dawn/bin/d3dcompiler_47.dll" "$<TARGET_FILE_DIR:webscene_windows_sharing_probe>")
+        add_test(NAME windows_dawn_d3d11_shared_pixels COMMAND webscene_windows_sharing_probe)
+        set_tests_properties(windows_dawn_d3d11_shared_pixels PROPERTIES TIMEOUT 90)
+    elseif(APPLE)
+        set(probe_backend metal)
+    else()
+        set(probe_backend vulkan)
+    endif()
+    add_test(NAME dawn_hardware_clear_readback COMMAND webscene_dawn_probe ${probe_backend})
+    set_tests_properties(dawn_hardware_clear_readback PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(webscene_nt_handle_tests "${CMAKE_CURRENT_LIST_DIR}/../../../experiments/WebScene.NativeEngine.Probe/tests/graphics_nt_handle_tests.cpp")
+    target_compile_features(webscene_nt_handle_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_nt_handle_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../../../experiments/WebScene.NativeEngine.Probe/native")
+    add_test(NAME webscene_nt_handle_tests COMMAND webscene_nt_handle_tests)
+endif()
+
+if(BUILD_TESTING AND APPLE)
+    add_executable(webscene_iosurface_color_tests
+        "../../../experiments/WebScene.NativeEngine.Probe/tests/graphics_iosurface_color_tests.cpp")
+    target_compile_features(webscene_iosurface_color_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_iosurface_color_tests PRIVATE
+        "../../../experiments/WebScene.NativeEngine.Probe/native")
+    target_link_libraries(webscene_iosurface_color_tests PRIVATE
+        "-framework CoreFoundation" "-framework IOSurface" "-framework CoreVideo")
+    add_test(NAME webscene_iosurface_color_tests COMMAND webscene_iosurface_color_tests)
+endif()

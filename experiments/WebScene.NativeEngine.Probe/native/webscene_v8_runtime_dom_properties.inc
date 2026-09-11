@@ -1471,11 +1471,12 @@
         }
     }
 
-    static void advance_canvas_generation(dom_node& node)
+    static void advance_canvas_generation(dom_node& node, bool publish_backing = true)
     {
         mark_canvas_scene_changed();
         auto& canvas = node.mutable_canvas();
         ++canvas.generation;
+        if (publish_backing) canvas.backing.publish_content();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         constexpr uint64_t retained_diagnostic_generations = 64U;
         if (canvas.generation <= retained_diagnostic_generations) return;
@@ -1496,13 +1497,34 @@
             element_dimension(*node, "width", node->tag == "canvas" ? 300 : node->layout.width)));
     }
 
+    static uint32_t canvas_bitmap_dimension(dom_node& node,const char* name,uint32_t fallback)
+    {
+        const auto value=element_dimension(node,name,fallback);
+        if (!std::isfinite(value)) return fallback;
+        return static_cast<uint32_t>(std::clamp(value,0.0,static_cast<double>(UINT32_MAX)));
+    }
+
     static void reset_canvas_backing_store(implementation& self, dom_node& node)
     {
         if (node.tag != "canvas") return;
         auto& canvas = node.mutable_canvas();
         canvas.rects.clear();
         canvas.lines.clear();
-        advance_canvas_generation(node);
+        canvas.backing.reset_bitmap(canvas_bitmap_dimension(node,"width",300),canvas_bitmap_dimension(node,"height",150));
+        canvas.gpu_image.reset();
+        canvas.gpu_snapshot.reset();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+        const auto gpu=self.gpu_canvases.find(self.wrapper_key(node));
+        if(gpu!=self.gpu_canvases.end()) {
+            gpu->second.context->resize(canvas.backing.width(),canvas.backing.height());
+            // ResizeObserver may reset the bitmap and queue a redraw for the
+            // next host RAF. Keep the preceding coherent scene until that
+            // opportunity, rather than publishing an intermediate blank canvas.
+            gpu->second.bitmap_reset_awaiting_frame=true;
+            gpu->second.presentation_resize_pending=true;
+        }
+#endif
+        advance_canvas_generation(node,false);
         canvas.commands.clear();
         canvas.strings.clear();
         canvas.string_indices.clear();
@@ -1767,6 +1789,160 @@
         const v8::PropertyCallbackInfo<void>& info)
     {
         set_boolean_attribute(value, info, "readonly");
+    }
+
+    static void open_dialog(const v8::FunctionCallbackInfo<v8::Value>& info, bool modal)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        if (node->attributes.contains("open")) {
+            if (self->document.is_modal_dialog(*node) != modal)
+                throw_dom_exception(info, "Dialog is already open in a different mode", "InvalidStateError");
+            return;
+        }
+        if (modal && !self->is_connected(*node)) {
+            throw_dom_exception(info, "Modal dialog must be connected", "InvalidStateError");
+            return;
+        }
+        webscene_input_event input{};
+        bool prevented = false;
+        if (!self->dispatch_input_event_type(input, "beforetoggle", *node, &prevented) || prevented) return;
+        // A beforetoggle handler can open, detach or move this dialog.
+        if (node->attributes.contains("open") || (modal && !self->is_connected(*node))) return;
+        if (modal) {
+            auto* root = self->css_cascade_root_for_node(*node);
+            if (!root || !self->document.register_modal_dialog(*root, *node)) {
+                throw_dom_exception(info, "Modal dialog has no active document", "InvalidStateError");
+                return;
+            }
+        }
+        if (!node->dialog_state) node->dialog_state = std::make_unique<dom_node::dialog_data>();
+        node->dialog_state->previously_focused_id = self->active_element ? self->active_element->id : 0;
+        node->attributes["open"] = "";
+        self->recascade_connected_subtree(*node);
+        self->ensure_layout(); // Opening changes the hidden subtree before focus selection.
+        // Dialog focus starts with autofocus, then a focusable descendant,
+        // otherwise the dialog itself. Do not change its authored tabindex.
+        dom_node* first = nullptr;
+        dom_node* autofocus = nullptr;
+        const auto visit = [&](const auto& recurse, dom_node& candidate) -> void {
+            if (candidate.attributes.contains("autofocus")
+                && (&candidate == node || self->is_programmatically_focusable(&candidate)))
+                if (!autofocus) autofocus = &candidate;
+            if (&candidate != node && !first && self->is_programmatically_focusable(&candidate)) first = &candidate;
+            for (auto* child : self->document.composed_children(candidate)) if (child) recurse(recurse, *child);
+        };
+        visit(visit, *node);
+        if (self->is_connected(*node)) self->set_active_element(autofocus ? autofocus : first ? first : node, input);
+    }
+
+    static void dialog_show(const v8::FunctionCallbackInfo<v8::Value>& info) { open_dialog(info, false); }
+    static void dialog_show_modal(const v8::FunctionCallbackInfo<v8::Value>& info) { open_dialog(info, true); }
+
+    void close_dialog(dom_node& node, const std::optional<std::string>& result)
+    {
+        if (!node.attributes.contains("open")) return;
+        const auto old_open = node.attributes.at("open");
+        detach_attr(node, "open", old_open);
+        node.attributes.erase("open");
+        document.unregister_modal_dialog(node);
+        if (result) {
+            if (!node.dialog_state) node.dialog_state = std::make_unique<dom_node::dialog_data>();
+            node.dialog_state->return_value = *result;
+        }
+        recascade_connected_subtree(node);
+        if (node.dialog_state && node.dialog_state->previously_focused_id) {
+            auto* previous = document.find_by_native_id(node.dialog_state->previously_focused_id);
+            node.dialog_state->previously_focused_id = 0;
+            if (previous && is_connected(*previous) && is_programmatically_focusable(previous)) {
+                webscene_input_event input{};
+                set_active_element(previous, input);
+            }
+        }
+        pending_dialog_close_events.push_back(pending_dialog_close_event{
+            node.id, v8::Global<v8::Context>(isolate, context_for_node(node)),
+            v8::Global<v8::Object>(isolate, wrap_node(node))});
+    }
+
+    static bool dialog_close_argument(
+        const v8::FunctionCallbackInfo<v8::Value>& info, std::optional<std::string>& result)
+    {
+        if (info.Length() == 0 || info[0]->IsUndefined()) return true;
+        v8::Local<v8::String> converted;
+        if (!info[0]->ToString(info.GetIsolate()->GetCurrentContext()).ToLocal(&converted)) return false;
+        result = to_wtf8(info.GetIsolate(), converted);
+        return true;
+    }
+
+    static void dialog_close(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        std::optional<std::string> result;
+        if (!dialog_close_argument(info, result)) return;
+        self->close_dialog(*node, result);
+    }
+
+    static void dialog_request_close(const v8::FunctionCallbackInfo<v8::Value>& info)
+    {
+        auto* self = current(info.GetIsolate());
+        auto* node = unwrap_node(info.This());
+        std::optional<std::string> result;
+        if (!dialog_close_argument(info, result) || !node->attributes.contains("open")) return;
+        webscene_input_event input{};
+        bool prevented = false;
+        if (!self->dispatch_input_event_type(input, "cancel", *node, &prevented) || prevented) return;
+        self->close_dialog(*node, result);
+    }
+
+    static void get_dialog_open(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr) return;
+        info.GetReturnValue().Set(node->attributes.contains("open"));
+    }
+
+    static void set_dialog_open(
+        v8::Local<v8::Name>, v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        set_boolean_attribute(value, info, "open");
+    }
+
+    static void get_dialog_return_value(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr) return;
+        info.GetReturnValue().Set(js_dom_string(info.GetIsolate(),
+            node->dialog_state == nullptr ? std::string{} : node->dialog_state->return_value));
+    }
+
+    static void set_dialog_return_value(
+        v8::Local<v8::Name>, v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        auto* node = unwrap_node(info.Holder());
+        if (node == nullptr) return;
+        v8::Local<v8::String> converted;
+        if (!value->ToString(info.GetIsolate()->GetCurrentContext()).ToLocal(&converted)) return;
+        auto result = to_wtf8(info.GetIsolate(), converted);
+        if (node->dialog_state == nullptr) node->dialog_state = std::make_unique<dom_node::dialog_data>();
+        node->dialog_state->return_value = std::move(result);
+    }
+
+    static void get_inert(
+        v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info)
+    {
+        get_boolean_attribute(info, "inert");
+    }
+
+    static void set_inert(
+        v8::Local<v8::Name>, v8::Local<v8::Value> value,
+        const v8::PropertyCallbackInfo<void>& info)
+    {
+        set_boolean_attribute(value, info, "inert");
     }
 
     static void get_hidden(

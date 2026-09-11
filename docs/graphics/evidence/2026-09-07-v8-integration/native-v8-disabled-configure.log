@@ -1,0 +1,26 @@
+-- The C compiler identification is AppleClang 21.0.0.21000101
+-- The CXX compiler identification is AppleClang 21.0.0.21000101
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- WebScene native engine: generated WebIDL DOM bindings selected
+-- WebScene native engine: cssparser syntax parser selected
+-- WebScene native engine: Servo selector parser selected
+-- WebScene native engine: html5ever parser selected
+-- WebScene native engine: certification telemetry excluded
+-- WebScene native engine: V8 Inspector support enabled
+-- TLS configured to use secure transport
+-- Found ZLIB: /Volumes/SSD/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib/libz.tbd (found version "1.2.12")
+-- Found Python3: /opt/homebrew/Frameworks/Python.framework/Versions/3.14/bin/python3.14 (found version "3.14.4") found components: Interpreter
+-- WebScene native engine: bootstrap snapshot selected
+-- WebScene native engine: V8 enabled (/Volumes/SSD/repos/HtmlML/artifacts/native-engine-v8-15.3/osx-arm64/v8/out/arm64/Release/obj/libv8_monolith.a)
+-- Configuring done (1.8s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-build/native-v8-disabled

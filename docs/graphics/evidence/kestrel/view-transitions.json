@@ -1,0 +1,44 @@
+{
+  "date": "2026-09-08",
+  "originalDocumentSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "input": "DOM change events on original view-select and style-select controls",
+  "steps": [
+    {
+      "view": "iso",
+      "style": "shaded-edges",
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0,
+      "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands."
+    },
+    {
+      "view": "front",
+      "style": "shaded",
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0,
+      "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands."
+    },
+    {
+      "view": "iso",
+      "style": "xray",
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0,
+      "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands."
+    },
+    {
+      "view": "top",
+      "style": "wireframe",
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0,
+      "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands."
+    },
+    {
+      "view": "iso",
+      "style": "shaded-edges",
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0,
+      "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands."
+    }
+  ],
+  "visualCheck": "Final isometric viewport differs from top view and remains visibly rendered. Screenshot macos-isometric-webgpu.png.",
+  "qualification": "Scripted view smoke test only; flat floor plan does not qualify shaded mesh, pointer interaction, editing, export, or layout correctness."
+}

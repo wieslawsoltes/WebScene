@@ -2,6 +2,9 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Input;
+#if WEBSCENE_AVALONIA12
+using Avalonia.Input.Platform;
+#endif
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -20,6 +23,7 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
     private static long s_nextContextId;
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private readonly NativeSceneSurface _surface;
+    private readonly Func<string, bool>? _admitWebGpuDocument;
     private IntPtr _engine;
     private long _contextId;
     private NativeInteropInvoker? _interop;
@@ -35,8 +39,20 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
     }
 
     public NativeWebSceneView(bool useCompositionVisual)
+        : this(useCompositionVisual, null)
     {
-        _surface = new NativeSceneSurface(IntPtr.Zero, useCompositionVisual);
+    }
+
+    /// <summary>
+    /// Enables the experimental macOS IOSurface WebGPU route when a policy is supplied.
+    /// The host must provide a CGL/Skia compositor and approve only secure documents.
+    /// The policy runs on the native runtime worker before each document's scripts.
+    /// </summary>
+    public NativeWebSceneView(bool useCompositionVisual, Func<string, bool>? admitWebGpuDocument)
+    {
+        _admitWebGpuDocument = admitWebGpuDocument;
+        _surface = new NativeSceneSurface(IntPtr.Zero, useCompositionVisual,
+            enableGpuScenes: admitWebGpuDocument is not null);
         Content = _surface;
         InitializeRuntimeDiagnostics();
         ActualThemeVariantChanged += OnActualThemeVariantChanged;
@@ -430,7 +446,8 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
                 _surface.OnNativeScenePublished,
                 hostRequestAvailable: OnNativeHostRequestAvailable,
                 interopCallbackAvailable: callbackSignal.Notify,
-                animationFrameRequested: _surface.OnNativeAnimationFrameRequested);
+                animationFrameRequested: _surface.OnNativeAnimationFrameRequested,
+                admitWebGpuDocument: _admitWebGpuDocument);
             if (engine == IntPtr.Zero)
             {
                 throw new InvalidOperationException(
@@ -572,11 +589,21 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
                     "image/png",
                     StringComparison.OrdinalIgnoreCase))
             {
+#if WEBSCENE_AVALONIA12
+                var item = new DataTransferItem();
+                item.Set(DataFormat.CreateBytesPlatformFormat("image/png"), clipboardBytes);
+                item.Set(DataFormat.CreateBytesPlatformFormat("public.png"), clipboardBytes);
+                item.Set(DataFormat.CreateBytesPlatformFormat("PNG"), clipboardBytes);
+                var data = new DataTransfer();
+                data.Add(item);
+                await topLevel.Clipboard.SetDataAsync(data).ConfigureAwait(true);
+#else
                 var data = new DataObject();
                 data.Set("image/png", clipboardBytes);
                 data.Set("public.png", clipboardBytes);
                 data.Set("PNG", clipboardBytes);
                 await topLevel.Clipboard.SetDataObjectAsync(data).ConfigureAwait(true);
+#endif
             }
             else if (clipboardWrite.ContentType.StartsWith(
                          "text/",
@@ -587,9 +614,17 @@ public sealed partial class NativeWebSceneView : ContentControl, IAsyncDisposabl
             }
             else
             {
+#if WEBSCENE_AVALONIA12
+                var item = new DataTransferItem();
+                item.Set(DataFormat.CreateBytesPlatformFormat(clipboardWrite.ContentType), clipboardBytes);
+                var data = new DataTransfer();
+                data.Add(item);
+                await topLevel.Clipboard.SetDataAsync(data).ConfigureAwait(true);
+#else
                 var data = new DataObject();
                 data.Set(clipboardWrite.ContentType, clipboardBytes);
                 await topLevel.Clipboard.SetDataObjectAsync(data).ConfigureAwait(true);
+#endif
             }
             return;
         }

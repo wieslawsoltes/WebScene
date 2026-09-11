@@ -1,0 +1,82 @@
+{
+  "date": "2026-09-08",
+  "originalDocumentSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "startup": {
+    "ready": "true",
+    "backend": "WebGPU \u00b7 GPU pipeline",
+    "history": "Kestrel CADPrecision starts here. Open a drawing or choose a tool.RendererWebGPU active \u00b7 4\u00d7 MSAA \u00b7 instanced lines \u00b7 depth-tested meshesReadyL line \u00b7 C circle \u00b7 REC rectangle \u00b7 M move \u00b7 Ctrl+K commands.",
+    "errors": 0,
+    "gpu": true
+  },
+  "resizes": [
+    {
+      "window": [
+        980,
+        680
+      ],
+      "canvas": [
+        1110,
+        1006
+      ],
+      "css": [
+        555,
+        503
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1440,
+        900
+      ],
+      "canvas": [
+        1432,
+        1228
+      ],
+      "css": [
+        716,
+        614
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1100,
+        740
+      ],
+      "canvas": [
+        862,
+        1228
+      ],
+      "css": [
+        431,
+        614
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    },
+    {
+      "window": [
+        1280,
+        800
+      ],
+      "canvas": [
+        1112,
+        1228
+      ],
+      "css": [
+        556,
+        614
+      ],
+      "dpr": 2,
+      "backend": "WebGPU \u00b7 GPU pipeline",
+      "errors": 0
+    }
+  ],
+  "qualification": "Initial WebGPU floor-plan rendering and four sampled resizes observed. UI layout/clipping defects, interaction, export, live drag performance, and fallback qualification remain."
+}

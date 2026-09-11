@@ -1,0 +1,18 @@
+{
+  "scope": "Instrumented original Kestrel native sidebar run including startup; diagnostic attempt counts, not timing or FPS",
+  "counts": {
+    "GPU_GATE resize": 206,
+    "SCENE_GATE 46": 206,
+    "SCENE_GATE 431": 34
+  },
+  "mapping": {
+    "SCENE_GATE 46": "runtime open GPU output",
+    "GPU_GATE resize": "bitmap reset awaiting a waiting RAF task",
+    "SCENE_GATE 431": "captured immutable GPU image not resolved"
+  },
+  "workloadValidated": true,
+  "physicalPresentationVerified": false,
+  "logSha256": "fb1201f5eb188e0f53ac385dd82402d5179adbe5b72797fbb30a3db9b9111cba",
+  "instrumentation": "Temporary fprintf at publication defer/discard branches and runtime open-output reasons; removed after run",
+  "conclusion": "Resize redraw hold dominates attempt counts; no mailbox-full, invalidated binding, or failed producer branches observed. Logging perturbs timing; not a performance comparison."
+}

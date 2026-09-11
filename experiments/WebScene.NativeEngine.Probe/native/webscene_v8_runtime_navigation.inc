@@ -1,3 +1,39 @@
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    void retire_document_graphics()
+    {
+        if (graphics_transitioning || graphics_delivering) throw std::logic_error("Reentrant graphics document transition");
+        if (!graphics) return;
+        struct transition_guard {
+            bool& active;
+            explicit transition_guard(bool& value) : active(value) { active=true; }
+            ~transition_guard() { active=false; }
+        } guard(graphics_transitioning);
+        // Detach admission before cancellation delivery can run JS. The local
+        // service survives dispatch and closes native publication before reset.
+        if(!webgpu_navigator.IsEmpty()) {
+            webgpu_navigator.Get(isolate)->Delete(context.Get(isolate),js_string(isolate,"gpu")).FromMaybe(false);
+            webgpu_navigator.Reset();
+            for(const auto* name:webscene::graphics::webgpu_flag_namespaces)
+                context.Get(isolate)->Global()->Delete(context.Get(isolate),js_string(isolate,name)).FromMaybe(false);
+            context.Get(isolate)->Global()->Delete(context.Get(isolate),js_string(isolate,"GPUDeviceLostInfo")).FromMaybe(false);
+            for(const auto* name:webscene::graphics::webgpu_error_names)
+                context.Get(isolate)->Global()->Delete(context.Get(isolate),js_string(isolate,name)).FromMaybe(false);
+        }
+#if (defined(__APPLE__) || defined(_WIN32))
+        gpu_canvases.clear();gpu_rendering_opportunity=false;
+#endif
+        webgpu_dom_exception.Reset();
+        webgpu_wake.reset();
+        webgpu.reset();
+        auto previous=std::move(graphics);
+        auto deliver=std::move(graphics_deliver);
+        graphics_deliver={};
+        previous->close();
+        previous->pump(deliver,std::numeric_limits<size_t>::max());
+        perform_microtask_checkpoint();
+    }
+#endif
+
     bool execute(const std::string& source, const std::string& document_name)
     {
         auto isolate_locker = lock_shared_isolate();
@@ -20,6 +56,9 @@
         const std::string& url,
         std::vector<document_start_script> document_start_scripts)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        if (graphics_transitioning || graphics_delivering) throw std::logic_error("Navigation during graphics completion delivery");
+#endif
         current_document_start_scripts = std::move(document_start_scripts);
         std::string html;
         std::string resolved_url;
@@ -55,7 +94,18 @@
         v8::HandleScope handle_scope(isolate);
         auto local_context = context.Get(isolate);
         v8::Context::Scope context_scope(local_context);
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        retire_document_graphics();
+#endif
+        stop_workers();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        clear_media_bindings();
+#endif
+        module_map.clear();
         set_context_location(local_context, local_context->Global(), resolved_url);
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        if(webgpu_document_policy)webgpu_document_policy(resolved_url);
+#endif
         auto outer_document = document_object.Get(isolate);
         outer_document->Set(
             local_context,
@@ -238,7 +288,11 @@
         css_variables.clear();
         important_css_variables.clear();
 
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        for (auto stylesheet : parsed_inline_stylesheets(html_element)) {
+#else
         for (auto stylesheet : parse_inline_stylesheets(html)) {
+#endif
             add_stylesheet(std::move(stylesheet), document_base_address);
         }
         for (const auto& href : stylesheets) {
@@ -323,13 +377,11 @@
                 const auto script_source = immutable_source != nullptr
                     ? immutable_source->view()
                     : std::string_view(source);
-                if (!execute_in_context(
-                        local_context,
-                        script_source,
-                        name,
-                        error,
-                        true,
-                        std::move(immutable_source))) {
+                if (script.module) outer_document->Set(local_context, js_string(isolate, "currentScript"), v8::Null(isolate)).Check();
+                const bool executed = script.module
+                    ? execute_module(local_context, script_source, name, error)
+                    : execute_in_context(local_context, script_source, name, error, true, std::move(immutable_source));
+                if (!executed) {
                     frame_last_error_value = "Document script #" + std::to_string(script.index)
                         + " failed: " + error;
                     ++frame_script_error_count;

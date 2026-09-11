@@ -12,6 +12,9 @@ using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+#if WEBSCENE_AVALONIA12
+using Avalonia.Input.Platform;
+#endif
 using Avalonia.Platform;
 using Avalonia.Threading;
 using WebScene.Core;
@@ -348,20 +351,21 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
         var specifier = request.Specifier;
         if (specifier.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
         {
-            return new WebSceneTextResource(specifier, DecodeDataUri(specifier), specifier, null);
+            return new WebSceneTextResource(specifier, DecodeDataUri(specifier), specifier, null) { BinaryContent = request.Kind == WebSceneResourceKind.Data ? new ReadOnlyMemory<byte>(DecodeBinaryDataUri(specifier)) : (ReadOnlyMemory<byte>?)null };
         }
 
         var resolved = ResolveAddress(specifier, request.BaseAddress);
         if (resolved.IsFile)
         {
-            return LoadFile(resolved.LocalPath);
+            return LoadFile(resolved.LocalPath, request.Kind == WebSceneResourceKind.Data);
         }
 
         if (resolved.Scheme.Equals("avares", StringComparison.OrdinalIgnoreCase))
         {
             using var stream = AssetLoader.Open(resolved);
-            using var reader = new StreamReader(stream);
-            return new WebSceneTextResource(resolved.ToString(), reader.ReadToEnd(), resolved.ToString(), null);
+            using var memory = new MemoryStream();stream.CopyTo(memory);var bytes=memory.ToArray();
+            return new WebSceneTextResource(resolved.ToString(), Encoding.UTF8.GetString(bytes), resolved.ToString(), null)
+            { BinaryContent = request.Kind == WebSceneResourceKind.Data ? new ReadOnlyMemory<byte>(bytes) : (ReadOnlyMemory<byte>?)null };
         }
 
         if (resolved.Scheme is "http" or "https")
@@ -386,11 +390,11 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
             WebSceneTextResource resource;
             if (isSafeRead && TryResolveMountedResource(resolved, out var mountedPath))
             {
-                resource = LoadFile(mountedPath);
+                resource = LoadFile(mountedPath, request.Kind == WebSceneResourceKind.Data);
             }
             else if (isSafeRead && TryResolvePackagedResource(resolved.AbsolutePath, out var packagedPath))
             {
-                resource = LoadFile(packagedPath);
+                resource = LoadFile(packagedPath, request.Kind == WebSceneResourceKind.Data);
             }
             else
             {
@@ -464,14 +468,16 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
                             null,
                             response.StatusCode);
                     }
+                    var binaryBytes = request.Kind == WebSceneResourceKind.Data ? response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult() : null;
                     resource = new WebSceneTextResource(
                         resolved.ToString(),
-                        request.Kind == WebSceneResourceKind.Image
+                        binaryBytes is not null ? Encoding.UTF8.GetString(binaryBytes) : request.Kind == WebSceneResourceKind.Image
                             ? Native.NativeImageResource.ToMarkup(response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult())
                             : response.Content.ReadAsStringAsync().GetAwaiter().GetResult(),
                         resolved.ToString(),
                         null)
                     {
+                        BinaryContent = binaryBytes is null ? (ReadOnlyMemory<byte>?)null : new ReadOnlyMemory<byte>(binaryBytes),
                         EntityTag = responseEntityTag,
                         LastModified = responseLastModified,
                         FreshUntil = cachePolicy.FreshUntil,
@@ -756,7 +762,7 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
         return new Uri(Path.GetFullPath(Path.Combine(ScriptBaseDirectory, specifier)));
     }
 
-    private WebSceneTextResource LoadFile(string path)
+    private WebSceneTextResource LoadFile(string path, bool binary = false)
     {
         var fullPath = Path.GetFullPath(path);
         if (!File.Exists(fullPath) && string.IsNullOrEmpty(Path.GetExtension(fullPath)) && File.Exists(fullPath + ".js"))
@@ -780,7 +786,9 @@ public sealed class AvaloniaResourceLoader : IWebSceneResourceLoader
             _resourceSearchDirectories.Add(directory);
         }
 
-        return new WebSceneTextResource(fullPath, File.ReadAllText(fullPath), fullPath, directory);
+        var bytes = binary ? File.ReadAllBytes(fullPath) : null;
+        return new WebSceneTextResource(fullPath, bytes is null ? File.ReadAllText(fullPath) : Encoding.UTF8.GetString(bytes), fullPath, directory)
+        { BinaryContent = bytes is null ? (ReadOnlyMemory<byte>?)null : new ReadOnlyMemory<byte>(bytes) };
     }
 
     private bool TryResolvePackagedResource(string resourcePath, out string fullPath)
@@ -940,7 +948,11 @@ internal sealed class AvaloniaClipboard : IWebSceneClipboard
     {
         try
         {
+#if WEBSCENE_AVALONIA12
+            return _topLevel.Clipboard?.TryGetTextAsync().GetAwaiter().GetResult() ?? _lastText;
+#else
             return _topLevel.Clipboard?.GetTextAsync().GetAwaiter().GetResult() ?? _lastText;
+#endif
         }
         catch
         {
@@ -974,6 +986,18 @@ internal sealed class AvaloniaClipboard : IWebSceneClipboard
 
         try
         {
+#if WEBSCENE_AVALONIA12
+            var item = new DataTransferItem();
+            item.Set(DataFormat.CreateBytesPlatformFormat(format), bytes);
+            if (format.Equals("image/png", StringComparison.OrdinalIgnoreCase))
+            {
+                item.Set(DataFormat.CreateBytesPlatformFormat("public.png"), bytes);
+                item.Set(DataFormat.CreateBytesPlatformFormat("PNG"), bytes);
+            }
+            var clipboardData = new DataTransfer();
+            clipboardData.Add(item);
+            _topLevel.Clipboard?.SetDataAsync(clipboardData).GetAwaiter().GetResult();
+#else
             var clipboardData = new DataObject();
             clipboardData.Set(format, bytes);
             if (format.Equals("image/png", StringComparison.OrdinalIgnoreCase))
@@ -984,6 +1008,7 @@ internal sealed class AvaloniaClipboard : IWebSceneClipboard
                 clipboardData.Set("PNG", bytes);
             }
             _topLevel.Clipboard?.SetDataObjectAsync(clipboardData).GetAwaiter().GetResult();
+#endif
         }
         catch
         {

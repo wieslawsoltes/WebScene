@@ -49,6 +49,31 @@
 
     ~implementation()
     {
+        stop_workers();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)
+        clear_media_bindings();
+        media_initializer_key.Reset();
+#endif
+        dedicated_workers.clear();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+        // Stop native publication before releasing the dispatcher and isolate.
+        // Context disposal discards its JS promises; no late callback may enter it.
+        if(webgpu && isolate && !context.IsEmpty()) {
+            auto locker=lock_shared_isolate();
+            v8::Isolate::Scope isolate_scope(isolate);
+            v8::HandleScope handle_scope(isolate);
+            v8::Context::Scope context_scope(context.Get(isolate));
+#if (defined(__APPLE__) || defined(_WIN32))
+            gpu_canvases.clear();
+#endif
+            webgpu.reset();
+        }
+        webgpu_dom_exception.Reset();
+        webgpu_wake.reset();
+        webgpu_navigator.Reset();
+        graphics.reset();
+        graphics_deliver = {};
+#endif
         // Preparation workers may still be waiting on a document or adding
         // newly discovered CSS/script prefetches. Join them before taking the
         // final snapshot of the resource prefetch table.
@@ -117,6 +142,7 @@
         media_query_lists.clear();
         timers.clear();
         pending_window_messages.clear();
+        pending_dialog_close_events.clear();
         pending_programmatic_scroll_events.clear();
         pending_interop_promises.clear();
         pending_callback_promises.clear();
@@ -170,7 +196,9 @@
         element_template.Reset();
 #if defined(WEBSCENE_NATIVE_ENGINE_GENERATED_DOM_BINDINGS)
         html_element_template.Reset();
+        svg_element_template.Reset();
         html_table_cell_element_template.Reset();
+        html_dialog_element_template.Reset();
         html_form_element_template.Reset();
         html_select_element_template.Reset();
         html_script_element_template.Reset();
@@ -187,6 +215,7 @@
         event_target_template.Reset();
 #endif
         frame_context.Reset();
+        module_map.clear();
         context.Reset();
         release_external_dom_memory_accounting();
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
@@ -199,7 +228,7 @@
             isolate->Dispose();
         }
         isolate = nullptr;
-        delete allocator;
+        allocator.reset();
         allocator = nullptr;
         // The final shared owner disposes the isolate. Release the recursive
         // V8 lock first so its destructor never observes an already-disposed

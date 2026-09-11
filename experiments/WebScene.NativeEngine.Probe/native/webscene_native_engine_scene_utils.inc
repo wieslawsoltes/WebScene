@@ -4,16 +4,31 @@ uint64_t mix_hash(uint64_t hash, uint64_t value)
     return hash;
 }
 
-uint64_t canvas_layer_content_hash(
+struct canvas_content_hash_result { uint64_t content, commands; bool unchanged_prefix; };
+
+canvas_content_hash_result canvas_layer_content_hash(
     const webscene_canvas_layer& layer,
     const std::vector<webscene_canvas_command>& commands,
     const std::vector<webscene_scene_string>& strings,
-    const std::vector<char>& string_bytes)
+    const std::vector<char>& string_bytes,
+    const canvas_layer_version* previous)
 {
     auto hash = 1469598103934665603ULL;
+    size_t prefix_count=0;
+    bool unchanged_prefix=false;
+    if(previous && previous->generation==layer.generation
+        && previous->command_count<=layer.command_count && previous->string_count<=layer.string_count) {
+        // Native canvas writers only append finalized commands and intern new
+        // strings. Bitmap reset and full-overwrite compaction both advance the
+        // generation before clearing either array. Use the actual base canvas
+        // version, independently of whether that scene replaced its DOM data.
+        hash=previous->command_hash;
+        prefix_count=previous->command_count;
+        unchanged_prefix=true;
+    }
     const auto command_end =
         static_cast<size_t>(layer.command_offset) + layer.command_count;
-    for (auto index = static_cast<size_t>(layer.command_offset);
+    for (auto index = static_cast<size_t>(layer.command_offset)+prefix_count;
          index < command_end;
          ++index) {
         const auto& command = commands[index];
@@ -29,6 +44,7 @@ uint64_t canvas_layer_content_hash(
         }
     }
 
+    const auto command_hash=hash;
     const auto string_end =
         static_cast<size_t>(layer.string_offset) + layer.string_count;
     for (auto index = static_cast<size_t>(layer.string_offset);
@@ -46,7 +62,7 @@ uint64_t canvas_layer_content_hash(
                 static_cast<uint8_t>(string_bytes[byte_index]));
         }
     }
-    return hash;
+    return {hash,command_hash,unchanged_prefix};
 }
 
 void store_maximum(std::atomic<uint64_t>& target, uint64_t value)

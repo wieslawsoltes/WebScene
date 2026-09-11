@@ -1,0 +1,103 @@
+{
+  "validated": true,
+  "originalWidth": 222,
+  "finalWidth": 342,
+  "activeMoveSpanMilliseconds": 1004.312584,
+  "maximumDrawGapMilliseconds": 512.820917,
+  "delta": {
+    "Elapsed": "00:00:01.5261225",
+    "EnqueuedInputs": 123,
+    "DroppedInputs": 0,
+    "ConsumedInputs": 123,
+    "ExecutedScripts": 0,
+    "ScriptErrors": 0,
+    "LayoutPasses": 157,
+    "AppliedAnimationFrames": 61,
+    "CoalescedAnimationFrames": 0,
+    "PublicationAttempts": 194,
+    "BlockedPublications": 0,
+    "PublishedScenes": 14,
+    "AcquiredScenes": 14,
+    "AcknowledgedScenes": 14,
+    "RenderedScenes": 14,
+    "CompositionUiWakes": 0,
+    "RoutedInputEvents": 0,
+    "AcceptedInputEvents": 0,
+    "ResourceRequests": 0,
+    "ResourceHits": 0,
+    "ResourceMisses": 0,
+    "InteropPoolHits": 1,
+    "InteropPoolMisses": 0,
+    "InteropRequestPoolHits": 0,
+    "InteropRequestPoolMisses": 0,
+    "TimersScheduled": 0,
+    "TimersFired": 0,
+    "TimersCancelled": 0,
+    "LateTimers": 0,
+    "TotalTimerLatenessNanoseconds": 0,
+    "AnimationFramesRequested": 49,
+    "AnimationFramesInvoked": 49,
+    "AnimationFramesCancelled": 0,
+    "MicrotaskCheckpoints": 242,
+    "WorkerWaits": 223,
+    "WorkerSignalledWakes": 196,
+    "WorkerTimeoutWakes": 26,
+    "SceneBuilds": 14,
+    "NoDamageSceneBuilds": 0,
+    "FullCheckpointSceneBuilds": 0,
+    "ArbitraryEvaluationCalls": 1,
+    "GeneratedInvokeCalls": 0,
+    "GeneratedCallbackCalls": 0,
+    "ArbitraryEvaluationSourceBytes": 47,
+    "GeneratedRequestBytes": 0,
+    "WebTypefaceCacheHits": 0,
+    "WebTypefaceCacheMisses": 0,
+    "CompositionAnimationFrames": 91,
+    "CompositionRenders": 14,
+    "CompositionAppliedDiffs": 14,
+    "CompositionInvalidations": 15,
+    "CompositionFullInvalidations": 0,
+    "CompositionSubmittedAnimationFrames": 61,
+    "CompositionSkippedEmptyAnimationFrames": 30,
+    "CompositionRenderCallbacks": 15,
+    "CompositionUnchangedRenderCallbacks": 0
+  },
+  "stages": {
+    "apply:images-retained": {
+      "count": 14,
+      "medianMilliseconds": 0.0159585,
+      "maximumMilliseconds": 0.036375
+    },
+    "apply:cpu-applied": {
+      "count": 14,
+      "medianMilliseconds": 15.572416500000001,
+      "maximumMilliseconds": 22.157375
+    },
+    "apply:replaced": {
+      "count": 14,
+      "medianMilliseconds": 0.002687,
+      "maximumMilliseconds": 0.005959
+    },
+    "apply:Applied": {
+      "count": 14,
+      "medianMilliseconds": 0.0083545,
+      "maximumMilliseconds": 0.030167
+    }
+  },
+  "stageCounts": {
+    "frame": 92,
+    "acquire:Success": 14,
+    "apply:images-retained": 14,
+    "apply:cpu-applied": 14,
+    "apply:replaced": 14,
+    "apply:Applied": 14,
+    "acquire:Empty": 1
+  },
+  "physicalPresentationVerified": false,
+  "limitations": [
+    "Single automated sidebar gesture, no physical presentation qualification.",
+    "Native publication deferral reasons are not captured by this trace.",
+    "Earlier failed run ended at width 390 instead of 342; excluded from timing comparison.",
+    "Five-second OS sample mostly captured waiting threads; not active-resize cost evidence."
+  ]
+}

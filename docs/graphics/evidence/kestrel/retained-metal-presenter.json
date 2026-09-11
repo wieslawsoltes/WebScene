@@ -1,0 +1,33 @@
+{
+  "metal": {
+    "route": "Dawn-IOSurface-Metal-Ganesh",
+    "renderedFrames": 32,
+    "imports": 2,
+    "gpuRetirementCompleted": true,
+    "explicitTransportCopies": 0,
+    "diagnosticReadbacks": 8,
+    "physicalPresentationVerified": false,
+    "detachedBeforeRetirement": false
+  },
+  "metalDetached": {
+    "route": "Dawn-IOSurface-Metal-Ganesh",
+    "renderedFrames": 32,
+    "imports": 2,
+    "gpuRetirementCompleted": true,
+    "explicitTransportCopies": 0,
+    "diagnosticReadbacks": 8,
+    "physicalPresentationVerified": false,
+    "detachedBeforeRetirement": true
+  },
+  "cglRegression": {
+    "route": "Dawn-IOSurface-CGL-Ganesh",
+    "renderedFrames": 32,
+    "imports": 2,
+    "gpuRetirementCompleted": true,
+    "explicitTransportCopies": 0,
+    "diagnosticReadbacks": 8,
+    "physicalPresentationVerified": false,
+    "detachedBeforeRetirement": false
+  },
+  "earlyProducerAdmissionEnabled": false
+}

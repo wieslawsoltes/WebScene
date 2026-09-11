@@ -1,0 +1,26 @@
+{
+  "sourceBaseCommit": "e40a675867d22ceb75da35509007c44b7388f9b5",
+  "scope": "Native Dawn service device isolation under diagnostic ForceLoss on macOS",
+  "test": "webscene_graphics_dawn_event_tests",
+  "buildCommand": "cmake --build artifacts/graphics-build/native-v8-enabled --target webscene_graphics_dawn_event_tests -j4",
+  "testCommand": "ctest --test-dir artifacts/graphics-build/native-v8-enabled -R '^webscene_graphics_dawn_event_tests$' --output-on-failure",
+  "result": {
+    "passed": 1,
+    "failed": 0,
+    "seconds": 0.52
+  },
+  "checks": [
+    "Independent device adopted before sibling ForceLoss",
+    "Lost sibling pending mapping cancelled once and late callback retired",
+    "Survivor service handle remains usable",
+    "Survivor writes and maps 4096 bytes after loss; all 1024 words match call-time data after source mutation",
+    "Survivor loss signal remains clear",
+    "Survivor destruction returns device count and mailbox occupancy to expected values"
+  ],
+  "developmentFailure": "Initial setup reused a consumed adapter; Dawn rejected RequestDevice. Corrected by requesting a fresh adapter object before the independent device. Earlier failures are not passes.",
+  "limits": [
+    "Dawn ForceLoss injection, not physical GPU reset",
+    "No end-to-end V8/presenter loss qualification",
+    "No cross-platform hardware claim"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "sdkVersion": "10.0.28000.0",
+  "release": "10.0.28000.2526",
+  "compiler": "Redist/D3D/x64/d3dcompiler_47.dll",
+  "sha256": "7b06a9669b48608ab576659f4f5ee4ec94c82e5b3109fa7290f5fbab84d544ec",
+  "licenseUrl": "https://aka.ms/WinSDKLicenseURL",
+  "licenseSha256": "dd07eb178e00c6bba4148457fc00ff77cd4887eb521d504186fe59c9ec8bbe62"
+}

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "scope": "Epic #22 desktop WebGPU and WebGL implementation inventory; prerequisite probes are not browser API support",
+  "defaultBrowserImplementationStatus": "not-implemented",
+  "families": [
+    {"name":"WebGPU discovery and device model","classification":"core","interfaces":["GPU","GPUAdapter","GPUAdapterInfo","GPUSupportedFeatures","GPUSupportedLimits","GPUDevice","GPUQueue"],"issue":31,"harness":"Secure-context and V8 promise/exposure integration required"},
+    {"name":"WebGPU resources and bindings","classification":"core","interfaces":["GPUBuffer","GPUTexture","GPUTextureView","GPUSampler","GPUBindGroupLayout","GPUBindGroup","GPUPipelineLayout"],"issue":31,"harness":"WebGPU CTS browser bindings and resource validation required"},
+    {"name":"WebGPU shaders and render pipelines","classification":"core","interfaces":["GPUShaderModule","GPUCompilationInfo","GPUCompilationMessage","GPURenderPipeline","GPUCommandEncoder","GPURenderPassEncoder","GPUCommandBuffer"],"issue":32,"harness":"WGSL compilation, offscreen pixel oracle and render-pass validation required"},
+    {"name":"WebGPU canvas","classification":"core","interfaces":["GPUCanvasContext"],"issue":32,"harness":"HTML canvas configuration and retained GPU image composition required"},
+    {"name":"WebGPU asynchronous behavior","classification":"core","interfaces":["GPUDeviceLostInfo","GPUError","GPUValidationError","GPUOutOfMemoryError","GPUInternalError","GPUUncapturedErrorEvent"],"operations":["mapAsync","getMappedRange","unmap","onSubmittedWorkDone","pushErrorScope","popErrorScope","copyBufferToBuffer","copyBufferToTexture","copyTextureToBuffer","copyTextureToTexture"],"issue":33,"harness":"Promise/task ordering, mapped backing-store lifetime and induced device loss required"},
+    {"name":"WebGPU remaining command surface","classification":"core","interfaces":["GPUComputePipeline","GPUComputePassEncoder","GPURenderBundleEncoder","GPURenderBundle","GPUQuerySet"],"operations":["createComputePipelineAsync","createRenderPipelineAsync","dispatchWorkgroups","dispatchWorkgroupsIndirect","drawIndirect","drawIndexedIndirect","resolveQuerySet"],"issue":38,"harness":"Compute, indirect execution, bundles and query CTS required"},
+    {"name":"Adapter-dependent WebGPU features and limits","classification":"optional","sourceOfTruth":"Pinned WebGPU CTS and browser WebIDL/spec; enumerate individually during G09/G16 implementation","issue":38,"harness":"Supported/unsupported feature negotiation, validation and limit boundaries required; native extensions are not automatically browser features"},
+    {"name":"WebGL 1","classification":"core","interfaces":["WebGLRenderingContext","WebGLActiveInfo","WebGLBuffer","WebGLFramebuffer","WebGLProgram","WebGLRenderbuffer","WebGLShader","WebGLShaderPrecisionFormat","WebGLTexture","WebGLUniformLocation","WebGLContextEvent"],"issue":36,"harness":"Khronos WebGL 1 runner, GLSL ES validation, typed-array overloads, context loss and browser state validation required"},
+    {"name":"WebGL 2","classification":"core","interfaces":["WebGL2RenderingContext","WebGLQuery","WebGLSampler","WebGLSync","WebGLTransformFeedback","WebGLVertexArrayObject"],"issue":37,"harness":"Khronos WebGL 2 runner, ES3 command/resource surface and WebGPU-to-WebGL application fallback fixture required"},
+    {"name":"WebGL extensions","classification":"optional","sourceOfTruth":"Pinned Khronos WebGL extension specifications and tests; per-adapter filtering required","issue":37,"harness":"WebGL extension exposure must not mirror the unrestricted ANGLE ES extension list"},
+    {"name":"Canvas snapshots and serialization","classification":"source-dependency","operations":["drawImage","toBlob","toDataURL","convertToBlob","createImageBitmap"],"issue":34,"harness":"Call-time image capture, real PNG/Blob bytes, alpha/color conversion and origin-clean checks required"},
+    {"name":"Worker execution and transferable canvases","classification":"worker-dependency","interfaces":["WorkerNavigator","OffscreenCanvas","ImageBitmap","ImageBitmapRenderingContext"],"operations":["transferControlToOffscreen","transferToImageBitmap","transferFromImageBitmap"],"issue":39,"harness":"Worker event loop, structured clone/transfer, GPU ownership and resize ordering required"},
+    {"name":"Image and video upload/import","classification":"source-dependency","interfaces":["GPUExternalTexture","HTMLImageElement","HTMLVideoElement","VideoFrame","ImageData"],"operations":["copyExternalImageToTexture","importExternalTexture","texImage2D","texSubImage2D","texImage3D","texSubImage3D"],"issue":40,"harness":"Source decoding, video lifetime, orientation/color space, premultiplication and security tests required"}
+  ],
+  "gates": {
+    "webgpuCTS":"not-run",
+    "webglCTS":"not-run",
+    "canvasAndWorkerWPT":"not-run",
+    "unchangedKestrel":"not-run",
+    "presentationCopyCounters":"not-implemented"
+  }
+}

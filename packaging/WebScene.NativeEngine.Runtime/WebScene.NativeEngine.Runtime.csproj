@@ -2,6 +2,9 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <IsPackable>true</IsPackable>
+    <WebSceneNativeEngineMedia Condition="'$(WebSceneNativeEngineMedia)' == ''">false</WebSceneNativeEngineMedia>
+    <WebSceneNativeEngineGraphics>false</WebSceneNativeEngineGraphics>
+    <WebSceneNativeEngineGraphics Condition="'$(WebSceneGraphicsPackageProps)' != ''">true</WebSceneNativeEngineGraphics>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <PackageId Condition="'$(WebSceneNativeEngineRid)' != ''">WebScene.NativeEngine.Runtime.$(WebSceneNativeEngineRid)</PackageId>
@@ -50,6 +53,7 @@
     <WebSceneNativeV8LicensePackagePath>$(WebSceneNativePackageMetadataDir)V8-LICENSE.txt</WebSceneNativeV8LicensePackagePath>
     <WebSceneNativeIcuLicensePackagePath>$(WebSceneNativePackageMetadataDir)ICU-LICENSE.txt</WebSceneNativeIcuLicensePackagePath>
     <WebSceneNativeIXWebSocketLicensePackagePath>$(WebSceneNativePackageMetadataDir)IXWebSocket-LICENSE.txt</WebSceneNativeIXWebSocketLicensePackagePath>
+    <WebSceneNativeMiniaudioLicensePackagePath>$(WebSceneNativePackageMetadataDir)Miniaudio-LICENSE.txt</WebSceneNativeMiniaudioLicensePackagePath>
     <WebSceneNativeMbedTlsLicensePackagePath>$(WebSceneNativePackageMetadataDir)MbedTLS-LICENSE.txt</WebSceneNativeMbedTlsLicensePackagePath>
     <WebSceneNativeHtmlParserNoticesPackagePath>$(WebSceneNativePackageMetadataDir)HTML-PARSER-THIRD-PARTY-NOTICES.md</WebSceneNativeHtmlParserNoticesPackagePath>
   </PropertyGroup>
@@ -84,6 +88,8 @@
     <None Include="$(WebSceneNativeIXWebSocketLicensePackagePath)"
           Pack="true"
           PackagePath="licenses\IXWebSocket-LICENSE.txt" />
+    <None Include="$(WebSceneNativeMiniaudioLicensePackagePath)" Pack="true" Visible="false"
+          PackagePath="licenses\Miniaudio-LICENSE.txt" Condition="'$(WebSceneNativeEngineMedia)' == 'true'" />
     <None Include="$(WebSceneNativeMbedTlsLicensePackagePath)"
           Pack="true"
           PackagePath="licenses\MbedTLS-LICENSE.txt"
@@ -100,6 +106,8 @@
           PackagePath="buildTransitive\$(PackageId).props" />
   </ItemGroup>
 
+  <Import Project="$(WebSceneGraphicsPackageProps)" Condition="'$(WebSceneGraphicsPackageProps)' != ''" />
+
   <Target Name="ValidateWebSceneNativeEnginePackage" BeforeTargets="GenerateNuspec">
     <Error Condition="'$(WebSceneNativeEngineRid)' == '' or '$(WebSceneNativeEnginePath)' == '' or '$(WebSceneNativeEngineIcuDataPath)' == ''"
            Text="Packing the native WebScene runtime requires WebSceneNativeEngineRid, WebSceneNativeEnginePath, and WebSceneNativeEngineIcuDataPath." />
@@ -109,6 +117,8 @@
            Text="The configured WebScene native engine does not exist: $(WebSceneNativeEnginePath)" />
     <Error Condition="!Exists('$(WebSceneNativeEngineIcuDataPath)')"
            Text="The configured V8 ICU data does not exist: $(WebSceneNativeEngineIcuDataPath)" />
+    <Error Condition="'$(WebSceneNativeEngineMedia)' == 'true' and !Exists('$(WebSceneNativeEngineMiniaudioLicensePath)')"
+           Text="Media-enabled runtime packaging requires the pinned Miniaudio license." />
     <Error Condition="!Exists('$(WebSceneNativeEngineV8LicensePath)') or !Exists('$(WebSceneNativeEngineIcuLicensePath)') or !Exists('$(WebSceneNativeEngineIXWebSocketLicensePath)')"
            Text="Packing the native WebScene runtime requires valid V8, ICU, and IXWebSocket license files." />
     <Error Condition="$([System.String]::Copy('$(WebSceneNativeEngineRid)').StartsWith('win-')) and !Exists('$(WebSceneNativeEngineMbedTlsLicensePath)')"
@@ -165,6 +175,8 @@
           BeforeTargets="GenerateNuspec"
           DependsOnTargets="ValidateWebSceneNativeEnginePackage">
     <MakeDir Directories="$(WebSceneNativePackageMetadataDir)" />
+    <Copy SourceFiles="$(WebSceneNativeEngineMiniaudioLicensePath)" DestinationFiles="$(WebSceneNativeMiniaudioLicensePackagePath)"
+          Condition="'$(WebSceneNativeEngineMedia)' == 'true'" />
     <Copy SourceFiles="$(WebSceneNativeEngineV8LicensePath)"
           DestinationFiles="$(WebSceneNativeV8LicensePackagePath)" />
     <Copy SourceFiles="$(WebSceneNativeEngineIcuLicensePath)"
@@ -201,7 +213,7 @@
                       Lines="{&quot;schemaVersion&quot;:2,&quot;packageVersion&quot;:&quot;$(PackageVersion)&quot;,&quot;runtimeIdentifier&quot;:&quot;$(WebSceneNativeEngineRid)&quot;,&quot;fileName&quot;:&quot;$(WebSceneNativeEngineExpectedFileName)&quot;,&quot;sha256&quot;:&quot;$(WebSceneNativeEngineHash)&quot;,&quot;icuFileName&quot;:&quot;$(WebSceneNativeEngineExpectedIcuFileName)&quot;,&quot;icuSha256&quot;:&quot;$(WebSceneNativeEngineIcuHash)&quot;,&quot;snapshotFileName&quot;:&quot;$(WebSceneNativeEngineExpectedSnapshotFileName)&quot;,&quot;snapshotSha256&quot;:&quot;$(WebSceneNativeEngineSnapshotHash)&quot;,&quot;snapshotMetadataFileName&quot;:&quot;$(WebSceneNativeEngineExpectedSnapshotMetadataFileName)&quot;,&quot;snapshotMetadataSha256&quot;:&quot;$(WebSceneNativeEngineSnapshotMetadataHash)&quot;,&quot;abiVersion&quot;:$(WebSceneNativeEngineAbiVersion),&quot;v8Revision&quot;:&quot;$(WebSceneNativeEngineV8Revision)&quot;,&quot;htmlParser&quot;:&quot;$(WebSceneNativeEngineHtmlParser)&quot;,&quot;cssParser&quot;:&quot;$(WebSceneNativeEngineCssParser)&quot;,&quot;selectorParser&quot;:&quot;$(WebSceneNativeEngineSelectorParser)&quot;,&quot;domBindings&quot;:&quot;$(WebSceneNativeEngineDomBindings)&quot;,&quot;v8Snapshot&quot;:&quot;$(WebSceneNativeEngineV8Snapshot)&quot;,&quot;v8PointerCompression&quot;:$(WebSceneNativeEngineV8PointerCompression),&quot;v8SharedCage&quot;:$(WebSceneNativeEngineV8SharedCage),&quot;v8OptimizeForSizeDefault&quot;:$(WebSceneNativeEngineV8OptimizeForSizeDefault),&quot;v8PartitionAlloc&quot;:$(WebSceneNativeEngineV8PartitionAlloc),&quot;v8Inspector&quot;:$(WebSceneNativeEngineV8Inspector),&quot;denseLink&quot;:$(WebSceneNativeEngineDenseLink),&quot;thinLto&quot;:$(WebSceneNativeEngineThinLto),&quot;certificationTelemetry&quot;:$(WebSceneNativeEngineCertificationTelemetry),&quot;configuration&quot;:&quot;$(WebSceneNativeEngineConfiguration)&quot;}"
                       Overwrite="true" />
     <WriteLinesToFile File="$(WebSceneNativePropsPath)"
-                      Lines="&lt;Project&gt;&lt;PropertyGroup&gt;&lt;WebSceneNativeEnginePackagedRid&gt;$(WebSceneNativeEngineRid)&lt;/WebSceneNativeEnginePackagedRid&gt;&lt;WebSceneNativeEnginePackagedFileName&gt;$(WebSceneNativeEngineExpectedFileName)&lt;/WebSceneNativeEnginePackagedFileName&gt;&lt;WebSceneNativeEnginePackagedIcuFileName&gt;$(WebSceneNativeEngineExpectedIcuFileName)&lt;/WebSceneNativeEnginePackagedIcuFileName&gt;&lt;WebSceneNativeEnginePackagedSnapshotFileName&gt;$(WebSceneNativeEngineExpectedSnapshotFileName)&lt;/WebSceneNativeEnginePackagedSnapshotFileName&gt;&lt;WebSceneNativeEnginePackagedSnapshotMetadataFileName&gt;$(WebSceneNativeEngineExpectedSnapshotMetadataFileName)&lt;/WebSceneNativeEnginePackagedSnapshotMetadataFileName&gt;&lt;WebSceneNativeEnginePackagedAbi&gt;$(WebSceneNativeEngineAbiVersion)&lt;/WebSceneNativeEnginePackagedAbi&gt;&lt;WebSceneNativeEngineHtmlParser&gt;$(WebSceneNativeEngineHtmlParser)&lt;/WebSceneNativeEngineHtmlParser&gt;&lt;WebSceneNativeEngineCssParser&gt;$(WebSceneNativeEngineCssParser)&lt;/WebSceneNativeEngineCssParser&gt;&lt;WebSceneNativeEngineSelectorParser&gt;$(WebSceneNativeEngineSelectorParser)&lt;/WebSceneNativeEngineSelectorParser&gt;&lt;WebSceneNativeEngineDomBindings&gt;$(WebSceneNativeEngineDomBindings)&lt;/WebSceneNativeEngineDomBindings&gt;&lt;WebSceneNativeEngineV8Snapshot&gt;$(WebSceneNativeEngineV8Snapshot)&lt;/WebSceneNativeEngineV8Snapshot&gt;&lt;WebSceneNativeEngineV8PointerCompression&gt;$(WebSceneNativeEngineV8PointerCompression)&lt;/WebSceneNativeEngineV8PointerCompression&gt;&lt;WebSceneNativeEngineV8SharedCage&gt;$(WebSceneNativeEngineV8SharedCage)&lt;/WebSceneNativeEngineV8SharedCage&gt;&lt;WebSceneNativeEngineV8OptimizeForSizeDefault&gt;$(WebSceneNativeEngineV8OptimizeForSizeDefault)&lt;/WebSceneNativeEngineV8OptimizeForSizeDefault&gt;&lt;WebSceneNativeEngineV8PartitionAlloc&gt;$(WebSceneNativeEngineV8PartitionAlloc)&lt;/WebSceneNativeEngineV8PartitionAlloc&gt;&lt;WebSceneNativeEngineDenseLink&gt;$(WebSceneNativeEngineDenseLink)&lt;/WebSceneNativeEngineDenseLink&gt;&lt;WebSceneNativeEngineThinLto&gt;$(WebSceneNativeEngineThinLto)&lt;/WebSceneNativeEngineThinLto&gt;&lt;WebSceneNativeEngineCertificationTelemetry&gt;$(WebSceneNativeEngineCertificationTelemetry)&lt;/WebSceneNativeEngineCertificationTelemetry&gt;&lt;/PropertyGroup&gt;&lt;/Project&gt;"
+                      Lines="&lt;Project&gt;&lt;PropertyGroup&gt;&lt;WebSceneNativeEnginePackagedRid&gt;$(WebSceneNativeEngineRid)&lt;/WebSceneNativeEnginePackagedRid&gt;&lt;WebSceneNativeEnginePackagedFileName&gt;$(WebSceneNativeEngineExpectedFileName)&lt;/WebSceneNativeEnginePackagedFileName&gt;&lt;WebSceneNativeEnginePackagedIcuFileName&gt;$(WebSceneNativeEngineExpectedIcuFileName)&lt;/WebSceneNativeEnginePackagedIcuFileName&gt;&lt;WebSceneNativeEnginePackagedSnapshotFileName&gt;$(WebSceneNativeEngineExpectedSnapshotFileName)&lt;/WebSceneNativeEnginePackagedSnapshotFileName&gt;&lt;WebSceneNativeEnginePackagedSnapshotMetadataFileName&gt;$(WebSceneNativeEngineExpectedSnapshotMetadataFileName)&lt;/WebSceneNativeEnginePackagedSnapshotMetadataFileName&gt;&lt;WebSceneNativeEngineGraphics&gt;$(WebSceneNativeEngineGraphics)&lt;/WebSceneNativeEngineGraphics&gt;&lt;WebSceneNativeEnginePackagedAbi&gt;$(WebSceneNativeEngineAbiVersion)&lt;/WebSceneNativeEnginePackagedAbi&gt;&lt;WebSceneNativeEngineHtmlParser&gt;$(WebSceneNativeEngineHtmlParser)&lt;/WebSceneNativeEngineHtmlParser&gt;&lt;WebSceneNativeEngineCssParser&gt;$(WebSceneNativeEngineCssParser)&lt;/WebSceneNativeEngineCssParser&gt;&lt;WebSceneNativeEngineSelectorParser&gt;$(WebSceneNativeEngineSelectorParser)&lt;/WebSceneNativeEngineSelectorParser&gt;&lt;WebSceneNativeEngineDomBindings&gt;$(WebSceneNativeEngineDomBindings)&lt;/WebSceneNativeEngineDomBindings&gt;&lt;WebSceneNativeEngineV8Snapshot&gt;$(WebSceneNativeEngineV8Snapshot)&lt;/WebSceneNativeEngineV8Snapshot&gt;&lt;WebSceneNativeEngineV8PointerCompression&gt;$(WebSceneNativeEngineV8PointerCompression)&lt;/WebSceneNativeEngineV8PointerCompression&gt;&lt;WebSceneNativeEngineV8SharedCage&gt;$(WebSceneNativeEngineV8SharedCage)&lt;/WebSceneNativeEngineV8SharedCage&gt;&lt;WebSceneNativeEngineV8OptimizeForSizeDefault&gt;$(WebSceneNativeEngineV8OptimizeForSizeDefault)&lt;/WebSceneNativeEngineV8OptimizeForSizeDefault&gt;&lt;WebSceneNativeEngineV8PartitionAlloc&gt;$(WebSceneNativeEngineV8PartitionAlloc)&lt;/WebSceneNativeEngineV8PartitionAlloc&gt;&lt;WebSceneNativeEngineDenseLink&gt;$(WebSceneNativeEngineDenseLink)&lt;/WebSceneNativeEngineDenseLink&gt;&lt;WebSceneNativeEngineThinLto&gt;$(WebSceneNativeEngineThinLto)&lt;/WebSceneNativeEngineThinLto&gt;&lt;WebSceneNativeEngineCertificationTelemetry&gt;$(WebSceneNativeEngineCertificationTelemetry)&lt;/WebSceneNativeEngineCertificationTelemetry&gt;&lt;/PropertyGroup&gt;&lt;/Project&gt;"
                       Overwrite="true" />
   </Target>
 </Project>

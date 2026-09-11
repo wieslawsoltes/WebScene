@@ -1,0 +1,9 @@
+{
+  "path": "artifacts/chrome-reference-final-navigation-20260908.tar.gz",
+  "bytes": 189531386,
+  "sha256": "247f070c0e2126d2fb59a304c9e591703fd5085b65a5980fb23a88656b96a6db",
+  "verifiedFiles": 287,
+  "verification": "Every archived regular file compared by SHA-256 with capture directory; no extraction performed",
+  "retention": "Local archive only; remote permanent storage outstanding",
+  "command": "COPYFILE_DISABLE=1 tar -czf artifacts/chrome-reference-final-navigation-20260908.tar.gz -C artifacts chrome-reference-final-navigation-20260908"
+}

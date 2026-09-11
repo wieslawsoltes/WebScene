@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Animation callbacks preserve a rendering opportunity</title>
+<script>
+// Project-owned WPT-style regression, not an upstream WPT pass.
+const state = window.__webSceneWptState = {
+  complete: false, harness: null, results: [], errors: [], diagnostics: []
+};
+const events = [];
+let firstTimestamp, cancelled;
+function record(name, passed) {
+  state.results.push({name, status: passed ? 'PASS' : 'FAIL',
+    message: passed ? null : JSON.stringify(events), stack: null});
+}
+requestAnimationFrame(timestamp => {
+  firstTimestamp = timestamp;
+  events.push('first');
+  cancelAnimationFrame(cancelled);
+  Promise.resolve().then(() => events.push('microtask'));
+  setTimeout(() => events.push('timer'), 0);
+  requestAnimationFrame(nextTimestamp => {
+    record('Nested RAF waits for a later timestamp', nextTimestamp > firstTimestamp);
+    record('Cancelled callback stays cancelled', !events.includes('cancelled'));
+    record('Microtask checkpoint precedes following callbacks', events[1] === 'microtask');
+    record('Timer cannot interrupt the admitted batch',
+      events.indexOf('timer') < 0 || events.indexOf('timer') > events.indexOf('last'));
+    state.harness = {status: state.results.some(r => r.status !== 'PASS') ? 1 : 0,
+      message: null, stack: null};
+    state.complete = true;
+  });
+});
+cancelled = requestAnimationFrame(() => events.push('cancelled'));
+for (let i = 0; i < 40; ++i) requestAnimationFrame(timestamp => {
+  if (timestamp !== firstTimestamp) events.push('wrong-timestamp');
+  const started = performance.now();
+  while (performance.now() - started < 0.2) {}
+});
+requestAnimationFrame(timestamp => {
+  events.push('last');
+  record('Admitted callbacks share a timestamp',
+    timestamp === firstTimestamp && !events.includes('wrong-timestamp'));
+});
+</script>

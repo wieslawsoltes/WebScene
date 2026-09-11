@@ -1,0 +1,33 @@
+{
+  "physicalPresentationVerified": false,
+  "publicationToAcceptance": {
+    "count": 33,
+    "medianMilliseconds": 25.9775,
+    "p95Milliseconds": 29.699083,
+    "maximumMilliseconds": 30.231875
+  },
+  "acceptanceToDrawCallbackEnd": {
+    "count": 33,
+    "medianMilliseconds": 0.792584,
+    "p95Milliseconds": 1.556083,
+    "maximumMilliseconds": 2.148791
+  },
+  "publicationToDrawCallbackEnd": {
+    "count": 33,
+    "medianMilliseconds": 27.034791,
+    "p95Milliseconds": 31.00825,
+    "maximumMilliseconds": 31.255166
+  },
+  "inputToPublishedConsumptionWatermark": {
+    "count": 80,
+    "medianMilliseconds": 16.8208535,
+    "p95Milliseconds": 35.697167,
+    "maximumMilliseconds": 43.287167
+  },
+  "unmatchedInputCount": 0,
+  "limitations": [
+    "Draw callback completion is not physical presentation.",
+    "A consumption watermark does not prove each coalesced move was drawn.",
+    "Measurement includes settling; no FPS qualification is derived."
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "browser": {
+    "viewport": [
+      792,
+      878
+    ],
+    "dpr": 2,
+    "sidebarBefore": 175,
+    "sidebarAfter": 295,
+    "canvasAfter": [
+      994,
+      1082
+    ],
+    "backend": "WebGPU",
+    "errors": 0,
+    "observation": "CUA drag and endpoint screenshot; no intermediate-frame or physical timing capture",
+    "restoredSidebarWidth": 175,
+    "temporaryTabClosed": true
+  },
+  "native": {
+    "initialGeometry": {
+      "x": 173.5,
+      "y": 475.5,
+      "width": 175,
+      "viewport": [
+        792,
+        878
+      ],
+      "dpr": 2,
+      "canvas": [
+        1234,
+        1082
+      ]
+    },
+    "sidebarAfter": 295,
+    "workloadValidated": true,
+    "delta": {
+      "Elapsed": "00:00:01.5265003",
+      "EnqueuedInputs": 123,
+      "DroppedInputs": 0,
+      "ConsumedInputs": 123,
+      "ExecutedScripts": 0,
+      "ScriptErrors": 0,
+      "LayoutPasses": 161,
+      "AppliedAnimationFrames": 61,
+      "CoalescedAnimationFrames": 0,
+      "PublicationAttempts": 242,
+      "BlockedPublications": 0,
+      "PublishedScenes": 11,
+      "AcquiredScenes": 11,
+      "AcknowledgedScenes": 11,
+      "RenderedScenes": 11,
+      "CompositionUiWakes": 0,
+      "RoutedInputEvents": 0,
+      "AcceptedInputEvents": 0,
+      "ResourceRequests": 0,
+      "ResourceHits": 0,
+      "ResourceMisses": 0,
+      "InteropPoolHits": 1,
+      "InteropPoolMisses": 0,
+      "InteropRequestPoolHits": 0,
+      "InteropRequestPoolMisses": 0,
+      "TimersScheduled": 0,
+      "TimersFired": 0,
+      "TimersCancelled": 0,
+      "LateTimers": 0,
+      "TotalTimerLatenessNanoseconds": 0,
+      "AnimationFramesRequested": 51,
+      "AnimationFramesInvoked": 51,
+      "AnimationFramesCancelled": 0,
+      "MicrotaskCheckpoints": 251,
+      "WorkerWaits": 227,
+      "WorkerSignalledWakes": 200,
+      "WorkerTimeoutWakes": 26,
+      "SceneBuilds": 11,
+      "NoDamageSceneBuilds": 0,
+      "FullCheckpointSceneBuilds": 0,
+      "ArbitraryEvaluationCalls": 1,
+      "GeneratedInvokeCalls": 0,
+      "GeneratedCallbackCalls": 0,
+      "ArbitraryEvaluationSourceBytes": 47,
+      "GeneratedRequestBytes": 0,
+      "WebTypefaceCacheHits": 0,
+      "WebTypefaceCacheMisses": 0,
+      "CompositionAnimationFrames": 91,
+      "CompositionRenders": 11,
+      "CompositionAppliedDiffs": 11,
+      "CompositionInvalidations": 11,
+      "CompositionFullInvalidations": 0,
+      "CompositionSubmittedAnimationFrames": 61,
+      "CompositionSkippedEmptyAnimationFrames": 30,
+      "CompositionRenderCallbacks": 11,
+      "CompositionUnchangedRenderCallbacks": 0
+    }
+  },
+  "physicalPresentationVerified": false,
+  "comparisonLimitations": [
+    "Viewport/DPR/sidebar endpoints now align",
+    "Gesture pacing differs; no performance ratio or flicker classification",
+    "Browser restored locally autosaved workspace; full drawing-state equivalence unverified"
+  ]
+}

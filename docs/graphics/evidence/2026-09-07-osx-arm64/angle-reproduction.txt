@@ -1,0 +1,27 @@
++ git -C /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/depot_tools config core.autocrlf false
++ git -C /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle config core.autocrlf false
++ /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/depot_tools/gclient sync --shallow --no-history --revision angle@082d85ba19efba24d3c25108dc1f0cad9cf149f9
+________ running 'python3 third_party/depot_tools/update_depot_tools_toggle.py --disable' in '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle'
+________ running 'python3 build/mac_toolchain.py' in '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle'
+Skipping Mac toolchain installation for mac
+________ running 'python3 tools/rust/update_rust.py' in '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle'
+________ running 'python3 build/util/lastchange.py -o build/util/LASTCHANGE' in '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle'
+________ running 'python3 third_party/depot_tools/download_from_google_storage.py --no_resume --bucket chromium-browser-clang -s tools/clang/dsymutil/bin/dsymutil.arm64.sha1 -o tools/clang/dsymutil/bin/dsymutil' in '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle'
+________ running 'python3 third_party/depot_tools/download_from_google_storage.py --no_resume --platform=darwin* --bucket angle-flex-bison -d tools/flex-bison/mac/' in '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle'
+________ running 'python3 build/config/siso/configure_siso.py --rbe_instance projects/rbe-chrome-untrusted/instances/default_instance' in '/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle'
++ /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle/buildtools/mac/gn gen /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle/out/WebScene-osx-arm64 --fail-on-unused-args
+Generating compile_commands took 32ms
+Done. Made 1325 targets from 224 files in 702ms
++ ninja -C /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle/out/WebScene-osx-arm64 -j 6 libEGL libGLESv2
+ninja: Entering directory `/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-src/angle-workspace/angle/out/WebScene-osx-arm64'
+ninja: no work to do.
++ install_name_tool -id @rpath/libEGL.dylib /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libEGL.dylib
++ install_name_tool -change ./libEGL.dylib @loader_path/libEGL.dylib /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libEGL.dylib
++ install_name_tool -change ./libGLESv2.dylib @loader_path/libGLESv2.dylib /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libEGL.dylib
++ codesign --force --sign - /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libEGL.dylib
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libEGL.dylib: replacing existing signature
++ install_name_tool -id @rpath/libGLESv2.dylib /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libGLESv2.dylib
++ install_name_tool -change ./libEGL.dylib @loader_path/libEGL.dylib /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libGLESv2.dylib
++ install_name_tool -change ./libGLESv2.dylib @loader_path/libGLESv2.dylib /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libGLESv2.dylib
++ codesign --force --sign - /Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libGLESv2.dylib
+/Volumes/SSD/repos/worktrees/aa5a/HtmlML/artifacts/graphics-sdk/osx-arm64/angle/lib/libGLESv2.dylib: replacing existing signature

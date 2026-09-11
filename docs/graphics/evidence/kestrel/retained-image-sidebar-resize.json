@@ -1,0 +1,23 @@
+{
+  "validated": true,
+  "finalWidth": 342,
+  "publishedScenes": 49,
+  "drawnScenes": 28,
+  "maximumDrawCallbackGapMilliseconds": 56.618209,
+  "nativeSuites": {
+    "passed": 2,
+    "failed": 0,
+    "seconds": 11.66
+  },
+  "steppedWindowResize": {
+    "passedGeometries": 4,
+    "exitCode": 0
+  },
+  "graphicsDisabledBuildPassed": true,
+  "physicalPresentationVerified": false,
+  "limitations": [
+    "One sidebar comparison; no sustained physical FPS qualification.",
+    "Sidebar/window probe preceded the configuration-generation guard; final guard covered by native runtime regression.",
+    "Continuous visual resize and device-loss behavior still require qualification."
+  ]
+}

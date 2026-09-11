@@ -1,0 +1,4402 @@
+{
+  "date": "2026-09-08",
+  "sourceCommit": "0db03fd98d165d8bda5ecc9d27819877c8c9f426",
+  "host": "Explicit AvaloniaNativeRenderingMode.OpenGl only",
+  "producer": "Dawn WebGPU",
+  "command": "WEBSCENE_TEST_NATIVE_LIBRARY=\"$PWD/artifacts/graphics-build/native-v8-enabled/libwebscene_native_engine.dylib\" dotnet run --no-build --project experiments/WebScene.GpuHost.Probe -- --webgpu-opengl --kestrel tests/GraphicsCompatibility/fixtures/Kestrel-CAD.zip --sidebar-kestrel --verify-kestrel",
+  "exitCode": 0,
+  "workloadValidated": true,
+  "logSha256": "63c3348a731890ff5e7dabdca6f394c4e037959a2c61b9e94837c6b1fe1b8638",
+  "timeline": {
+    "traceStarted": 105336880826333,
+    "timestampFrequency": 1000000000,
+    "originalWidth": 222,
+    "width": 342,
+    "initialGeometry": {
+      "x": 220.5,
+      "y": 436.5,
+      "width": 222,
+      "viewport": [
+        1280,
+        800
+      ],
+      "dpr": 2,
+      "canvas": [
+        1612,
+        926
+      ]
+    },
+    "baseline": {
+      "ContextId": 1,
+      "Timestamp": 105336876104750,
+      "Engine": {
+        "EnqueuedInputs": 18,
+        "DroppedInputs": 0,
+        "ConsumedInputs": 18,
+        "PublishedScenes": 11,
+        "AcquiredScenes": 10,
+        "ExecutedScripts": 0,
+        "ScriptErrors": 0,
+        "DomNodes": 1316,
+        "LayoutPasses": 8,
+        "IframeNodes": 0,
+        "IframeHtmlBytes": 0,
+        "FrameScriptsExecuted": 10,
+        "FrameScriptErrors": 0,
+        "CanvasNodes": 2,
+        "ComponentReady": 0,
+        "CompilationRequests": 14,
+        "CompilationMemoryHits": 0,
+        "CompilationPersistentHits": 0,
+        "CompilationPersistentMisses": 0,
+        "CompilationCacheRejections": 0,
+        "CompilationCacheBytesRead": 0,
+        "CompilationCacheBytesWritten": 0,
+        "CompilationTimeNanoseconds": 3280543,
+        "InputEventsDispatched": 95,
+        "InputCallbacksInvoked": 1,
+        "BusiestCanvasWidthMilli": 806000,
+        "BusiestCanvasHeightMilli": 463000,
+        "CoalescedResizeInputs": 0,
+        "AppliedResizeInputs": 1,
+        "LastResizeDispatchNanoseconds": 40750,
+        "LastScenePublicationNanoseconds": 1410167,
+        "LastResizeOuterListenersNanoseconds": 0,
+        "LastResizeFrameListenersNanoseconds": 0,
+        "LastResizeLayoutNanoseconds": 0,
+        "LastResizeObserversNanoseconds": 0,
+        "CoalescedPointerMoveInputs": 4,
+        "CoalescedWheelInputs": 0,
+        "AppliedPointerMoveInputs": 5,
+        "AppliedWheelInputs": 0,
+        "AppliedAnimationFrames": 7,
+        "CoalescedAnimationFrames": 0,
+        "LastAnimationAdvanceNanoseconds": 0,
+        "LastLayoutNanoseconds": 2243875,
+        "LastSceneBuildNanoseconds": 1119333,
+        "MaximumScenePublicationNanoseconds": 3074791
+      },
+      "InputDispatch": {
+        "StructSize": 48,
+        "Reserved": 0,
+        "LastDispatchNanoseconds": 241458,
+        "MaximumDispatchNanoseconds": 597416,
+        "LastDispatchSequence": 639244713561672131,
+        "DispatchedInputs": 6,
+        "TotalDispatchNanoseconds": 2069374
+      },
+      "AnimationFrames": {
+        "StructSize": 48,
+        "Reserved": 0,
+        "DispatchedFrames": 7,
+        "TotalDispatchNanoseconds": 5209,
+        "LastDispatchNanoseconds": 1042,
+        "MaximumDispatchNanoseconds": 1333,
+        "LastTimestampMicroseconds": 105334927828
+      },
+      "SceneFlow": {
+        "StructSize": 64,
+        "Reserved": 0,
+        "PublicationAttempts": 22,
+        "BlockedPublications": 0,
+        "AcknowledgedScenes": 10,
+        "TotalAcknowledgementNanoseconds": 376503832,
+        "LastAcknowledgementNanoseconds": 13644125,
+        "MaximumAcknowledgementNanoseconds": 107728625,
+        "AcknowledgedRevision": 11
+      },
+      "ResizeFrames": {
+        "StructSize": 136,
+        "Reserved": 0,
+        "SubmittedPairs": 0,
+        "AppliedPairs": 0,
+        "PublishedPairs": 0,
+        "TotalQueueNanoseconds": 0,
+        "LastQueueNanoseconds": 0,
+        "MaximumQueueNanoseconds": 0,
+        "TotalDispatchNanoseconds": 0,
+        "LastDispatchNanoseconds": 0,
+        "MaximumDispatchNanoseconds": 0,
+        "AnimationFrameCallbacks": 0,
+        "TotalAnimationFrameBatchNanoseconds": 0,
+        "LastAnimationFrameBatchNanoseconds": 0,
+        "MaximumAnimationFrameBatchNanoseconds": 0,
+        "TotalToPublicationNanoseconds": 0,
+        "LastToPublicationNanoseconds": 0,
+        "MaximumToPublicationNanoseconds": 0
+      },
+      "ResourceCache": {
+        "StructSize": 56,
+        "Reserved": 0,
+        "Requests": 1,
+        "Hits": 0,
+        "Misses": 1,
+        "Rejections": 0,
+        "BytesRead": 0,
+        "BytesWritten": 0
+      },
+      "RuntimeWork": {
+        "StructSize": 168,
+        "Reserved": 0,
+        "TimersScheduled": 0,
+        "TimersFired": 0,
+        "TimersCancelled": 0,
+        "LateTimers": 0,
+        "TotalTimerLatenessNanoseconds": 0,
+        "AnimationFramesRequested": 0,
+        "AnimationFramesInvoked": 0,
+        "AnimationFramesCancelled": 0,
+        "MicrotaskCheckpoints": 0,
+        "WorkerWaits": 0,
+        "WorkerSignalledWakes": 0,
+        "WorkerTimeoutWakes": 0,
+        "SceneBuilds": 0,
+        "NoDamageSceneBuilds": 0,
+        "FullCheckpointSceneBuilds": 0,
+        "ArbitraryEvaluationCalls": 0,
+        "GeneratedInvokeCalls": 0,
+        "GeneratedCallbackCalls": 0,
+        "ArbitraryEvaluationSourceBytes": 0,
+        "GeneratedRequestBytes": 0
+      },
+      "ProcessCache": {
+        "StructSize": 112,
+        "Reserved": 0,
+        "CompilationMemoryHits": 0,
+        "CompilationLeaders": 14,
+        "CompilationWaiters": 0,
+        "CompilationSharedBytes": 0,
+        "ResourceMemoryHits": 0,
+        "ResourceLoadLeaders": 1,
+        "ResourceLoadWaiters": 0,
+        "ResourceSharedBytes": 0,
+        "ScriptSourceMemoryHits": 0,
+        "ScriptSourceSharedBytes": 0,
+        "SharedIsolateSlot": 18446744073709551615,
+        "SharedIsolateActiveContexts": 1,
+        "SharedIsolatePeakContexts": 1
+      },
+      "Memory": {
+        "StructSize": 608,
+        "Reserved": 0,
+        "V8TotalHeapBytes": 5701632,
+        "V8UsedHeapBytes": 2877660,
+        "V8ExecutableHeapBytes": 524288,
+        "V8PhysicalHeapBytes": 5701632,
+        "V8ExternalBytes": 442729,
+        "V8MallocedBytes": 73812,
+        "V8PeakMallocedBytes": 1282048,
+        "LatestSceneBytes": 127076,
+        "ProcessCompilationCacheBytes": 250464,
+        "ProcessResourceCacheBytes": 0,
+        "V8CodeAndMetadataBytes": 0,
+        "V8BytecodeAndMetadataBytes": 0,
+        "V8ExternalScriptSourceBytes": 785023,
+        "NativeDomNodeCount": 1051,
+        "NativeDomNodeSizeBytes": 992,
+        "NativeDomInlineBytes": 1042592,
+        "NativeDomPseudoStorageBytes": 6800,
+        "NativeDomCanvasNodeCount": 2,
+        "NativeDomCanvasStorageBytes": 480,
+        "NativeDomAnimationCount": 3,
+        "NativeDomAnimationStorageBytes": 3801,
+        "NativeDomCustomPropertyNodeCount": 1,
+        "NativeDomCustomPropertyEntryCount": 22,
+        "NativeDomCustomPropertyStorageBytes": 2700,
+        "NativeDomBackgroundImageCount": 2,
+        "NativeDomBackgroundImageStorageBytes": 1006,
+        "NativeDomGridCount": 1,
+        "NativeDomGridStorageBytes": 569,
+        "NativeDomAuthoredStyleNodeCount": 12,
+        "NativeDomAuthoredStyleEntryCount": 14,
+        "NativeDomAuthoredStyleStorageBytes": 2692,
+        "NativeCssRuleCount": 407,
+        "NativeCssRuleStorageBytes": 16495,
+        "NativeCssIndexStorageBytes": 45535,
+        "ProcessSharedCssRuleCount": 407,
+        "ProcessSharedCssRuleStorageBytes": 369573,
+        "LowMemoryNotifications": 0,
+        "NativeDomAttributeNodeCount": 678,
+        "NativeDomAttributeEntryCount": 1848,
+        "NativeDomAttributeStorageBytes": 183026,
+        "NativeWrapperHandleCount": 269,
+        "NativeWrapperStorageBytes": 11000,
+        "NativeTextMeasurementCacheEntryCount": 425,
+        "NativeTextMeasurementCacheStorageBytes": 99812,
+        "ProcessCompilationMappedCacheBytes": 0,
+        "ProcessResourceMappedCacheBytes": 0,
+        "NativeDomTextualStyleCount": 751,
+        "NativeDomTextualStyleStorageBytes": 485542,
+        "NativeDomNodePoolReservedBytes": 1079296,
+        "NativeDomNodePoolPeakBytes": 1079296,
+        "NativeDomTableLayoutCount": 0,
+        "NativeDomTableLayoutStorageBytes": 0,
+        "NativeDomFormControlCount": 52,
+        "NativeDomFormControlStorageBytes": 4108,
+        "HiddenLowMemoryNotifications": 0,
+        "NativeEventListenerCount": 30,
+        "NativeEventListenerStorageBytes": 4685,
+        "V8YoungSpaceUsedBytes": 441696,
+        "V8YoungSpacePhysicalBytes": 2097152,
+        "V8OldSpaceUsedBytes": 1920268,
+        "V8OldSpacePhysicalBytes": 2097152,
+        "V8CodeSpaceUsedBytes": 196928,
+        "V8CodeSpacePhysicalBytes": 524288,
+        "V8MapSpaceUsedBytes": 0,
+        "V8MapSpacePhysicalBytes": 0,
+        "V8LargeObjectSpaceUsedBytes": 187472,
+        "V8LargeObjectSpacePhysicalBytes": 196608,
+        "V8ReadOnlySpaceUsedBytes": 1816740,
+        "V8ReadOnlySpacePhysicalBytes": 1835008,
+        "V8SharedSpaceUsedBytes": 0,
+        "V8SharedSpacePhysicalBytes": 0,
+        "V8TrustedSpaceUsedBytes": 131296,
+        "V8TrustedSpacePhysicalBytes": 786432,
+        "PendingSceneCount": 0,
+        "PendingSceneBytes": 0
+      },
+      "InteropPool": {
+        "StructSize": 200,
+        "Version": 3,
+        "OutstandingResults": 0,
+        "PooledBytes": 1294,
+        "PoolHits": 3,
+        "PoolMisses": 1,
+        "OversizeAllocations": 0,
+        "HighWaterOutstandingResults": 1,
+        "PooledRequestRecords": 0,
+        "RequestPoolHits": 0,
+        "RequestPoolMisses": 0,
+        "RequestOversizeAllocations": 0,
+        "ActiveOperationSlots": 0,
+        "AvailableOperationSlots": 1,
+        "OperationSlotHighWater": 1,
+        "PooledResultBytes4K": 1294,
+        "PooledResultBytes16K": 0,
+        "PooledResultBytes64K": 0,
+        "PooledResultBytes256K": 0,
+        "PooledResultBytes1M": 0,
+        "TakenResultLeases": 0,
+        "OperationResultLeases": 0,
+        "QueuedCallbacks": 0,
+        "TakenCallbackLeases": 0,
+        "PendingCallbackPromises": 0,
+        "CallbackQueueHighWater": 0
+      },
+      "RendererMemory": {
+        "RetainedLayerCount": 0,
+        "RetainedCommandCount": 0,
+        "LogicalBitmapBytes": 0,
+        "IsolationLayerCount": 0,
+        "IsolationLogicalBitmapBytes": 0,
+        "DomCommandCount": 0,
+        "StringCount": 0,
+        "StringBytes": 0,
+        "TypefaceCount": 0,
+        "SvgPictureCount": 0,
+        "ProcessSvgPictureCount": 0,
+        "ProcessSvgPictureReferenceCount": 0,
+        "ProcessSvgPictureMemoryHits": 0
+      },
+      "Surface": {
+        "RenderedScenes": 7,
+        "RoutedInputEvents": 0,
+        "AcceptedInputEvents": 0,
+        "CompositionUiWakes": 0,
+        "PendingCompositionPublications": 0,
+        "ResizePublicationNotifications": 0
+      },
+      "ProcessWebTypefaces": {
+        "Entries": 0,
+        "References": 0,
+        "Hits": 0,
+        "Misses": 0
+      },
+      "ProcessComposition": {
+        "AnimationFrames": 1,
+        "Renders": 0,
+        "AppliedDiffs": 0,
+        "InvalidationCalls": 0,
+        "DamageRectangles": 0,
+        "ChangedLayers": 0,
+        "EmptyDamageDiffs": 0,
+        "PartialDamageDiffs": 0,
+        "FullInvalidations": 0,
+        "SuppressedLiveResizeAnimationFrames": 0,
+        "SubmittedAnimationFrames": 0,
+        "SkippedEmptyAnimationFrames": 1,
+        "RenderCallbacks": 0,
+        "UnchangedRenderCallbacks": 0,
+        "LastAnimationFrameDemand": 0
+      }
+    },
+    "after": {
+      "ContextId": 1,
+      "Timestamp": 105338400222583,
+      "Engine": {
+        "EnqueuedInputs": 139,
+        "DroppedInputs": 0,
+        "ConsumedInputs": 139,
+        "PublishedScenes": 66,
+        "AcquiredScenes": 65,
+        "ExecutedScripts": 0,
+        "ScriptErrors": 0,
+        "DomNodes": 1365,
+        "LayoutPasses": 165,
+        "IframeNodes": 0,
+        "IframeHtmlBytes": 0,
+        "FrameScriptsExecuted": 10,
+        "FrameScriptErrors": 0,
+        "CanvasNodes": 2,
+        "ComponentReady": 0,
+        "CompilationRequests": 15,
+        "CompilationMemoryHits": 0,
+        "CompilationPersistentHits": 0,
+        "CompilationPersistentMisses": 0,
+        "CompilationCacheRejections": 0,
+        "CompilationCacheBytesRead": 0,
+        "CompilationCacheBytesWritten": 0,
+        "CompilationTimeNanoseconds": 3379334,
+        "InputEventsDispatched": 243,
+        "InputCallbacksInvoked": 172,
+        "BusiestCanvasWidthMilli": 686000,
+        "BusiestCanvasHeightMilli": 463000,
+        "CoalescedResizeInputs": 0,
+        "AppliedResizeInputs": 1,
+        "LastResizeDispatchNanoseconds": 40750,
+        "LastScenePublicationNanoseconds": 5750,
+        "LastResizeOuterListenersNanoseconds": 0,
+        "LastResizeFrameListenersNanoseconds": 0,
+        "LastResizeLayoutNanoseconds": 0,
+        "LastResizeObserversNanoseconds": 0,
+        "CoalescedPointerMoveInputs": 5,
+        "CoalescedWheelInputs": 0,
+        "AppliedPointerMoveInputs": 64,
+        "AppliedWheelInputs": 0,
+        "AppliedAnimationFrames": 66,
+        "CoalescedAnimationFrames": 0,
+        "LastAnimationAdvanceNanoseconds": 0,
+        "LastLayoutNanoseconds": 1535667,
+        "LastSceneBuildNanoseconds": 423584,
+        "MaximumScenePublicationNanoseconds": 3914791
+      },
+      "InputDispatch": {
+        "StructSize": 48,
+        "Reserved": 0,
+        "LastDispatchNanoseconds": 124792,
+        "MaximumDispatchNanoseconds": 12222209,
+        "LastDispatchSequence": 639244713561672193,
+        "DispatchedInputs": 67,
+        "TotalDispatchNanoseconds": 362341834
+      },
+      "AnimationFrames": {
+        "StructSize": 48,
+        "Reserved": 0,
+        "DispatchedFrames": 66,
+        "TotalDispatchNanoseconds": 111919,
+        "LastDispatchNanoseconds": 20500,
+        "MaximumDispatchNanoseconds": 20500,
+        "LastTimestampMicroseconds": 105337910918
+      },
+      "SceneFlow": {
+        "StructSize": 64,
+        "Reserved": 0,
+        "PublicationAttempts": 92,
+        "BlockedPublications": 0,
+        "AcknowledgedScenes": 65,
+        "TotalAcknowledgementNanoseconds": 856195832,
+        "LastAcknowledgementNanoseconds": 11793958,
+        "MaximumAcknowledgementNanoseconds": 107728625,
+        "AcknowledgedRevision": 71
+      },
+      "ResizeFrames": {
+        "StructSize": 136,
+        "Reserved": 0,
+        "SubmittedPairs": 0,
+        "AppliedPairs": 0,
+        "PublishedPairs": 0,
+        "TotalQueueNanoseconds": 0,
+        "LastQueueNanoseconds": 0,
+        "MaximumQueueNanoseconds": 0,
+        "TotalDispatchNanoseconds": 0,
+        "LastDispatchNanoseconds": 0,
+        "MaximumDispatchNanoseconds": 0,
+        "AnimationFrameCallbacks": 0,
+        "TotalAnimationFrameBatchNanoseconds": 0,
+        "LastAnimationFrameBatchNanoseconds": 0,
+        "MaximumAnimationFrameBatchNanoseconds": 0,
+        "TotalToPublicationNanoseconds": 0,
+        "LastToPublicationNanoseconds": 0,
+        "MaximumToPublicationNanoseconds": 0
+      },
+      "ResourceCache": {
+        "StructSize": 56,
+        "Reserved": 0,
+        "Requests": 1,
+        "Hits": 0,
+        "Misses": 1,
+        "Rejections": 0,
+        "BytesRead": 0,
+        "BytesWritten": 0
+      },
+      "RuntimeWork": {
+        "StructSize": 168,
+        "Reserved": 0,
+        "TimersScheduled": 0,
+        "TimersFired": 0,
+        "TimersCancelled": 0,
+        "LateTimers": 0,
+        "TotalTimerLatenessNanoseconds": 0,
+        "AnimationFramesRequested": 49,
+        "AnimationFramesInvoked": 49,
+        "AnimationFramesCancelled": 0,
+        "MicrotaskCheckpoints": 247,
+        "WorkerWaits": 189,
+        "WorkerSignalledWakes": 163,
+        "WorkerTimeoutWakes": 25,
+        "SceneBuilds": 60,
+        "NoDamageSceneBuilds": 0,
+        "FullCheckpointSceneBuilds": 0,
+        "ArbitraryEvaluationCalls": 1,
+        "GeneratedInvokeCalls": 0,
+        "GeneratedCallbackCalls": 0,
+        "ArbitraryEvaluationSourceBytes": 47,
+        "GeneratedRequestBytes": 0
+      },
+      "ProcessCache": {
+        "StructSize": 112,
+        "Reserved": 0,
+        "CompilationMemoryHits": 0,
+        "CompilationLeaders": 15,
+        "CompilationWaiters": 0,
+        "CompilationSharedBytes": 0,
+        "ResourceMemoryHits": 0,
+        "ResourceLoadLeaders": 1,
+        "ResourceLoadWaiters": 0,
+        "ResourceSharedBytes": 0,
+        "ScriptSourceMemoryHits": 0,
+        "ScriptSourceSharedBytes": 0,
+        "SharedIsolateSlot": 18446744073709551615,
+        "SharedIsolateActiveContexts": 1,
+        "SharedIsolatePeakContexts": 1
+      },
+      "Memory": {
+        "StructSize": 608,
+        "Reserved": 0,
+        "V8TotalHeapBytes": 5701632,
+        "V8UsedHeapBytes": 2877660,
+        "V8ExecutableHeapBytes": 524288,
+        "V8PhysicalHeapBytes": 5701632,
+        "V8ExternalBytes": 442729,
+        "V8MallocedBytes": 73812,
+        "V8PeakMallocedBytes": 1282048,
+        "LatestSceneBytes": 156952,
+        "ProcessCompilationCacheBytes": 250464,
+        "ProcessResourceCacheBytes": 0,
+        "V8CodeAndMetadataBytes": 0,
+        "V8BytecodeAndMetadataBytes": 0,
+        "V8ExternalScriptSourceBytes": 785023,
+        "NativeDomNodeCount": 1051,
+        "NativeDomNodeSizeBytes": 992,
+        "NativeDomInlineBytes": 1042592,
+        "NativeDomPseudoStorageBytes": 6800,
+        "NativeDomCanvasNodeCount": 2,
+        "NativeDomCanvasStorageBytes": 480,
+        "NativeDomAnimationCount": 3,
+        "NativeDomAnimationStorageBytes": 3801,
+        "NativeDomCustomPropertyNodeCount": 1,
+        "NativeDomCustomPropertyEntryCount": 22,
+        "NativeDomCustomPropertyStorageBytes": 2700,
+        "NativeDomBackgroundImageCount": 2,
+        "NativeDomBackgroundImageStorageBytes": 1006,
+        "NativeDomGridCount": 1,
+        "NativeDomGridStorageBytes": 569,
+        "NativeDomAuthoredStyleNodeCount": 12,
+        "NativeDomAuthoredStyleEntryCount": 14,
+        "NativeDomAuthoredStyleStorageBytes": 2692,
+        "NativeCssRuleCount": 407,
+        "NativeCssRuleStorageBytes": 16495,
+        "NativeCssIndexStorageBytes": 45535,
+        "ProcessSharedCssRuleCount": 407,
+        "ProcessSharedCssRuleStorageBytes": 369573,
+        "LowMemoryNotifications": 0,
+        "NativeDomAttributeNodeCount": 678,
+        "NativeDomAttributeEntryCount": 1848,
+        "NativeDomAttributeStorageBytes": 183026,
+        "NativeWrapperHandleCount": 269,
+        "NativeWrapperStorageBytes": 11000,
+        "NativeTextMeasurementCacheEntryCount": 425,
+        "NativeTextMeasurementCacheStorageBytes": 99812,
+        "ProcessCompilationMappedCacheBytes": 0,
+        "ProcessResourceMappedCacheBytes": 0,
+        "NativeDomTextualStyleCount": 751,
+        "NativeDomTextualStyleStorageBytes": 485542,
+        "NativeDomNodePoolReservedBytes": 1079296,
+        "NativeDomNodePoolPeakBytes": 1079296,
+        "NativeDomTableLayoutCount": 0,
+        "NativeDomTableLayoutStorageBytes": 0,
+        "NativeDomFormControlCount": 52,
+        "NativeDomFormControlStorageBytes": 4108,
+        "HiddenLowMemoryNotifications": 0,
+        "NativeEventListenerCount": 30,
+        "NativeEventListenerStorageBytes": 4685,
+        "V8YoungSpaceUsedBytes": 441696,
+        "V8YoungSpacePhysicalBytes": 2097152,
+        "V8OldSpaceUsedBytes": 1920268,
+        "V8OldSpacePhysicalBytes": 2097152,
+        "V8CodeSpaceUsedBytes": 196928,
+        "V8CodeSpacePhysicalBytes": 524288,
+        "V8MapSpaceUsedBytes": 0,
+        "V8MapSpacePhysicalBytes": 0,
+        "V8LargeObjectSpaceUsedBytes": 187472,
+        "V8LargeObjectSpacePhysicalBytes": 196608,
+        "V8ReadOnlySpaceUsedBytes": 1816740,
+        "V8ReadOnlySpacePhysicalBytes": 1835008,
+        "V8SharedSpaceUsedBytes": 0,
+        "V8SharedSpacePhysicalBytes": 0,
+        "V8TrustedSpaceUsedBytes": 131296,
+        "V8TrustedSpacePhysicalBytes": 786432,
+        "PendingSceneCount": 0,
+        "PendingSceneBytes": 0
+      },
+      "InteropPool": {
+        "StructSize": 200,
+        "Version": 3,
+        "OutstandingResults": 0,
+        "PooledBytes": 1294,
+        "PoolHits": 4,
+        "PoolMisses": 1,
+        "OversizeAllocations": 0,
+        "HighWaterOutstandingResults": 1,
+        "PooledRequestRecords": 0,
+        "RequestPoolHits": 0,
+        "RequestPoolMisses": 0,
+        "RequestOversizeAllocations": 0,
+        "ActiveOperationSlots": 0,
+        "AvailableOperationSlots": 1,
+        "OperationSlotHighWater": 1,
+        "PooledResultBytes4K": 1294,
+        "PooledResultBytes16K": 0,
+        "PooledResultBytes64K": 0,
+        "PooledResultBytes256K": 0,
+        "PooledResultBytes1M": 0,
+        "TakenResultLeases": 0,
+        "OperationResultLeases": 0,
+        "QueuedCallbacks": 0,
+        "TakenCallbackLeases": 0,
+        "PendingCallbackPromises": 0,
+        "CallbackQueueHighWater": 0
+      },
+      "RendererMemory": {
+        "RetainedLayerCount": 0,
+        "RetainedCommandCount": 0,
+        "LogicalBitmapBytes": 0,
+        "IsolationLayerCount": 0,
+        "IsolationLogicalBitmapBytes": 0,
+        "DomCommandCount": 483,
+        "StringCount": 384,
+        "StringBytes": 56410,
+        "TypefaceCount": 2,
+        "SvgPictureCount": 73,
+        "ProcessSvgPictureCount": 73,
+        "ProcessSvgPictureReferenceCount": 73,
+        "ProcessSvgPictureMemoryHits": 0
+      },
+      "Surface": {
+        "RenderedScenes": 60,
+        "RoutedInputEvents": 0,
+        "AcceptedInputEvents": 0,
+        "CompositionUiWakes": 0,
+        "PendingCompositionPublications": 0,
+        "ResizePublicationNotifications": 0
+      },
+      "ProcessWebTypefaces": {
+        "Entries": 0,
+        "References": 0,
+        "Hits": 0,
+        "Misses": 0
+      },
+      "ProcessComposition": {
+        "AnimationFrames": 92,
+        "Renders": 53,
+        "AppliedDiffs": 55,
+        "InvalidationCalls": 54,
+        "DamageRectangles": 65,
+        "ChangedLayers": 10,
+        "EmptyDamageDiffs": 0,
+        "PartialDamageDiffs": 55,
+        "FullInvalidations": 0,
+        "SuppressedLiveResizeAnimationFrames": 0,
+        "SubmittedAnimationFrames": 59,
+        "SkippedEmptyAnimationFrames": 33,
+        "RenderCallbacks": 54,
+        "UnchangedRenderCallbacks": 0,
+        "LastAnimationFrameDemand": 0
+      }
+    },
+    "delta": {
+      "Elapsed": "00:00:01.5241178",
+      "EnqueuedInputs": 121,
+      "DroppedInputs": 0,
+      "ConsumedInputs": 121,
+      "ExecutedScripts": 0,
+      "ScriptErrors": 0,
+      "LayoutPasses": 157,
+      "AppliedAnimationFrames": 59,
+      "CoalescedAnimationFrames": 0,
+      "PublicationAttempts": 70,
+      "BlockedPublications": 0,
+      "PublishedScenes": 55,
+      "AcquiredScenes": 55,
+      "AcknowledgedScenes": 55,
+      "RenderedScenes": 53,
+      "CompositionUiWakes": 0,
+      "RoutedInputEvents": 0,
+      "AcceptedInputEvents": 0,
+      "ResourceRequests": 0,
+      "ResourceHits": 0,
+      "ResourceMisses": 0,
+      "InteropPoolHits": 1,
+      "InteropPoolMisses": 0,
+      "InteropRequestPoolHits": 0,
+      "InteropRequestPoolMisses": 0,
+      "TimersScheduled": 0,
+      "TimersFired": 0,
+      "TimersCancelled": 0,
+      "LateTimers": 0,
+      "TotalTimerLatenessNanoseconds": 0,
+      "AnimationFramesRequested": 49,
+      "AnimationFramesInvoked": 49,
+      "AnimationFramesCancelled": 0,
+      "MicrotaskCheckpoints": 247,
+      "WorkerWaits": 189,
+      "WorkerSignalledWakes": 163,
+      "WorkerTimeoutWakes": 25,
+      "SceneBuilds": 60,
+      "NoDamageSceneBuilds": 0,
+      "FullCheckpointSceneBuilds": 0,
+      "ArbitraryEvaluationCalls": 1,
+      "GeneratedInvokeCalls": 0,
+      "GeneratedCallbackCalls": 0,
+      "ArbitraryEvaluationSourceBytes": 47,
+      "GeneratedRequestBytes": 0,
+      "WebTypefaceCacheHits": 0,
+      "WebTypefaceCacheMisses": 0,
+      "CompositionAnimationFrames": 91,
+      "CompositionRenders": 53,
+      "CompositionAppliedDiffs": 55,
+      "CompositionInvalidations": 54,
+      "CompositionFullInvalidations": 0,
+      "CompositionSubmittedAnimationFrames": 59,
+      "CompositionSkippedEmptyAnimationFrames": 32,
+      "CompositionRenderCallbacks": 54,
+      "CompositionUnchangedRenderCallbacks": 0
+    },
+    "submittedMoves": [
+      {
+        "sequence": 639244713561672133,
+        "submittedAt": 105336880955291,
+        "step": 1,
+        "x": 222.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672134,
+        "submittedAt": 105336898166958,
+        "step": 2,
+        "x": 224.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672135,
+        "submittedAt": 105336915419208,
+        "step": 3,
+        "x": 226.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672136,
+        "submittedAt": 105336932518541,
+        "step": 4,
+        "x": 228.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672137,
+        "submittedAt": 105336949672125,
+        "step": 5,
+        "x": 230.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672138,
+        "submittedAt": 105336966773250,
+        "step": 6,
+        "x": 232.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672139,
+        "submittedAt": 105336983287291,
+        "step": 7,
+        "x": 234.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672140,
+        "submittedAt": 105337000378958,
+        "step": 8,
+        "x": 236.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672141,
+        "submittedAt": 105337017483791,
+        "step": 9,
+        "x": 238.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672142,
+        "submittedAt": 105337034679250,
+        "step": 10,
+        "x": 240.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672143,
+        "submittedAt": 105337051598708,
+        "step": 11,
+        "x": 242.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672144,
+        "submittedAt": 105337068739083,
+        "step": 12,
+        "x": 244.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672145,
+        "submittedAt": 105337085840916,
+        "step": 13,
+        "x": 246.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672146,
+        "submittedAt": 105337102983875,
+        "step": 14,
+        "x": 248.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672147,
+        "submittedAt": 105337118442541,
+        "step": 15,
+        "x": 250.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672148,
+        "submittedAt": 105337135554375,
+        "step": 16,
+        "x": 252.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672149,
+        "submittedAt": 105337152664125,
+        "step": 17,
+        "x": 254.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672150,
+        "submittedAt": 105337169768958,
+        "step": 18,
+        "x": 256.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672151,
+        "submittedAt": 105337186853916,
+        "step": 19,
+        "x": 258.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672152,
+        "submittedAt": 105337203627083,
+        "step": 20,
+        "x": 260.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672153,
+        "submittedAt": 105337220170208,
+        "step": 21,
+        "x": 262.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672154,
+        "submittedAt": 105337237259250,
+        "step": 22,
+        "x": 264.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672155,
+        "submittedAt": 105337253618833,
+        "step": 23,
+        "x": 266.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672156,
+        "submittedAt": 105337270704916,
+        "step": 24,
+        "x": 268.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672157,
+        "submittedAt": 105337287942083,
+        "step": 25,
+        "x": 270.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672158,
+        "submittedAt": 105337304565791,
+        "step": 26,
+        "x": 272.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672159,
+        "submittedAt": 105337321687125,
+        "step": 27,
+        "x": 274.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672160,
+        "submittedAt": 105337338821583,
+        "step": 28,
+        "x": 276.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672161,
+        "submittedAt": 105337355904791,
+        "step": 29,
+        "x": 278.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672162,
+        "submittedAt": 105337373056041,
+        "step": 30,
+        "x": 280.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672163,
+        "submittedAt": 105337390162625,
+        "step": 31,
+        "x": 282.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672164,
+        "submittedAt": 105337406614541,
+        "step": 32,
+        "x": 284.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672165,
+        "submittedAt": 105337423679125,
+        "step": 33,
+        "x": 286.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672166,
+        "submittedAt": 105337440761208,
+        "step": 34,
+        "x": 288.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672167,
+        "submittedAt": 105337457834041,
+        "step": 35,
+        "x": 290.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672168,
+        "submittedAt": 105337474902500,
+        "step": 36,
+        "x": 292.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672169,
+        "submittedAt": 105337492099291,
+        "step": 37,
+        "x": 294.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672170,
+        "submittedAt": 105337508571041,
+        "step": 38,
+        "x": 296.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672171,
+        "submittedAt": 105337525633833,
+        "step": 39,
+        "x": 298.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672172,
+        "submittedAt": 105337542695666,
+        "step": 40,
+        "x": 300.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672173,
+        "submittedAt": 105337559748875,
+        "step": 41,
+        "x": 302.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672174,
+        "submittedAt": 105337576811500,
+        "step": 42,
+        "x": 304.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672175,
+        "submittedAt": 105337593800666,
+        "step": 43,
+        "x": 306.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672176,
+        "submittedAt": 105337610867083,
+        "step": 44,
+        "x": 308.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672177,
+        "submittedAt": 105337627924708,
+        "step": 45,
+        "x": 310.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672178,
+        "submittedAt": 105337644275333,
+        "step": 46,
+        "x": 312.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672179,
+        "submittedAt": 105337660565000,
+        "step": 47,
+        "x": 314.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672180,
+        "submittedAt": 105337677649791,
+        "step": 48,
+        "x": 316.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672181,
+        "submittedAt": 105337694694416,
+        "step": 49,
+        "x": 318.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672182,
+        "submittedAt": 105337711753000,
+        "step": 50,
+        "x": 320.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672183,
+        "submittedAt": 105337728814750,
+        "step": 51,
+        "x": 322.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672184,
+        "submittedAt": 105337745853041,
+        "step": 52,
+        "x": 324.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672185,
+        "submittedAt": 105337762890750,
+        "step": 53,
+        "x": 326.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672186,
+        "submittedAt": 105337779960583,
+        "step": 54,
+        "x": 328.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672187,
+        "submittedAt": 105337797000166,
+        "step": 55,
+        "x": 330.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672188,
+        "submittedAt": 105337814092541,
+        "step": 56,
+        "x": 332.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672189,
+        "submittedAt": 105337831150875,
+        "step": 57,
+        "x": 334.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672190,
+        "submittedAt": 105337848203166,
+        "step": 58,
+        "x": 336.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672191,
+        "submittedAt": 105337865074041,
+        "step": 59,
+        "x": 338.5,
+        "y": 436.5
+      },
+      {
+        "sequence": 639244713561672192,
+        "submittedAt": 105337881493583,
+        "step": 60,
+        "x": 340.5,
+        "y": 436.5
+      }
+    ],
+    "publications": [
+      {
+        "Timestamp": 105336882986000,
+        "Revision": 12,
+        "ConsumedInputSequence": 639244713561672132,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105336921224250,
+        "Revision": 13,
+        "ConsumedInputSequence": 639244713561672134,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105336950874500,
+        "Revision": 14,
+        "ConsumedInputSequence": 639244713561672136,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105336965774291,
+        "Revision": 15,
+        "ConsumedInputSequence": 639244713561672137,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105336995492083,
+        "Revision": 16,
+        "ConsumedInputSequence": 639244713561672139,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337023683083,
+        "Revision": 17,
+        "ConsumedInputSequence": 639244713561672140,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337037951125,
+        "Revision": 18,
+        "ConsumedInputSequence": 639244713561672141,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337056149000,
+        "Revision": 19,
+        "ConsumedInputSequence": 639244713561672142,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337073104791,
+        "Revision": 20,
+        "ConsumedInputSequence": 639244713561672143,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337089483041,
+        "Revision": 21,
+        "ConsumedInputSequence": 639244713561672144,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337107185500,
+        "Revision": 22,
+        "ConsumedInputSequence": 639244713561672145,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337123015541,
+        "Revision": 23,
+        "ConsumedInputSequence": 639244713561672146,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337140107833,
+        "Revision": 24,
+        "ConsumedInputSequence": 639244713561672147,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337158147791,
+        "Revision": 25,
+        "ConsumedInputSequence": 639244713561672148,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337173469041,
+        "Revision": 26,
+        "ConsumedInputSequence": 639244713561672149,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337188065250,
+        "Revision": 27,
+        "ConsumedInputSequence": 639244713561672150,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337205781458,
+        "Revision": 28,
+        "ConsumedInputSequence": 639244713561672151,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337220700416,
+        "Revision": 29,
+        "ConsumedInputSequence": 639244713561672152,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337237721875,
+        "Revision": 30,
+        "ConsumedInputSequence": 639244713561672153,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337256796166,
+        "Revision": 31,
+        "ConsumedInputSequence": 639244713561672154,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337274647291,
+        "Revision": 32,
+        "ConsumedInputSequence": 639244713561672155,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337290532875,
+        "Revision": 33,
+        "ConsumedInputSequence": 639244713561672156,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337306757583,
+        "Revision": 34,
+        "ConsumedInputSequence": 639244713561672157,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337323959000,
+        "Revision": 35,
+        "ConsumedInputSequence": 639244713561672158,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337340390583,
+        "Revision": 36,
+        "ConsumedInputSequence": 639244713561672159,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337358798875,
+        "Revision": 37,
+        "ConsumedInputSequence": 639244713561672160,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337374918166,
+        "Revision": 38,
+        "ConsumedInputSequence": 639244713561672161,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337387441375,
+        "Revision": 39,
+        "ConsumedInputSequence": 639244713561672162,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337404364541,
+        "Revision": 40,
+        "ConsumedInputSequence": 639244713561672163,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337422741041,
+        "Revision": 41,
+        "ConsumedInputSequence": 639244713561672164,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337441380458,
+        "Revision": 42,
+        "ConsumedInputSequence": 639244713561672165,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337457675500,
+        "Revision": 43,
+        "ConsumedInputSequence": 639244713561672166,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337471361458,
+        "Revision": 44,
+        "ConsumedInputSequence": 639244713561672167,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337487832208,
+        "Revision": 45,
+        "ConsumedInputSequence": 639244713561672168,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337504445000,
+        "Revision": 46,
+        "ConsumedInputSequence": 639244713561672169,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337523992166,
+        "Revision": 47,
+        "ConsumedInputSequence": 639244713561672170,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337539819875,
+        "Revision": 48,
+        "ConsumedInputSequence": 639244713561672171,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337554167333,
+        "Revision": 49,
+        "ConsumedInputSequence": 639244713561672172,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337571343958,
+        "Revision": 50,
+        "ConsumedInputSequence": 639244713561672173,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337587705666,
+        "Revision": 51,
+        "ConsumedInputSequence": 639244713561672174,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337604108666,
+        "Revision": 52,
+        "ConsumedInputSequence": 639244713561672174,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337618337083,
+        "Revision": 53,
+        "ConsumedInputSequence": 639244713561672176,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337633985416,
+        "Revision": 54,
+        "ConsumedInputSequence": 639244713561672176,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337657758125,
+        "Revision": 55,
+        "ConsumedInputSequence": 639244713561672178,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337671001750,
+        "Revision": 56,
+        "ConsumedInputSequence": 639244713561672179,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337682721166,
+        "Revision": 57,
+        "ConsumedInputSequence": 639244713561672179,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337705660333,
+        "Revision": 58,
+        "ConsumedInputSequence": 639244713561672181,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337739393125,
+        "Revision": 60,
+        "ConsumedInputSequence": 639244713561672183,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337753696375,
+        "Revision": 61,
+        "ConsumedInputSequence": 639244713561672183,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337773230666,
+        "Revision": 62,
+        "ConsumedInputSequence": 639244713561672185,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337805819375,
+        "Revision": 64,
+        "ConsumedInputSequence": 639244713561672187,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337838744541,
+        "Revision": 66,
+        "ConsumedInputSequence": 639244713561672189,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337873118125,
+        "Revision": 68,
+        "ConsumedInputSequence": 639244713561672191,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337900386000,
+        "Revision": 70,
+        "ConsumedInputSequence": 639244713561672193,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      },
+      {
+        "Timestamp": 105337921598083,
+        "Revision": 71,
+        "ConsumedInputSequence": 639244713561672193,
+        "ViewportWidth": 1280,
+        "ViewportHeight": 800
+      }
+    ],
+    "renderedScenes": [
+      {
+        "Timestamp": 105336916103583,
+        "Revision": 12,
+        "ConsumedInputSequence": 639244713561672132,
+        "AcceptedTimestamp": 105336902851541
+      },
+      {
+        "Timestamp": 105336940790041,
+        "Revision": 13,
+        "ConsumedInputSequence": 639244713561672134,
+        "AcceptedTimestamp": 105336933798125
+      },
+      {
+        "Timestamp": 105336975329208,
+        "Revision": 15,
+        "ConsumedInputSequence": 639244713561672137,
+        "AcceptedTimestamp": 105336969749000
+      },
+      {
+        "Timestamp": 105337021322500,
+        "Revision": 16,
+        "ConsumedInputSequence": 639244713561672139,
+        "AcceptedTimestamp": 105337014228958
+      },
+      {
+        "Timestamp": 105337038254666,
+        "Revision": 17,
+        "ConsumedInputSequence": 639244713561672140,
+        "AcceptedTimestamp": 105337030029500
+      },
+      {
+        "Timestamp": 105337056127708,
+        "Revision": 18,
+        "ConsumedInputSequence": 639244713561672141,
+        "AcceptedTimestamp": 105337048610041
+      },
+      {
+        "Timestamp": 105337067628125,
+        "Revision": 19,
+        "ConsumedInputSequence": 639244713561672142,
+        "AcceptedTimestamp": 105337064445333
+      },
+      {
+        "Timestamp": 105337088918541,
+        "Revision": 20,
+        "ConsumedInputSequence": 639244713561672143,
+        "AcceptedTimestamp": 105337081344750
+      },
+      {
+        "Timestamp": 105337105788791,
+        "Revision": 21,
+        "ConsumedInputSequence": 639244713561672144,
+        "AcceptedTimestamp": 105337097735458
+      },
+      {
+        "Timestamp": 105337117377125,
+        "Revision": 22,
+        "ConsumedInputSequence": 639244713561672145,
+        "AcceptedTimestamp": 105337114095083
+      },
+      {
+        "Timestamp": 105337135965000,
+        "Revision": 23,
+        "ConsumedInputSequence": 639244713561672146,
+        "AcceptedTimestamp": 105337131795833
+      },
+      {
+        "Timestamp": 105337156106083,
+        "Revision": 24,
+        "ConsumedInputSequence": 639244713561672147,
+        "AcceptedTimestamp": 105337147487875
+      },
+      {
+        "Timestamp": 105337166686916,
+        "Revision": 25,
+        "ConsumedInputSequence": 639244713561672148,
+        "AcceptedTimestamp": 105337163452833
+      },
+      {
+        "Timestamp": 105337183674083,
+        "Revision": 26,
+        "ConsumedInputSequence": 639244713561672149,
+        "AcceptedTimestamp": 105337179669958
+      },
+      {
+        "Timestamp": 105337202178500,
+        "Revision": 27,
+        "ConsumedInputSequence": 639244713561672150,
+        "AcceptedTimestamp": 105337198064541
+      },
+      {
+        "Timestamp": 105337221546500,
+        "Revision": 28,
+        "ConsumedInputSequence": 639244713561672151,
+        "AcceptedTimestamp": 105337213618916
+      },
+      {
+        "Timestamp": 105337232828625,
+        "Revision": 29,
+        "ConsumedInputSequence": 639244713561672152,
+        "AcceptedTimestamp": 105337230107625
+      },
+      {
+        "Timestamp": 105337249580375,
+        "Revision": 30,
+        "ConsumedInputSequence": 639244713561672153,
+        "AcceptedTimestamp": 105337246576666
+      },
+      {
+        "Timestamp": 105337271077166,
+        "Revision": 31,
+        "ConsumedInputSequence": 639244713561672154,
+        "AcceptedTimestamp": 105337263459916
+      },
+      {
+        "Timestamp": 105337289028208,
+        "Revision": 32,
+        "ConsumedInputSequence": 639244713561672155,
+        "AcceptedTimestamp": 105337280940625
+      },
+      {
+        "Timestamp": 105337300276041,
+        "Revision": 33,
+        "ConsumedInputSequence": 639244713561672156,
+        "AcceptedTimestamp": 105337296988625
+      },
+      {
+        "Timestamp": 105337316196208,
+        "Revision": 34,
+        "ConsumedInputSequence": 639244713561672157,
+        "AcceptedTimestamp": 105337312749208
+      },
+      {
+        "Timestamp": 105337334172625,
+        "Revision": 35,
+        "ConsumedInputSequence": 639244713561672158,
+        "AcceptedTimestamp": 105337330643666
+      },
+      {
+        "Timestamp": 105337351313791,
+        "Revision": 36,
+        "ConsumedInputSequence": 639244713561672159,
+        "AcceptedTimestamp": 105337347632875
+      },
+      {
+        "Timestamp": 105337370787833,
+        "Revision": 37,
+        "ConsumedInputSequence": 639244713561672160,
+        "AcceptedTimestamp": 105337364558625
+      },
+      {
+        "Timestamp": 105337383463291,
+        "Revision": 38,
+        "ConsumedInputSequence": 639244713561672161,
+        "AcceptedTimestamp": 105337380007166
+      },
+      {
+        "Timestamp": 105337400132916,
+        "Revision": 39,
+        "ConsumedInputSequence": 639244713561672162,
+        "AcceptedTimestamp": 105337396776875
+      },
+      {
+        "Timestamp": 105337416824333,
+        "Revision": 40,
+        "ConsumedInputSequence": 639244713561672163,
+        "AcceptedTimestamp": 105337413512125
+      },
+      {
+        "Timestamp": 105337434034208,
+        "Revision": 41,
+        "ConsumedInputSequence": 639244713561672164,
+        "AcceptedTimestamp": 105337430336958
+      },
+      {
+        "Timestamp": 105337451351750,
+        "Revision": 42,
+        "ConsumedInputSequence": 639244713561672165,
+        "AcceptedTimestamp": 105337447887875
+      },
+      {
+        "Timestamp": 105337467118000,
+        "Revision": 43,
+        "ConsumedInputSequence": 639244713561672166,
+        "AcceptedTimestamp": 105337463733791
+      },
+      {
+        "Timestamp": 105337483508000,
+        "Revision": 44,
+        "ConsumedInputSequence": 639244713561672167,
+        "AcceptedTimestamp": 105337480145625
+      },
+      {
+        "Timestamp": 105337500309000,
+        "Revision": 45,
+        "ConsumedInputSequence": 639244713561672168,
+        "AcceptedTimestamp": 105337496876458
+      },
+      {
+        "Timestamp": 105337516458041,
+        "Revision": 46,
+        "ConsumedInputSequence": 639244713561672169,
+        "AcceptedTimestamp": 105337513344958
+      },
+      {
+        "Timestamp": 105337534249875,
+        "Revision": 47,
+        "ConsumedInputSequence": 639244713561672170,
+        "AcceptedTimestamp": 105337531105875
+      },
+      {
+        "Timestamp": 105337549693375,
+        "Revision": 48,
+        "ConsumedInputSequence": 639244713561672171,
+        "AcceptedTimestamp": 105337546727000
+      },
+      {
+        "Timestamp": 105337566938791,
+        "Revision": 49,
+        "ConsumedInputSequence": 639244713561672172,
+        "AcceptedTimestamp": 105337563727625
+      },
+      {
+        "Timestamp": 105337583467958,
+        "Revision": 50,
+        "ConsumedInputSequence": 639244713561672173,
+        "AcceptedTimestamp": 105337580265000
+      },
+      {
+        "Timestamp": 105337600565375,
+        "Revision": 51,
+        "ConsumedInputSequence": 639244713561672174,
+        "AcceptedTimestamp": 105337596283750
+      },
+      {
+        "Timestamp": 105337618047458,
+        "Revision": 52,
+        "ConsumedInputSequence": 639244713561672174,
+        "AcceptedTimestamp": 105337614948041
+      },
+      {
+        "Timestamp": 105337633344250,
+        "Revision": 53,
+        "ConsumedInputSequence": 639244713561672176,
+        "AcceptedTimestamp": 105337630482250
+      },
+      {
+        "Timestamp": 105337650580375,
+        "Revision": 54,
+        "ConsumedInputSequence": 639244713561672176,
+        "AcceptedTimestamp": 105337647567083
+      },
+      {
+        "Timestamp": 105337666601875,
+        "Revision": 55,
+        "ConsumedInputSequence": 639244713561672178,
+        "AcceptedTimestamp": 105337663474500
+      },
+      {
+        "Timestamp": 105337689377458,
+        "Revision": 57,
+        "ConsumedInputSequence": 639244713561672179,
+        "AcceptedTimestamp": 105337685857250
+      },
+      {
+        "Timestamp": 105337717032166,
+        "Revision": 58,
+        "ConsumedInputSequence": 639244713561672181,
+        "AcceptedTimestamp": 105337713760708
+      },
+      {
+        "Timestamp": 105337750741500,
+        "Revision": 60,
+        "ConsumedInputSequence": 639244713561672183,
+        "AcceptedTimestamp": 105337747049458
+      },
+      {
+        "Timestamp": 105337766433458,
+        "Revision": 61,
+        "ConsumedInputSequence": 639244713561672183,
+        "AcceptedTimestamp": 105337764008666
+      },
+      {
+        "Timestamp": 105337784091041,
+        "Revision": 62,
+        "ConsumedInputSequence": 639244713561672185,
+        "AcceptedTimestamp": 105337781287583
+      },
+      {
+        "Timestamp": 105337816719875,
+        "Revision": 64,
+        "ConsumedInputSequence": 639244713561672187,
+        "AcceptedTimestamp": 105337813711708
+      },
+      {
+        "Timestamp": 105337850277500,
+        "Revision": 66,
+        "ConsumedInputSequence": 639244713561672189,
+        "AcceptedTimestamp": 105337847452666
+      },
+      {
+        "Timestamp": 105337884418000,
+        "Revision": 68,
+        "ConsumedInputSequence": 639244713561672191,
+        "AcceptedTimestamp": 105337880042458
+      },
+      {
+        "Timestamp": 105337918801375,
+        "Revision": 70,
+        "ConsumedInputSequence": 639244713561672193,
+        "AcceptedTimestamp": 105337913905541
+      },
+      {
+        "Timestamp": 105337936661833,
+        "Revision": 71,
+        "ConsumedInputSequence": 639244713561672193,
+        "AcceptedTimestamp": 105337933405625
+      }
+    ],
+    "scheduling": [
+      {
+        "Timestamp": 105336894249625,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 11,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336894334875,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 11,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336894359833,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 12,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336902793333,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 12,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336902798166,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 12,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336902835750,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 12,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336920358000,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 12,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336927599916,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 12,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336927645250,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 12,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336927659375,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 13,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336933749166,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 13,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336933753125,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 13,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336933786625,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 13,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336944248333,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 13,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336960911041,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 13,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336960946000,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 13,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336960964041,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 14,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336966219416,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 14,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336966222250,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 14,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336966227958,
+        "Stage": "apply:Applied",
+        "PendingPublications": 2,
+        "Revision": 14,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336966244791,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 14,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336966252500,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 15,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336969732041,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 15,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336969737833,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 15,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336969741125,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 15,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105336977573708,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 15,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105336994230708,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 15,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337010943041,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 15,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337010958916,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 15,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337010971375,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 16,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337014216708,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 16,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337014219250,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 16,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337014223666,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 16,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337026581166,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 16,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337026591666,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 16,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337026600708,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 17,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337030010083,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 17,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337030012250,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 17,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337030022583,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 17,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337044236750,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 17,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337044292458,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 17,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337044305458,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 18,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337048582791,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 18,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337048585166,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 18,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337048604541,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 18,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337060950166,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 18,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337060981625,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 18,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337060996083,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 19,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337064433000,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 19,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337064435500,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 19,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337064440083,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 19,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337077622458,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 19,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337077634166,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 19,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337077645458,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 20,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337081333000,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 20,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337081335333,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 20,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337081340833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 20,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337094238875,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 20,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337094251541,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 20,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337094260541,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 21,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337097724458,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 21,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337097727000,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 21,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337097731791,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 21,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337110895750,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 21,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337110905666,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 21,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337110914041,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 22,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337114083916,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 22,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337114086291,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 22,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337114090833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 22,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337127601083,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 22,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337127611916,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 22,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337127621000,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 23,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337131772583,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 23,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337131775000,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 23,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337131791833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 23,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337144261791,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 23,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337144307958,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 23,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337144319708,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 24,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337147476458,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 24,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337147478416,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 24,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337147483416,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 24,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337160934791,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 24,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337160944458,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 24,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337160954166,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 25,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337163442875,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 25,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337163445291,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 25,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337163448916,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 25,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337176668041,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 25,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337176680875,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 25,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337176706500,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 26,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337179648791,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 26,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337179650500,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 26,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337179666125,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 26,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337194237458,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 26,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337194247958,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 26,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337194256583,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 27,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337198024125,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 27,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337198026250,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 27,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337198042833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 27,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337210900708,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 27,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337210926125,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 27,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337210937208,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 28,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337213608708,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 28,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337213611125,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 28,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337213614583,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 28,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337227559416,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 28,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337227567875,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 28,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337227573541,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 29,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337230097375,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 29,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337230099375,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 29,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337230103000,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 29,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337244231708,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 29,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337244240916,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 29,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337244248625,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 30,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337246568416,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 30,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337246570083,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 30,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337246573166,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 30,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337260909250,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 30,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337260920666,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 30,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337260929458,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 31,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337263450875,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 31,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337263453166,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 31,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337263455791,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 31,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337277562291,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 31,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337277570708,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 31,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337277576583,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 32,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337280914333,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 32,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337280916458,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 32,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337280935416,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 32,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337294282000,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 32,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337294314791,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 32,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337294326958,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 33,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337296978666,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 33,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337296980875,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 33,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337296983958,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 33,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337309943291,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 33,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337309954958,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 33,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337309962916,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 34,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337312739916,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 34,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337312742166,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 34,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337312744750,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 34,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337327568333,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 34,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337327596041,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 34,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337327606000,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 35,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337330632416,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 35,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337330635125,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 35,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337330639375,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 35,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337344261791,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 35,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337344272041,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 35,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337344279166,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 36,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337347621916,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 36,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337347624458,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 36,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337347629500,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 36,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337360910166,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 36,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337360922375,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 36,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337360929125,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 37,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337364528708,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 37,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337364533208,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 37,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337364555208,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 37,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337376913208,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 37,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337376936125,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 37,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337376947166,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 38,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337379995166,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 38,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337379999708,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 38,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337380003708,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 38,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337394233541,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 38,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337394242958,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 38,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337394250458,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 39,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337396764166,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 39,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337396770166,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 39,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337396773541,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 39,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337410933166,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 39,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337410941791,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 39,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337410948208,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 40,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337413505041,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 40,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337413506000,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 40,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337413508875,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 40,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337427614000,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 40,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337427622708,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 40,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337427630875,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 41,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337430329166,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 41,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337430330500,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 41,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337430333791,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 41,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337444243500,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 41,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337444252458,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 41,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337444261333,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 42,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337447869000,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 42,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337447870041,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 42,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337447885000,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 42,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337460898750,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 42,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337460921958,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 42,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337460932000,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 43,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337463726666,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 43,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337463727708,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 43,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337463731000,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 43,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337477563041,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 43,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337477571625,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 43,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337477579000,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 44,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337480138083,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 44,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337480139458,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 44,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337480142750,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 44,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337494227708,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 44,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337494234916,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 44,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337494242250,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 45,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337496870083,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 45,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337496871500,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 45,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337496874083,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 45,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337510896250,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 45,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337510902666,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 45,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337510908541,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 46,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337513337500,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 46,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337513338583,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 46,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337513341833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 46,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337527566208,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 46,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337527572208,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 46,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337527578791,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 47,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337531083375,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 47,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337531084625,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 47,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337531102416,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 47,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337544230416,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 47,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337544252125,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 47,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337544264041,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 48,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337546721208,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 48,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337546722250,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 48,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337546724333,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 48,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337560897000,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 48,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337560906708,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 48,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337560913500,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 49,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337563719416,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 49,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337563720666,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 49,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337563723833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 49,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337577564416,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 49,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337577571625,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 49,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337577577375,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 50,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337580257708,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 50,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337580259083,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 50,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337580262041,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 50,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337593775708,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 50,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337593785625,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 50,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337593795916,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 51,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337596275500,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 51,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337596277083,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 51,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337596280166,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 51,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337610897666,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 51,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337610905750,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 51,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337610914583,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 52,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337614928583,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 52,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337614929875,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 52,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337614944916,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 52,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337627566625,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 52,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337627588958,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 52,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337627601291,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 53,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337630473875,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 53,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337630475458,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 53,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337630478875,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 53,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337644244083,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 53,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337644254333,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 53,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337644263333,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 54,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337647558833,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 54,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337647560041,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 54,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337647564333,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 54,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337660901583,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 54,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337660908375,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 54,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337660915291,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 55,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337663468041,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 55,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337663469083,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 55,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337663471583,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 55,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337677568958,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 55,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337677577791,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 55,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337677585750,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 56,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337682839750,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 56,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337682841458,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 56,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337682857791,
+        "Stage": "apply:Applied",
+        "PendingPublications": 2,
+        "Revision": 56,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337682866166,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 56,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337682879708,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 57,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337685851083,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 57,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337685852708,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 57,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337685855333,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 57,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337694237291,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 57,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337710901125,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 57,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337710908958,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 57,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337710916541,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 58,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337713748375,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 58,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337713750958,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 58,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337713755833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 58,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337727566375,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 58,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337744238750,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 58,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337744246666,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 58,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337744257041,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 60,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337747038208,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 60,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337747039375,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 60,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337747042458,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 60,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337760900541,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 60,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337760909041,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 60,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337760917125,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 61,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337764001666,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 61,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337764002750,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 61,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337764005833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 61,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337777565833,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 61,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337777573666,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 61,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337777579708,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 62,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337781261708,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 62,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337781263333,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 62,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337781281208,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 62,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337794231875,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 62,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337810901500,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 62,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337810935750,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 62,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337810952750,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 64,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337813701416,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 64,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337813703208,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 64,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337813706833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 64,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337827573708,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 64,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337844232458,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 64,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337844239375,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 64,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337844245750,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 66,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337847444791,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 66,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337847446750,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 66,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337847449833,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 66,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337860898250,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 66,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337876587958,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 66,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337876598208,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 66,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337876607000,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 68,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337880027625,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 68,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337880030500,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 68,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337880037958,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 68,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337893295458,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 68,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337910917958,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 68,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337910963208,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 68,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337910976125,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 70,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337913895500,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 70,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337913897458,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 70,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337913901500,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 70,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337927666750,
+        "Stage": "frame",
+        "PendingPublications": 1,
+        "Revision": 70,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337927677708,
+        "Stage": "acquire:Success",
+        "PendingPublications": 1,
+        "Revision": 70,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337927686500,
+        "Stage": "apply:images-retained",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337933380250,
+        "Stage": "apply:cpu-applied",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337933382541,
+        "Stage": "apply:replaced",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337933402250,
+        "Stage": "apply:Applied",
+        "PendingPublications": 1,
+        "Revision": 71,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337944237750,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337944265000,
+        "Stage": "acquire:Empty",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": true
+      },
+      {
+        "Timestamp": 105337959966500,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337977573583,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105337993361041,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338010068375,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338027596916,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338044443333,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338060921916,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338076599083,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338094269083,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338110929875,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338127585083,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338144105250,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338160108916,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338176983500,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338193635291,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338210936791,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338226575750,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338243875166,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338259907708,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338277092041,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338294261416,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338310919125,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338327584541,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338344235333,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338360915708,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338377623750,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      },
+      {
+        "Timestamp": 105338394299708,
+        "Stage": "frame",
+        "PendingPublications": 0,
+        "Revision": 71,
+        "PendingRetirements": false
+      }
+    ],
+    "physicalPresentationVerified": false
+  },
+  "limitations": [
+    "Single scripted sidebar run; not physical FPS or native user-drag qualification.",
+    "OpenGL compositor host with WebGPU producer; does not verify ANGLE WebGL API fallback.",
+    "Earlier failed gesture run remains excluded."
+  ]
+}

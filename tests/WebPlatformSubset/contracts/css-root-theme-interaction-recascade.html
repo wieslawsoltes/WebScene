@@ -1,0 +1,42 @@
+<!doctype html><html data-theme="dark"><meta charset="utf-8">
+<title>Root theme variables survive descendant interaction recascade</title>
+<link rel="help" href="https://drafts.csswg.org/css-variables-1/#inheritance">
+<script src="/resources/testharness.js"></script><script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-actions.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+<style>
+:root { --panel: #1b2532; --hover: #2c3b4d; }
+:root[data-theme=light] { --panel: #f5f7fa; --hover: #e3ebf3; }
+#panel { background: var(--panel); }
+button { background: none; }
+button.selected, button:focus, button:hover { background: var(--hover); }
+</style><body><div id="panel"><button id="control">Select</button></div>
+<script>
+test(() => {
+ const root=document.documentElement, panel=document.getElementById('panel'), control=document.getElementById('control');
+ const background = node => getComputedStyle(node).backgroundColor;
+ assert_equals(background(panel),'rgb(27, 37, 50)','initial dark panel');
+ control.className='selected';
+ assert_equals(background(control),'rgb(44, 59, 77)','dark interaction color');
+ assert_equals(background(panel),'rgb(27, 37, 50)','parent remains dark');
+ root.setAttribute('data-theme','light');
+ assert_equals(background(panel),'rgb(245, 247, 250)','light panel after root mutation');
+ assert_equals(background(control),'rgb(227, 235, 243)','light interaction color');
+ root.setAttribute('data-theme','dark');
+ assert_equals(background(control),'rgb(44, 59, 77)','restored dark interaction color');
+ control.className=''; control.focus();
+ assert_equals(background(control),'rgb(44, 59, 77)','focus uses current dark variable');
+ control.blur();
+ assert_equals(background(panel),'rgb(27, 37, 50)','panel remains dark after blur');
+}, 'Conditional root custom properties track theme and descendant state changes');
+promise_test(async () => {
+ const control=document.getElementById('control');
+ await new test_driver.Actions().pointerMove(0,0,{origin:control}).send();
+ assert_equals(getComputedStyle(control).backgroundColor,'rgb(44, 59, 77)','native pointer hover uses dark color');
+ document.documentElement.setAttribute('data-theme','light');
+ assert_equals(getComputedStyle(control).backgroundColor,'rgb(227, 235, 243)','hover tracks root theme mutation');
+ document.documentElement.setAttribute('data-theme','dark');
+ assert_equals(getComputedStyle(control).backgroundColor,'rgb(44, 59, 77)','hover restores dark color');
+}, 'Pointer hover resolves the active root theme');
+</script></body></html>

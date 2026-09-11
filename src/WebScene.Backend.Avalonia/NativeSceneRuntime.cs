@@ -89,13 +89,20 @@ internal sealed class NativePerformanceInstrumentation
     }
 }
 
+public readonly record struct NativeSceneSchedulingSample(
+    long Timestamp, string Stage, long PendingPublications, ulong Revision, bool PendingRetirements);
+
 internal sealed class NativeSceneRenderObserver
 {
     private const uint SceneComponentReady = 4;
     private readonly object _viewportGate = new();
     private readonly List<int> _renderedViewportHeights = [];
     private readonly Queue<NativeSceneRenderSample> _renderedScenes = new(4096);
+    private readonly Queue<NativeSceneSchedulingSample> _scheduling = new(4096);
     private readonly Queue<long> _presentations = new(4096);
+    // Optional draw-only timing avoids enabling the full performance census.
+    private readonly bool _traceDrawCallbacks =
+        Environment.GetEnvironmentVariable("WEBSCENE_TRACE_DRAW_CALLBACKS") == "1";
     private readonly NativePerformanceInstrumentation _instrumentation;
     private long _renderedSceneCount;
     private long _firstRenderedSceneTimestamp;
@@ -161,9 +168,24 @@ internal sealed class NativeSceneRenderObserver
         }
     }
 
+    public NativeSceneSchedulingSample[] SchedulingSamples
+    {
+        get { lock (_viewportGate) return _scheduling.ToArray(); }
+    }
+
+    public void RecordScheduling(string stage, long pending, ulong revision, bool retiring)
+    {
+        if (!_instrumentation.IsEnabled) return;
+        lock (_viewportGate)
+        {
+            if (_scheduling.Count == 4096) _scheduling.Dequeue();
+            _scheduling.Enqueue(new(Stopwatch.GetTimestamp(), stage, pending, revision, retiring));
+        }
+    }
+
     public void RecordPresented()
     {
-        if (!_instrumentation.IsEnabled)
+        if (!_instrumentation.IsEnabled && !_traceDrawCallbacks)
         {
             return;
         }
@@ -177,7 +199,7 @@ internal sealed class NativeSceneRenderObserver
         }
     }
 
-    public void RecordRendered(in SceneHeader header)
+    public void RecordRendered(in SceneHeader header, long acceptedTimestamp = 0)
     {
         var monitoring = _instrumentation.IsEnabled;
         var needsFirstRenderTimestamp =
@@ -210,7 +232,7 @@ internal sealed class NativeSceneRenderObserver
             _renderedScenes.Enqueue(new NativeSceneRenderSample(
                 timestamp,
                 header.Revision,
-                header.ConsumedInputSequence));
+                header.ConsumedInputSequence) { AcceptedTimestamp = acceptedTimestamp });
             if (_renderedViewportHeights.Count == 0
                 || _renderedViewportHeights[^1] != viewportHeight)
             {
@@ -238,6 +260,8 @@ public static unsafe partial class NativeWebSceneApi
     private static readonly IntPtr ResourceLoadV2Address =
         Marshal.GetFunctionPointerForDelegate(ResourceLoadV2);
     private static readonly ResourceLoadCallbackV3 ResourceLoadV3 = LoadResourceV3;
+    private static readonly WebGpuPolicyCallback WebGpuPolicy = EvaluateWebGpuPolicy;
+    private static readonly IntPtr WebGpuPolicyAddress = Marshal.GetFunctionPointerForDelegate(WebGpuPolicy);
     private static readonly StylesheetConsumedCallback StylesheetConsumed = NotifyStylesheetConsumed;
     private static readonly IntPtr StylesheetConsumedAddress =
         Marshal.GetFunctionPointerForDelegate(StylesheetConsumed);
@@ -313,7 +337,8 @@ public static unsafe partial class NativeWebSceneApi
         Action<NativeScenePublished> scenePublished,
         Action? hostRequestAvailable = null,
         Action? interopCallbackAvailable = null,
-        Action? animationFrameRequested = null)
+        Action? animationFrameRequested = null,
+        Func<string, bool>? admitWebGpuDocument = null)
     {
         ArgumentNullException.ThrowIfNull(resourceLoader);
         ArgumentNullException.ThrowIfNull(scenePublished);
@@ -326,7 +351,8 @@ public static unsafe partial class NativeWebSceneApi
                 scenePublished,
                 hostRequestAvailable,
                 interopCallbackAvailable,
-                animationFrameRequested));
+                animationFrameRequested,
+                admitWebGpuDocument));
         try
         {
             fixed (byte* directory = directoryBytes)
@@ -366,7 +392,9 @@ public static unsafe partial class NativeWebSceneApi
                     ResourceLoadCallbackV3 = ResourceLoadV3Address,
                     ResourceLoadV3UserData = GCHandle.ToIntPtr(bridgeHandle),
                     StylesheetConsumedCallback = StylesheetConsumedAddress,
-                    StylesheetConsumedUserData = GCHandle.ToIntPtr(bridgeHandle)
+                    StylesheetConsumedUserData = GCHandle.ToIntPtr(bridgeHandle),
+                    WebGpuPolicyCallback = admitWebGpuDocument is null ? IntPtr.Zero : WebGpuPolicyAddress,
+                    WebGpuPolicyUserData = admitWebGpuDocument is null ? IntPtr.Zero : GCHandle.ToIntPtr(bridgeHandle)
                 };
                 var engine = EngineCreateWithOptions(in options);
                 if (engine == IntPtr.Zero) return IntPtr.Zero;
@@ -587,6 +615,27 @@ public static unsafe partial class NativeWebSceneApi
         in NativeResourceRequestContextV3 requestContext,
         IntPtr destination,
         nuint destinationCapacity);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate uint WebGpuPolicyCallback(IntPtr userData, IntPtr url, nuint urlLength);
+
+    // Admission selects the platform transport for a trusted secure document.
+    // The bridge and static delegate stay rooted until native engine destruction.
+    private static uint EvaluateWebGpuPolicy(IntPtr userData, IntPtr url, nuint urlLength)
+    {
+        try
+        {
+            var bridge = (ResourceBridge?)GCHandle.FromIntPtr(userData).Target;
+            return bridge?.AdmitWebGpuDocument(
+                Marshal.PtrToStringUTF8(url, checked((int)urlLength)) ?? string.Empty) == true
+                ? (OperatingSystem.IsWindows() ? 2u : 1u) : 0u;
+        }
+        catch
+        {
+            // Deny on policy failure; exceptions cannot cross reverse P/Invoke.
+            return 0;
+        }
+    }
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void StylesheetConsumedCallback(
@@ -939,8 +988,12 @@ public static unsafe partial class NativeWebSceneApi
         Action<NativeScenePublished> scenePublished,
         Action? hostRequestAvailable,
         Action? interopCallbackAvailable,
-        Action? animationFrameRequested) : IDisposable
+        Action? animationFrameRequested,
+        Func<string, bool>? admitWebGpuDocument = null) : IDisposable
     {
+        public bool AdmitWebGpuDocument(string url)
+            => (OperatingSystem.IsMacOS() || OperatingSystem.IsWindows()) && admitWebGpuDocument?.Invoke(url) == true;
+
         private const int EnvelopeHeaderSize = 2 + sizeof(uint) + sizeof(long) + sizeof(long);
         [ThreadStatic]
         private static PendingResourceCopy? _pendingCopy;
@@ -1136,7 +1189,7 @@ public static unsafe partial class NativeWebSceneApi
             var responseEntityTagLength = Encoding.UTF8.GetByteCount(responseEntityTag);
             var contentLength = resource.NotModified
                 ? 0
-                : Encoding.UTF8.GetByteCount(resource.Content);
+                : resource.BinaryContent?.Length ?? Encoding.UTF8.GetByteCount(resource.Content);
             return new PreparedResource(
                 resource.NotModified,
                 resource.IsCacheable,
@@ -1145,8 +1198,8 @@ public static unsafe partial class NativeWebSceneApi
                 responseEntityTag,
                 responseEntityTagLength,
                 resource.Content,
-                default,
-                false,
+                resource.BinaryContent.GetValueOrDefault(),
+                resource.BinaryContent.HasValue,
                 contentLength,
                 checked((nuint)(
                     EnvelopeHeaderSize + responseEntityTagLength + contentLength)));

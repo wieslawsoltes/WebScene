@@ -9,13 +9,10 @@
     }
 #endif
 
-    bool publish_scene()
+    publication_result publish_scene()
     {
         scene_publication_attempts_.fetch_add(1, std::memory_order_relaxed);
         const auto publication_started = std::chrono::steady_clock::now();
-        auto next = std::make_shared<scene>();
-        next->commands.reserve(command_count_ + 4U);
-
         uint64_t hash = 1469598103934665603ULL;
         const auto width = static_cast<float>(viewport_width_);
         const auto height = static_cast<float>(viewport_height_);
@@ -26,6 +23,7 @@
             // otherwise backpressure can strand an observer-dependent layout
             // at its temporary measurement size.
             if (document_.dirty()) {
+                webscene_frame_trace::scope trace(frame_trace_, "publish-layout-start", "publish-layout-end", last_input_sequence_);
                 const auto layout_started = std::chrono::steady_clock::now();
                 document_.layout(width, height);
                 last_layout_nanoseconds_.store(
@@ -38,8 +36,25 @@
                 && !runtime_->deliver_resize_observers()) {
                 set_last_error(runtime_->last_error());
             }
+            if (runtime_ != nullptr) {
+                runtime_->refresh_pointer_cursor_after_layout();
+                current_cursor_.store(runtime_->current_cursor_kind(), std::memory_order_release);
+            }
 #endif
         }
+        // A staged scene owns an immutable CPU capture and exact GPU dependencies.
+        // Only a new capture must wait for the current rendering opportunity;
+        // unrelated newer GPU work must not hold an already completed capture.
+        // Commit still validates resets, viewport, completion and mailbox capacity.
+        if(staged_scene_)return commit_captured_scene(staged_scene_,publication_started);
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        if(runtime_) {
+            std::vector<std::shared_ptr<const webscene_gpu_image_lease_v3>> images;
+            { std::lock_guard lock(acknowledgement_->mutex); images=acknowledgement_->presentation_images; }
+            runtime_->update_gpu_presentation_images(images);
+            if(runtime_->has_open_gpu_output())return publication_result::deferred;
+        }
+#endif
         uint64_t base_revision = 0;
         uint64_t acknowledged_dom_hash = 0;
         float acknowledged_width = 0;
@@ -62,7 +77,7 @@
                     blocked_scene_publications_.fetch_add(
                         1,
                         std::memory_order_relaxed);
-                    return false;
+                    return publication_result::deferred;
                 }
             }
             if (!acknowledgement_->pending_scenes.empty()) {
@@ -84,6 +99,10 @@
                 acknowledged_scene = acknowledgement_->value;
             }
         }
+        // Waiting on a captured GPU output or a full consumer mailbox requires
+        // no new scene storage. Allocate only after admission succeeds.
+        auto next = scene_storage_->acquire();
+        next->commands.reserve(command_count_ + 4U);
         uint32_t scene_flags = base_revision == 0 ? scene_flag_checkpoint : 0U;
         const auto collect_runtime_work_metrics =
             runtime_work_metrics_enabled_.load(std::memory_order_relaxed);
@@ -91,15 +110,30 @@
             scene_builds_.fetch_add(1, std::memory_order_relaxed);
         }
         if (native_scene_active_) {
+            frame_trace_.mark("build-dom-start", last_input_sequence_);
             const auto scene_build_started = std::chrono::steady_clock::now();
+            document_.build_gpu_canvas_bindings(next->gpu_bindings);
+            next->gpu_images.resize(next->gpu_bindings.size());
             document_.build_scene(
                 next->commands,
                 next->canvas_strings,
-                next->canvas_string_bytes);
+                next->canvas_string_bytes,
+                !next->gpu_bindings.empty(), true);
+            std::unordered_map<uint64_t,uint32_t> gpu_indices;
+            for (uint32_t index=0;index<next->gpu_bindings.size();++index)
+                gpu_indices.emplace(next->gpu_bindings[index].metadata.canvas,index);
+            for (auto& command:next->commands) {
+                if (command.kind!=WEBSCENE_SCENE_COMMAND_GPU_IMAGE) continue;
+                const auto* node=document_.find_by_native_id(command.node_id);
+                if (!node) throw std::logic_error("GPU paint node missing");
+                command.rgba=gpu_indices.at(node->canvas().backing.identity());
+            }
             last_scene_build_nanoseconds_.store(
                 static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::steady_clock::now() - scene_build_started).count()),
                 std::memory_order_relaxed);
+            frame_trace_.mark("build-dom-end", last_input_sequence_);
+            frame_trace_.mark("metadata-start", last_input_sequence_);
             dom_nodes_.store(document_.node_count(), std::memory_order_relaxed);
             layout_passes_.store(document_.layout_passes(), std::memory_order_relaxed);
             iframe_nodes_.store(document_.count_tag("iframe"), std::memory_order_relaxed);
@@ -163,18 +197,28 @@
                 std::lock_guard lock(canvas_layout_mutex_);
                 document_.build_canvas_layouts(canvas_layouts_);
             }
-            std::vector<webscene_canvas_layer> all_layers;
-            std::vector<webscene_canvas_command> all_canvas_commands;
-            std::vector<webscene_scene_string> all_canvas_strings;
-            std::vector<char> all_canvas_string_bytes;
+            auto& all_layers=canvas_layers_scratch_;
+            frame_trace_.mark("metadata-end", last_input_sequence_);
+            frame_trace_.mark("build-canvas-start", last_input_sequence_);
+            auto& all_canvas_commands=canvas_commands_scratch_;
+            auto& all_canvas_strings=canvas_strings_scratch_;
+            auto& all_canvas_string_bytes=canvas_string_bytes_scratch_;
             document_.build_canvas_display_lists(
                 all_layers,
                 all_canvas_commands,
                 all_canvas_strings,
                 all_canvas_string_bytes);
+            for (const auto& layer : all_layers) {
+                if (layer.command_count && all_canvas_commands[layer.command_offset].kind == WEBSCENE_CANVAS_COMMAND_RASTER_CHECKPOINT)
+                    next->required_capabilities |= WEBSCENE_SCENE_CAPABILITY_CANVAS_CHECKPOINTS;
+            }
 
+            frame_trace_.mark("build-canvas-end", last_input_sequence_);
             uint64_t dom_hash = 1469598103934665603ULL;
             for (const auto& command : next->commands) {
+                // Compute from the full paint stream before unchanged DOM
+                // commands are removed from an incremental scene below.
+                next->required_capabilities |= scene_command_capabilities(command.kind);
                 dom_hash = mix_hash(dom_hash, static_cast<uint64_t>(command.kind) << 32U | command.flags);
                 dom_hash = mix_hash(dom_hash, static_cast<uint64_t>(command.node_id) << 32U | command.rgba);
                 dom_hash = mix_hash(
@@ -203,11 +247,20 @@
             for (const auto byte : next->canvas_string_bytes) {
                 dom_hash = mix_hash(dom_hash, static_cast<uint8_t>(byte));
             }
+            for (const auto& binding:next->gpu_bindings) {
+                const auto m=binding.metadata;
+                dom_hash=mix_hash(dom_hash,m.canvas);
+                dom_hash=mix_hash(dom_hash,m.allocation);
+                dom_hash=mix_hash(dom_hash,m.allocation_generation);
+                dom_hash=mix_hash(dom_hash,m.content_serial);
+            }
             next->dom_hash = dom_hash;
             const auto viewport_changed = width != acknowledged_width || height != acknowledged_height;
             if (base_revision == 0 || viewport_changed || dom_hash != acknowledged_dom_hash) {
                 scene_flags |= scene_flag_dom_replacement;
-                const auto localized = base_revision != 0
+                const auto localized = next->gpu_images.empty()
+                    && (!acknowledged_scene || acknowledged_scene->gpu_images.empty())
+                    && base_revision != 0
                     && !viewport_changed
                     && acknowledged_scene != nullptr
                     && append_localized_dom_damage(
@@ -229,12 +282,15 @@
                 if (damage_width <= 0 || damage_height <= 0) return;
                 next->damage_rects.push_back(webscene_damage_rect{x, y, damage_width, damage_height});
             };
+            size_t published_canvas_command_count = 0;
             for (auto layer : all_layers) {
-                const auto content_hash = canvas_layer_content_hash(
+                const auto old = acknowledged_layers.find(layer.node_id);
+                const auto [content_hash,command_hash,unchanged_prefix] = canvas_layer_content_hash(
                     layer,
                     all_canvas_commands,
                     all_canvas_strings,
-                    all_canvas_string_bytes);
+                    all_canvas_string_bytes,
+                    old==acknowledged_layers.end() ? nullptr : &old->second);
                 const canvas_layer_version version{
                     layer.generation,
                     content_hash,
@@ -243,9 +299,9 @@
                     layer.x,
                     layer.y,
                     layer.width,
-                    layer.height};
+                    layer.height,
+                    command_hash};
                 next->full_layer_versions[layer.node_id] = version;
-                const auto old = acknowledged_layers.find(layer.node_id);
                 if (base_revision != 0
                     && old != acknowledged_layers.end()
                     && old->second.visually_equals(version)) {
@@ -259,13 +315,19 @@
 
                 const auto source_command_offset = layer.command_offset;
                 const auto source_string_offset = layer.string_offset;
-                layer.flags = canvas_layer_flag_replace;
-                layer.command_offset = static_cast<uint32_t>(next->canvas_commands.size());
+                layer.flags = canvas_layer_flag_replace
+                    | (base_revision!=0 && unchanged_prefix ? WEBSCENE_CANVAS_LAYER_UNCHANGED_PREFIX : 0U);
+                layer.command_offset = static_cast<uint32_t>(published_canvas_command_count);
                 layer.string_offset = static_cast<uint32_t>(next->canvas_strings.size());
-                next->canvas_commands.insert(
-                    next->canvas_commands.end(),
-                    all_canvas_commands.begin() + source_command_offset,
-                    all_canvas_commands.begin() + source_command_offset + layer.command_count);
+                // Compact changed layers in their existing allocation, then
+                // transfer ownership to the immutable publication. Unchanged
+                // layers can leave gaps, so overlapping ranges require memmove.
+                if (layer.command_count != 0 && published_canvas_command_count != source_command_offset) {
+                    std::memmove(all_canvas_commands.data() + published_canvas_command_count,
+                        all_canvas_commands.data() + source_command_offset,
+                        static_cast<size_t>(layer.command_count) * sizeof(webscene_canvas_command));
+                }
+                published_canvas_command_count += layer.command_count;
                 for (uint32_t index = 0; index < layer.string_count; ++index) {
                     const auto& source_string = all_canvas_strings[source_string_offset + index];
                     const auto byte_offset = static_cast<uint32_t>(next->canvas_string_bytes.size());
@@ -279,6 +341,8 @@
                 }
                 next->canvas_layers.push_back(layer);
             }
+            all_canvas_commands.resize(published_canvas_command_count);
+            next->canvas_commands.swap(all_canvas_commands);
             for (const auto& [node_id, old] : acknowledged_layers) {
                 if (next->full_layer_versions.contains(node_id)) continue;
                 append_damage(old.x, old.y, old.width, old.height);
@@ -365,16 +429,78 @@
             mix_hash(
                 mix_hash(hash, std::bit_cast<uint32_t>(width)),
                 std::bit_cast<uint32_t>(height))};
+        next->captured_generation=document_.scene_generation();
+        return commit_captured_scene(std::move(next),publication_started);
+    }
+
+    publication_result commit_captured_scene(std::shared_ptr<scene> next,
+        std::chrono::steady_clock::time_point publication_started)
+    {
+        // Staging retains one exact CPU scene and its matching GPU dependencies.
+        // A later live DOM mutation cannot alter this capture.
+        if(next->header.viewport_width!=static_cast<float>(viewport_width_)
+            || next->header.viewport_height!=static_cast<float>(viewport_height_)) {
+            staged_scene_.reset();return publication_result::deferred;
+        }
+        // Inspect every dependency before waiting on any one of them. A later
+        // failed/reset canvas invalidates the capture even if an earlier GPU
+        // producer is still pending; producer ownership still guards its writes.
+        for(const auto& binding:next->gpu_bindings) {
+            if(!document_.validate_gpu_canvas_binding(binding)) {
+                staged_scene_.reset();return publication_result::deferred;
+            }
+            if(binding.pending && binding.pending->state()==webscene_gpu_image_snapshot::status::failed) {
+                staged_scene_.reset();
+                set_last_error("GPU scene producer failed; retaining the last complete scene");
+                return publication_result::discarded;
+            }
+        }
+        for(size_t index=0;index<next->gpu_bindings.size();++index) {
+            const auto& binding=next->gpu_bindings[index];
+            if(!next->gpu_images[index]) {
+                next->gpu_images[index]=binding.pending && producer_gpu_wait_consumer_.load(std::memory_order_acquire)
+                    ? binding.pending->resolve_with_gpu_waits() : binding.resolve();
+            }
+            if(!next->gpu_images[index]) {
+                staged_scene_=std::move(next);return publication_result::deferred;
+            }
+            const auto actual=next->gpu_images[index]->value.describe();
+            const auto& expected=binding.metadata;
+            if(actual.canvas!=expected.canvas || actual.allocation!=expected.allocation
+                || actual.allocation_generation!=expected.allocation_generation
+                || actual.content_serial!=expected.content_serial) {
+                staged_scene_.reset();
+                set_last_error("Captured GPU output resolved to a different image version");
+                return publication_result::discarded;
+            }
+        }
+        std::unique_lock acknowledgement_lock(acknowledgement_->mutex);
+        {
+            const auto limit=ordered_scene_consumer_.load(std::memory_order_acquire) ? 2U : 1U;
+            if(acknowledgement_->pending_scenes.size()>=limit) {
+                staged_scene_=std::move(next);return publication_result::deferred;
+            }
+            const auto predecessor=acknowledgement_->pending_scenes.empty()
+                ? acknowledgement_->revision : acknowledgement_->pending_scenes.back()->header.revision;
+            if(predecessor!=next->header.base_revision) {
+                staged_scene_.reset();return publication_result::deferred;
+            }
+        }
+        staged_scene_.reset();
+        published_document_generation_=next->captured_generation;
+        next->gpu_bindings.clear();
+        const auto revision=next->header.revision;
+        const auto width=next->header.viewport_width;
+        const auto height=next->header.viewport_height;
+        const auto sequence=next->header.consumed_input_sequence;
         const auto latest_scene_bytes = retained_scene_bytes(*next);
         latest_scene_bytes_.store(latest_scene_bytes, std::memory_order_relaxed);
         next->published_timestamp_nanoseconds = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count());
         auto published_scene = std::shared_ptr<const scene>(std::move(next));
-        {
-            std::lock_guard lock(acknowledgement_->mutex);
-            acknowledgement_->pending_scenes.push_back(published_scene);
-        }
+        acknowledgement_->pending_scenes.push_back(published_scene);
+        acknowledgement_lock.unlock();
         std::atomic_store_explicit(
             &latest_,
             std::move(published_scene),
@@ -391,9 +517,9 @@
             scene_published_callback_(
                 scene_published_user_data_,
                 revision,
-                last_input_sequence_,
+                sequence,
                 width,
                 height);
         }
-        return true;
+        return publication_result::published;
     }

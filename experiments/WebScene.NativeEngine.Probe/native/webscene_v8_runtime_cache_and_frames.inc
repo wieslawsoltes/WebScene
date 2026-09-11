@@ -1605,13 +1605,44 @@
         )JS";
         constexpr std::string_view message_channel_source_suffix = R"JS(
               class WebSceneFormData {
-                constructor(form = undefined) {
+                constructor(form = undefined, submitter = null) {
                   __webSceneRecordWebApi(
                     'FormData.constructor', 'partially-supported',
                     'ordered string and Blob fields with multipart fetch serialization');
                   this._entries = [];
-                  if (form !== undefined && form !== null) {
-                    throw new TypeError('Constructing FormData from a form is not yet supported');
+                  if (form !== undefined) {
+                    if (!(form instanceof HTMLFormElement)) throw new TypeError('FormData requires an HTMLFormElement');
+                    const isSubmit = control => control && ((control.tagName === 'BUTTON' && (!control.type || control.type === 'submit')) ||
+                      (control.tagName === 'INPUT' && ['submit', 'image'].includes(control.type)));
+                    if (submitter !== null) {
+                      if (!(submitter instanceof HTMLElement) || !isSubmit(submitter)) throw new TypeError('FormData submitter must be a submit button');
+                      if (submitter.form !== form) throw new DOMException('Submitter belongs to another form', 'NotFoundError');
+                    }
+                    const root = form.getRootNode();
+                    for (const control of root.querySelectorAll('input,select,textarea,button')) {
+                      if (control.form !== form || control.matches(':disabled') || control.closest('datalist')) continue;
+                      const tag = control.tagName;
+                      const type = String(control.type || (tag === 'BUTTON' ? 'submit' : 'text')).toLowerCase();
+                      if ((tag === 'BUTTON' || ['submit', 'image', 'reset', 'button'].includes(type)) && control !== submitter) continue;
+                      const name = control.getAttribute('name') || '';
+                      if (type === 'image') {
+                        this.append(name ? name + '.x' : 'x', '0');
+                        this.append(name ? name + '.y' : 'y', '0');
+                        continue;
+                      }
+                      if (!name || (['checkbox', 'radio'].includes(type) && !control.checked)) continue;
+                      if (tag === 'SELECT') {
+                        for (const option of control.options) {
+                          if (option.selected && !option.matches(':disabled')) this.append(name, option.value);
+                        }
+                      } else if (type === 'file') {
+                        throw new TypeError('File controls in FormData are not yet supported');
+                      } else {
+                        const value = type === 'hidden' && name === '_charset_' ? 'UTF-8' :
+                          ['checkbox', 'radio'].includes(type) && !control.hasAttribute('value') ? 'on' : control.value;
+                        this.append(name, value);
+                      }
+                    }
                   }
                 }
                 append(name, value, filename = undefined) {
@@ -2035,7 +2066,7 @@
         }
         std::string source = script.code;
         std::shared_ptr<const immutable_text_source> immutable_source;
-        auto name = "webscene-frame-inline-" + std::to_string(script.index) + ".js";
+        auto name = hydration.base_address + "#inline-script-" + std::to_string(script.index);
         if (!script.source.empty()) {
             if (!load_text_resource(
                     script.source,
@@ -2054,19 +2085,15 @@
             auto document_value = local_frame_context->Global()->Get(
                 local_frame_context,
                 js_string(isolate, "document")).ToLocalChecked().As<v8::Object>();
-            set_current_script(local_frame_context, document_value, name);
+            if(script.module)document_value->Set(local_frame_context,js_string(isolate,"currentScript"),v8::Null(isolate)).Check();
+            else set_current_script(local_frame_context, document_value, name);
         }
         std::string error;
         const auto script_source = immutable_source != nullptr
             ? immutable_source->view()
             : std::string_view(source);
-        if (!execute_in_context(
-                local_frame_context,
-                script_source,
-                name,
-                error,
-                true,
-                std::move(immutable_source))) {
+        if (!(script.module ? execute_module(local_frame_context,script_source,name,error)
+            : execute_in_context(local_frame_context,script_source,name,error,true,std::move(immutable_source)))) {
             frame_last_error_value = "Iframe script #" + std::to_string(script.index)
                 + " failed: " + error;
             ++frame_script_error_count;

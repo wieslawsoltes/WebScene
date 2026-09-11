@@ -1,0 +1,16 @@
+{
+  "inventoryFiles": 1095,
+  "missing": [
+    "include/CL/.clang-format",
+    "include/EGL/.clang-format",
+    "include/GLES/.clang-format",
+    "include/GLES2/.clang-format",
+    "include/GLES3/.clang-format",
+    "include/GLX/.clang-format",
+    "include/KHR/.clang-format",
+    "include/WGL/.clang-format",
+    "include/platform/autogen/.clang-format"
+  ],
+  "hashMismatches": [],
+  "qualification": "failed: incomplete downloaded artifact"
+}

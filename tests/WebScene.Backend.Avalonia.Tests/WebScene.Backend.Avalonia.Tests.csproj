@@ -7,6 +7,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../experiments/WebScene.GpuHost.Probe/KestrelDragWorkloadValidator.cs" Link="Probe/KestrelDragWorkloadValidator.cs" />
     <ProjectReference Include="..\..\src\WebScene.Core\WebScene.Core.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Backend.Avalonia\WebScene.Backend.Avalonia.csproj" />
     <ProjectReference Include="..\..\src\WebScene.Diagnostics.Cdp\WebScene.Diagnostics.Cdp.csproj" />

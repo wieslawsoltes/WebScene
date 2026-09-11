@@ -9,6 +9,13 @@
   },
   "required": [
     {
+      "path": "contracts/dialog-opening-lifecycle.html",
+      "type": "testharness",
+      "capabilities": ["dialog-opening", "dialog-modal-focus", "dialog-beforetoggle"],
+      "evidence": ["kestrel-original-box-command"],
+      "reason": "Native dialog opening regression; does not assert complete ToggleEvent or popover interoperability."
+    },
+    {
       "path": "contracts/youtube-embed-fallback.html",
       "type": "testharness",
       "capabilities": ["youtube-embed-fallback", "iframe-layout", "external-navigation"],
@@ -1065,6 +1072,34 @@
   ],
   "candidate": [
     {
+      "path": "contracts/css-grid-flex-track-minimum.html",
+      "type": "testharness",
+      "capabilities": ["css-grid", "fractional-track-sizing", "minmax"],
+      "evidence": ["kestrel-unused-horizontal-grid-space"],
+      "reason": "Fractional track allocation must include its minimum, freeze constrained tracks and redistribute space. Local regression pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/css-grid-auto-row-shrink.html",
+      "type": "testharness",
+      "capabilities": ["css-grid", "automatic-minimum-size", "dynamic-layout"],
+      "evidence": ["kestrel-stale-canvas-height-after-resize"],
+      "reason": "Auto grid rows must shrink to definite available height when item minimums permit; preserve visible content and authored minimums. Local regression pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/css-border-functional-color-width.html",
+      "type": "testharness",
+      "capabilities": ["border-shorthand", "functional-color"],
+      "evidence": ["kestrel-white-layer-list"],
+      "reason": "Color-mix percentages must stay inside the color component instead of becoming border widths. Local regression pending cross-RID qualification."
+    },
+    {
+      "path": "contracts/css-root-theme-interaction-recascade.html",
+      "type": "testharness",
+      "capabilities": ["css-custom-properties", "attribute-selector", "focus-pseudo-class"],
+      "evidence": ["kestrel-white-ui-investigation"],
+      "reason": "Reduced Kestrel dark/light theme and interaction recascade regression. This local contract does not establish upstream WPT or pixel presentation conformance."
+    },
+    {
       "path": "contracts/scroll-static-absolute-containing-block.html",
       "type": "testharness",
       "capabilities": ["absolute-containing-block-scroll-offset", "static-overflow-descendant-overlay"],
@@ -2064,6 +2099,19 @@
         }
       ],
       "reason": "Self-verifying reduction for two retained-path replay boundaries: geometry keeps the transform active when each segment is authored even if the transform changes before stroke(), and a full-circle arc appended to a non-empty subpath includes the required connecting line to its start point."
+    },
+    {
+      "path": "contracts/html-script-style-text-is-inert.html",
+      "type": "testharness",
+      "capabilities": [
+        "html-raw-text",
+        "stylesheet-discovery"
+      ],
+      "evidence": [
+        "kestrel-print-preview-style-leak"
+      ],
+      "reason": "Candidate passes through native document navigation, preserving parser raw-text/comment/template semantics. Prepared-markup regex loading cannot qualify this parsing regression.",
+      "nativeNavigation": true
     }
   ],
   "harnessBlocked": [],

@@ -258,6 +258,7 @@
             command.data.values[index++] = argument;
         }
         node.mutable_canvas().commands.push_back(command);
+        node.mutable_canvas().backing.publish_content();
     }
 
     static void canvas_append_resource_command(
@@ -277,6 +278,7 @@
             command.data.values[index++] = argument;
         }
         node.mutable_canvas().commands.push_back(command);
+        node.mutable_canvas().backing.publish_content();
     }
 
     static void canvas_append_line_dash_command(
@@ -292,6 +294,7 @@
             command.data.values[index + 1U] = segments[index];
         }
         node.mutable_canvas().commands.push_back(command);
+        node.mutable_canvas().backing.publish_content();
     }
 
     static uint32_t canvas_intern_string(dom_node& node, const std::string& value)
@@ -2645,6 +2648,45 @@
             js_string(isolate, "source-over")).Check();
     }
 
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    void finish_gpu_rendering_opportunity(bool present) {
+        if(!gpu_rendering_opportunity||has_due_animation_frame_task())return;
+        gpu_rendering_opportunity=false;
+        for(auto& [key,canvas]:gpu_canvases) {
+            const auto submitted=canvas.context->has_current_texture();
+            canvas.context->end_frame(present);
+            if(submitted) {
+                // A reset inside this RAF batch may occur after frame admission.
+                // Its replacement output now owns the publication dependency.
+                canvas.bitmap_reset_awaiting_frame=false;
+                canvas.presentation_resize_pending=false;
+                canvas.node->mutable_canvas().gpu_presentation_image.reset();
+                auto& output=canvas.node->mutable_canvas().gpu_snapshot;
+                output.reset();
+                if(present) {
+                    auto ticket=canvas.provider->capture_latest_submission();
+                    if(ticket)output=std::make_shared<webscene::graphics::platform_dawn_scene_snapshot>(std::move(ticket));
+                    else {
+                        const auto& backing=canvas.node->canvas().backing;
+                        output=std::make_shared<webscene_failed_gpu_image_snapshot>(webscene::graphics::image_metadata{
+                            backing.identity(),0,backing.allocation_generation(),backing.content_serial(),
+                            0,0,backing.width(),backing.height()});
+                    }
+                    document.mark_scene_changed();
+                }
+            }
+        }
+        publish_ready_gpu_canvases();
+    }
+    void publish_ready_gpu_canvases() {
+        for(auto& [key,canvas]:gpu_canvases)while(auto image=canvas.provider->take_ready()) {
+            const auto metadata=image->describe();const auto& backing=canvas.node->canvas().backing;
+            if(metadata.canvas!=backing.identity()||metadata.allocation_generation!=backing.allocation_generation()||!backing.accepts_completed_content(metadata.content_serial))continue;
+            if(canvas.node->canvas().gpu_image&&canvas.node->canvas().gpu_image->value.describe().content_serial>metadata.content_serial)continue;
+            document.publish_gpu_canvas_image(*canvas.node,std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image)));
+        }
+    }
+#endif
     static void canvas_get_context(const v8::FunctionCallbackInfo<v8::Value>& info)
     {
         auto* self = current(info.GetIsolate());
@@ -2657,6 +2699,45 @@
         const auto requested = info.Length() > 0
             ? to_utf8(info.GetIsolate(), info[0])
             : std::string{};
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+        if(requested=="webgpu"&&self->webgpu&&self->webgpu_interop==webscene::graphics::platform_canvas_interop&&!self->in_frame_context()) {
+            using namespace webscene::graphics;
+            auto& backing=node->mutable_canvas().backing;
+            if(backing.mode()!=canvas_context_mode::none&&backing.mode()!=canvas_context_mode::webgpu) {
+                info.GetReturnValue().SetNull();return;
+            }
+            const auto key=self->wrapper_key(*node);
+            const auto known=self->gpu_canvases.find(key);
+            if(known!=self->gpu_canvases.end()){info.GetReturnValue().Set(known->second.context->object());return;}
+            try {
+                auto context=info.GetIsolate()->GetCurrentContext();
+                auto exception=self->webgpu_dom_exception.Get(info.GetIsolate());
+                auto width=canvas_bitmap_dimension(*node,"width",300),height=canvas_bitmap_dimension(*node,"height",150);
+                if(backing.width()!=width||backing.height()!=height)backing.reset_bitmap(width,height);
+                auto provider=std::make_shared<platform_dawn_canvas_host>(64ULL*1024*1024,self->webgpu_wake);
+                auto host=make_platform_webgpu_canvas_host(provider,[self,node] {
+                    auto& backing=node->mutable_canvas().backing;backing.publish_content();
+                    image_metadata metadata;metadata.canvas=backing.identity();metadata.allocation_generation=backing.allocation_generation();
+                    metadata.content_serial=backing.content_serial();metadata.producer_timeline=self->gpu_canvas_timeline;metadata.producer_value=metadata.content_serial;
+                    return metadata;
+                });
+                host.invalidate=[self,node] {
+                    auto& canvas=node->mutable_canvas();canvas.backing.reset_bitmap(canvas.backing.width(),canvas.backing.height());canvas.gpu_image.reset();canvas.gpu_snapshot.reset();canvas.gpu_presentation_image.reset();
+                    const auto known=self->gpu_canvases.find(self->wrapper_key(*node));
+                    if(known!=self->gpu_canvases.end()) {
+                        known->second.presentation_resize_pending=false;
+                        known->second.presentation_generation_floor=canvas.backing.allocation_generation();
+                    }
+                    self->document.mark_scene_changed();
+                };
+                auto controller=std::make_unique<v8_webgpu_canvas_context>(info.GetIsolate(),context,info.This(),exception,width,height,std::move(host));
+                auto object=controller->object();
+                self->gpu_canvases.emplace(key,gpu_canvas_entry{node,std::move(provider),std::move(controller)});
+                backing.claim_context(canvas_context_mode::webgpu);
+                info.GetReturnValue().Set(object);return;
+            }catch(const std::exception&){info.GetIsolate()->ThrowException(v8::Exception::Error(js_string(info.GetIsolate(),"WebGPU canvas initialization failed")));return;}
+        }
+#endif
         if (requested != "2d") {
             self->record_feature(
                 "canvas",
@@ -2664,6 +2745,10 @@
                 "unsupported",
                 {},
                 "native-binding");
+            info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+            return;
+        }
+        if (!node->mutable_canvas().backing.claim_context(webscene::graphics::canvas_context_mode::two_d)) {
             info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
             return;
         }
@@ -2688,6 +2773,10 @@
         }
         auto local_context = info.GetIsolate()->GetCurrentContext();
         auto result = v8::Object::New(info.GetIsolate());
+        auto& backing=node->mutable_canvas().backing;
+        const auto width=canvas_bitmap_dimension(*node,"width",300);
+        const auto height=canvas_bitmap_dimension(*node,"height",150);
+        if (backing.width()!=width || backing.height()!=height) backing.reset_bitmap(width,height);
         auto state = std::make_unique<canvas_state>();
         state->node = node;
         auto* state_pointer = state.get();

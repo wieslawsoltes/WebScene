@@ -1,0 +1,16 @@
+{
+  "scope": "Linux x64 GCC/libstdc++ header compilation under container emulation; not hardware or full package qualification",
+  "compiler": "Ubuntu GCC 13.3.0",
+  "container": "ubuntu:24.04 linux/amd64",
+  "containerManifestDigest": "sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
+  "before": "Original header fails unchanged 1024-byte static assertion",
+  "afterDomNodeBytes": 1024,
+  "afterCompileAndRunExitCode": 0,
+  "output": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\nIn file included from /probe/before.cpp:1:\n/probe/before.h:2052:24: error: static assertion failed: dom_node exceeded its cross-library 64-bit footprint budget\n 2052 |     sizeof(void*) != 8 || sizeof(dom_node) <= 1024,\n      |     ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~\n1024\n",
+  "macOSVerification": {
+    "build": "passed",
+    "nativeEngineTests": "passed",
+    "graphicsV8RuntimeTests": "passed"
+  },
+  "remainingCIProblem": "CandidateProfileContainsTheEstablishedDiscoveryDenominator rejects the documented inert-style harnessBlocked case"
+}

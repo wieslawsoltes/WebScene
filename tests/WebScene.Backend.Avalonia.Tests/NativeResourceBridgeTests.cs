@@ -10,6 +10,29 @@ namespace WebScene.Backend.Avalonia.Tests;
 public sealed unsafe class NativeResourceBridgeTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BinaryResourceBytesSurviveEnvelopeWithoutTextConversion(bool empty)
+    {
+        byte[] payload = empty ? [] : [0, 255, 128, 195, 40, 65];
+        using var bridge = CreateBridge(new BinaryLoader(payload));
+        var required = bridge.Copy(4, "https://example.test/media.wav", null, 0, IntPtr.Zero, 0);
+        var destination = NativeMemory.Alloc(required);
+        try
+        {
+            Assert.Equal(required, bridge.Copy(4, "https://example.test/media.wav", null, 0, (IntPtr)destination, required));
+            Assert.Equal(payload, new ReadOnlySpan<byte>((byte*)destination + 22, (int)required - 22).ToArray());
+        }
+        finally { NativeMemory.Free(destination); }
+    }
+    private sealed class BinaryLoader(byte[] bytes) : IWebSceneResourceLoader
+    {
+        public WebSceneTextResource LoadText(in WebSceneResourceRequest request)
+            => new(request.Specifier, "This textual value must not replace binary bytes", request.Specifier, null)
+            { BinaryContent = bytes };
+    }
+
+    [Theory]
     [InlineData("http", 503)]
     [InlineData("timeout", 0)]
     [InlineData("network", 0)]

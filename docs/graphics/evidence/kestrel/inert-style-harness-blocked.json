@@ -1,0 +1,42 @@
+{
+  "schema": "webscene-wpt-subset-result-v3",
+  "profile": "webscene-component-1",
+  "profileSha256": "dadfc76517839844f8e553a19ba5a7e4d18b1cb31424110d9ae3ea1f3a09af0c",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "engine": "native",
+  "nativeEngineIdentity": "abi=3;sha256=cda82f39c6460bf9031162c37217e852d0d2203132ba7c366d77ecc1567d884f",
+  "chromiumIdentity": null,
+  "startedAt": "2026-09-08T07:58:54.758821+00:00",
+  "duration": "00:00:00.4534177",
+  "selection": "candidate",
+  "summary": {
+    "tests": 1,
+    "passed": 0,
+    "failed": 1,
+    "timedOut": 0,
+    "harnessErrors": 0,
+    "subtests": 1,
+    "subtestsPassed": 0,
+    "subtestsFailed": 1
+  },
+  "results": [
+    {
+      "path": "contracts/html-script-style-text-is-inert.html",
+      "type": "testharness",
+      "status": "FAIL",
+      "duration": "00:00:00.4489942",
+      "message": "diagnostic: activeElement=",
+      "subtests": [
+        {
+          "name": "Script strings, comments and template contents do not activate stylesheets",
+          "status": "FAIL",
+          "message": "assert_equals: expected \u0022rgb(10, 20, 30)\u0022 but got \u0022rgb(0, 0, 255)\u0022",
+          "stack": "Error\n    at get_stack (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4802:21)\n    at new AssertionError (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4795:22)\n    at assert (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:4779:19)\n    at assert_equals (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1598:9)\n    at assert_wrapper (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:1518:30)\n    at Test.\u003Canonymous\u003E (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-4.js:3:2)\n    at Test.step (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:2869:25)\n    at test (/Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-1.js:633:30)\n    at /Volumes/SSD/repos/worktrees/aa5a/HtmlML/tests/WebPlatformSubset/upstream/webscene-wpt-inline-4.js:2:1"
+        }
+      ],
+      "artifacts": null,
+      "chromiumOracle": null
+    }
+  ]
+}

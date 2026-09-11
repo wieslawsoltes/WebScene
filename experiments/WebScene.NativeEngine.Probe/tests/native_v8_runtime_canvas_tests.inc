@@ -1,3 +1,112 @@
+void test_canvas_prefix_hint_tracks_append_and_reset()
+{
+    {
+        webscene_native::native_document document;
+        auto& target = document.create_element("canvas");
+        auto& source = document.create_element("canvas");
+        auto& nested = document.create_element("canvas");
+        document.append_child(document.body(), target);
+        webscene_canvas_command fill{}; fill.kind = 20;
+        target.mutable_canvas().commands.push_back(fill);
+        source.mutable_canvas().commands.push_back(fill);
+        nested.mutable_canvas().commands.push_back(fill);
+        document.layout(640, 360);
+        std::vector<webscene_canvas_layer> layers;
+        std::vector<webscene_canvas_command> commands;
+        std::vector<webscene_scene_string> strings;
+        std::vector<char> bytes;
+        const auto capture_dependencies = [&] {
+            document.build_canvas_display_lists(layers, commands, strings, bytes);
+            return layers.size();
+        };
+        require(capture_dependencies() == 1, "detached canvas retained without dependency");
+        webscene_canvas_command image{}; image.kind = 27; image.resource_id = source.id;
+        target.mutable_canvas().commands.push_back(image);
+        image.resource_id = nested.id;
+        source.mutable_canvas().commands.push_back(image);
+        require(capture_dependencies() == 3, "appended transitive canvas dependency was lost");
+        require(capture_dependencies() == 3, "cached transitive canvas dependency was lost");
+        ++target.mutable_canvas().generation;
+        target.mutable_canvas().commands.clear();
+        target.mutable_canvas().commands.push_back(fill);
+        require(capture_dependencies() == 1, "canvas reset retained stale dependencies");
+    }
+    auto* engine=webscene_engine_create(0);
+    require(engine!=nullptr,"canvas prefix engine creation failed");
+    resize(engine,640,360,1);
+    struct capture { uint64_t generation{};uint32_t flags{},node_id{};
+        std::vector<webscene_canvas_command> commands;std::vector<std::string> strings; };
+    const auto read=[&](auto accept) {
+        for(int attempt=0;attempt<250;++attempt) {
+            const webscene_scene_view_v3* lease=nullptr;
+            const webscene_scene_acquire_options_v3 options{sizeof(options),3,WEBSCENE_SCENE_CAPABILITY_CANVAS_CHECKPOINTS};
+            if(webscene_engine_acquire_latest_scene_v3(engine,&options,&lease)==WEBSCENE_SCENE_ACQUIRE_SUCCESS) {
+                const auto* scene=lease->cpu_view;
+                capture result;
+                if(scene->header.canvas_layer_count==1) {
+                    const auto& layer=scene->canvas_layers[0];
+                    result.generation=layer.generation;result.flags=layer.flags;
+                    result.node_id=layer.node_id;
+                    result.commands.assign(scene->canvas_commands+layer.command_offset,
+                        scene->canvas_commands+layer.command_offset+layer.command_count);
+                    for(uint32_t index=0;index<layer.string_count;++index) {
+                        const auto& value=scene->strings[layer.string_offset+index];
+                        result.strings.emplace_back(scene->string_bytes+value.byte_offset,value.byte_length);
+                    }
+                }
+                webscene_scene_acknowledge_v3(lease);webscene_scene_release_v3(lease);
+                if(!result.commands.empty() && accept(result))return result;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        fail("canvas prefix scene was not published");
+    };
+    execute_and_wait(engine,R"JS(document.body.innerHTML='<canvas width="20" height="10"></canvas>';
+      globalThis.prefixCanvas=document.body.firstElementChild;
+      globalThis.prefixContext=prefixCanvas.getContext('2d');prefixContext.fillRect(0,0,20,10);)JS","prefix-setup.js");
+    auto previous=read([](const capture&){return true;});
+    for(int frame=0;frame<4;++frame) {
+        execute_and_wait(engine,R"JS(prefixContext.clearRect(0,0,19.5,10);
+          prefixContext.fillStyle='blue';prefixContext.fillRect(1,1,3,3);)JS","prefix-append.js");
+        const auto next=read([&](const capture& value){return value.commands.size()>previous.commands.size();});
+        require((next.flags&WEBSCENE_CANVAS_LAYER_UNCHANGED_PREFIX)!=0,"append lost prefix hint across a DOM-unchanged diff");
+        require(next.generation==previous.generation,"partial clear reset canvas generation");
+        require(std::memcmp(next.commands.data(),previous.commands.data(),previous.commands.size()*sizeof(webscene_canvas_command))==0,
+            "canvas prefix hint covered modified commands");
+        require(next.strings.size()>=previous.strings.size()
+            && std::equal(previous.strings.begin(),previous.strings.end(),next.strings.begin()),
+            "canvas prefix hint covered modified strings");
+        previous=next;
+    }
+    execute_and_wait(engine,"prefixCanvas.width=20;prefixContext.fillRect(0,0,20,10)","prefix-reset.js");
+    auto reset=read([&](const capture& value){return value.generation!=previous.generation;});
+    require((reset.flags&WEBSCENE_CANVAS_LAYER_UNCHANGED_PREFIX)==0,"bitmap reset claimed an unchanged prefix");
+    execute_and_wait(engine,"prefixContext.clearRect(0,0,20,10);prefixContext.fillRect(1,1,3,3)","prefix-full-clear.js");
+    auto cleared=read([&](const capture& value){return value.generation!=reset.generation;});
+    require((cleared.flags&WEBSCENE_CANVAS_LAYER_UNCHANGED_PREFIX)==0,"full-overwrite compaction claimed an unchanged prefix");
+    constexpr auto payload="native checkpoint protocol test";
+    require(webscene_engine_submit_canvas_checkpoint_v3(engine,cleared.node_id,cleared.generation,
+        static_cast<uint32_t>(cleared.commands.size()),payload,std::strlen(payload)),"checkpoint submission failed");
+    execute_and_wait(engine,"prefixContext.fillText('checkpoint-tail',2,3)","checkpoint-tail.js");
+    // Checkpoint installation can publish before the following script runs.
+    // Wait for the appended drawing command as well as the new generation;
+    // otherwise an intermediate checkpoint-only scene races this assertion.
+    auto checkpoint=read([&](const capture& value){
+        return value.generation!=cleared.generation && value.commands.size()>1;
+    });
+    require(checkpoint.commands.front().kind==WEBSCENE_CANVAS_COMMAND_RASTER_CHECKPOINT,"checkpoint prefix was not installed");
+    require(checkpoint.strings.front()==payload,"checkpoint payload changed");
+    require(std::find(checkpoint.strings.begin(),checkpoint.strings.end(),"checkpoint-tail")!=checkpoint.strings.end(),
+        "commands appended after checkpoint capture lost their resources");
+    require(webscene_engine_acquire_latest_scene(engine)==nullptr,"legacy consumer accepted a raster checkpoint");
+    require(webscene_engine_submit_canvas_checkpoint_v3(engine,cleared.node_id,cleared.generation,
+        static_cast<uint32_t>(cleared.commands.size()),payload,std::strlen(payload)),"stale checkpoint could not be queued");
+    execute_and_wait(engine,"prefixContext.fillRect(2,2,3,3)","checkpoint-stale.js");
+    auto after_stale=read([&](const capture& value){return value.commands.size()>checkpoint.commands.size();});
+    require(after_stale.generation==checkpoint.generation,"stale checkpoint replaced a newer canvas generation");
+    webscene_engine_destroy(engine);
+}
+
 struct canvas_text_measurement_probe final {
     std::string text;
     std::string family;

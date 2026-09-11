@@ -178,6 +178,10 @@ void test_host_pointer_exit_clears_tooltip_without_another_move()
 
     // Many chart gestures use document mousemove/up rather than DOM capture.
     pointer_move(engine, 20, 20, 9U);
+    // The down event flushes the pending frame-paced entry move. Install
+    // counters afterward so worker timing cannot count that setup movement
+    // as part of the outside-host drag being tested.
+    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 10U, true);
     execute(engine, R"JS(
         globalThis.dragMoves = 0;
         globalThis.dragUps = 0;
@@ -186,13 +190,13 @@ void test_host_pointer_exit_clears_tooltip_without_another_move()
     )JS", "host-exit-document-drag.js");
     require(evaluate(engine, "dragUps", "host-exit-document-drag-ready.js") == "0",
         "document drag fixture not ready");
-    pointer_button(engine, WEBSCENE_INPUT_POINTER_DOWN, 20, 20, 10U, true);
     exit(11U, 1U);
     pointer_move(engine, -20, -20, 12U, true);
     pointer_button(engine, WEBSCENE_INPUT_POINTER_UP, -20, -20, 13U, false);
-    require(evaluate(engine, "[dragMoves, dragUps, getComputedStyle(tip).display]",
-        "host-exit-document-drag-result.js") == R"([1,1,"none"])",
-        "host exit interrupted document-level drag movement or release");
+    const auto drag_result = evaluate(engine, "[dragMoves, dragUps, getComputedStyle(tip).display]",
+        "host-exit-document-drag-result.js");
+    require(drag_result == R"([1,1,"none"])",
+        "host exit interrupted document-level drag movement or release: " + drag_result);
 
     pointer_move(engine, 20, 20, 14U);
     execute(engine, R"JS(
@@ -1205,7 +1209,36 @@ void test_pressed_drag_moves_remain_dispatchable_after_threshold()
 
 void test_mouse_moves_are_raf_aligned_at_compositor_cadence()
 {
-    auto* engine = webscene_engine_create(0);
+    struct pointer_handler_gate {
+        std::mutex mutex;
+        std::condition_variable changed;
+        bool entered{false};
+        bool released{false};
+        bool timed_out{false};
+    } gate;
+    webscene_engine_options options{};
+    options.struct_size = sizeof(options);
+    options.text_measure_user_data = &gate;
+    options.text_measure_callback = +[](
+        void* user_data, const char* text, size_t length, const char*, size_t,
+        float font_size, int32_t, float, float, webscene_text_metrics* metrics) -> uint8_t {
+        if (text != nullptr && std::string_view(text, length) == "pointer-handoff-gate") {
+            auto& state = *static_cast<pointer_handler_gate*>(user_data);
+            std::unique_lock lock(state.mutex);
+            state.entered = true;
+            state.changed.notify_all();
+            // Test-only rendezvous inside the synchronous pointer handler.
+            // Production text callbacks must not block. This holds the handler
+            // open without depending on relative JS/test-thread sleep durations.
+            if (!state.changed.wait_for(lock, std::chrono::seconds(5),
+                    [&] { return state.released; })) state.timed_out = true;
+        }
+        metrics->advance_width = static_cast<float>(length) * font_size * 0.5F;
+        metrics->ascent = font_size * 0.75F;
+        metrics->descent = font_size * 0.25F;
+        return 1U;
+    };
+    auto* engine = webscene_engine_create_with_options(&options);
     require(engine != nullptr, "rAF-aligned mouse engine creation failed");
     resize(engine, 640, 360, 1U);
     execute(engine, R"JS(
@@ -1324,6 +1357,79 @@ void test_mouse_moves_are_raf_aligned_at_compositor_cadence()
             && after.coalesced_pointer_move_inputs
                 - before.coalesced_pointer_move_inputs == 2U,
         "rAF-aligned mouse metrics did not report coalesced device samples");
+
+    // The host can enqueue the RAF belonging to a boundary after a newer
+    // device sample has already been retained. That old RAF must not release
+    // the sample; only a subsequent display boundary or discrete input may.
+    pointer_move(engine, 70, 20, 9U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    animation_frame(engine, 1016.666, 10U);
+    wait_for_consumed_inputs(engine, after.consumed_inputs + 1U,
+        "already-observed RAF was not consumed");
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    require(consumed_input_count(engine) == after.consumed_inputs + 1U,
+        "already-observed RAF prematurely released a newer pointer sample");
+    webscene_engine_observe_compositor_frame(engine, 1025.0);
+    wait_for_consumed_inputs(engine, after.consumed_inputs + 2U,
+        "next boundary did not release the retained sample after an old RAF");
+    require(evaluate(engine, "globalThis.__pacedPointerMoves",
+        "native-frame-paced-old-raf.js") == "[30,40,60,70]",
+        "old RAF handling lost or duplicated pointer movement");
+
+    execute_and_wait(engine, R"JS(document.body.firstElementChild.addEventListener('pointermove', () => {
+      document.createElement('canvas').getContext('2d').measureText('pointer-handoff-gate');
+      requestAnimationFrame(() => {});
+    }, {once:true}))JS", "native-pointer-demand-handoff-setup.js");
+    const auto handoff_inputs = consumed_input_count(engine);
+    pointer_move(engine, 80, 20, 11U);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    webscene_engine_observe_compositor_frame(engine, 1041.666);
+    {
+        std::unique_lock lock(gate.mutex);
+        require(gate.changed.wait_for(lock, std::chrono::seconds(5),
+            [&] { return gate.entered; }), "pointer handler did not enter its handoff gate");
+    }
+    require((webscene_engine_requires_animation_frame(engine) & 4U) != 0,
+        "in-flight pointer handler temporarily lost its frame demand");
+    // This sample arrives while the previous handler is busy, before the
+    // next boundary. Dequeuing it after that boundary must not make it wait
+    // for yet another refresh. No script barrier is used to flush the input.
+    pointer_move(engine, 90, 20, 12U);
+    webscene_engine_observe_compositor_frame(engine, 1058.333);
+    {
+        std::lock_guard lock(gate.mutex);
+        require(!gate.timed_out, "pointer handler handoff gate timed out");
+        gate.released = true;
+    }
+    gate.changed.notify_all();
+    wait_for_consumed_inputs(engine, handoff_inputs + 2,
+        "pointer handler did not finish its demand handoff");
+    require(evaluate(engine, "globalThis.__pacedPointerMoves.slice(-2)",
+        "native-frame-paced-busy-worker.js") == "[80,90]",
+        "busy worker deferred an eligible sample into an extra display interval");
+    require((webscene_engine_requires_animation_frame(engine) & 1U) != 0,
+        "pointer demand was cleared before publishing the handler's RAF demand");
+#if defined(_WIN32)
+    execute_and_wait(engine, R"JS(
+      document.body.firstElementChild.addEventListener('pointermove', event => {
+        event.target.style.cursor = 'ew-resize';
+        requestAnimationFrame(() => { event.target.style.cursor = 'ns-resize'; });
+      }, {once:true});
+    )JS", "native-paced-cursor-setup.js");
+    const auto cursor_inputs = consumed_input_count(engine);
+    pointer_move(engine, 100, 20, 13U);
+    webscene_engine_observe_compositor_frame(engine, 1075.0);
+    animation_frame(engine, 1075.0, 14U);
+    wait_for_consumed_inputs(engine, cursor_inputs + 2,
+        "paced cursor input and frame were not consumed");
+    const auto cursor_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (webscene_engine_get_cursor(engine) != WEBSCENE_CURSOR_NS_RESIZE
+        && std::chrono::steady_clock::now() < cursor_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(webscene_engine_get_cursor(engine) == WEBSCENE_CURSOR_NS_RESIZE,
+        "paced cursor was not resolved from the final animation/publication layout");
+#endif
     webscene_engine_destroy(engine);
 }
 

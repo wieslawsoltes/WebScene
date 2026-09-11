@@ -4,3 +4,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("WebScene.NativeEngine.Benchmarks")]
 [assembly: InternalsVisibleTo("WebScene.WebPlatformSubset.Runner")]
 [assembly: InternalsVisibleTo("WebScene.GlyphDiagnostics")]
+
+[assembly: InternalsVisibleTo("WebScene.GpuHost.Probe")]

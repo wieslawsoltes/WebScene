@@ -1,0 +1,108 @@
+{
+  "shutdownCheck": "passed",
+  "exitCode": 0,
+  "physicalPresentationVerified": false,
+  "performanceQualification": "not passed",
+  "measurement": {
+    "schema": "webscene-native-resize-cadence-v2",
+    "measurementScope": "headless-cpu-draw-callback",
+    "physicalPresentationVerified": false,
+    "sourceKind": "deterministic-fixture",
+    "composition": true,
+    "certificationTelemetryEnabled": false,
+    "requestedHz": 60,
+    "warmupSeconds": 2,
+    "requestedSeconds": 5,
+    "elapsedMilliseconds": 5000.0296,
+    "submitted": 300,
+    "acceptedSubmissions": 300,
+    "appliedPairs": 300,
+    "publishedPairs": 150,
+    "coalescedPairs": 0,
+    "renderedFrames": 150,
+    "drawCallbackCompletions": 150,
+    "renderedFramesPerSecond": 29.999822401051382,
+    "drawCallbackCompletionsPerSecond": 30.00758094003664,
+    "layoutPasses": 897,
+    "layoutPassesPerAppliedResize": 2.99,
+    "publishedScenes": 150,
+    "publicationAttempts": 301,
+    "blockedPublications": 151,
+    "fullInvalidations": 150,
+    "unchangedRenderCallbacks": 0,
+    "droppedInputs": 0,
+    "processCpuMilliseconds": 2420.718,
+    "normalizedProcessCpuPercent": 48.41407338868554,
+    "lastCompositionMilliseconds": {
+      "diffApply": 2.576333,
+      "retainedDraw": 0.269375,
+      "skiaSubmit": 0.355208,
+      "callback": 0.355292
+    },
+    "lastResizeStageMilliseconds": {
+      "outerListeners": 0,
+      "frameListeners": 0,
+      "finalLayout": 0,
+      "observers": 0,
+      "totalDispatch": 2.446584,
+      "scenePublication": 0.601167
+    },
+    "queueMilliseconds": {
+      "average": 0.008569023333333333,
+      "maximum": 0.0855
+    },
+    "dispatchMilliseconds": {
+      "average": 2.50976627,
+      "maximum": 7.221375
+    },
+    "publicationLatencyMilliseconds": {
+      "count": 299,
+      "average": 12.70474201672241,
+      "p50": 7.074458,
+      "p95": 21.458667,
+      "maximum": 23.746291
+    },
+    "publicationToRenderLatencyMilliseconds": {
+      "count": 148,
+      "average": 66.06984041891891,
+      "p50": 66.001375,
+      "p95": 67.127083,
+      "maximum": 70.4875
+    },
+    "renderLatencyMilliseconds": {
+      "count": 295,
+      "average": 78.77105805423724,
+      "p50": 73.838792,
+      "p95": 88.123166,
+      "maximum": 90.509625
+    },
+    "renderIntervalMilliseconds": {
+      "count": 149,
+      "average": 33.323867167785245,
+      "p50": 32.808042,
+      "p95": 34.887917,
+      "maximum": 37.98525
+    },
+    "drawCallbackIntervalMilliseconds": {
+      "count": 149,
+      "average": 33.324912194630855,
+      "p50": 32.807792,
+      "p95": 34.894292,
+      "maximum": 37.985042
+    },
+    "cpuCadenceGate": {
+      "maximumP95LatencyMilliseconds": 16.7,
+      "minimumFramesPerSecond": 58,
+      "maximumConsecutiveMissIntervalMilliseconds": 33.4,
+      "passed": false
+    },
+    "chromeReferenceComparison": null,
+    "certificationDiagnostics": "certification telemetry disabled at compile time"
+  },
+  "limitations": [
+    "Headless CPU draw callbacks, not scanout",
+    "Run overlapped managed regression test execution; not an isolated performance comparison"
+  ],
+  "rootCauseEvidence": "macOS crash report: std::mutex::lock -> webscene_engine_acquire_next_scene during cleanup after asynchronous compositor stop",
+  "debuggerLimitations": "Initial LLDB startup crashed in the SOS init plugin; no-init launch did not progress and owned debugger/child processes were terminated. Root-cause evidence comes from the OS crash report and the code path, not a live debugger stack."
+}

@@ -1,0 +1,11 @@
+{
+  "host": "Avalonia.Native.MetalDevice",
+  "metalDeviceAvailable": true,
+  "metalQueueAvailable": true,
+  "skiaGpuContextAvailable": true,
+  "producerInteropVerified": false,
+  "physicalPresentationVerified": false,
+  "command": "dotnet run --no-build --project experiments/WebScene.GpuHost.Probe -- --metal-host",
+  "exitCode": 0,
+  "scope": "Native-window active drawing lease, Avalonia 11.3.4; handles inspected while platform lease held, released before Skia draw"
+}

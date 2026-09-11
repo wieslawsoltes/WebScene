@@ -21,7 +21,9 @@
             animation_frame_requested_callback = nullptr,
         void* animation_frame_requested_user_data = nullptr,
         webscene_stylesheet_consumed_callback stylesheet_consumed_callback = nullptr,
-        void* stylesheet_consumed_user_data = nullptr)
+        void* stylesheet_consumed_user_data = nullptr,
+        webscene_webgpu_policy_callback webgpu_policy_callback = nullptr,
+        void* webgpu_policy_user_data = nullptr)
         : command_count_(command_count == 0U
               ? 0U
               : (command_count < minimum_command_count
@@ -36,6 +38,8 @@
         , resource_load_v3_user_data_(resource_load_v3_user_data)
         , stylesheet_consumed_callback_(stylesheet_consumed_callback)
         , stylesheet_consumed_user_data_(stylesheet_consumed_user_data)
+        , webgpu_policy_callback_(webgpu_policy_callback)
+        , webgpu_policy_user_data_(webgpu_policy_user_data)
         , scene_published_callback_(scene_published_callback)
         , scene_published_user_data_(scene_published_user_data)
         , host_request_available_callback_(host_request_available_callback)
@@ -53,7 +57,7 @@
     {
         worker_.request_stop();
         signal_worker();
-        worker_.join();
+        if (worker_.joinable()) worker_.join();
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
         delete inspector_state_.exchange(nullptr, std::memory_order_acq_rel);
 #endif
@@ -111,7 +115,11 @@
             return true;
         }
 
-        if (!inputs_.try_push(event)) {
+        const auto pointer_move = event.kind == WEBSCENE_INPUT_POINTER_MOVE;
+        if (pointer_move) pending_pointer_move_inputs_.fetch_add(1, std::memory_order_release);
+        if (!inputs_.try_push(queued_input_event(event,
+                observed_compositor_timestamp_microseconds_.load(std::memory_order_acquire)))) {
+            if (pointer_move) pending_pointer_move_inputs_.fetch_sub(1, std::memory_order_release);
             dropped_inputs_.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
@@ -236,11 +244,16 @@
 
     uint8_t animation_frame_demand() const noexcept
     {
+        // Read the handoff flag first: observing false acquires the RAF demand
+        // published before the worker released its in-flight pointer demand.
+        const auto pointer_pending = frame_paced_pointer_pending_.load(std::memory_order_acquire);
+        const auto queued_pointer = pending_pointer_move_inputs_.load(std::memory_order_acquire) != 0
+            && observed_compositor_timestamp_microseconds_.load(std::memory_order_acquire) != 0;
         const auto host_demand = host_animation_frame_requested_.load(
             std::memory_order_acquire);
         return static_cast<uint8_t>(
             host_demand
-            | (frame_paced_pointer_pending_.load(std::memory_order_acquire)
+            | (pointer_pending || queued_pointer
                     ? uint8_t{4U}
                     : uint8_t{0U}));
     }

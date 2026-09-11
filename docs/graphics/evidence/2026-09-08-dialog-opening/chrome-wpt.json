@@ -1,0 +1,62 @@
+{
+  "schema": "webscene-wpt-contract-chrome-result-v1",
+  "engine": "chrome",
+  "identity": "Google Chrome 152.0.7977.77",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "deviceScaleFactor": 1
+  },
+  "origin": "http://127.0.0.1:56732/",
+  "recordedAt": "2026-09-08T14:49:30.633Z",
+  "summary": {
+    "tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "timedOut": 0,
+    "subtests": 5,
+    "subtestsPassed": 5,
+    "subtestsFailed": 0
+  },
+  "results": [
+    {
+      "path": "contracts/dialog-opening-lifecycle.html",
+      "status": "PASS",
+      "duration": 58,
+      "message": null,
+      "subtests": [
+        {
+          "name": "show and showModal preserve mode and reject switching while open",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        },
+        {
+          "name": "showModal requires connection; show supports disconnected dialogs",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        },
+        {
+          "name": "beforetoggle can cancel opening or detach the dialog",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        },
+        {
+          "name": "modal focus uses autofocus and close restores background interaction",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        },
+        {
+          "name": "Removing open alone retains modal state; detachment releases it",
+          "status": "PASS",
+          "message": null,
+          "stack": null
+        }
+      ],
+      "diagnostics": []
+    }
+  ]
+}

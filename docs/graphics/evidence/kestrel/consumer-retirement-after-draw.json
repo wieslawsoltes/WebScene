@@ -1,0 +1,2350 @@
+{
+  "originalSha256": "0549ac0817db91f4df5ff8e6274843a72cec3b91a5aa6e32101e3f2a888c0563",
+  "change": "Recheck retired GPU image groups after recording the current frame, under the existing Skia graphics lease. The current image group remains drawable; only retiring groups are polled. Fence waits retain zero timeout.",
+  "rejectedExperiment": "Polling through EnsureCurrent before producer-frame submission reduced collection age but processed fewer frames/moves. Removed before final implementation.",
+  "runs": {
+    "fence-trace": {
+      "deliveredMoves": 60,
+      "coalescedMoves": 20,
+      "callbacks": 30,
+      "renderedScenes": 44,
+      "elapsedMilliseconds": 1862.1027,
+      "errors": 0,
+      "fenceCollectionMedianMilliseconds": 20.396,
+      "fencePolls": [
+        {
+          "ageMilliseconds": 0.466,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 15.689,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.08,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.097,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 16.351,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 15.679,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.119,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.157,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 17.897,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 16.633,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.084,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.115,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 16.86,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 16.509,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.106,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.109,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 16.597,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 15.666,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.071,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.148,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 18.082,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 16.503,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.096,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.214,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 16.477,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 37.688,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.069,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.087,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.716,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 7.94,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.088,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 24.631,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 16.66,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.104,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 17.66,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.085,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.1,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 16.792,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 16.416,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 4.193,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 16.397,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.263,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 39.949,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.079,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.101,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 23.878,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 38.786,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.062,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.119,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 39.455,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 26.42,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.102,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.089,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 43.046,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 39.558,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.071,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.087,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 22.84,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 38.955,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.075,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.078,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 38.343,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 19.381,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.063,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.08,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 35.844,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 37.583,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.074,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.088,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 19.989,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 36.771,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.072,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.081,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 35.332,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 20.803,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.089,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.092,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 33.966,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 33.811,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.065,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.096,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 18.749,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 36.343,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.072,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.639,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.089,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 33.228,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.064,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.134,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 18.819,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 33.982,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.063,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.072,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 33.57,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 19.19,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.063,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.077,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 35.06,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 4.79,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.086,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 34.001,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.08,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.074,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 18.036,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 34.926,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.081,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.086,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 34.116,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 19.838,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.105,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.07,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 36.246,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 33.248,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.109,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.067,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 19.682,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 32.328,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.06,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.611,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.077,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 33.58,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.065,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.091,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 18.509,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 33.675,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.084,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.6,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.07,
+          "poll": 1,
+          "glStatus": "911A"
+        }
+      ],
+      "delta": {
+        "Elapsed": "00:00:01.8642221",
+        "EnqueuedInputs": 125,
+        "DroppedInputs": 0,
+        "ConsumedInputs": 125,
+        "ExecutedScripts": 0,
+        "ScriptErrors": 0,
+        "LayoutPasses": 92,
+        "AppliedAnimationFrames": 43,
+        "CoalescedAnimationFrames": 0,
+        "PublicationAttempts": 89,
+        "BlockedPublications": 0,
+        "PublishedScenes": 44,
+        "AcquiredScenes": 44,
+        "AcknowledgedScenes": 44,
+        "RenderedScenes": 44,
+        "CompositionUiWakes": 0,
+        "RoutedInputEvents": 0,
+        "AcceptedInputEvents": 0,
+        "ResourceRequests": 0,
+        "ResourceHits": 0,
+        "ResourceMisses": 0,
+        "InteropPoolHits": 0,
+        "InteropPoolMisses": 0,
+        "InteropRequestPoolHits": 0,
+        "InteropRequestPoolMisses": 0,
+        "TimersScheduled": 0,
+        "TimersFired": 0,
+        "TimersCancelled": 0,
+        "LateTimers": 0,
+        "TotalTimerLatenessNanoseconds": 0,
+        "AnimationFramesRequested": 30,
+        "AnimationFramesInvoked": 30,
+        "AnimationFramesCancelled": 0,
+        "MicrotaskCheckpoints": 172,
+        "WorkerWaits": 192,
+        "WorkerSignalledWakes": 163,
+        "WorkerTimeoutWakes": 28,
+        "SceneBuilds": 44,
+        "NoDamageSceneBuilds": 1,
+        "FullCheckpointSceneBuilds": 0,
+        "ArbitraryEvaluationCalls": 0,
+        "GeneratedInvokeCalls": 0,
+        "GeneratedCallbackCalls": 0,
+        "ArbitraryEvaluationSourceBytes": 0,
+        "GeneratedRequestBytes": 0,
+        "WebTypefaceCacheHits": 0,
+        "WebTypefaceCacheMisses": 0,
+        "CompositionAnimationFrames": 75,
+        "CompositionRenders": 44,
+        "CompositionAppliedDiffs": 44,
+        "CompositionInvalidations": 49,
+        "CompositionFullInvalidations": 0,
+        "CompositionSubmittedAnimationFrames": 43,
+        "CompositionSkippedEmptyAnimationFrames": 32,
+        "CompositionRenderCallbacks": 49,
+        "CompositionUnchangedRenderCallbacks": 0
+      }
+    },
+    "early-retirement-pan": {
+      "deliveredMoves": 41,
+      "coalescedMoves": 39,
+      "callbacks": 28,
+      "renderedScenes": 32,
+      "elapsedMilliseconds": 1900.3174,
+      "errors": 0,
+      "fenceCollectionMedianMilliseconds": 4.961,
+      "fencePolls": [
+        {
+          "ageMilliseconds": 0.472,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 5.361,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 2.693,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 15.045,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.081,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 5.122,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.089,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.649,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.126,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.602,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.151,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.138,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.131,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.09,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.228,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 8.12,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.1,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.831,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.101,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.885,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.169,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 19.023,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.153,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 9.174,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.096,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 5.029,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.106,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.767,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 38.341,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.09,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 5.41,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.086,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 6.314,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.232,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 5.387,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.152,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.485,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.096,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.965,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.117,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.893,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.097,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.963,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.087,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 5.488,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.224,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 6.117,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.1,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.159,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.099,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.697,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.093,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.624,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.163,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.704,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 42.703,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.098,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.973,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.095,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.304,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 43.569,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.095,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.739,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.097,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 35.555,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 4.012,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.094,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.33,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 38.514,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.084,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.295,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.058,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.62,
+          "poll": 2,
+          "glStatus": "911A"
+        }
+      ],
+      "delta": {
+        "Elapsed": "00:00:01.9023536",
+        "EnqueuedInputs": 113,
+        "DroppedInputs": 0,
+        "ConsumedInputs": 113,
+        "ExecutedScripts": 0,
+        "ScriptErrors": 0,
+        "LayoutPasses": 71,
+        "AppliedAnimationFrames": 31,
+        "CoalescedAnimationFrames": 0,
+        "PublicationAttempts": 79,
+        "BlockedPublications": 0,
+        "PublishedScenes": 32,
+        "AcquiredScenes": 32,
+        "AcknowledgedScenes": 32,
+        "RenderedScenes": 32,
+        "CompositionUiWakes": 0,
+        "RoutedInputEvents": 0,
+        "AcceptedInputEvents": 0,
+        "ResourceRequests": 0,
+        "ResourceHits": 0,
+        "ResourceMisses": 0,
+        "InteropPoolHits": 0,
+        "InteropPoolMisses": 0,
+        "InteropRequestPoolHits": 0,
+        "InteropRequestPoolMisses": 0,
+        "TimersScheduled": 0,
+        "TimersFired": 0,
+        "TimersCancelled": 0,
+        "LateTimers": 0,
+        "TotalTimerLatenessNanoseconds": 0,
+        "AnimationFramesRequested": 28,
+        "AnimationFramesInvoked": 28,
+        "AnimationFramesCancelled": 0,
+        "MicrotaskCheckpoints": 132,
+        "WorkerWaits": 182,
+        "WorkerSignalledWakes": 147,
+        "WorkerTimeoutWakes": 34,
+        "SceneBuilds": 32,
+        "NoDamageSceneBuilds": 1,
+        "FullCheckpointSceneBuilds": 0,
+        "ArbitraryEvaluationCalls": 0,
+        "GeneratedInvokeCalls": 0,
+        "GeneratedCallbackCalls": 0,
+        "ArbitraryEvaluationSourceBytes": 0,
+        "GeneratedRequestBytes": 0,
+        "WebTypefaceCacheHits": 0,
+        "WebTypefaceCacheMisses": 0,
+        "CompositionAnimationFrames": 58,
+        "CompositionRenders": 32,
+        "CompositionAppliedDiffs": 32,
+        "CompositionInvalidations": 32,
+        "CompositionFullInvalidations": 0,
+        "CompositionSubmittedAnimationFrames": 31,
+        "CompositionSkippedEmptyAnimationFrames": 27,
+        "CompositionRenderCallbacks": 32,
+        "CompositionUnchangedRenderCallbacks": 0
+      }
+    },
+    "after-draw-retirement-pan": {
+      "deliveredMoves": 65,
+      "coalescedMoves": 15,
+      "callbacks": 41,
+      "renderedScenes": 53,
+      "elapsedMilliseconds": 1855.9072,
+      "errors": 0,
+      "fenceCollectionMedianMilliseconds": 3.569,
+      "fencePolls": [
+        {
+          "ageMilliseconds": 0.365,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.727,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 25.504,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.073,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.005,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.086,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.743,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 29.654,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.096,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.197,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.073,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.974,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.086,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.211,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 25.934,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.077,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.24,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.072,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.434,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.102,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.392,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.295,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.323,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.087,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.085,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.089,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.049,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.103,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.394,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.098,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.027,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.202,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.249,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.189,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.737,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.11,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.603,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.116,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.305,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.138,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.52,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.117,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.667,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.088,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.374,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.15,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.358,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.128,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.456,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.113,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.95,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.075,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.561,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 28.188,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.079,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.825,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.081,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.654,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.077,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.432,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 31.883,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.097,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.811,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.078,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 22.05,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 3.618,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.07,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.45,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 5.458,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.211,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.415,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.128,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.255,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.152,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.637,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.151,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.878,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.128,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.731,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 2.286,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 8.109,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.097,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.536,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.108,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.836,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 25.529,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.084,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.495,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.105,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 21.844,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 2.849,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.104,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.394,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 27.25,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.151,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.296,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.117,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.803,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.091,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.096,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.108,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.895,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.079,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.386,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 25.651,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.122,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.094,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.09,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.725,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.106,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.066,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.097,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.725,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.137,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.866,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 26.488,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.069,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.583,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.072,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 19.413,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 2.516,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.098,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.899,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.078,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.173,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 24.36,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.105,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.383,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.105,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.342,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 27.91,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.102,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.978,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.117,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.488,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 27.455,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.093,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.319,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.075,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 19.652,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 2.688,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.209,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.636,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.211,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.003,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 32.106,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.127,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.166,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.194,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 23.921,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 4.542,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.135,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.205,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 33.724,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.138,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.266,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.088,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 24.968,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 2.226,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 23.075,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.099,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.297,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.089,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 24.755,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 2.717,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.068,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.147,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 22.102,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.102,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.126,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.067,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.589,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.146,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.872,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.142,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 5.305,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.073,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.7,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.08,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.496,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.179,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.144,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.088,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.025,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.104,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.283,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.231,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.014,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 41.51,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.214,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.866,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.146,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 4.26,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.122,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.241,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.083,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.653,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 32.926,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.07,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.734,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 0.072,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 27.177,
+          "poll": 3,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 2.866,
+          "poll": 2,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.073,
+          "poll": 1,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 2.425,
+          "poll": 2,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 3.589,
+          "poll": 3,
+          "glStatus": "911B"
+        },
+        {
+          "ageMilliseconds": 6.08,
+          "poll": 4,
+          "glStatus": "911A"
+        },
+        {
+          "ageMilliseconds": 0.083,
+          "poll": 1,
+          "glStatus": "911A"
+        }
+      ],
+      "delta": {
+        "Elapsed": "00:00:01.8595648",
+        "EnqueuedInputs": 134,
+        "DroppedInputs": 0,
+        "ConsumedInputs": 134,
+        "ExecutedScripts": 0,
+        "ScriptErrors": 0,
+        "LayoutPasses": 108,
+        "AppliedAnimationFrames": 52,
+        "CoalescedAnimationFrames": 0,
+        "PublicationAttempts": 103,
+        "BlockedPublications": 1,
+        "PublishedScenes": 53,
+        "AcquiredScenes": 53,
+        "AcknowledgedScenes": 53,
+        "RenderedScenes": 53,
+        "CompositionUiWakes": 0,
+        "RoutedInputEvents": 0,
+        "AcceptedInputEvents": 0,
+        "ResourceRequests": 0,
+        "ResourceHits": 0,
+        "ResourceMisses": 0,
+        "InteropPoolHits": 0,
+        "InteropPoolMisses": 0,
+        "InteropRequestPoolHits": 0,
+        "InteropRequestPoolMisses": 0,
+        "TimersScheduled": 0,
+        "TimersFired": 0,
+        "TimersCancelled": 0,
+        "LateTimers": 0,
+        "TotalTimerLatenessNanoseconds": 0,
+        "AnimationFramesRequested": 41,
+        "AnimationFramesInvoked": 41,
+        "AnimationFramesCancelled": 0,
+        "MicrotaskCheckpoints": 193,
+        "WorkerWaits": 211,
+        "WorkerSignalledWakes": 183,
+        "WorkerTimeoutWakes": 27,
+        "SceneBuilds": 53,
+        "NoDamageSceneBuilds": 1,
+        "FullCheckpointSceneBuilds": 0,
+        "ArbitraryEvaluationCalls": 0,
+        "GeneratedInvokeCalls": 0,
+        "GeneratedCallbackCalls": 0,
+        "ArbitraryEvaluationSourceBytes": 0,
+        "GeneratedRequestBytes": 0,
+        "WebTypefaceCacheHits": 0,
+        "WebTypefaceCacheMisses": 0,
+        "CompositionAnimationFrames": 78,
+        "CompositionRenders": 53,
+        "CompositionAppliedDiffs": 53,
+        "CompositionInvalidations": 54,
+        "CompositionFullInvalidations": 0,
+        "CompositionSubmittedAnimationFrames": 52,
+        "CompositionSkippedEmptyAnimationFrames": 26,
+        "CompositionRenderCallbacks": 54,
+        "CompositionUnchangedRenderCallbacks": 0
+      }
+    },
+    "after-draw-final-pan": {
+      "deliveredMoves": 71,
+      "coalescedMoves": 9,
+      "callbacks": 52,
+      "renderedScenes": 61,
+      "elapsedMilliseconds": 1854.8945,
+      "errors": 0,
+      "fenceCollectionMedianMilliseconds": null,
+      "fencePolls": [],
+      "delta": {
+        "Elapsed": "00:00:01.8569473",
+        "EnqueuedInputs": 141,
+        "DroppedInputs": 0,
+        "ConsumedInputs": 141,
+        "ExecutedScripts": 0,
+        "ScriptErrors": 0,
+        "LayoutPasses": 125,
+        "AppliedAnimationFrames": 59,
+        "CoalescedAnimationFrames": 0,
+        "PublicationAttempts": 151,
+        "BlockedPublications": 0,
+        "PublishedScenes": 61,
+        "AcquiredScenes": 61,
+        "AcknowledgedScenes": 61,
+        "RenderedScenes": 61,
+        "CompositionUiWakes": 0,
+        "RoutedInputEvents": 0,
+        "AcceptedInputEvents": 0,
+        "ResourceRequests": 0,
+        "ResourceHits": 0,
+        "ResourceMisses": 0,
+        "InteropPoolHits": 0,
+        "InteropPoolMisses": 0,
+        "InteropRequestPoolHits": 0,
+        "InteropRequestPoolMisses": 0,
+        "TimersScheduled": 0,
+        "TimersFired": 0,
+        "TimersCancelled": 0,
+        "LateTimers": 0,
+        "TotalTimerLatenessNanoseconds": 0,
+        "AnimationFramesRequested": 52,
+        "AnimationFramesInvoked": 52,
+        "AnimationFramesCancelled": 0,
+        "MicrotaskCheckpoints": 216,
+        "WorkerWaits": 252,
+        "WorkerSignalledWakes": 223,
+        "WorkerTimeoutWakes": 28,
+        "SceneBuilds": 61,
+        "NoDamageSceneBuilds": 1,
+        "FullCheckpointSceneBuilds": 0,
+        "ArbitraryEvaluationCalls": 0,
+        "GeneratedInvokeCalls": 0,
+        "GeneratedCallbackCalls": 0,
+        "ArbitraryEvaluationSourceBytes": 0,
+        "GeneratedRequestBytes": 0,
+        "WebTypefaceCacheHits": 0,
+        "WebTypefaceCacheMisses": 0,
+        "CompositionAnimationFrames": 89,
+        "CompositionRenders": 61,
+        "CompositionAppliedDiffs": 61,
+        "CompositionInvalidations": 61,
+        "CompositionFullInvalidations": 0,
+        "CompositionSubmittedAnimationFrames": 59,
+        "CompositionSkippedEmptyAnimationFrames": 30,
+        "CompositionRenderCallbacks": 61,
+        "CompositionUnchangedRenderCallbacks": 0
+      }
+    }
+  },
+  "validation": {
+    "managedInteropTests": {
+      "net8Passed": 11,
+      "net10Passed": 11,
+      "skipped": 0
+    },
+    "ganesh": {
+      "route": "Dawn-IOSurface-CGL-Ganesh",
+      "renderedFrames": 32,
+      "imports": 2,
+      "gpuRetirementCompleted": true,
+      "explicitTransportCopies": 0,
+      "diagnosticReadbacks": 8,
+      "physicalPresentationVerified": false,
+      "detachedBeforeRetirement": false
+    }
+  },
+  "limitations": [
+    "Short individual runs; no statistical or browser performance qualification.",
+    "Fence age measures collection time, not exact GPU completion time.",
+    "Traced and untraced runs have different instrumentation overhead; do not infer a speedup ratio.",
+    "Physical display smoothness, resize timing and all epic acceptance gates remain unqualified."
+  ]
+}

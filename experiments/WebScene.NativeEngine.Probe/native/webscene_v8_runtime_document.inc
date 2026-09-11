@@ -710,6 +710,7 @@
             return;
         }
         node->attributes[name] = value;
+        if ((name == "width" || name == "height")) reset_canvas_backing_store(*self, *node);
         if (name == "id") node->id_attribute = value;
         else if (name == "class") node->class_name = value;
         else if (name == "value" && node->tag == "input") {
@@ -778,6 +779,7 @@
             : std::optional<std::string>(previous->second);
         self->record_html_attribute_feature(name, "setAttributeNS");
         node->attributes[name] = value;
+        if ((!namespace_uri || namespace_uri->empty()) && (name == "width" || name == "height")) reset_canvas_backing_store(*self, *node);
         if (name == "id") node->id_attribute = value;
         else if (name == "class") node->class_name = value;
         if (self->attribute_requires_recascade(name)) {
@@ -807,6 +809,7 @@
         const auto old_value = std::optional<std::string>(node->attributes.at(name));
         self->detach_attr(*node, name, *old_value);
         node->attributes.erase(name);
+        if ((name == "width" || name == "height")) reset_canvas_backing_store(*self, *node);
         if (name == "id") node->id_attribute.clear();
         else if (name == "class") node->class_name.clear();
         else if (name == "src" && node->tag == "img") {
@@ -879,6 +882,7 @@
         const auto old_value = std::optional<std::string>(match->second);
         self->detach_attr(*node, name, *old_value);
         node->attributes.erase(name);
+        if ((!namespace_uri || namespace_uri->empty()) && (name == "width" || name == "height")) reset_canvas_backing_store(*self, *node);
         if (name == "id") node->id_attribute.clear();
         else if (name == "class") node->class_name.clear();
         else if (name == "src" && node->tag == "img") node->clear_replaced_image();
@@ -917,6 +921,7 @@
         }
         if (force_present) {
             node->attributes[name] = {};
+            if (name == "width" || name == "height") reset_canvas_backing_store(*self, *node);
             if (name == "id") node->id_attribute.clear();
             else if (name == "class") node->class_name.clear();
             self->notify_custom_element_attribute(
@@ -924,6 +929,7 @@
         } else {
             const auto old_value = std::optional<std::string>(node->attributes.at(name));
             node->attributes.erase(name);
+            if (name == "width" || name == "height") reset_canvas_backing_store(*self, *node);
             if (name == "id") node->id_attribute.clear();
             else if (name == "class") node->class_name.clear();
             self->notify_custom_element_attribute(
@@ -989,8 +995,9 @@
             result.push_back(frame_script{
                 extract_html_attribute(attributes, "src"),
                 html.substr(open_end + 1U, close - open_end - 1U),
-                attributes.find("defer") != std::string::npos,
-                index++});
+                attributes.find("defer") != std::string::npos || extract_html_attribute(attributes, "type") == "module",
+                index++,
+                extract_html_attribute(attributes, "type") == "module"});
             cursor = close + 9U;
         }
         return result;
@@ -1021,8 +1028,34 @@
         }
     }
 
+    static std::vector<std::string> parsed_inline_stylesheets(const dom_node& root)
+    {
+        std::vector<std::string> result;
+        const auto visit = [&](const auto& self, const dom_node& node) -> void {
+            // Tree construction handles raw text, comments and template contents.
+            // Never scan script strings for markup belonging to another document.
+            if (node.tag == "style") {
+                auto text = node.text_content;
+                for (const auto* child : node.children)
+                    if (child != nullptr && child->tag == "#text") text += child->text_content;
+                result.push_back(std::move(text));
+                return;
+            }
+            if (node.tag == "template") return;
+            for (const auto* child : node.children) if (child != nullptr) self(self, *child);
+        };
+        visit(visit, root);
+        return result;
+    }
+
     static std::vector<std::string> parse_inline_stylesheets(const std::string& html)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
+        native_document parsed;
+        const auto status = parse_html_document(parsed, parsed.body(), html);
+        if (!status) return {};
+        return parsed_inline_stylesheets(parsed.body());
+#else
         std::vector<std::string> result;
         size_t cursor = 0U;
         while (true) {
@@ -1036,6 +1069,7 @@
             cursor = close + 8U;
         }
         return result;
+#endif
     }
 
     static std::string extract_element_contents(const std::string& html, const std::string& tag)
@@ -1181,6 +1215,40 @@
             local_context,
             js_string(isolate, "toString"),
             v8::Function::New(local_context, location_to_string).ToLocalChecked()).Check();
+        std::string secure_host = host;
+        if (const auto at = secure_host.rfind('@'); at != std::string::npos) secure_host.erase(0, at + 1);
+        if (secure_host.starts_with("[")) {
+            const auto close = secure_host.find(']');
+            secure_host = secure_host.substr(0, close == std::string::npos ? secure_host.size() : close + 1);
+        } else if (const auto colon = secure_host.find(':'); colon != std::string::npos) secure_host.resize(colon);
+        std::transform(secure_host.begin(), secure_host.end(), secure_host.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        bool loopback = secure_host == "localhost" || secure_host.ends_with(".localhost")
+            || secure_host == "[::1]";
+        if (secure_host.starts_with("127.")) {
+            size_t start = 0, components = 0;
+            bool valid = true;
+            while (start < secure_host.size()) {
+                auto end = secure_host.find('.', start);
+                if (end == std::string::npos) end = secure_host.size();
+                unsigned value = 0;
+                const auto parsed = std::from_chars(secure_host.data() + start, secure_host.data() + end, value);
+                if (parsed.ec != std::errc{} || parsed.ptr != secure_host.data() + end || value > 255) valid = false;
+                ++components; start = end + 1;
+            }
+            loopback = valid && components == 4;
+        }
+        const auto protocol = scheme_end == std::string::npos ? std::string{} : href.substr(0, scheme_end);
+        bool secure = protocol == "https" || protocol == "wss" || protocol == "file"
+            || ((protocol == "http" || protocol == "ws") && loopback);
+        // A trustworthy child cannot escape an insecure top-level ancestor.
+        if (!context.IsEmpty() && local_context != context.Get(isolate)) {
+            v8::Local<v8::Value> parent_secure;
+            secure = secure && context.Get(isolate)->Global()->Get(context.Get(isolate),
+                js_string(isolate, "isSecureContext")).ToLocal(&parent_secure) && parent_secure->IsTrue();
+        }
+        global->DefineOwnProperty(local_context, js_string(isolate, "isSecureContext"),
+            v8::Boolean::New(isolate, secure), v8::ReadOnly).Check();
         global->Set(local_context, js_string(isolate, "location"), location).Check();
         v8::Local<v8::Value> document_value;
         if (global->Get(
