@@ -670,6 +670,22 @@ public:
               if(model.data!=before)throw std::runtime_error("Hosted inspector text undo failed");
             }
             std::cout<<"Hosted inspector text commits and undo passed\n";
+            if(model.find(selected)->value("type",std::string{})!="POLYLINE")
+              throw std::runtime_error("Hosted checkbox fixture did not select a polyline");
+            const bool was_closed=model.find(selected)->value("closed",false);
+            const auto checkbox=find_select(find_select,view->document.find("inspector"),"closed");
+            if(!checkbox)throw std::runtime_error("Hosted Closed checkbox missing");
+            view->refresh();
+            const auto box=view->document.bounds(checkbox);
+            if(box.width<=0 || box.height<=0)throw std::runtime_error("Hosted checkbox has no hit area");
+            foco::pointer_event click;click.position={float(view->bounds().x+box.x+box.width*.5),float(view->bounds().y+box.y+box.height*.5)};
+            click.kind=foco::pointer_event_kind::pressed;click.buttons=1;view->pointer_event_received(click);
+            click.kind=foco::pointer_event_kind::released;click.buttons=0;view->pointer_event_received(click);
+            if(model.find(selected)->value("closed",false)==was_closed)throw std::runtime_error("Hosted Closed checkbox pointer activation failed");
+            view->document.focus(view->document.find("viewport"));
+            key={};key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
+            if(model.data!=before)throw std::runtime_error("Hosted Closed checkbox undo failed");
+            std::cout<<"Hosted Closed checkbox pointer activation and undo passed\n";
             exercise_layer_edit=false;std::cout<<"Hosted inspector layer edit and undo passed\n";
           }
           exercise_picking=false;std::cout<<"Hosted geometry selection passed\n";

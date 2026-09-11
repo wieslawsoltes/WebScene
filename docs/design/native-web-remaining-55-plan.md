@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Hosted Closed checkbox verification: the Courtyard inspector exercise now finds
+the compiled checkbox's rendered bounds, sends Foco pointer press/release at its
+center, verifies the selected polyline's closed flag changed, and invokes platform
+undo with exact drawing restoration. The run passed with GPU capture and clean
+exit. This exercises host hit testing/activation, not physical mouse latency or
+full application parity.
+
 Polyline geometry inspector: original Vertices, Closed, Length and conditional
 Plan area rows instantiate through compiled templates. Closed binds native checked
 state to an editable-selection undo transaction; length/area use the native path
