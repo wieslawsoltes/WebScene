@@ -15,6 +15,7 @@
 #include "webscene_css_resources.h"
 #include "webscene_css_rule_preparation.h"
 #include "webscene_css_stylesheet.h"
+#include "webscene_css_stylesheet_owner.h"
 #include "webscene_css_media.h"
 #include "webscene_css_property_mask.h"
 #include "webscene_css_reset.h"
@@ -789,5 +790,21 @@ int main(int argc,char** argv) {
         });
     std::sort(candidate_indices.begin(),candidate_indices.end());
     if(candidate_indices!=std::vector<size_t>{0,0,1,2,3,4,6}) return 141;
+    webscene_native::css::stylesheet_owner sheets;
+    auto responsive=std::make_shared<webscene_native::css::css_rule_payload>();
+    responsive->selector=".item";
+    responsive->media_queries={"(min-width: 600px)"};
+    sheets.replace(1,{"asset://app/ui.css",{responsive},{},{}});
+    if(sheets.state().rules[0].media_matches || sheets.candidates(ordered_node).size()!=1) return 142;
+    if(!sheets.set_environment({800,600,false}) || !sheets.state().rules[0].media_matches ||
+       sheets.set_environment({900,600,false})) return 143;
+    sheets.replace(2,{"asset://app/override.css",{responsive},{},{}});
+    sheets.replace(1,{"asset://app/ui.css",{responsive},{},{}});
+    if(sheets.state().rules.size()!=2 || sheets.state().rules[0].stylesheet_owner_id!=1 ||
+       sheets.state().rules[1].stylesheet_owner_id!=2 || sheets.candidates(ordered_node).size()!=2) return 144;
+    if(!sheets.remove(1) || sheets.remove(1) || sheets.state().rules.size()!=1 ||
+       sheets.candidates(ordered_node)!=std::vector<size_t>{0}) return 145;
+    sheets.remove(2);
+    if(!sheets.candidates(ordered_node).empty()) return 146;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

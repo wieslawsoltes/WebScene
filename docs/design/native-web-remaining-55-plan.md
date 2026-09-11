@@ -705,3 +705,15 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   positional selector, active pseudo border, iframe recascade and media-query
   regressions pass. This preserves existing selection policy; native stylesheet
   ownership/invalidation and full Kestrel parity/performance remain unfinished.
+
+- Native prepared stylesheet ownership: stylesheet_owner now attaches/replaces
+  prepared author sheets in stable source order, removes them with index rebuild,
+  merges keyframe definitions, collects sorted unique candidates, and refreshes
+  media activation from an explicit environment. Prepared data types are separated
+  from the parser entry point; the owner performs no CSS text parsing. Native
+  tests pass for replacement order, removal/index compaction, repeated class keys,
+  viewport activation and unchanged activation. Original Kestrel preparation still
+  reports 407 selector-expanded rules, 1520 declarations and two partial keyframe
+  diagnostics; these are syntax counts, not visual parity. The owner is not yet
+  wired to a native document host. Recascade scheduling, interaction dependencies,
+  scoped sheets, resource registration and app integration remain outstanding.
