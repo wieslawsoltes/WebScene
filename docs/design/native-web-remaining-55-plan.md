@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Foco picker retained-rendering correction: color_spectrum now publishes reusable
+gradient paint resources and complete retained commands for its existing box/ring
+visuals. Basic headerless sliders without ticks/tooltips now emit retained tracks
+and thumbs; unsupported slider variants remain explicitly incomplete. The open
+Kestrel picker capture now succeeds and shows the spectrum/RGB controls, and the
+open/commit/undo exercise passes again with a GPU capture. The flyout's chrome,
+placement, spectrum selection marker and actual pointer color selection still
+need review; this is not full picker appearance/interaction parity or 60fps resize
+evidence. Foco owns these rendering fixes; WebScene remains unchanged by them.
+
 Color-picker integration work in progress: selected swatches now anchor Foco's
 existing compact color_picker flyout; native color changes apply to the captured
 selection only and refresh the model/DOM. --exercise-color-picker opens the flyout,
