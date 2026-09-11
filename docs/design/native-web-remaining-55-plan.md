@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Picker background follow-up: the Foco editor panel now resolves Fluent.Surface
+as its background. NativeKestrel rebuilt and the open-picker GPU capture
+(`/tmp/kestrel-picker-background.png`, exit 0) shows an opaque panel with readable
+RGB/hex fields. At 1280x800 it fits flush against the bottom/right window edges.
+Small-window overflow and actual pointer selection remain unverified; no original
+HTML/CSS changed.
+
 Foco spectrum box correction: retained rendering now uses the selected hue with
 white-to-hue saturation and a vertical value shade, matching the control's native
 pointer coordinates. Its selection marker follows saturation/value instead of
