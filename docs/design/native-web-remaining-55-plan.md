@@ -2298,3 +2298,14 @@ stroke commands and unchanged model, then recreates the visible capture. Build
 and hosted run pass, GPU serial 2, exit 0. This tests direct camera mutation and
 synthetic host input; actual continuous navigation, resize latency and snapping
 remain unverified.
+
+### Native grid/ortho/polar constraint semantics
+
+Added constrain_drafting_point in the drawing module, porting the portion of
+original snapPoint after object-snap selection. Grid rounding precedes ortho or
+polar restriction; XY constraints preserve incoming Z. Math.round negative ties
+use floor(x+.5), and ortho equal-axis ties choose horizontal. Native drawing suite
+passes horizontal/vertical/tie, negative grid tie and negative polar tie cases.
+This is a reusable native helper only: original status toggles, Shift tracking,
+shared preview/commit integration and object-snap candidate selection remain to
+be connected. No snapping capability is claimed in the running app yet.

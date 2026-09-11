@@ -607,6 +607,23 @@ public:
     return item.label;
   }
 };
+// Post-object-snap drafting constraints from app.js snapPoint.
+inline std::array<double,3> constrain_drafting_point(std::array<double,3> world,
+    std::optional<std::array<double,3>> base,bool snap,double spacing,bool ortho,bool polar,double polar_degrees=45) {
+  if(snap && std::isfinite(spacing) && spacing>0) {
+    for(size_t axis=0;axis<2;++axis)world[axis]=std::floor(world[axis]/spacing+.5)*spacing;
+  }
+  if(!base)return world;
+  const auto dx=world[0]-(*base)[0],dy=world[1]-(*base)[1];
+  if(ortho) {
+    if(std::abs(dx)>=std::abs(dy))world[1]=(*base)[1];else world[0]=(*base)[0];
+  } else if(polar && std::isfinite(polar_degrees) && polar_degrees>0) {
+    const auto step=polar_degrees*std::numbers::pi/180;
+    const auto angle=std::floor(std::atan2(dy,dx)/step+.5)*step,r=std::hypot(dx,dy);
+    world[0]=(*base)[0]+std::cos(angle)*r;world[1]=(*base)[1]+std::sin(angle)*r;
+  }
+  return world;
+}
 // Coordinate entry shared by native drafting tools; base is pending or last accepted point.
 inline std::array<double,3> parse_drafting_point(std::string text,std::array<double,3> base={}) {
   const auto trim=[](std::string value) {

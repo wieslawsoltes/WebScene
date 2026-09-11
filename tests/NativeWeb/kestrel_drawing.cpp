@@ -18,6 +18,17 @@ static void check(bool v, const char *message) {
 int main() {
   {
     using point=std::array<double,3>;
+    const point base{10,20,3};
+    check(kestrel::constrain_drafting_point({15,24,7},base,false,1,true,false)==point{15,20,7},"horizontal ortho failed");
+    check(kestrel::constrain_drafting_point({14,25,7},base,false,1,true,false)==point{10,25,7},"vertical ortho failed");
+    check(kestrel::constrain_drafting_point({15,25,7},base,false,1,true,false)==point{15,20,7},"ortho tie differs from browser");
+    check(kestrel::constrain_drafting_point({-5,5,7},{},true,10,false,false)==point{0,10,7},"grid negative tie differs from Math.round");
+    auto polar=kestrel::constrain_drafting_point({10,-10,7},point{0,0,0},false,1,false,true,90);
+    check(std::abs(polar[0]-std::sqrt(200.0))<1e-8 && std::abs(polar[1])<1e-8 && polar[2]==7,"polar negative tie failed");
+  }
+
+  {
+    using point=std::array<double,3>;
     check(kestrel::parse_drafting_point("1,2",{5,6,7})==point{1,2,7},"absolute XY elevation lost");
     check(kestrel::parse_drafting_point("@1,2",{5,6,7})==point{6,8,7},"relative XY failed");
     check(kestrel::parse_drafting_point("1,2,3",{5,6,7})==point{1,2,3},"absolute XYZ failed");
