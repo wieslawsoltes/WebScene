@@ -8,6 +8,15 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Native label activation: pointer activation now resolves explicit for/id targets
+and implicit wrapped controls, focuses and activates the associated control after
+an uncancelled label click, and avoids reactivation from direct control clicks.
+Disabled/inert targets are excluded and callback removal/disposal is rechecked.
+Native input tests cover Group-style explicit labels, preventDefault, disabled
+inputs and wrapping checkbox labels without double toggles; the suite passes.
+This closes the basic native label behavior gap, not all HTML activation edge
+cases or accessibility/browser parity.
+
 Group Unicode trim parity: group creation now trims the 25 ECMAScript whitespace
 code points using UTF-8 boundaries, preserving accented/astral name content and
 falling back to Group for all-whitespace names. A development Node reference

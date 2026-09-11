@@ -413,7 +413,44 @@ void document::activate(node_id id,float x,float y,uint32_t buttons,input_modifi
   if(checkbox)set_checked(id,!previous);
   const bool allowed=dispatch(id,"click",x,y,0,buttons,{},0,modifiers);
   if(!state_->alive || !state_->dom.find_by_native_id(id))return;
-  if(!checkbox)return;
+  if(!checkbox) {
+    if(!allowed)return;
+    node=state_->dom.find_by_native_id(id);
+    const auto interactive=[](const dom_node& candidate) {
+      return candidate.tag=="input" || candidate.tag=="button" || candidate.tag=="select" ||
+        candidate.tag=="textarea" || candidate.tag=="meter" || candidate.tag=="output" ||
+        candidate.tag=="progress" || (candidate.tag=="a" && candidate.attributes.contains("href"));
+    };
+    dom_node* label=nullptr;
+    for(auto* current=node;current;current=current->parent) {
+      if(current->tag=="label"){label=current;break;}
+      if(interactive(*current))return;
+    }
+    if(!label)return;
+    const auto labelable=[](const dom_node& candidate) {
+      if(candidate.tag=="input")return !candidate.attributes.contains("type") || candidate.attributes.at("type")!="hidden";
+      return candidate.tag=="button" || candidate.tag=="select" || candidate.tag=="textarea" ||
+        candidate.tag=="meter" || candidate.tag=="output" || candidate.tag=="progress";
+    };
+    dom_node* control=nullptr;
+    if(auto association=label->attributes.find("for");association!=label->attributes.end()) {
+      control=state_->dom.find_by_native_id(find(association->second));
+      if(control && !labelable(*control))control=nullptr;
+    } else {
+      const auto search=[&](auto&& self,dom_node& parent)->dom_node* {
+        for(auto* child:parent.children) {
+          if(labelable(*child))return child;
+          if(auto* found=self(self,*child))return found;
+        }
+        return nullptr;
+      };
+      control=search(search,*label);
+    }
+    if(!control || control->attributes.contains("disabled") || state_->dom.is_inert(*control))return;
+    const auto target=control->id;focus(target);
+    if(state_->alive && state_->dom.find_by_native_id(target))activate(target,x,y,buttons,modifiers);
+    return;
+  }
   if(!allowed){set_checked(id,previous);return;}
   dispatch(id,"input");
   if(state_->alive && state_->dom.find_by_native_id(id))dispatch(id,"change");

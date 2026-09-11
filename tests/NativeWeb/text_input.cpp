@@ -4,6 +4,18 @@ using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
   {
+    document d;auto label=d.element(d.body(),"label");d.attribute(label,"for","name");d.set_text(label,"Name");
+    auto input=d.element(d.body(),"input");d.attribute(input,"id","name");
+    const auto click=[&](node_id node) {d.render(300,200);auto b=d.bounds(node);d.pointer("pointerdown",b.x+1,b.y+1);d.pointer("pointerup",b.x+1,b.y+1,0);};
+    click(label);require(d.focused()==input);
+    d.focus(0);auto prevent=d.on(label,"click",[](auto& event){event.prevent_default();});click(label);require(d.focused()==0);prevent={};
+    d.attribute(input,"disabled","");click(label);require(d.focused()==0);d.remove_attribute(input,"disabled");
+    auto wrapper=d.element(d.body(),"label");auto text=d.element(wrapper,"span");d.set_text(text,"Toggle");
+    auto box=d.element(wrapper,"input");d.attribute(box,"type","checkbox");
+    click(text);require(d.checked(box) && d.focused()==box);
+    click(box);require(!d.checked(box));
+  }
+  {
     document d;auto outside=d.element(d.body(),"button");
     auto dialog=d.element(d.body(),"dialog");auto first=d.element(dialog,"input");auto last=d.element(dialog,"button");
     rule box;box.inline_target=dialog;box.declarations.push_back({false,+[](style& s){s.set_width({200,length_unit::pixels});s.set_height({100,length_unit::pixels});}});d.add_rule(std::move(box));
