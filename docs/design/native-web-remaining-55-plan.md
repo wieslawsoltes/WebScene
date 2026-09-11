@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Foco spectrum box correction: retained rendering now uses the selected hue with
+white-to-hue saturation and a vertical value shade, matching the control's native
+pointer coordinates. Its selection marker follows saturation/value instead of
+remaining at the center. The rebuilt NativeKestrel open-picker capture
+(`/tmp/kestrel-spectrum-selection.png`) verifies the gradient and marker for the
+selected color. Ring marker behavior, flyout placement/background and actual
+pointer-driven selection still need work; this does not establish picker parity.
+
 Foco picker retained-rendering correction: color_spectrum now publishes reusable
 gradient paint resources and complete retained commands for its existing box/ring
 visuals. Basic headerless sliders without ticks/tooltips now emit retained tracks
