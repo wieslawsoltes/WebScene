@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Color-scheme environment gap fixed: shared_css previously hardcoded the light
+media environment. Native documents now expose set_dark_color_scheme, invalidate
+styles when it changes, and pass it to the existing shared media evaluator. Foco's
+view supplies its effective theme and requests a refresh when that preference
+changes. A native shared-CSS test verifies light/dark/light widths and unchanged
+preference layout stability. The hosted app builds and its existing theme/capture
+exercise passes; that exercise changes Kestrel's data-theme and is not an OS theme
+notification test. Typed-backend color-scheme lowering and OS theme transitions
+remain outside this verification.
+
 Shared CSS parity check strengthened: shared_styles now records serialized scene
 bytes at every render checkpoint and requires identical sequences for runtime
 stylesheet preparation and compiler-generated stylesheet data on compiled HTML.

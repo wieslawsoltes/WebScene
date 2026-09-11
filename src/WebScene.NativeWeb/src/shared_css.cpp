@@ -24,7 +24,7 @@ public:
         report_->diagnostics.insert(report_->diagnostics.end(),
             sheet.diagnostics.begin(),sheet.diagnostics.end());
     }
-    session_->set_environment({environment.width,environment.height,false,environment.reduced_motion});
+    session_->set_environment({environment.width,environment.height,environment.dark_color_scheme,environment.reduced_motion});
     session_->set_interaction(document.find_by_native_id(environment.hover),
         document.find_by_native_id(environment.focus),environment.focus_visible);
     // document::render calls this only for style/DOM/environment invalidation.

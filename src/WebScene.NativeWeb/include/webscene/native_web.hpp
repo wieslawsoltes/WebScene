@@ -384,7 +384,7 @@ private:
 struct style_environment {
   float width{}, height{};
   node_id hover{}, focus{};
-  bool focus_visible{}, reduced_motion{};
+  bool focus_visible{}, reduced_motion{}, dark_color_scheme{};
 };
 class stylesheet_resolver {
 public:
@@ -445,6 +445,7 @@ public:
   // Committed text only. Returns whether the focused control consumed it.
   bool text_input(std::string);
   void set_reduced_motion(bool enabled);
+  void set_dark_color_scheme(bool enabled);
   bool advance_animations(double timestamp_ms);
   bool has_active_animations() const;
   std::string cursor_at(float x, float y) const;

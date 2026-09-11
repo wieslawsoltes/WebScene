@@ -119,6 +119,17 @@ void compare_selector(const webscene_native::css::compiled_css_selector& a,
 }
 int main() {
   {
+    document d;auto target=d.element(d.body(),"div");d.attribute(target,"id","scheme-target");
+    auto sheet=webscene_native::css::prepare_stylesheet(
+      "#scheme-target {width:40px;height:10px} @media(prefers-color-scheme:dark){#scheme-target {width:90px}}",
+      "asset://scheme.css",[](const auto&){return true;});
+    d.set_stylesheet_resolver(make_shared_stylesheet_resolver({*sheet},{}));
+    d.render(200,100);require(d.bounds(target).width==40);
+    d.set_dark_color_scheme(true);d.render(200,100);require(d.bounds(target).width==90);
+    const auto passes=d.layout_passes();d.set_dark_color_scheme(true);d.render(200,100);require(d.layout_passes()==passes);
+    d.set_dark_color_scheme(false);d.render(200,100);require(d.bounds(target).width==40);
+  }
+  {
     document d;auto target=d.element(d.body(),"div");d.attribute(target,"id","theme-target");
     auto sheet=webscene_native::css::prepare_stylesheet(
       ":root {--size:40px} :root[data-theme=light] {--size:90px} #theme-target {width:var(--size);height:10px}",

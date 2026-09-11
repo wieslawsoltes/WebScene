@@ -24,6 +24,7 @@ struct document_state {
   bool alive{true};
   bool styles_dirty{true};
   bool reduced_motion{};
+  bool dark_color_scheme{};
   uint64_t rendered_scene_generation{};
   bool keyboard_modality{true};
   node_id focus{}, hover{}, pressed{}, body_id{};
@@ -468,6 +469,13 @@ void document::set_reduced_motion(bool enabled) {
   state_->styles_dirty=true;
   state_->dom.mark_dirty();
 }
+void document::set_dark_color_scheme(bool enabled) {
+  state_->check();
+  if(state_->dark_color_scheme==enabled)return;
+  state_->dark_color_scheme=enabled;
+  state_->styles_dirty=true;
+  state_->dom.mark_dirty();
+}
 std::string document::cursor_at(float x, float y) const {
   state_->check();
   auto *node=state_->dom.hit_test(state_->dom.body(),x,y);
@@ -879,7 +887,7 @@ const scene &document::render(float width, float height) {
   };
   if (s.styles_dirty || out.width != width || out.height != height) {
     if(s.resolver)
-      s.resolver->resolve(s.dom,{width,height,s.hover,s.focus,s.keyboard_modality,s.reduced_motion});
+      s.resolver->resolve(s.dom,{width,height,s.hover,s.focus,s.keyboard_modality,s.reduced_motion,s.dark_color_scheme});
     else
       cascade(cascade, s.dom.body(), {});
     auto events=s.dom.take_transition_events();

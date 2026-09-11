@@ -28,7 +28,8 @@ public:
   }
   bool requires_host_frames() const noexcept override {
     if(document.disposed()) return !packet_.empty() || bool(gpu_owner_);
-    return input_refresh_pending_ || host_reduced_motion()!=reduced_motion_ || document.has_active_animations();
+    return input_refresh_pending_ || host_reduced_motion()!=reduced_motion_ ||
+      (actual_theme()==foco::theme_variant::dark)!=dark_color_scheme_ || document.has_active_animations();
   }
   bool advance_host_frame(double timestamp_ms) override {
     if (!requires_host_frames()) return false;
@@ -52,6 +53,8 @@ public:
       return;
     reduced_motion_=host_reduced_motion();
     document.set_reduced_motion(reduced_motion_);
+    dark_color_scheme_=actual_theme()==foco::theme_variant::dark;
+    document.set_dark_color_scheme(dark_color_scheme_);
     const auto &scene = document.render(b.width, b.height);
     update_cursor();
     if (scene.revision == document_revision_ && !gpu_dirty_)
@@ -224,6 +227,7 @@ private:
     return sink && sink->reduced_motion();
   }
   bool reduced_motion_{};
+  bool dark_color_scheme_{};
   bool input_refresh_pending_{};
   std::optional<foco::point> pointer_position_;
   void request_input_refresh() {
