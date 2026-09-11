@@ -319,7 +319,8 @@ static bool focusable(const dom_node &n) {
   if(n.tag=="input" && n.attributes.contains("type") && n.attributes.at("type")=="hidden") return false;
   for (auto *ancestor = &n; ancestor; ancestor = ancestor->parent)
     if (ancestor->style.display == display_mode::none) return false;
-  return (n.tag == "button" || n.tag == "select" || forms::is_text_control(&n) || tab_index(n).has_value()) &&
+  const bool checkbox=n.tag=="input" && n.attributes.contains("type") && n.attributes.at("type")=="checkbox";
+  return (checkbox || n.tag == "button" || n.tag == "select" || forms::is_text_control(&n) || tab_index(n).has_value()) &&
          !n.attributes.contains("disabled");
 }
 void document::focus(node_id id) {
@@ -375,6 +376,28 @@ void document::set_value(node_id id,std::string value) {
   control.selection_start=control.selection_end=control.value.size();
   control.selection_direction=text_selection_direction::none;
   state_->styles_dirty=true;state_->dom.mark_dirty();
+}
+bool document::checked(node_id id) const {
+  const auto& node=state_->node(id);const auto& control=node.form_control();
+  return control.checkedness_initialized?control.checkedness:node.attributes.contains("checked");
+}
+void document::set_checked(node_id id,bool value) {
+  auto& node=state_->node(id);auto& control=node.mutable_form_control();
+  control.checkedness_initialized=true;control.checkedness=value;
+  state_->styles_dirty=true;state_->dom.mark_dirty();
+}
+void document::activate(node_id id,float x,float y,uint32_t buttons,input_modifiers modifiers) {
+  auto* node=state_->dom.find_by_native_id(id);
+  if(!node || node->attributes.contains("disabled") || state_->dom.is_inert(*node))return;
+  const bool checkbox=node->tag=="input" && node->attributes.contains("type") && node->attributes.at("type")=="checkbox";
+  const bool previous=checkbox && checked(id);
+  if(checkbox)set_checked(id,!previous);
+  const bool allowed=dispatch(id,"click",x,y,0,buttons,{},0,modifiers);
+  if(!state_->alive || !state_->dom.find_by_native_id(id))return;
+  if(!checkbox)return;
+  if(!allowed){set_checked(id,previous);return;}
+  dispatch(id,"input");
+  if(state_->alive && state_->dom.find_by_native_id(id))dispatch(id,"change");
 }
 void document::set_selection(node_id id,size_t start,size_t end) {
   auto& node=state_->node(id);
@@ -513,7 +536,7 @@ void document::pointer(std::string type, float x, float y, uint32_t buttons, inp
     state_->styles_dirty = true;
     state_->dom.mark_dirty();
     if (id && id == pressed && state_->dom.find_by_native_id(id))
-      dispatch(id, "click", x, y, 0, buttons, {}, 0, modifiers);
+      activate(id,x,y,buttons,modifiers);
   }
 }
 void document::key(std::string_view key, bool shift) {
@@ -616,6 +639,9 @@ void document::key(std::string_view key, input_modifiers modifiers) {
     focus(nodes[(index + (shift ? -1 : 1) + nodes.size()) % nodes.size()]);
   } else if ((key == "Enter" || key == " ") && state_->focus) {
     const auto id=state_->focus;
+    if(key==" " && state_->node(id).tag=="input" && attribute(id,"type")=="checkbox") {
+      activate(id,0,0,0,modifiers);return;
+    }
     if(key=="Enter" && state_->node(id).tag=="input" && forms::is_text_control(&state_->node(id))) {
       if(auto pending=state_->uncommitted_text.extract(id);!pending.empty() && value(id)!=pending.mapped())
         dispatch(id,"change");

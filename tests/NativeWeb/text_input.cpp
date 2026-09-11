@@ -4,6 +4,16 @@ using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
   {
+    document d;auto box=d.element(d.body(),"input");d.attribute(box,"type","checkbox");
+    unsigned changes=0;auto change=d.on(box,"change",[&](auto&){++changes;});
+    d.focus(box);require(d.focused()==box && !d.checked(box));d.key(" ");require(d.checked(box) && changes==1);
+    auto cancel=d.on(box,"click",[&](auto& event){require(!d.checked(box));event.prevent_default();});
+    d.key(" ");require(d.checked(box) && changes==1);cancel={};
+    d.set_checked(box,false);require(changes==1);d.attribute(box,"disabled","");d.key(" ");require(!d.checked(box));
+    d.remove_attribute(box,"disabled");auto dispose=d.on(box,"input",[&](auto&){d.dispose();});
+    d.key(" ");require(d.disposed() && changes==1);
+  }
+  {
     document d;auto input=d.element(d.body(),"input");auto other=d.element(d.body(),"button");
     unsigned changes=0;auto handler=d.on(input,"change",[&](auto&){++changes;});
     d.set_value(input,"old");d.focus(input);d.set_selection(input,0,3);d.text_input("new");

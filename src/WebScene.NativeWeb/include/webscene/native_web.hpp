@@ -437,6 +437,8 @@ public:
   // Live input/textarea value; programmatic updates do not emit input events.
   std::string value(node_id) const;
   void set_value(node_id,std::string);
+  bool checked(node_id) const;
+  void set_checked(node_id,bool);
   // UTF-8 byte offsets; offsets inside a scalar are rejected.
   void set_selection(node_id,size_t start,size_t end);
   std::pair<size_t,size_t> selection(node_id) const;
@@ -462,6 +464,7 @@ public:
   bool disposed() const noexcept;
 
 private:
+  void activate(node_id,float,float,uint32_t,input_modifiers);
   std::shared_ptr<document_state> state_;
 };
 } // namespace webscene::native_web

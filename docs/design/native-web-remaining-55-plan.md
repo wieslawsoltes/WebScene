@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Native checkbox prerequisite: added checked/set_checked and checkbox focusability.
+Pointer click activation and Space toggle checkedness before click listeners, roll
+back when canceled, then emit input/change with removal/disposal guards. Tests
+cover Space, cancellation, programmatic state, disabled controls and disposal in
+input. Radio groups, labels, OS pointer verification and the polyline Closed
+binding remain open; this is not complete form-control parity.
+
 Ellipse Major/Minor radius now use compiled coordinate fields and the existing
 native conic-axis calculation. Editing normalizes/scales the selected axis while
 preserving the other axis and writes both explicit axes, matching the original
