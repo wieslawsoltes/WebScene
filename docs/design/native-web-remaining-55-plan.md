@@ -2344,3 +2344,15 @@ target/bubbling, modifier propagation, no Backspace edit on release and disposal
 during dispatch. The hosted adapter requires rebuild/verification. Modifier-only
 Cocoa flagsChanged delivery and missing modifier key names remain open; this
 change does not yet prove stationary Shift release works.
+
+### Hosted ordinary key-release forwarding
+
+Rebuilt Foco preview with the native release adapter. Hosted check sends a key
+press with Shift modifiers then ordinary key release without them, without moving
+the pointer; it verifies modifier clearing and unconstrained reprojection.
+Run passes with existing Line checks, GPU serial 2, exit 0. This synthetic pair
+uses key::a solely to exercise the release callback and is not proof of physical
+Shift release. Cocoa audit confirms input key enum lacks modifier key values and
+Foco's input view lacks flagsChanged. Add modifier values/mapping and explicit
+flagsChanged routing in Foco next, then verify physical or injected Cocoa modifier
+events through the complete route.

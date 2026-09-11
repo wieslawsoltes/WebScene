@@ -834,6 +834,16 @@ public:
             const auto& scene=view->document.render(host.width,host.height);
             size_t strokes=0;for(const auto& command:scene.canvas)if(command.kind==20)++strokes;
             if(strokes<2)throw std::runtime_error("Pending Line emitted no dashed Canvas strokes");
+            view->document.focus(view->document.find("viewport"));
+            foco::key_event modifier_key;modifier_key.value=foco::key::a;modifier_key.modifiers=foco::key_modifiers::shift;
+            view->key_event_received(modifier_key);redraw_overlay(gpu_width,gpu_height);
+            if(!drafting_shift || !line_pointer)throw std::runtime_error("Hosted key modifiers did not update stationary preview");
+            modifier_key={};modifier_key.value=foco::key::a;
+            view->key_released_received(modifier_key);redraw_overlay(gpu_width,gpu_height);
+            if(drafting_shift || !modifier_key.handled)throw std::runtime_error("Hosted key release did not clear stationary modifier");
+            const auto released=viewport->camera.unproject(area.width*.7,area.height*.65,0);
+            if(!line_pointer || !released || std::hypot(line_pointer->x-released->x,line_pointer->y-released->y)>.01)
+              throw std::runtime_error("Hosted key release left a constrained preview");
             move.modifiers=foco::key_modifiers::shift;view->pointer_event_received(move);
             redraw_overlay(gpu_width,gpu_height);
             const auto anchor=line_tool.points().back();
