@@ -180,6 +180,26 @@ public:
           auto group_name=one->value("groupName",std::string{});
           read("Group",group_name.empty()?group:group_name);
         }
+        if(one->value("type",std::string{})=="POLYLINE" && one->contains("points") && (*one)["points"].is_array()) {
+          auto geometry=kestrel_layers::instantiate(document_,inspector,"inspector-geometry");inspector_roots_.push_back(geometry.named("root"));
+          const auto info=[&](const std::string& label,const std::string& value) {
+            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");
+            document_.set_text(row.named("label"),label);document_.set_text(row.named("value"),value);document_.attribute(row.named("value"),"title",value);
+          };
+          info("Vertices",std::to_string((*one)["points"].size()));
+          auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-polyline-closed");
+          document_.set_checked(row.named("input"),one->value("closed",false));
+          handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input")](auto&) {
+            model_.change_polyline_closed(document_.checked(node));refresh();if(changed_)changed_();
+          }));
+          const auto points=geo::path(*one);double length=0;
+          const auto distance=[](auto a,auto b){auto d=a-b;return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);};
+          for(size_t i=1;i<points.size();++i)length+=distance(points[i-1],points[i]);
+          if(geo::closed(*one) && !points.empty())length+=distance(points.front(),points.back());
+          const auto metric=[&](double value,const std::string& suffix) {std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(3)<<value<<" "<<model_.data.value("units",std::string("mm"))<<suffix;return text.str();};
+          info("Length",metric(length,""));
+          if(geo::closed(*one))info("Plan area",metric(std::abs(polygon_area(points)),"²"));
+        }
         const bool point_entity=one->value("type",std::string{})=="POINT" && one->contains("position") && (*one)["position"].is_array();
         const auto entity_type=one->value("type",std::string{});
         const bool conic_entity=(entity_type=="CIRCLE" || entity_type=="ARC" || entity_type=="ELLIPSE") && one->contains("center") && (*one)["center"].is_array();

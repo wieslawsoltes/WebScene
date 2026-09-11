@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Polyline geometry inspector: original Vertices, Closed, Length and conditional
+Plan area rows instantiate through compiled templates. Closed binds native checked
+state to an editable-selection undo transaction; length/area use the native path
+and polygon calculations. A native keyboard test closes a 3–4–5 path, checks length
+7 to 12 and area 6, then requires exact undo. Hosted pointer checkbox verification
+and other remaining application behavior are still open.
+
 Native checkbox prerequisite: added checked/set_checked and checkbox focusability.
 Pointer click activation and Space toggle checkedness before click listeners, roll
 back when canceled, then emit input/change with removal/disposal guards. Tests

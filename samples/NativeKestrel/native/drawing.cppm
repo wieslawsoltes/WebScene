@@ -449,6 +449,11 @@ public:
     const auto key=end?"endAngle":"startAngle";
     return transaction(std::string("Edit ")+key+"Deg",[&] {(*entity)[key]=degrees*(std::numbers::pi/180.0);});
   }
+  bool change_polyline_closed(bool closed) {
+    const auto ids=selected(true);if(ids.size()!=1)return false;
+    auto* entity=find(ids.front());if(!entity || entity->value("type",std::string{})!="POLYLINE")return false;
+    return transaction("Edit closed",[&] {(*entity)["closed"]=closed;});
+  }
   size_t erase_selected() {
     const auto ids=selected(true);
     if(ids.empty())return 0;
