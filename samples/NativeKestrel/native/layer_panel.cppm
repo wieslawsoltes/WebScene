@@ -21,6 +21,7 @@ public:
   struct entry {std::string id;webscene::native_web::node_id row,visibility,lock;};
 private:
   std::vector<entry> rows_;
+  std::vector<webscene::native_web::node_id> inspector_roots_;
   std::vector<webscene::native_web::node_id> shell_icons_;
   webscene::native_web::subscription filter_handler_;
   std::vector<webscene::native_web::subscription> tab_handlers_;
@@ -47,6 +48,8 @@ private:
   }
   void clear() {
     handlers_.clear();
+    if(!document_.disposed())for(auto node:inspector_roots_)document_.remove(node);
+    inspector_roots_.clear();
     if(!document_.disposed()) for(const auto& row:rows_) document_.remove(row.row);
     if(empty_ && !document_.disposed()) document_.remove(empty_);
     empty_=0;
@@ -80,6 +83,31 @@ public:
   const std::vector<entry>& entries() const {return rows_;}
   void refresh() {
     clear();
+    if(auto inspector=document_.find("inspector");inspector && model_.selection.empty()) {
+      auto header=kestrel_layers::instantiate(document_,inspector,"inspector-empty-header");
+      auto general=kestrel_layers::instantiate(document_,inspector,"inspector-empty-general");
+      inspector_roots_={header.named("root"),general.named("root")};
+      for(const auto& layer:model_.data["layers"]) {
+        auto option=kestrel_layers::instantiate(document_,general.named("layer"),"inspector-layer-option");
+        document_.attribute(option.named("root"),"value",layer["id"].get<std::string>());
+        document_.set_text(option.named("root"),layer["name"].get<std::string>());
+      }
+      const auto current=model_.data.value("currentLayer",std::string("0"));
+      document_.set_value(general.named("layer"),current);
+      for(const auto& layer:model_.data["layers"])if(layer["id"]==current)
+        document_.set_value(general.named("color"),layer.value("color",std::string("#dce4ed")));
+      const auto units=model_.data.value("units",std::string("mm"));
+      const auto unit_label=units=="mm"?"Millimeters":units=="cm"?"Centimeters":units=="m"?"Meters":units=="in"?"Inches":units=="ft"?"Feet":units;
+      document_.set_text(general.named("units"),unit_label);document_.attribute(general.named("units"),"title",unit_label);
+      auto style=document_.find("style-select")?document_.value(document_.find("style-select")):"wireframe";
+      std::replace(style.begin(),style.end(),'-',' ');document_.set_text(general.named("style"),style);document_.attribute(general.named("style"),"title",style);
+      document_.set_text(general.named("workspace"),"2D drafting");document_.attribute(general.named("workspace"),"title","2D drafting");
+      handlers_.push_back(document_.on(general.named("layer"),"change",[this,node=general.named("layer")](auto&) {
+        const auto value=document_.value(node);
+        for(const auto& layer:model_.data["layers"])if(layer["id"]==value){model_.data["currentLayer"]=value;break;}
+        refresh();if(changed_)changed_();
+      }));
+    }
     if(auto tabs=document_.find("document-tabs")) {
       auto tab=kestrel_layers::instantiate(document_,tabs,model_.dirty?"document-dirty":"document-clean");
       document_tab_=tab.named("tab");

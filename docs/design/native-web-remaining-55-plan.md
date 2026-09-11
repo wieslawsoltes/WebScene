@@ -1668,3 +1668,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   /tmp/kestrel-drag-selected.png; inspected cyan geometry/text highlights and
   selected count. Physical pointer capture outside the window and full browser
   differential rectangle selection remain open.
+
+- Inspector no-selection state: compiled original inspector header/general/option
+  templates, populated current layer, color swatch, units and visual-style summary
+  through native APIs. Current-layer select change updates the drawing and panel.
+  Native layer tests verify populated no-selection content and disposal; pass.
+  Rebuilt preview exits 0 and /tmp/kestrel-inspector-empty.png shows original
+  Properties layout. Selected-object inspector, color/default editing, ByLayer
+  action and workspace-dependent summary refresh remain incomplete. The temporary
+  workspace label is still 2D drafting until native workspace state is ported.
