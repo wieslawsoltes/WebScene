@@ -22,6 +22,7 @@ static bool exercise_line_edit=false;
 static bool exercise_color_picker=false;
 static bool show_color_picker=false;
 static bool show_group_dialog=false;
+static bool exercise_group_dialog=false;
 static bool exercise_shortcuts=false;
 static bool exercise_drag_selection=false;
 static bool benchmark_pan=false;
@@ -490,6 +491,23 @@ public:
           if(!group_dialog->open())throw std::runtime_error("Native group dialog failed to open");
           const auto modal_bounds=view->document.bounds(view->document.find("modal"));
           std::cout<<"Group dialog bounds: "<<modal_bounds.x<<","<<modal_bounds.y<<" "<<modal_bounds.width<<"x"<<modal_bounds.height<<"\n";
+          if(exercise_group_dialog) {
+            const auto before=model.data;
+            const auto input=view->document.find("field-name");
+            if(view->document.focused()!=input)throw std::runtime_error("Group input did not receive focus");
+            view->document.set_selection(input,0,view->document.value(input).size());
+            foco::text_input_event text;text.text="Hosted group";view->text_input_received(text);
+            const auto submit=view->document.bounds(view->document.find("modal-submit"));
+            foco::pointer_event pointer;pointer.position={float(view->bounds().x+submit.x+submit.width/2),float(view->bounds().y+submit.y+submit.height/2)};
+            pointer.kind=foco::pointer_event_kind::pressed;pointer.buttons=1;view->pointer_event_received(pointer);
+            pointer.kind=foco::pointer_event_kind::released;pointer.buttons=0;view->pointer_event_received(pointer);
+            if(group_dialog->is_open())throw std::runtime_error("Group submit did not close dialog");
+            for(const auto& id:model.selection)if(model.find(id)->value("groupName",std::string{})!="Hosted group")throw std::runtime_error("Hosted group name was not applied");
+            view->document.focus(view->document.find("viewport"));
+            foco::key_event undo;undo.value=foco::key::z;undo.modifiers=foco::key_modifiers::platform;view->key_event_received(undo);
+            if(model.data!=before)throw std::runtime_error("Hosted group undo did not restore drawing");
+            exercise_group_dialog=false;std::cout<<"Hosted compiled Group text input, pointer submit and undo passed\n";
+          }
           show_group_dialog=false;
         }
         if(color_picker_pending) {color_picker_pending=false;color_picker->set_open(true);}
@@ -883,6 +901,7 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-picking") exercise_picking=true;
     else if(std::string_view(argv[i])=="--exercise-theme") exercise_theme=true;
     else if(std::string_view(argv[i])=="--show-group-dialog") show_group_dialog=true;
+    else if(std::string_view(argv[i])=="--exercise-group-dialog") {show_group_dialog=true;exercise_group_dialog=true;}
     else if(std::string_view(argv[i])=="--exercise-failure") exercise_failure=true;
     else if(std::string_view(argv[i])=="--exercise-navigation") exercise_navigation=true;
     else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;

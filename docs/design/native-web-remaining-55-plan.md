@@ -8,6 +8,15 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Hosted Group interaction verified: --exercise-group-dialog opens the compiled
+original dialog, sends Foco text input into its focused name field, presses/releases
+the rendered Create group button, requires applied names and closed modal, then
+sends platform-Z and compares the complete drawing to its original snapshot.
+The rebuilt app passes and captures /tmp/kestrel-group-submit.png (exit 0,
+GPU serial 2). Input is injected through host methods; this is not physical OS
+mouse/keyboard latency evidence. Backdrop visuals and broader dialog parity remain
+open.
+
 Modal layout correction: runtime diagnostics located the original Group dialog
 at (0,800), 510x278.4, below the viewport. Shared native layout now takes
 default-positioned registered modals out of flow, sizes them against the viewport
