@@ -27,6 +27,7 @@ struct document_state {
   uint64_t rendered_scene_generation{};
   bool keyboard_modality{true};
   node_id focus{}, hover{}, pressed{}, body_id{};
+  std::map<node_id,std::string> uncommitted_text;
   uint64_t next_listener{1};
   std::mutex listener_mutex;
   std::map<uint64_t, listener> listeners;
@@ -93,6 +94,7 @@ void document::dispose() {
   state_->rules.clear();
   state_->resolver.reset();
   state_->pending_transition_events.clear();
+  state_->uncommitted_text.clear();
   state_->output = {};
   state_->dom.clear();
 }
@@ -200,6 +202,7 @@ void document::remove(node_id id) {
       self(self, *c);
   };
   collect(collect, n);
+  for(auto removed_id:removed)state_->uncommitted_text.erase(removed_id);
   {
     std::lock_guard lock(state_->listener_mutex);
     std::erase_if(state_->listeners, [&](const auto &v) {
@@ -335,9 +338,14 @@ void document::focus(node_id id) {
   state_->focus = id;
   state_->styles_dirty = true;
   state_->dom.mark_dirty();
-  if (old && state_->dom.find_by_native_id(old))
+  if(auto pending=state_->uncommitted_text.extract(old);!pending.empty()) {
+    auto* previous=state_->dom.find_by_native_id(old);
+    if(previous && forms::is_text_control(previous) && value(old)!=pending.mapped())
+      dispatch(old,"change");
+  }
+  if (state_->alive && old && state_->dom.find_by_native_id(old))
     dispatch(old, "blur");
-  if (state_->alive && id && state_->dom.find_by_native_id(id))
+  if (state_->alive && state_->focus==id && id && state_->dom.find_by_native_id(id))
     dispatch(id, "focus");
 }
 node_id document::focused() const {
@@ -356,6 +364,7 @@ std::string document::value(node_id id) const {
 }
 void document::set_value(node_id id,std::string value) {
   auto& node=state_->node(id);
+  state_->uncommitted_text.erase(id);
   if(node.tag=="select") {
     forms::set_select_value(node,value);
     state_->styles_dirty=true;state_->dom.mark_dirty();return;
@@ -402,6 +411,7 @@ bool document::text_input(std::string text) {
   auto& control=node->mutable_form_control();
   const auto start=std::min(control.selection_start,control.value.size());
   const auto end=std::min(std::max(control.selection_start,control.selection_end),control.value.size());
+  state_->uncommitted_text.try_emplace(id,control.value);
   control.value.replace(start,end-start,text);control.dirty_value=true;
   control.selection_start=control.selection_end=start+text.size();
   control.selection_direction=text_selection_direction::none;control.selection_explicitly_set=true;control.caret_visible=true;
@@ -573,6 +583,7 @@ void document::key(std::string_view key, input_modifiers modifiers) {
        node->attributes.contains("readonly") || state_->dom.is_inert(*node)) return;
     auto& control=node->mutable_form_control();auto [start,end]=range(control);
     if(start==end) return;
+    state_->uncommitted_text.try_emplace(id,control.value);
     control.value.erase(start,end-start);control.dirty_value=true;
     control.selection_start=control.selection_end=start;control.selection_direction=text_selection_direction::none;
     control.selection_explicitly_set=true;control.caret_visible=true;
@@ -604,6 +615,12 @@ void document::key(std::string_view key, input_modifiers modifiers) {
                                    : static_cast<int>(it - nodes.begin());
     focus(nodes[(index + (shift ? -1 : 1) + nodes.size()) % nodes.size()]);
   } else if ((key == "Enter" || key == " ") && state_->focus) {
+    const auto id=state_->focus;
+    if(key=="Enter" && state_->node(id).tag=="input" && forms::is_text_control(&state_->node(id))) {
+      if(auto pending=state_->uncommitted_text.extract(id);!pending.empty() && value(id)!=pending.mapped())
+        dispatch(id,"change");
+      return;
+    }
     if (state_->node(state_->focus).tag == "button" &&
         !state_->node(state_->focus).attributes.contains("disabled"))
       dispatch(state_->focus, "click",0,0,0,0,{},0,modifiers);

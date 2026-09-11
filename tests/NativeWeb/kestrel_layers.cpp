@@ -24,9 +24,9 @@ int main() {
     auto type=control(control,inspector,"linetype");require(type!=0);doc.focus(type);doc.key("End");
     require(model.find(id)->at("linetype")=="Center");
     auto weight=control(control,inspector,"lineweight");require(weight!=0);
-    doc.set_value(weight,"1.25");doc.dispatch(weight,"change");require(model.find(id)->at("lineweight")==1.25);
+    doc.focus(weight);doc.set_selection(weight,0,doc.value(weight).size());doc.text_input("1.25");doc.key("Enter");require(model.find(id)->at("lineweight")==1.25);
     auto name=control(control,inspector,"name");require(name!=0);
-    doc.set_value(name,"Native wall");doc.dispatch(name,"change");require(model.find(id)->at("name")=="Native wall");
+    doc.focus(name);doc.text_input("Native wall");doc.focus(0);require(model.find(id)->at("name")=="Native wall");
     require(model.undo()=="Edit name" && model.undo()=="Edit lineweight" && model.undo()=="Edit linetype");
     require(model.data==before);
     require(!model.change_selected_appearance("linetype","invalid"));

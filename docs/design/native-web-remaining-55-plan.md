@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Native text commit correction: inspector number/name tests previously dispatched
+change explicitly, masking that real text entry only emitted input. Native text
+controls now track user edits and emit change on focus departure; single-line
+inputs also commit on Enter. Unchanged edits and programmatic set_value do not
+create a commit, and pending records are cleared on removal/disposal. Tests cover
+deletion, textarea blur, repeated commits, and change handlers that remove the
+control or dispose the document. Inspector tests now type through text_input and
+commit via Enter/focus, then verify model updates and exact undo. Full input
+validation, IME and original application parity remain separate open work.
+
 Inspector continuation: original Linetype and Lineweight rows and the single-object
 Name row now instantiate from predefined compiled templates. Native edits apply
 only to editable selected entities and create undo transactions. Native document

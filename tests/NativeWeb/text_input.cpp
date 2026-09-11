@@ -4,6 +4,25 @@ using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
   {
+    document d;auto input=d.element(d.body(),"input");auto other=d.element(d.body(),"button");
+    unsigned changes=0;auto handler=d.on(input,"change",[&](auto&){++changes;});
+    d.set_value(input,"old");d.focus(input);d.set_selection(input,0,3);d.text_input("new");
+    require(changes==0);d.key("Enter");require(changes==1 && d.value(input)=="new");
+    d.focus(other);require(changes==1);
+    d.focus(input);d.key("Backspace");d.focus(other);require(changes==2);
+    d.focus(input);d.text_input("x");d.key("Backspace");d.focus(other);require(changes==2);
+    d.focus(input);d.set_value(input,"script");d.focus(other);require(changes==2);
+    d.focus(input);d.text_input("!");
+    auto dispose=d.on(input,"change",[&](auto&){d.dispose();});
+    d.focus(other);require(d.disposed() && changes==3);
+  }
+  {
+    document d;auto area=d.element(d.body(),"textarea");auto other=d.element(d.body(),"button");
+    unsigned changes=0;auto handler=d.on(area,"change",[&](auto&){++changes;d.remove(area);});
+    d.focus(area);d.text_input("multi\nline");d.key("Enter");require(changes==0);
+    d.focus(other);require(changes==1 && d.focused()==other);
+  }
+  {
     document d;auto input=d.element(d.body(),"input");d.set_value(input,"abc");d.focus(input);
     unsigned calls=0;
     auto handler=d.on(d.root(),"keydown",[&](auto& event) {
