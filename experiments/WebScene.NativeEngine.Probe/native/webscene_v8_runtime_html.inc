@@ -242,6 +242,7 @@
         if (name == "color") return inline_color;
         if (name == "fill") return inline_svg_fill;
         if (name == "stroke") return inline_svg_stroke;
+        if (name == "text-anchor") return inline_svg_text_anchor;
         if (name == "cursor") return inline_cursor;
         if (name == "font-size") return inline_font_size;
         if (name == "font-family") return inline_font_family;

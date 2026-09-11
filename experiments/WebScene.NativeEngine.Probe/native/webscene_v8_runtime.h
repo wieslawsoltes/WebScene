@@ -23,6 +23,27 @@ struct webscene_gpu_image_lease_v3;
 
 namespace webscene_native {
 
+struct native_file_data {
+    std::string name, mime;
+    std::vector<uint8_t> bytes;
+};
+struct native_file_request {
+    webscene_file_request_v1 view{};
+    std::string accept;
+    native_file_data file;
+    void bind() {
+        view.struct_size=sizeof(view); view.version=1;
+        view.accept=accept.c_str();
+        view.file={file.name.c_str(),file.mime.c_str(),file.bytes.data(),file.bytes.size()};
+    }
+};
+struct native_file_completion {
+    uint64_t id{};
+    uint32_t status{};
+    std::vector<native_file_data> files;
+    std::string error;
+};
+
 class native_document;
 
 struct document_start_script final {
@@ -257,6 +278,9 @@ public:
         interop_callback_completion_data_v3& completion);
     void cancel_callback_v3(uint64_t call_id);
     uint64_t pending_callback_promises() const noexcept;
+    void enable_file_service(bool enabled);
+    std::unique_ptr<native_file_request> take_file_request();
+    void complete_file_request(native_file_completion& completion);
     bool try_take_host_request(std::string& request);
     bool try_take_console_message(std::string& message);
     bool inspector_available() const noexcept;

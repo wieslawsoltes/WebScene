@@ -283,6 +283,7 @@
         { "name": "tabIndex", "getter": "get_tab_index", "setter": "set_tab_index" },
         { "name": "src", "getter": "get_element_url", "setter": "set_element_src" },
         { "name": "href", "getter": "get_element_url", "setter": "set_element_href" },
+        { "name": "accept", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "download", "getter": "get_reflected_string_attribute", "setter": "set_reflected_string_attribute" },
         { "name": "hash", "getter": "get_anchor_hash", "setter": "set_anchor_hash" },
         { "name": "contentWindow", "getter": "get_content_window" },

@@ -237,6 +237,20 @@ void test_canvas_storage(dawn_event_service& service,const wgpu::Device& device,
 int main() try {
     test_dxgi_fence_ownership();
     auto wake=std::make_shared<engine_wake>();
+    // Real editors retain hundreds of wrappers across resize/compute work;
+    // release reservations must not exhaust before individual resource tables.
+    graphics_service editor_releases(wake);
+    auto editor_channel=editor_releases.release_endpoint();
+    std::vector<release_ticket> editor_tickets;
+    for (int i=0;i<1024;++i) {
+        auto ticket=editor_channel->reserve(graphics_command{
+            [](graphics_service&,std::span<const std::byte>,const graphics_command::arguments&) noexcept {},{}});
+        if (!ticket) throw std::runtime_error("editor release capacity exhausted");
+        editor_tickets.push_back(*ticket);
+    }
+    for (auto ticket:editor_tickets) if (!editor_channel->publish(ticket))
+        throw std::runtime_error("editor release publication failed");
+    editor_releases.close();
     graphics_service root(wake),other_root(wake);
     auto& service=root.dawn();
     auto mailbox=service.completions();

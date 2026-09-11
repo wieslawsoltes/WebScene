@@ -238,6 +238,7 @@ native_document::allocation_metrics native_document::read_allocation_metrics() c
             + textual->cursor.capacity() + 1U
             + textual->svg_fill.capacity() + 1U
             + textual->svg_stroke.capacity() + 1U
+            + textual->svg_text_anchor.capacity() + 1U
             + textual->list_style_position.capacity() + 1U
             + textual->list_style_type.capacity() + 1U;
     }

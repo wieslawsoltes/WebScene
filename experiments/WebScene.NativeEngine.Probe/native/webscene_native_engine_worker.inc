@@ -22,7 +22,7 @@
         inspector_runtime_.store(nullptr, std::memory_order_release);
 #endif
         // V8 cleanup must stay on its owning worker even after a terminal throw.
-        runtime_.reset();
+        retire_file_runtime();
 #endif
     }
 
@@ -226,8 +226,9 @@
             failure.stage = "bootstrap";
             failure.message = runtime_->last_error();
             diagnostics_.publish(std::move(failure));
-            runtime_.reset();
+            retire_file_runtime();
         } else {
+            { std::lock_guard lock(file_runtime_mutex_); file_runtime_ready_=true; }
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
             inspector_runtime_.store(runtime_.get(), std::memory_order_release);
 #endif
@@ -849,6 +850,9 @@
             if (runtime_ != nullptr) {
                 std::lock_guard lock(configuration_mutex_);
                 runtime_->set_resource_root(resource_root_);
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+                runtime_->enable_file_service(file_service_enabled_.load());
+#endif
             }
             std::deque<script_work_request> script_work;
             {
@@ -889,7 +893,15 @@
                     continue;
                 }
 #endif
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+                if (auto* file = std::get_if<webscene_native::native_file_completion>(&request)) {
+                    if (runtime_) runtime_->complete_file_request(*file);
+                    changed = true;
+                    continue;
+                }
+#endif
                 if (auto* url = std::get_if<url_request>(&request)) {
+                    if (url->initial_viewport) apply(*url->initial_viewport);
                     if (runtime_ != nullptr
                         && runtime_->load_url(
                             url->url,
@@ -1243,7 +1255,7 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
         if (runtime_) runtime_->shutdown_graphics();
 #endif
-        runtime_.reset();
+        retire_file_runtime();
 #endif
         frame_trace_.dump();
     }

@@ -1155,6 +1155,11 @@ WEBSCENE_API uint8_t webscene_engine_load_url(
     webscene_engine* engine,
     const char* url,
     size_t url_length);
+/* Set the initial viewport on the worker immediately before document scripts.
+ * This avoids publishing a canvas initialized against default dimensions. */
+WEBSCENE_API uint8_t webscene_engine_load_url_with_viewport(
+    webscene_engine* engine, const char* url, size_t url_length,
+    const webscene_input_event* viewport);
 WEBSCENE_API uint8_t webscene_engine_load_url_with_options(
     webscene_engine* engine,
     const char* url,
@@ -1299,6 +1304,33 @@ WEBSCENE_API uint8_t webscene_engine_get_interop_pool_metrics_v3(
  * payload is UTF-8 JSON. A too-small/null destination reports the required
  * size without consuming the request; a successful full copy consumes it.
  */
+/* Native file service v1. Explicit opt-in permits script-triggered native
+ * dialogs. Requests own immutable UTF-8 metadata and bytes until release.
+ * Hosts must return only user-selected bytes, never script-supplied paths.
+ * kind: 1 Open, 2 Save; status: 0 completed, 1 cancelled, 2 failed.
+ * Completion copies its inputs before returning and is delivered on the JS
+ * worker. Maximum 64 MiB per operation, 64 files, 16 pending requests.
+ * The existing host_request_available callback also signals this queue. */
+typedef struct webscene_file_data_v1 {
+    const char* name;
+    const char* mime_type;
+    const uint8_t* bytes;
+    size_t byte_count;
+} webscene_file_data_v1;
+typedef struct webscene_file_request_v1 {
+    uint32_t struct_size, version;
+    uint64_t request_id;
+    uint32_t kind, multiple;
+    const char* accept;
+    webscene_file_data_v1 file;
+} webscene_file_request_v1;
+WEBSCENE_API uint8_t webscene_engine_enable_file_service_v1(webscene_engine* engine, uint8_t enabled);
+WEBSCENE_API const webscene_file_request_v1* webscene_engine_take_file_request_v1(webscene_engine* engine);
+WEBSCENE_API void webscene_file_request_release_v1(const webscene_file_request_v1* request);
+WEBSCENE_API uint8_t webscene_engine_complete_file_request_v1(webscene_engine* engine,
+    uint64_t request_id, uint32_t status, const webscene_file_data_v1* files,
+    size_t file_count, const char* error_message);
+
 WEBSCENE_API size_t webscene_engine_take_host_request(
     webscene_engine* engine,
     char* destination,

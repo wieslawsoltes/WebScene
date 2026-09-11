@@ -41,7 +41,23 @@ test('native engine publishes only the versioned leased interop surface', async 
 
   assert.doesNotMatch(header, /\bwebscene_engine_evaluate_json\b/);
   assert.doesNotMatch(exports, /_webscene_engine_evaluate_json\b/);
-  assert.doesNotMatch(header, /\bwebscene_(?:engine|interop)_[a-z0-9_]+_v[12]\b/);
+  // File services have their own versioned ABI; they are not legacy interop.
+  const fileServiceSymbols = new Set([
+    'webscene_engine_enable_file_service_v1',
+    'webscene_engine_take_file_request_v1',
+    'webscene_engine_complete_file_request_v1',
+    'webscene_file_request_release_v1'
+  ]);
+  for (const symbol of fileServiceSymbols) {
+    assert.match(header, new RegExp(`\\b${symbol}\\b`));
+    assert.match(exports, new RegExp(`_${symbol}\\b`));
+  }
+  for (const [name, source] of [['header', header], ['exports', exports]]) {
+    const legacySymbols = [...source.matchAll(
+      /\b_?(webscene_(?:engine|interop)_[a-z0-9_]+_v[12])\b/g
+    )].map(match => match[1]).filter(symbol => !fileServiceSymbols.has(symbol));
+    assert.deepEqual(legacySymbols, [], `${name} must not expose legacy interop`);
+  }
   assert.match(
     header,
     /webscene_interop_result_release_v3\s*\([^)]*uint64_t lease_id\s*\)/s);

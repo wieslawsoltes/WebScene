@@ -74,6 +74,7 @@ uint8_t measure_baseline_fixture_text(
 #endif
 #include "native_v8_runtime_interop_tests.inc"
 #include "native_v8_runtime_input_tests.inc"
+#include "native_file_service_tests.inc"
 #include "native_table_cell_copy_tests.inc"
 #include "native_v8_runtime_resource_tests.inc"
 #include "native_v8_runtime_diagnostics_tests.inc"
@@ -261,6 +262,13 @@ int main()
             webscene_engine_destroy(focused_engine);
             return 0;
         }
+        if (selected == "native-file-service") {
+            auto* engine=webscene_engine_create(0);
+            require(engine!=nullptr,"file engine creation failed");
+            test_native_file_service(engine);
+            webscene_engine_destroy(engine);
+            return 0;
+        }
         if (selected == "tradingview-opacity-border") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -386,6 +394,7 @@ int main()
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
             test_svg_dom_parser_preserves_fill_rule(focused_engine);
+            test_svg_stylesheet_typography_reaches_scene(focused_engine);
             webscene_engine_destroy(focused_engine);
             return 0;
         }
@@ -674,6 +683,12 @@ int main()
     test_pointer_cursor_and_external_anchor_host_handoff(engine);
     test_enter_dispatches_browser_keypress_for_interval_commit(engine);
     test_css_linear_gradient_reaches_the_retained_scene(engine);
+    {
+        auto* file_engine=webscene_engine_create(0);
+        require(file_engine!=nullptr,"file service fixture creation failed");
+        test_native_file_service(file_engine);
+        webscene_engine_destroy(file_engine);
+    }
     test_z_index_orders_positioned_siblings_in_scene(engine);
     test_popup_portal_tooltip_escapes_non_stacking_positioned_wrapper(engine);
     test_fixed_portal_descendant_stays_in_ancestor_stacking_context(engine);
@@ -767,6 +782,7 @@ int main()
     test_tradingview_split_color_swatch_uses_pseudo_border_triangle(engine);
     test_negative_z_after_paints_behind_svg_content(engine);
     test_svg_current_color_is_resolved_before_scene_serialization(engine);
+    test_svg_stylesheet_typography_reaches_scene(engine);
     test_svg_preserve_aspect_ratio_reaches_scene_serialization(engine);
     test_svg_view_box_keeps_foreign_attribute_case_and_origin(engine);
     test_positive_z_before_paints_above_lower_z_child(engine);

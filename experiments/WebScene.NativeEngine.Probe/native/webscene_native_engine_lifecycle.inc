@@ -94,6 +94,37 @@
     }
 #endif
 
+    bool complete_file_request(webscene_native::native_file_completion completion) {
+        std::lock_guard lock(script_mutex_);
+        if (script_work_.size() >= 1024) return false;
+        script_work_.emplace_back(std::move(completion));
+        signal_worker();
+        return true;
+    }
+    void retire_file_runtime() {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        std::unique_ptr<webscene_native::v8_dom_runtime> retired;
+        {
+            std::lock_guard lock(file_runtime_mutex_);
+            file_runtime_ready_=false;
+            retired=std::move(runtime_);
+        }
+        // Destruction stays on the V8 worker and outside the host queue lock.
+#endif
+    }
+    bool enable_file_service(bool enabled) {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        file_service_enabled_.store(enabled); signal_worker(); return true;
+#endif
+        return false;
+    }
+    std::unique_ptr<webscene_native::native_file_request> take_file_request() {
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        std::lock_guard lock(file_runtime_mutex_);
+        if (file_runtime_ready_) return runtime_->take_file_request();
+#endif
+        return {};
+    }
     bool enqueue(const webscene_input_event& event)
     {
         if (event.kind == WEBSCENE_INPUT_RESIZE) {
@@ -455,6 +486,15 @@
         return enqueue_url(value, length, {});
     }
 
+    bool load_url_with_viewport(const char* value, size_t length, const webscene_input_event& viewport)
+    {
+        if (viewport.kind != WEBSCENE_INPUT_RESIZE ||
+            !std::isfinite(viewport.x) || !std::isfinite(viewport.y) ||
+            !std::isfinite(viewport.delta_x) || viewport.x <= 0 || viewport.y <= 0 || viewport.delta_x <= 0)
+            return false;
+        return enqueue_url(value, length, {}, viewport);
+    }
+
     bool load_url(
         const char* value,
         size_t length,
@@ -531,7 +571,8 @@
     bool enqueue_url(
         const char* value,
         size_t length,
-        std::vector<webscene_native::document_start_script> scripts)
+        std::vector<webscene_native::document_start_script> scripts,
+        std::optional<webscene_input_event> viewport = {})
     {
 #if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
         static_cast<void>(value);
@@ -557,7 +598,7 @@
         }
         script_work_.emplace_back(url_request{
             std::string(value, length),
-            std::move(scripts)});
+            std::move(scripts), viewport});
         signal_worker();
         return true;
 #endif

@@ -601,7 +601,7 @@ void native_document::append_scene(
             [](unsigned char character) {
                 return static_cast<char>(std::tolower(character));
             });
-        if (pseudo_background_image_lower.starts_with("linear-gradient(")
+        if ((pseudo_background_image_lower.starts_with("linear-gradient(") || pseudo_background_image_lower.starts_with("radial-gradient("))
             && width > 0 && height > 0) {
             auto gradient_resource = std::string{"webscene-bg-v2\t"};
             gradient_resource += pseudo.background_image.image_value;
@@ -934,7 +934,7 @@ void native_document::append_scene(
             return static_cast<char>(std::tolower(character));
         });
     if (paint_self
-        && background_image_value_lower.starts_with("linear-gradient(")
+        && (background_image_value_lower.starts_with("linear-gradient(") || background_image_value_lower.starts_with("radial-gradient("))
         && node.layout.width > 0
         && node.layout.height > 0) {
         auto gradient_resource = std::string{"webscene-bg-v2\t"};

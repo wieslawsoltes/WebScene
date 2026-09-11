@@ -1744,6 +1744,30 @@ void test_pointer_cursor_and_external_anchor_host_handoff(webscene_engine* engin
 
 void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine)
 {
+    {
+        const auto path=std::filesystem::temp_directory_path()/(
+            "webscene-initial-viewport-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".html");
+        { std::ofstream file(path); file << "<!doctype html><script>globalThis.initialViewport=[innerWidth,innerHeight,devicePixelRatio]</script>"; }
+        auto* fresh=webscene_engine_create(0);
+        require(fresh!=nullptr,"initial viewport engine creation failed");
+        const auto root=path.parent_path().string();
+        webscene_engine_set_resource_root(fresh,root.data(),root.size());
+        const auto url="file://"+path.string();
+        webscene_input_event viewport{WEBSCENE_INPUT_RESIZE,0,1,1357,811,1.5,0};
+        require(webscene_engine_load_url_with_viewport(fresh,url.data(),url.size(),&viewport)!=0,
+            "initial viewport navigation was rejected");
+        std::string observed;
+        for (int attempt=0;attempt<100;++attempt) {
+            observed=evaluate(fresh,"JSON.stringify(globalThis.initialViewport)","initial-viewport.js");
+            if (observed.find("1357,811,1.5")!=std::string::npos) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        require(observed.find("1357,811,1.5")!=std::string::npos,
+            "document-start JS observed unexpected viewport: "+observed);
+        webscene_engine_destroy(fresh);
+        std::filesystem::remove(path);
+    }
+
     execute(engine, R"JS(
         (() => {
           document.body.innerHTML = `<style>
@@ -1852,4 +1876,31 @@ void test_css_linear_gradient_reaches_the_retained_scene(webscene_engine* engine
             "as a retained gradient command: " + observed_resource);
     require(found_border,
         "the rounded opacity swatch border did not remain above its layered gradient");
+    execute(engine, R"JS(
+        document.body.innerHTML = `<style>#ball { width:36px;height:36px;border-radius:50%;
+          background:radial-gradient(circle at 32% 22%,#ffffffa0,transparent 48%),
+                     radial-gradient(circle at 45% 35%,var(--ball-color),#14161b 90%); }</style>
+          <div id="ball" style="--ball-color:#ff4400"></div>`;
+    )JS", "native-radial-gradient.js");
+    webscene_engine_request_scene_checkpoint(engine);
+    bool radial_found=false;
+    std::string radial_observed;
+    for (int attempt=0;attempt<100 && !radial_found;++attempt) {
+        if (const auto* scene=webscene_engine_acquire_latest_scene(engine)) {
+            for (uint32_t i=0;i<scene->header.command_count;++i) {
+                const auto& command=scene->commands[i];
+                if ((command.kind!=21 && command.kind!=22) || command.flags>=scene->string_count) continue;
+                const auto& ref=scene->strings[command.flags];
+                const std::string resource(scene->string_bytes+ref.byte_offset,ref.byte_length);
+                radial_observed=resource+" radius="+std::to_string(command.radius_top_left);
+                radial_found=resource.find("radial-gradient")!=std::string::npos &&
+                    resource.find("#ffffffa0")!=std::string::npos && resource.find("rgb(255, 68, 0)")!=std::string::npos &&
+                    command.radius_top_left>0;
+                if (radial_found) break;
+            }
+            webscene_scene_acknowledge(scene); webscene_scene_release(scene);
+        }
+        if (!radial_found) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    require(radial_found,"layered radial backgrounds with custom properties and rounded clipping were not retained: "+radial_observed);
 }

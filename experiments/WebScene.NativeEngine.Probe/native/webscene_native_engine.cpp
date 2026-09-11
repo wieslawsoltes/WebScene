@@ -282,6 +282,7 @@ struct canvas_checkpoint_request {
 struct url_request final {
     std::string url;
     std::vector<webscene_native::document_start_script> document_start_scripts;
+    std::optional<webscene_input_event> initial_viewport;
 };
 
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
@@ -430,6 +431,9 @@ private:
     webscene_native::runtime_diagnostics diagnostics_;
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
     std::unique_ptr<webscene_native::v8_dom_runtime> runtime_;
+    std::atomic<bool> file_service_enabled_{false};
+    std::mutex file_runtime_mutex_;
+    bool file_runtime_ready_{false};
 #if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8_INSPECTOR)
     std::atomic<webscene_native::v8_dom_runtime*> inspector_runtime_{nullptr};
     std::atomic<engine_inspector_state*> inspector_state_{nullptr};
@@ -969,6 +973,13 @@ uint8_t webscene_engine_load_url_with_options(
         && engine->load_url(url, url_length, options)
         ? 1U
         : 0U;
+}
+
+uint8_t webscene_engine_load_url_with_viewport(
+    webscene_engine* engine, const char* url, size_t length,
+    const webscene_input_event* viewport)
+{
+    return engine && viewport && engine->load_url_with_viewport(url, length, *viewport) ? 1U : 0U;
 }
 
 uint8_t webscene_engine_enqueue(webscene_engine* engine, const webscene_input_event* event)
@@ -1731,3 +1742,36 @@ uint8_t webscene_engine_get_memory_metrics(
 #if defined(WEBSCENE_GRAPHICS_SCENE_TESTS)
 #include "../tests/graphics_scene_lease_tests.inc"
 #endif
+
+uint8_t webscene_engine_enable_file_service_v1(webscene_engine* engine, uint8_t enabled) {
+    return engine && engine->enable_file_service(enabled != 0);
+}
+const webscene_file_request_v1* webscene_engine_take_file_request_v1(webscene_engine* engine) {
+    if (!engine) return nullptr;
+    auto request=engine->take_file_request();
+    if (!request) return nullptr;
+    request->bind();
+    return &request.release()->view;
+}
+void webscene_file_request_release_v1(const webscene_file_request_v1* request) {
+    delete reinterpret_cast<const webscene_native::native_file_request*>(request);
+}
+uint8_t webscene_engine_complete_file_request_v1(webscene_engine* engine,
+    uint64_t id, uint32_t status, const webscene_file_data_v1* files,
+    size_t count, const char* error) {
+    if (!engine || !id || status>2 || count>64 || (count && !files) || (status && count)) return 0;
+    webscene_native::native_file_completion completion; completion.id=id; completion.status=status;
+    completion.error=error ? error : "";
+    if (completion.error.size()>4096) return 0;
+    size_t total=0;
+    for(size_t i=0;i<count;++i) {
+        const auto& f=files[i];
+        if (!f.name || !f.mime_type || (f.byte_count && !f.bytes) || f.byte_count>64u*1024u*1024u-total) return 0;
+        total+=f.byte_count;
+        webscene_native::native_file_data value; value.name=f.name; value.mime=f.mime_type;
+        if(value.name.size()>4096 || value.mime.size()>256) return 0;
+        if(f.byte_count) value.bytes.assign(f.bytes,f.bytes+f.byte_count);
+        completion.files.push_back(std::move(value));
+    }
+    return engine->complete_file_request(std::move(completion));
+}
