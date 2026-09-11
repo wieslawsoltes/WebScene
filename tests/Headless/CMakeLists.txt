@@ -17,4 +17,17 @@ if(HEADLESS_TEST_WEBGPU)
   target_link_libraries(headless_gpu PRIVATE WebScene::WebGPU)
   add_test(NAME headless_gpu COMMAND headless_gpu)
   set_tests_properties(headless_gpu PROPERTIES TIMEOUT 180)
+  # Compile the original native Kestrel modules against the installed SDK.
+  # The existing test retains every pixel, pending-frame and resize assertion.
+  set(kestrel "${CMAKE_CURRENT_SOURCE_DIR}/../../samples/NativeKestrel/native")
+  add_library(headless_kestrel_modules STATIC)
+  target_sources(headless_kestrel_modules PUBLIC FILE_SET CXX_MODULES BASE_DIRS "${kestrel}" FILES
+    "${kestrel}/math.cppm" "${kestrel}/drawing.cppm" "${kestrel}/examples.cppm"
+    "${kestrel}/camera.cppm" "${kestrel}/geometry.cppm" "${kestrel}/render_data.cppm"
+    "${kestrel}/shaders.cppm" "${kestrel}/gpu_pipelines.cppm" "${kestrel}/gpu_renderer.cppm" "${kestrel}/viewport.cppm")
+  target_link_libraries(headless_kestrel_modules PUBLIC WebScene::NativeWeb WebScene::WebGPU)
+  add_executable(headless_kestrel "${CMAKE_CURRENT_SOURCE_DIR}/../NativeWeb/kestrel_gpu.cpp")
+  target_link_libraries(headless_kestrel PRIVATE headless_kestrel_modules)
+  add_test(NAME headless_kestrel COMMAND headless_kestrel)
+  set_tests_properties(headless_kestrel PROPERTIES TIMEOUT 180)
 endif()
