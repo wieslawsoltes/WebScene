@@ -20,16 +20,24 @@ int main() {
     canvas_document.add_rule(std::move(counted));
     canvas_document.render(200, 200);
     const auto initial_count = style_application_count;
+    const auto initial_layouts = canvas_document.layout_passes();
+    const auto initial_revision = canvas_document.render(200, 200).revision;
     check(initial_count > 0, "initial cascade runs");
     canvas_document.fill_rect(canvas, 0, 0, 10, 10, 0xffffffff);
     canvas_document.render(200, 200);
     check(style_application_count == initial_count, "canvas paint reuses computed style");
+    check(canvas_document.layout_passes() == initial_layouts, "canvas paint reuses layout");
+    check(canvas_document.render(200, 200).revision > initial_revision, "canvas paint rebuilds scene");
+    canvas_document.clear_canvas(canvas);
+    canvas_document.render(200, 200);
+    check(canvas_document.layout_passes() == initial_layouts, "canvas clear reuses layout");
     canvas_document.attribute(canvas, "class", "changed");
     canvas_document.render(200, 200);
     check(style_application_count > initial_count, "attribute mutation recascades");
     const auto before_resize = style_application_count;
     canvas_document.render(300, 200);
     check(style_application_count > before_resize, "resize recascades viewport-dependent styles");
+    check(canvas_document.layout_passes() > initial_layouts, "layout still updates after mutations and resize");
   }
   {
     using expression = variable_expression;

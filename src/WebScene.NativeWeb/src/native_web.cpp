@@ -22,6 +22,7 @@ struct document_state {
   std::thread::id owner{std::this_thread::get_id()};
   bool alive{true};
   bool styles_dirty{true};
+  uint64_t rendered_scene_generation{};
   bool keyboard_modality{true};
   node_id focus{}, hover{}, pressed{}, body_id{};
   uint64_t next_listener{1};
@@ -408,7 +409,7 @@ void document::set_external_canvas(node_id id, bool enabled) {
   auto &node = state_->node(id);
   if (node.tag != "canvas") throw std::invalid_argument("not a canvas");
   node.mutable_canvas().externally_composited = enabled;
-  state_->dom.mark_dirty();
+  state_->dom.mark_scene_changed();
 }
 void document::clear_canvas(node_id id) {
   auto &n = state_->node(id);
@@ -419,7 +420,7 @@ void document::clear_canvas(node_id id) {
   c.strings.clear();
   c.string_indices.clear();
   ++c.generation;
-  state_->dom.mark_dirty();
+  state_->dom.mark_scene_changed();
 }
 void document::fill_rect(node_id id, float x, float y, float w, float h,
                          uint32_t rgba) {
@@ -442,7 +443,7 @@ void document::fill_rect(node_id id, float x, float y, float w, float h,
   canvas.commands.push_back(paint);
   canvas.commands.push_back(c);
   ++canvas.generation;
-  state_->dom.mark_dirty();
+  state_->dom.mark_scene_changed();
 }
 static bool class_has(const std::string &list, const std::string &name) {
   size_t i = 0;
@@ -533,7 +534,9 @@ const scene &document::render(float width, float height) {
     throw std::invalid_argument("invalid viewport");
   auto &s = *state_;
   auto &out = s.output;
-  if (!s.dom.dirty() && out.width == width && out.height == height)
+  if (!s.styles_dirty && !s.dom.dirty() &&
+      s.rendered_scene_generation == s.dom.scene_generation() &&
+      out.width == width && out.height == height)
     return out;
   const auto cascade = [&](auto &&self, dom_node &n, const computed_variables &inherited) -> void {
     n.style = node_style{};
@@ -595,9 +598,10 @@ const scene &document::render(float width, float height) {
   if (s.styles_dirty || out.width != width || out.height != height) {
     cascade(cascade, s.dom.body(), {});
     s.styles_dirty = false;
+    s.dom.mark_dirty();
   }
-  s.dom.mark_dirty();
-  s.dom.layout(width, height);
+  if (s.dom.dirty() || out.width != width || out.height != height)
+    s.dom.layout(width, height);
   out.commands.clear();
   out.strings.clear();
   out.bytes.clear();
@@ -617,8 +621,13 @@ const scene &document::render(float width, float height) {
   out.bytes.insert(out.bytes.end(), canvas_bytes.begin(), canvas_bytes.end());
   out.width = width;
   out.height = height;
+  s.rendered_scene_generation = s.dom.scene_generation();
   ++out.revision;
   return out;
+}
+uint64_t document::layout_passes() const {
+  state_->check();
+  return state_->dom.layout_passes();
 }
 layout_rect document::bounds(node_id id) const {
   return state_->node(id).layout;

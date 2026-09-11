@@ -377,6 +377,7 @@ public:
   void fill_rect(node_id, float x, float y, float width, float height,
                  uint32_t rgba);
   const scene &render(float width, float height);
+  uint64_t layout_passes() const;
   webscene_native::layout_rect bounds(node_id) const;
   std::string text_content(node_id) const;
   void dispose();

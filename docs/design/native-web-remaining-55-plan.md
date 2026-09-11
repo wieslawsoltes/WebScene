@@ -766,3 +766,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   paint skips the cascade and attribute/resize updates execute it. Compiler and
   contract suites pass. This applies to the current app host but does not yet wire
   the prepared stylesheet session into it or prove 60fps presented performance.
+
+- Native canvas layout reuse: canvas drawing/clearing/external composition now
+  marks scene generation rather than global layout dirtiness. The compiled host
+  checks both scene generation and layout state, rebuilding display data while
+  retaining geometry for canvas-only changes. Style/viewport changes still mark
+  layout dirty. A public layout-pass counter supports performance diagnostics;
+  contracts verify paint/clear skip layout, paint produces a new scene revision,
+  and mutations/resize still run layout. Compiler and contract tests pass. This
+  removes measured unnecessary passes but does not establish presented 60fps or
+  complete original Kestrel behavior; Foco app-level profiling remains required.
