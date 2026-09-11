@@ -1064,3 +1064,20 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   runtime; tradingview-svg-checker and canvas-svg-image regressions pass. This is
   live scene-data update evidence, not a new Foco pixel comparison. Full original
   Kestrel behavior and presented 60fps remain unfinished.
+
+- Native original layer panel: added four predefined layer-row templates from
+  pinned upstream app.js and UI.icon geometry (visible/hidden, locked/unlocked),
+  retaining original structure/classes and adding data-ref binding metadata.
+  New C++ module kestrel.layer_panel binds the native drawing's layers, colors,
+  entity counts, current selection, visibility/lock icons and accessible labels.
+  It handles current-layer clicks, transactional visibility/locking, row cleanup,
+  explorer badges and summary fields. The shared/GPU preview mounts it and marks
+  GPU content dirty after changes. Native layer tests pass for toggles without
+  accidental row selection, current-layer changes, lock undo, repeated refresh and
+  obsolete-node removal. Rebuilt and captured Foco preview successfully at
+  /tmp/kestrel-native-layers.png (GPU serial 1, clean exit), then inspected the image:
+  populated original layer rows, current highlight, icons, counts and summary are
+  visible alongside the GPU demo. No runtime HTML parsing or JavaScript was added.
+  Filtering, Shift-click selection, ribbon synchronization, object/property panels,
+  complete app behavior and presented 60fps remain unfinished. The demo geometry
+  is still a box, not the original full browser demonstration document.

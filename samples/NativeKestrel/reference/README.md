@@ -69,3 +69,20 @@ Original dynamic IDs are instance references in the templates and are restored
 by C++ when the active ribbon mounts. Switching tabs disposes the previous
 ribbon roots before mounting the next template. Command behavior remains to be
 ported; diagnostic SVG/form styling still depends on compiler coverage.
+
+### Shared CSS preview and native layers
+
+Set `NATIVE_WEB_PREVIEW_SHARED_CSS=ON` in the Foco-enabled CMake build to select
+build-time prepared styles and WebScene's shared native CSS engine. This optional
+path still interprets CSS values/inline attributes at runtime; HTML and dynamic
+rows remain compiled. `FocoKestrelPreview --capture /absolute/path.png` captures
+an actual compositor frame and exits (requires the native GPU build).
+
+`templates/LayerRows.html` preserves the layer-row structure from upstream
+`src/app.js` and the eye/lock SVG variants from `src/ui.js` at the source baseline
+above. Added `data-ref` attributes identify native binding targets. Four predefined
+templates represent visible/hidden and locked/unlocked states. Native
+`kestrel.layer_panel` binds drawing layers, counts and colors, handles current-layer
+selection and visibility/lock transactions, and removes subscriptions with rows.
+The shared/GPU diagnostic preview mounts this panel. Filtering, Shift-click
+selection, ribbon synchronization and the object explorer remain unported here.

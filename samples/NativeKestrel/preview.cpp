@@ -22,6 +22,9 @@ import kestrel.preview.tabs;
 import kestrel.preview.groups;
 #ifdef KESTREL_PREVIEW_GPU
 import kestrel.viewport;
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+import kestrel.layer_panel;
+#endif
 #endif
 class preview_window final : public foco::window {
 public:
@@ -37,6 +40,9 @@ class preview_app final : public foco::application {
   std::vector<webscene::native_web::node_id> ribbon_roots;
 #ifdef KESTREL_PREVIEW_GPU
   kestrel::drawing model;
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+  std::unique_ptr<kestrel::layer_panel> layers;
+#endif
   std::unique_ptr<kestrel::viewport> viewport;
   uint32_t gpu_width{}, gpu_height{};
   uint64_t gpu_serial{};
@@ -128,6 +134,10 @@ public:
     }
     view->refresh();
     model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+    layers=std::make_unique<kestrel::layer_panel>(view->document,model,[this]{gpu_dirty=true;view->refresh();});
+    view->refresh();
+#endif
     handlers.push_back(view->document.on(view->document.root(), "click",
         [this](auto &event) {
           if (!viewport) return;
