@@ -1331,3 +1331,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   briefly visible without GPU content while replacement is pending. Next ensure
   correctly sized content arrives on resize presentation deadlines; live 60fps
   resize and no blank intervals still require measurement/integration work.
+
+- Same-tick resize submission investigation: WebScene snapshots already expose
+  resolve_with_gpu_waits, but native Foco make_gpu_image explicitly rejects
+  requires_producer_wait and omits dependency_count/get_metal_event callbacks.
+  Experiment using immediate GPU-wait resolution aborts with Native frame
+  requires a completed GPU image (/tmp/kestrel-gpu-waits.log). Reverted viewport/
+  preview experiment, retaining completed-image behavior in source. Last-built
+  preview binary contains the experiment and must be rebuilt before running.
+  Next extend the native adapter's consumer lifetime and dependency callbacks
+  using existing lease ABI, then retry same-tick publication with synchronization.
+  Do not remove the rejection alone: that would permit unfinished GPU sampling.
