@@ -70,6 +70,22 @@ void exercise(const webscene_native::css::prepared_stylesheet& input) {
   require(serialized().find("stroke-width=\"1\"")==std::string::npos);
   d.attribute(mark,"class","bad");d.attribute(mark,"style","stroke-width:4px");
   require(serialized().find("stroke-width=\"4px\"")!=std::string::npos);
+  d.attribute(mark,"class","paint");
+  require(serialized().find("fill=\"blue\"")!=std::string::npos);
+  require(serialized().find("stroke=\"green\"")!=std::string::npos);
+  d.remove_attribute(mark,"class");
+  require(serialized().find("fill=\"blue\"")==std::string::npos);
+  require(serialized().find("stroke=\"green\"")==std::string::npos);
+  require(serialized().find("stroke=\"red\"")!=std::string::npos);
+  require(serialized().find("fill=\"none\"")!=std::string::npos);
+  d.attribute(mark,"style","fill:purple;stroke:orange");
+  d.attribute(mark,"class","paint");
+  require(serialized().find("fill=\"purple\"")!=std::string::npos);
+  d.remove_attribute(mark,"class");
+  require(serialized().find("stroke=\"orange\"")!=std::string::npos);
+  d.remove_attribute(mark,"style");
+  require(serialized().find("fill=\"purple\"")==std::string::npos);
+  require(serialized().find("stroke=\"red\"")!=std::string::npos);
   // Replacing the sheet changes styling through the same document invalidation.
   auto replacement=webscene_native::css::prepare_stylesheet("#target {width:44px;height:12px}","asset://new.css",[](const auto&){return true;});
   d.set_stylesheet_resolver(make_shared_stylesheet_resolver({*replacement},report));

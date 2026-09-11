@@ -1054,3 +1054,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   SVG data; no new Foco pixel comparison or packaged preview capture was made.
   Font-relative units, full SVG styling parity, full Kestrel behavior and presented
   60fps remain unverified or unfinished.
+
+- SVG paint recascade: reproduced stale fill/stroke after removing an icon class
+  in both parsed/generated shared stylesheet tests. Cascade reset now clears
+  non-inline SVG paint overrides so authored presentation attributes become
+  effective again. Tests cover class removal, inline paint taking precedence,
+  inline paint surviving class changes, and removing the inline attribute.
+  Shared style/document, CSS service and compiler suites pass. Rebuilt reference
+  runtime; tradingview-svg-checker and canvas-svg-image regressions pass. This is
+  live scene-data update evidence, not a new Foco pixel comparison. Full original
+  Kestrel behavior and presented 60fps remain unfinished.

@@ -23,3 +23,5 @@
 #mark.inherited {stroke-width:inherit;}
 
 #mark.bad {stroke-width:-1px!important;}
+
+#mark.paint {fill:blue;stroke:green;}
