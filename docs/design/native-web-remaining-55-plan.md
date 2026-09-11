@@ -1008,3 +1008,21 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   No default application backend changed. Runtime inline/value interpretation,
   resource integration, actual Foco/Kestrel integration, parity and presented 60fps
   remain unfinished.
+
+- Foco shared-CSS preview integration: NATIVE_WEB_PREVIEW_SHARED_CSS (default OFF)
+  selects generated shared styles for the original Kestrel document and ribbon
+  templates, links the separate shared adapter and reports native CSS limitations.
+  Canvas percentage sizing remains native application logic. Added --capture for
+  the GPU preview, requiring a delivered GPU image and shutting down after capture.
+  Built the opt-in FocoKestrelPreview and ran it successfully: compositor capture
+  /tmp/kestrel-shared-css-preview.png, GPU serial 1, clean exit. Inspected the image:
+  original shell, ribbon icons, sidebars, command dock and GPU grid/demo box render.
+  Layer/property populations and app behavior are still incomplete. Layout dump
+  at 1280x800 and 1280x1000 shows the workbench growing from 463 to 663 pixels while
+  fixed top/bottom regions retain size; this is layout evidence, not smooth live
+  resize evidence. Input-coalescing check passes. Runtime diagnostics still include
+  unsupported backdrop-filter, overflow-wrap, scrollbar-color/width, stroke-width,
+  text-overflow, touch-action and user-select, plus partial features. No stylesheet
+  source modifications or runtime HTML parsing were introduced. The production
+  sample remains typed and this preview still uses shared value interpretation.
+  Full Kestrel logic, resources, browser parity and presented 60fps remain open.

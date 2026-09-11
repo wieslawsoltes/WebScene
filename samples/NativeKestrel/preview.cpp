@@ -1,6 +1,12 @@
 #include "native_web_view.hpp"
 #include <foco/app_builder.hpp>
 #include <iostream>
+#include <fstream>
+#include <set>
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+#include <webscene/shared_css.hpp>
+#endif
+static std::string capture_path;
 #include <array>
 #include <functional>
 #include <cmath>
@@ -34,6 +40,7 @@ class preview_app final : public foco::application {
   std::unique_ptr<kestrel::viewport> viewport;
   uint32_t gpu_width{}, gpu_height{};
   uint64_t gpu_serial{};
+  unsigned ticks{};
   bool gpu_dirty{true}, panning{};
   float pan_x{}, pan_y{};
   void tick() {
@@ -79,7 +86,12 @@ public:
     window->set_title("Kestrel original HTML/CSS — diagnostic preview (unsupported features omitted)");
     window->set_width(1280); window->set_height(800);
     view = foco::make_ref<webscene::foco_host::view>();
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+    auto css_report=std::make_shared<webscene::native_web::shared_css_report>();
+    compiled_ui::build(view->document,css_report);
+#else
     compiled_ui::build(view->document);
+#endif
     const std::array<const char*,6> names{"Home","Insert","Annotate","Model","View","Manage"};
     auto parent = view->document.find("ribbon-tab-list");
     for(size_t i=0;i<tabs.size();++i) {
@@ -90,11 +102,21 @@ public:
       handlers.push_back(view->document.on(tabs[i],"click",[this,i](auto&){select_tab(i);}));
     }
     select_tab(0);
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+    view->document.render(1280,800);
+    std::set<std::string> diagnostics;
+    for(const auto& entry:css_report->diagnostics)
+      diagnostics.insert(entry.feature+": "+entry.classification+": "+entry.detail);
+    for(const auto& entry:diagnostics) std::cerr << "Shared CSS: " << entry << '\n';
+#endif
     window->add_child(view);
 #ifdef KESTREL_PREVIEW_GPU
     // renderer.js sizes both canvases to the viewport during resize. Keep that
     // application behavior in native code; the original stylesheet is unchanged.
     for (auto id : {"scene", "overlay"}) {
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+      view->document.attribute(view->document.find(id),"style","width:100%;height:100%");
+#else
       webscene::native_web::rule sizing;
       sizing.inline_target = view->document.find(id);
       sizing.declarations.push_back({false, +[](webscene::native_web::style &style) {
@@ -102,6 +124,7 @@ public:
         style.set_height({100, webscene::native_web::length_unit::percent});
       }});
       view->document.add_rule(std::move(sizing));
+#endif
     }
     view->refresh();
     model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
@@ -153,7 +176,18 @@ public:
           event.prevent_default();
         }));
     window->frame = [this, lifetime] {
-      try { tick(); }
+      try {
+        tick();
+        if(!capture_path.empty() && ++ticks==120) {
+          if(!gpu_serial) {lifetime->shutdown(3);return;}
+          auto png=foco::capture_platform_compositor_png(*window,1.f);
+          if(!png) {std::cerr << png.failure().message; lifetime->shutdown(2);return;}
+          std::ofstream file(capture_path,std::ios::binary);
+          file.write(reinterpret_cast<const char*>(png.value().data()),png.value().size());file.close();
+          std::cout << "Preview captured; GPU serial=" << gpu_serial << '\n';
+          lifetime->shutdown(file?0:4);
+        }
+      }
       catch (const std::exception &error) {
         std::cerr << "Native preview viewport: " << error.what() << '\n';
         lifetime->shutdown(5);
@@ -164,6 +198,7 @@ public:
   }
 };
 int main(int argc, char **argv) {
+  for(int i=1;i+1<argc;++i) if(std::string_view(argv[i])=="--capture") capture_path=argv[++i];
   if (argc == 2 && std::string_view(argv[1]) == "--check-input-coalescing") {
     auto view = foco::make_ref<webscene::foco_host::view>();
     auto node = view->document.element(view->document.body(), "button");

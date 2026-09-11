@@ -214,19 +214,24 @@ if(FOCO_SOURCE_DIR AND APPLE AND WEBSCENE_NATIVE_WEB_GPU AND BUILD_TESTING)
 endif()
 
 if(FOCO_SOURCE_DIR)
+ option(NATIVE_WEB_PREVIEW_SHARED_CSS "Use shared native CSS in the diagnostic Kestrel preview" OFF)
+ set(PREVIEW_CSS_OPTIONS)
+ if(NATIVE_WEB_PREVIEW_SHARED_CSS)
+  list(APPEND PREVIEW_CSS_OPTIONS --css-backend shared)
+ endif()
  set(PREVIEW_UI "${CMAKE_CURRENT_BINARY_DIR}/KestrelPreview.cppm")
  add_custom_command(OUTPUT "${PREVIEW_UI}"
-   COMMAND webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/reference/index.html" "${PREVIEW_UI}" --module kestrel.original.preview --preview
+   COMMAND webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/reference/index.html" "${PREVIEW_UI}" --module kestrel.original.preview ${PREVIEW_CSS_OPTIONS} --preview
    DEPENDS webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/reference/index.html"
    DEPFILE "${PREVIEW_UI}.d" VERBATIM)
  set(PREVIEW_TABS "${CMAKE_CURRENT_BINARY_DIR}/KestrelPreviewTabs.cppm")
  add_custom_command(OUTPUT "${PREVIEW_TABS}"
-   COMMAND webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonTabs.html" "${PREVIEW_TABS}" --module kestrel.preview.tabs --namespace kestrel_tabs
+   COMMAND webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonTabs.html" "${PREVIEW_TABS}" --module kestrel.preview.tabs --namespace kestrel_tabs ${PREVIEW_CSS_OPTIONS}
    DEPENDS webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonTabs.html"
    DEPFILE "${PREVIEW_TABS}.d" VERBATIM)
  set(PREVIEW_GROUPS "${CMAKE_CURRENT_BINARY_DIR}/KestrelPreviewGroups.cppm")
  add_custom_command(OUTPUT "${PREVIEW_GROUPS}"
-   COMMAND webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonGroups.html" "${PREVIEW_GROUPS}" --module kestrel.preview.groups --namespace kestrel_groups --preview
+   COMMAND webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonGroups.html" "${PREVIEW_GROUPS}" --module kestrel.preview.groups --namespace kestrel_groups ${PREVIEW_CSS_OPTIONS} --preview
    DEPENDS webscene-uic "${WEBSCENE_ROOT}/samples/NativeKestrel/templates/RibbonGroups.html"
    DEPFILE "${PREVIEW_GROUPS}.d" VERBATIM)
  add_executable(FocoKestrelPreview MACOSX_BUNDLE "${WEBSCENE_ROOT}/samples/NativeKestrel/preview.cpp")
@@ -234,6 +239,10 @@ if(FOCO_SOURCE_DIR)
  set_target_properties(FocoKestrelPreview PROPERTIES CXX_SCAN_FOR_MODULES ON)
  target_include_directories(FocoKestrelPreview PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/foco")
  target_link_libraries(FocoKestrelPreview PRIVATE webscene_native_web FocoUI::PlatformCocoa)
+ if(NATIVE_WEB_PREVIEW_SHARED_CSS)
+  target_link_libraries(FocoKestrelPreview PRIVATE webscene_native_web_shared_css)
+  target_compile_definitions(FocoKestrelPreview PRIVATE KESTREL_PREVIEW_SHARED_CSS=1)
+ endif()
  if(TARGET kestrel_gpu AND TARGET webscene_native_web_foco_gpu)
   target_link_libraries(FocoKestrelPreview PRIVATE kestrel_gpu webscene_native_web_foco_gpu)
   target_compile_definitions(FocoKestrelPreview PRIVATE KESTREL_PREVIEW_GPU=1)
