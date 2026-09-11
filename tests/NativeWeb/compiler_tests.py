@@ -12,6 +12,18 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_screen_media_types(self):
+        result, out = self.compile('<div></div>',
+            '@media print {div {width:123px}} @media screen {div {width:45px}}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('123.0f', out.read_text())
+        self.assertIn('45.0f', out.read_text())
+        result, out = self.compile('<div></div>',
+            '@media print {@media screen {div {width:123px}}} @media not print {div {width:45px}}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('123.0f', out.read_text())
+        self.assertIn('45.0f', out.read_text())
+
     def test_native_cursor_keywords(self):
         for value in ['pointer', 'crosshair', 'col-resize', 'row-resize', 'grab', 'grabbing', 'not-allowed', 'inherit']:
             result, out = self.compile('<div></div>', 'div {cursor:'+value+'}')
@@ -121,7 +133,7 @@ class CompilerTests(unittest.TestCase):
     def test_at_rule_diagnostics_distinguish_media(self):
         for css,message in [('@keyframes spin { from { opacity:0; } }', 'unsupported at-rule: @keyframes'),
                             ('@supports (display:grid) { div { width:1px; } }', 'unsupported at-rule: @supports'),
-                            ('@media print { div { width:1px; } }', 'media conditions')]:
+                            ('@media speech { div { width:1px; } }', 'media conditions')]:
             result,_=self.compile('<div></div>',css)
             self.assertNotEqual(result.returncode,0)
             self.assertIn(message,result.stderr)
@@ -419,7 +431,7 @@ class CompilerTests(unittest.TestCase):
         self.assertIn(str(source)+':4:5',result.stderr)
         self.assertIn(str(source)+':5:5',result.stderr)
         self.assertIn('1 distinct unsupported constructs',result.stdout)
-        source.write_text('/* header */\n@media print {\n  div::before { color:black; }\n}\n@import "other.css";\n')
+        source.write_text('/* header */\n@media speech {\n  div::before { color:black; }\n}\n@import "other.css";\n')
         result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
         self.assertEqual(result.returncode,1)
         for location in [':2:1',':3:3',':5:1']:
@@ -479,7 +491,7 @@ class CompilerTests(unittest.TestCase):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
         root=pathlib.Path(folder.name)
         css=root/'linked.css'
-        css.write_text('/* audit */\n@media print { div { width:1px; } }\ndiv {\n  filter:blur(2px);\n  filter:blur(3px);\n}\n')
+        css.write_text('/* audit */\n@media speech { div { width:1px; } }\ndiv {\n  filter:blur(2px);\n  filter:blur(3px);\n}\n')
         source=root/'view.html'
         source.write_text('<html><head><link rel="stylesheet" href="linked.css"></head><body><div></div></body></html>')
         result=subprocess.run([UIC,source,root/'view.cppm','--module','audit.view','--preview'],capture_output=True,text=True)
@@ -573,7 +585,7 @@ class CompilerTests(unittest.TestCase):
             result=subprocess.run([UIC,source,output],capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn(',400.0f,1e+09f,0,0.0f,1e+09f}',output.read_text())
-            source.write_text(source.read_text().replace('(min-width:400px)','print'))
+            source.write_text(source.read_text().replace('(min-width:400px)','speech'))
             result=subprocess.run([UIC,source,output],capture_output=True,text=True)
             self.assertNotEqual(result.returncode,0)
             preview=subprocess.run([UIC,source,output,'--preview'],capture_output=True,text=True)

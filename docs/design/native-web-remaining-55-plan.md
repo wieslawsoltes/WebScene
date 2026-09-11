@@ -856,3 +856,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   text paint paths require coordinated overflow geometry, and the Foco renderer
   still uses simple text runs rather than a shared full shaper. Compiler audit
   remains 33; original app parity and 60fps acceptance remain unfinished.
+
+- Screen-target media types: the compiler now accepts screen/all/not print as
+  active and print/not screen/not all as inactive for the current native screen
+  application target. Inactive nested rules retain an impossible media interval;
+  nested screen rules cannot reactivate a print subtree. Compiler suite passes,
+  with diagnostic fixtures using unsupported speech instead of print. Fresh
+  original CSS audit: **32 distinct unsupported constructs**. This is not print
+  output support or general media-query grammar; print rendering would require
+  a distinct target/runtime mode. Reduced-motion preference and animations remain
+  open, as do original Kestrel parity and presented 60fps panning/resize.

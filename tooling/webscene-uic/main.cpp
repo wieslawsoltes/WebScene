@@ -1263,6 +1263,11 @@ static media_bound compile_media_bound(const std::string &name, const std::strin
   static const std::regex grammar(R"(\s*\(\s*(min|max)-(width|height)\s*:\s*([^\s]+)\s*\)\s*)", std::regex::icase);
   if (ascii_keyword(name) != "media")
     throw std::runtime_error("unsupported at-rule: @" + name);
+  // This compiler currently targets screen applications. Preserve inactive media
+  // as an impossible interval, including when nested inside active conditions.
+  const auto medium=ascii_keyword(trim(prelude));
+  if(medium=="print" || medium=="not screen" || medium=="not all") return {0,false,-1};
+  if(medium=="screen" || medium=="all" || medium=="not print") return {0,true,0};
   if (!std::regex_match(prelude, match, grammar))
     throw std::runtime_error("only min/max width or height media conditions in px are supported");
   return {ascii_keyword(match[2]) == "width" ? size_t{0} : size_t{2},
