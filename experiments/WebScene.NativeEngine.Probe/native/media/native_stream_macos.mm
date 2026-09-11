@@ -62,6 +62,7 @@ class apple_stream final : public native_stream {
             uint64_t applied = UINT64_MAX, seek_applied = 0;
             auto completed_seek = std::make_shared<std::atomic<uint64_t>>(0);
             snapshot state;
+            bool tracks_checked = false;
             while (!stop.stop_requested()) {
                 @autoreleasepool {
                     controls desired;
@@ -79,6 +80,17 @@ class apple_stream final : public native_stream {
                         state.ready = false; publish(state); break;
                     }
                     if (item.status == AVPlayerItemStatusReadyToPlay) {
+                        if (!tracks_checked && item.tracks.count) {
+                            tracks_checked = true;
+                            bool decodable_video = false;
+                            for (AVPlayerItemTrack* track in item.tracks)
+                                if ([track.assetTrack.mediaType isEqualToString:AVMediaTypeVideo] &&
+                                    track.assetTrack.decodable) decodable_video = true;
+                            if (!decodable_video) {
+                                state.error = "The macOS media stack cannot decode this video's format";
+                                publish(state); break;
+                            }
+                        }
                         const double duration = CMTimeGetSeconds(item.duration);
                         state.duration = std::isfinite(duration) ? duration : INFINITY;
                         if (desired.seek_revision != seek_applied) {
