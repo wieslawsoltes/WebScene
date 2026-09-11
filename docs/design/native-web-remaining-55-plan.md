@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Ellipse Major/Minor radius now use compiled coordinate fields and the existing
+native conic-axis calculation. Editing normalizes/scales the selected axis while
+preserving the other axis and writes both explicit axes, matching the original
+application approach. Native inspector tests type a minor radius for a tilted
+ellipse, verify axis direction/other-axis preservation and exact undo. Full hosted
+conic interaction, other entity inspectors and application parity remain open.
+
 Post-inspector panning check: the current original Courtyard benchmark ran 360
 ticks with 265 entities and 30 text records, no geometry rebuilds and no compositor
 skips. Of 361 Metal callbacks, 359 had positive presentation timestamps: 59.999700

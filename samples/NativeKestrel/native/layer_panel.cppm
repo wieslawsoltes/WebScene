@@ -15,6 +15,7 @@ module;
 #endif
 export module kestrel.layer_panel;
 import kestrel.drawing;
+import kestrel.geometry;
 import kestrel.layer_templates;
 export namespace kestrel {
 class layer_panel {
@@ -227,6 +228,22 @@ public:
               const auto text=document_.value(node);double radius=0;size_t used=0;bool valid=true;
               try {radius=std::stod(text,&used);}catch(const std::exception&){valid=false;}
               if(valid && used==text.size())model_.change_conic_radius(radius);
+              refresh();if(changed_)changed_();
+            }));
+          }
+          if(conic_entity && entity_type=="ELLIPSE")for(bool minor:{false,true}) {
+            const auto label=minor?"Minor radius":"Major radius";const auto key=minor?"ry":"rx";
+            const auto basis=geo::axes(*one);const auto axis=minor?basis.y:basis.x;
+            const double radius=std::sqrt(axis.x*axis.x+axis.y*axis.y+axis.z*axis.z);
+            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
+            document_.set_text(row.named("label"),label);document_.attribute(row.named("input"),"aria-label",label);
+            document_.attribute(row.named("input"),"data-prop",key);document_.attribute(row.named("input"),"min","0.000001");
+            std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(4)<<radius;
+            auto value=text.str();while(value.ends_with('0'))value.pop_back();if(value.ends_with('.'))value.pop_back();document_.set_value(row.named("input"),value);
+            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),minor](auto&) {
+              const auto text=document_.value(node);double radius=0;size_t used=0;bool valid=true;
+              try {radius=std::stod(text,&used);}catch(const std::exception&){valid=false;}
+              if(valid && used==text.size())geo::change_ellipse_radius(model_,minor,radius);
               refresh();if(changed_)changed_();
             }));
           }

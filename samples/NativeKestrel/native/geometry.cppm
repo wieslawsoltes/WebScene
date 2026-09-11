@@ -52,6 +52,21 @@ inline vec3 conic_point(const json &e, double t) {
   auto a = axes(e);
   return point(e.at("center")) + a.x * std::cos(t) + a.y * std::sin(t);
 }
+inline bool change_ellipse_radius(drawing& model,bool minor,double radius) {
+  if(!std::isfinite(radius) || radius<=0)return false;
+  const auto ids=model.selected(true);if(ids.size()!=1)return false;
+  auto* entity=model.find(ids.front());if(!entity || entity->value("type",std::string{})!="ELLIPSE")return false;
+  auto basis=axes(*entity);
+  auto& axis=minor?basis.y:basis.x;
+  const double length=std::sqrt(axis.x*axis.x+axis.y*axis.y+axis.z*axis.z);
+  if(!std::isfinite(length) || length<=0)return false;
+  axis=axis*(radius/length);
+  return model.transaction(minor?"Edit ry":"Edit rx",[&] {
+    (*entity)["axisX"]={basis.x.x,basis.x.y,basis.x.z};
+    (*entity)["axisY"]={basis.y.x,basis.y.y,basis.y.z};
+    (*entity)[minor?"ry":"rx"]=radius;
+  });
+}
 inline std::vector<double> uniform_knots(size_t count, size_t degree) {
   std::vector<double> out;
   for (size_t i = 0; i < count + degree + 1; ++i)

@@ -27,6 +27,20 @@ int main() {
     require(model.find(id)->at("center")[0]==42);
     require(model.undo()=="Edit center.0" && model.data==before);
     panel.refresh();
+    if(std::string_view(type)=="ELLIPSE") {
+      (*model.find(id))["axisX"]={3,4,0};(*model.find(id))["axisY"]={0,0,3};panel.refresh();
+      const auto original=model.data;
+      const auto radius=[&](auto&& self,node_id node)->node_id {
+        if(doc.attribute(node,"data-prop")=="ry")return node;
+        for(auto child:doc.children(node))if(auto result=self(self,child))return result;
+        return 0;
+      };
+      const auto input=radius(radius,inspector);require(input!=0 && doc.value(input)=="3");
+      doc.focus(input);doc.set_selection(input,0,1);doc.text_input("6");doc.key("Enter");
+      require(model.find(id)->at("axisX")==kestrel::json({3,4,0}));
+      require(model.find(id)->at("axisY")==kestrel::json({0,0,6}));
+      require(model.undo()=="Edit ry" && model.data==original);
+    }
     if(std::string_view(type)=="CIRCLE")require(doc.text_content(inspector).find("78.540 mm²")!=std::string::npos);
     if(std::string_view(type)=="ARC") {
       const auto angle=[&](auto&& self,node_id node)->node_id {
