@@ -2286,3 +2286,15 @@ the cyan dashed segment is visible over the drawing alongside the original Line
 banner and command prompt. This is static dark-theme render evidence, not a
 continuous-motion latency or 60fps proof. Light theme, cleanup capture, snapping
 and physical pointer motion still need verification.
+
+### Preview camera reprojection and cancellation
+
+Pending Line pointer state now retains client coordinates and reprojects against
+the current camera/scene bounds on overlay redraw. Previously its saved world
+position could detach from the cursor during camera movement. Hosted preview
+exercise passes a 40/15 camera pan projection check (within .01 screen units),
+restores the camera, dispatches Escape through Foco input, verifies zero remaining
+stroke commands and unchanged model, then recreates the visible capture. Build
+and hosted run pass, GPU serial 2, exit 0. This tests direct camera mutation and
+synthetic host input; actual continuous navigation, resize latency and snapping
+remain unverified.

@@ -71,6 +71,7 @@ class preview_app final : public foco::application {
   kestrel::line_command line_tool{model};
   bool line_active{};
   std::optional<kestrel::vec3> line_pointer;
+  std::optional<std::array<double,2>> line_pointer_client;
   bool overlay_dirty{};
   std::array<double,3> last_drafting_point{};
   void sync_line_prompt() {
@@ -150,6 +151,12 @@ class preview_app final : public foco::application {
     viewport->camera.fit(points);gpu_dirty=true;
   }
   void redraw_overlay(uint32_t w,uint32_t h) {
+    if(line_active && line_pointer_client) {
+      const auto area=view->document.bounds(view->document.find("scene"));
+      const auto x=(*line_pointer_client)[0]-area.x,y=(*line_pointer_client)[1]-area.y;
+      line_pointer=(x>=0 && y>=0 && x<=area.width && y<=area.height)?viewport->camera.unproject(x,y,0):std::nullopt;
+    }
+
         const auto overlay=view->document.find("overlay");
         view->document.attribute(overlay,"width",std::to_string(w));
         view->document.attribute(overlay,"height",std::to_string(h));
@@ -423,7 +430,7 @@ public:
               view->document.attribute(workbench,"class",classes);view->refresh();
             }
             else if (*action == "line") {
-              line_tool.cancel();line_pointer.reset();line_active=true;selection_pressed=false;
+              line_tool.cancel();line_pointer.reset();line_pointer_client.reset();line_active=true;selection_pressed=false;
               if(std::abs(viewport->camera.direction.z)<.015)set_camera_view("top");
               sync_line_prompt();view->document.focus(view->document.find("viewport"));
             }
@@ -511,6 +518,7 @@ public:
     handlers.push_back(view->document.on(view->document.root(), "pointermove",
         [this](auto &event) {
           if(line_active && viewport) {
+            line_pointer_client=std::array<double,2>{event.client_x,event.client_y};
             const auto area=view->document.bounds(view->document.find("scene"));
             const auto x=event.client_x-area.x,y=event.client_y-area.y;
             line_pointer=(x>=0 && y>=0 && x<=area.width && y<=area.height)?viewport->camera.unproject(x,y,0):std::nullopt;
@@ -812,6 +820,21 @@ public:
             const auto& scene=view->document.render(host.width,host.height);
             size_t strokes=0;for(const auto& command:scene.canvas)if(command.kind==20)++strokes;
             if(strokes<2)throw std::runtime_error("Pending Line emitted no dashed Canvas strokes");
+            viewport->camera.pan(40,15);redraw_overlay(gpu_width,gpu_height);
+            if(!line_pointer)throw std::runtime_error("Pan lost preview pointer");
+            const auto projected=viewport->camera.project(*line_pointer);
+            if(std::abs(projected.x-area.width*.7)>.01 || std::abs(projected.y-area.height*.65)>.01)
+              throw std::runtime_error("Camera pan detached preview from pointer");
+            viewport->camera.pan(-40,-15);redraw_overlay(gpu_width,gpu_height);
+            view->document.focus(view->document.find("viewport"));
+            key={};key.value=foco::key::escape;view->key_event_received(key);
+            redraw_overlay(gpu_width,gpu_height);view->refresh();
+            const auto& cleared=view->document.render(host.width,host.height);
+            for(const auto& command:cleared.canvas)if(command.kind==20)throw std::runtime_error("Escape left preview strokes");
+            if(model.data!=pending)throw std::runtime_error("Preview cancellation changed geometry");
+            box=view->document.bounds(button);click(box.x+box.width/2,box.y+box.height/2);
+            click(area.x+area.width*.3,area.y+area.height*.35);view->pointer_event_received(move);
+            redraw_overlay(gpu_width,gpu_height);view->refresh();
             std::cout<<"Hosted pending Line preview emitted "<<strokes<<" strokes without committing geometry\n";
           }
           exercise_line_draw=false;
