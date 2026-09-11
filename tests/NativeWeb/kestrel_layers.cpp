@@ -10,6 +10,8 @@ int main() {
   auto list=d.element(d.body(),"div");d.attribute(list,"id","explorer-list");
   auto badge=d.element(d.body(),"span");d.attribute(badge,"id","layer-count");
   auto search=d.element(d.body(),"input");d.attribute(search,"id","explorer-search");
+  auto layers_tab=d.element(d.body(),"button");d.attribute(layers_tab,"id","layers-tab");
+  auto objects_tab=d.element(d.body(),"button");d.attribute(objects_tab,"id","objects-tab");
   kestrel::drawing model;unsigned changes=0;
   {
     kestrel::layer_panel panel(d,model,[&]{++changes;});
@@ -51,6 +53,25 @@ int main() {
     panel.refresh();
     bool removed=false;try {d.bounds(obsolete);} catch(const std::invalid_argument&) {removed=true;}
     require(removed);
+    model.data["entities"]={
+      {{"id","line_1"},{"type","LINE"},{"layer","architecture"},{"name","Wall <A>"}},
+      {{"id","mesh_2"},{"type","MESH"},{"layer","openings"},{"primitive","Box"}}};
+    d.dispatch(objects_tab,"click");
+    require(panel.entries().size()==2 && d.attribute(objects_tab,"class")=="active");
+    require(d.attribute(search,"placeholder")=="Filter objects…");
+    require(d.attribute(panel.entries()[0].row,"data-object")=="line_1");
+    d.dispatch(panel.entries()[0].row,"click");require(model.selection.size()==1 && model.selection.contains("line_1"));
+    d.dispatch(panel.entries()[1].row,"click",0,0,0,0,{},0,{true});require(model.selection.size()==2);
+    d.dispatch(panel.entries()[0].row,"click",0,0,0,0,{},0,{true});require(!model.selection.contains("line_1"));
+    d.set_value(search,"a-wall");d.dispatch(search,"input");require(panel.entries().size()==1);
+    d.set_value(search,"no match");d.dispatch(search,"input");require(panel.entries().empty());
+    d.set_value(search,"");
+    for(unsigned i=0;i<501;++i) model.data["entities"].push_back({{"id","point_"+std::to_string(i)},{"type","POINT"},{"layer","architecture"}});
+    panel.refresh();require(panel.entries().size()==500);
+    const auto& limited=d.render(300,300);
+    require(std::string(limited.bytes.begin(),limited.bytes.end()).find("Showing the first 500 of 503 objects.")!=std::string::npos);
+    d.dispatch(layers_tab,"click");require(panel.entries().size()==8);
+    require(d.attribute(search,"placeholder")=="Filter layers…");
     d.render(300,300);
   }
   d.dispose();

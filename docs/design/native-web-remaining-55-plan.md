@@ -1153,3 +1153,16 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   swatch dimensions and absence of text/caret commands. Rebuilt native_web_text and
   its CTest passes. This is painting support only: picker activation, full input-type
   value sanitization and browser-specific color-control appearance remain unfinished.
+
+- Original Objects explorer: extended the native explorer module with tab handlers,
+  original object-row templates and all twelve original entity icon variants copied
+  from the pinned UI source. C++ now supplies names/type labels, layer names, ID
+  suffixes, selected classes, the original combined search fields and a 500-row cap.
+  Click replaces selection; Shift-click toggles membership. Template construction
+  performs no runtime HTML parsing; model text is assigned through native APIs.
+  Native explorer tests pass for switching tabs, selection toggles, layer-name
+  filtering, empty matches and the cap message. Large-number locale formatting,
+  inspector/ribbon synchronization and full original model/application integration
+  remain unfinished; these tests do not establish visual parity or presented FPS.
+  The FocoKestrelPreview application also rebuilds and links successfully with the
+  updated templates and native explorer module; interactive capture is pending.

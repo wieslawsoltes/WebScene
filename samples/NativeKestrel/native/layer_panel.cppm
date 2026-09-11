@@ -21,6 +21,8 @@ public:
 private:
   std::vector<entry> rows_;
   webscene::native_web::subscription filter_handler_;
+  std::vector<webscene::native_web::subscription> tab_handlers_;
+  bool objects_{};
   webscene::native_web::node_id empty_{};
   static std::string lowercase(std::string text) {
 #ifdef __APPLE__
@@ -54,6 +56,10 @@ public:
       :document_(document),model_(model),changed_(std::move(changed)) {
     if(auto filter=document_.find("explorer-search"))
       filter_handler_=document_.on(filter,"input",[this](auto&){refresh();});
+    for(auto [id,objects]:{std::pair{"layers-tab",false},std::pair{"objects-tab",true}})
+      if(auto tab=document_.find(id)) tab_handlers_.push_back(document_.on(tab,"click",[this,objects](auto&){
+        objects_=objects;refresh();
+      }));
     refresh();
   }
   ~layer_panel() {clear();}
@@ -64,7 +70,45 @@ public:
     if(!parent) throw std::logic_error("layer panel requires explorer-list");
     const auto filter=document_.find("explorer-search");
     const auto query=filter?lowercase(document_.value(filter)):std::string{};
-    for(const auto& layer:model_.data["layers"]) {
+    for(auto [id,active]:{std::pair{"layers-tab",!objects_},std::pair{"objects-tab",objects_}})
+      if(auto tab=document_.find(id)) document_.attribute(tab,"class",active?"active":"");
+    if(filter) document_.attribute(filter,"placeholder",objects_?"Filter objects…":"Filter layers…");
+    if(auto subtitle=document_.find("explorer-subtitle")) document_.set_text(subtitle,objects_?"DRAWING OBJECTS":"LAYER NAME");
+    if(objects_) {
+      size_t matches=0;
+      for(const auto& entity:model_.data["entities"]) {
+        const auto id=entity["id"].get<std::string>();
+        const auto type=entity.value("type",std::string{});
+        const auto name=entity.value("name",std::string{});
+        const auto layer=model_.layer(entity).value("name",std::string{});
+        if(lowercase(type+" "+name+" "+layer+" "+id).find(query)==std::string::npos) continue;
+        if(++matches>500) continue;
+        std::string icon="drawing",label=type;
+        if(type=="MESH") {icon="box";label=entity.value("primitive",std::string("Mesh solid"));if(label.empty())label="Mesh solid";}
+        for(auto [key,title]:{std::pair{"LINE","Line"},std::pair{"POLYLINE","Polyline"},std::pair{"CIRCLE","Circle"},
+            std::pair{"ARC","Arc"},std::pair{"ELLIPSE","Ellipse"},std::pair{"SPLINE","Spline"},std::pair{"TEXT","Text"},
+            std::pair{"DIMENSION","Aligned dimension"},std::pair{"HATCH","Hatch"},std::pair{"POINT","Point"}})
+          if(type==key) {icon=lowercase(type);label=title;break;}
+        auto view=kestrel_layers::instantiate(document_,parent,"object-"+icon);
+        auto root=view.named("row");rows_.push_back({id,root,0,0});
+        document_.attribute(root,"data-object",id);
+        document_.attribute(root,"class",model_.selection.contains(id)?"object-row active":"object-row ");
+        document_.set_text(view.named("name"),name.empty()?label:name);
+        document_.set_text(view.named("layer"),layer);
+        const auto split=id.rfind('_');
+        document_.set_text(view.named("suffix"),split==std::string::npos?id:id.substr(split+1));
+        handlers_.push_back(document_.on(root,"click",[this,id](auto& event){
+          if(event.modifiers.shift) {
+            if(model_.selection.contains(id)) model_.selection.erase(id);else model_.selection.insert(id);
+          } else model_.selection={id};
+          refresh();if(changed_)changed_();
+        }));
+      }
+      if(matches>500) {
+        empty_=kestrel_layers::instantiate(document_,parent,"object-limit").named("empty");
+        document_.set_text(empty_,"Showing the first 500 of "+std::to_string(matches)+" objects. Refine the filter.");
+      }
+    } else for(const auto& layer:model_.data["layers"]) {
       const auto id=layer["id"].get<std::string>();
       const auto name=layer["name"].get<std::string>();
       if(lowercase(name).find(query)==std::string::npos) continue;
@@ -100,7 +144,7 @@ public:
           refresh();if(changed_) changed_();
         }));
     }
-    if(rows_.empty()) empty_=kestrel_layers::instantiate(document_,parent,"empty").named("empty");
+    if(!objects_ && rows_.empty()) empty_=kestrel_layers::instantiate(document_,parent,"empty").named("empty");
     const auto text=[&](const char* id,std::string value) {
       if(auto node=document_.find(id)) document_.set_text(node,std::move(value));
     };
