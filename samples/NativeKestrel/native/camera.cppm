@@ -88,6 +88,12 @@ public:
     return r.origin + r.direction * ((target - r.origin).dot(direction) /
                                      r.direction.dot(direction));
   }
+  void orbit(double dx, double dy) {
+    yaw -= dx * .007;
+    pitch = std::clamp(pitch + dy * .007,
+        -std::numbers::pi / 2 + .002, std::numbers::pi / 2 - .002);
+    update();
+  }
   void pan(double dx, double dy) {
     target = target - (point_on_view(width / 2 + dx, height / 2 + dy) -
                        point_on_view(width / 2, height / 2));

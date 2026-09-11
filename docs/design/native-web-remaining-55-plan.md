@@ -1482,3 +1482,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Rebuilt FocoKestrelPreview and captured /tmp/kestrel-status-current.png with
   clean exit; inspected Courtyard title, active document tab, units and renderer
   badge. This does not establish full command parity or OS live-resize timing.
+
+- Native orbit navigation: Shift+middle-drag now selects orbit at pointer-down,
+  using the original app.js yaw/pitch sensitivity and pole clamps. Ordinary
+  middle-drag still pans. Orbit updates the original view selector to iso.
+  Native camera tests verify direction, sensitivity, fixed target, revision and
+  both pitch limits; existing browser camera-reference comparisons pass.
+  This does not yet port the browser workspace/navigation class updates or prove
+  physical pointer capture outside the window.

@@ -65,7 +65,7 @@ class preview_app final : public foco::application {
   foco::scene_publication_metrics pan_initial_publication;
   std::chrono::steady_clock::time_point pan_start;
   double pan_tick_ms{}, pan_tick_max_ms{};
-  bool gpu_dirty{true}, panning{};
+  bool gpu_dirty{true}, panning{}, orbiting{};
   float pan_x{}, pan_y{};
   void fit_drawing() {
     if(!viewport)return;
@@ -270,14 +270,17 @@ public:
     handlers.push_back(view->document.on(view->document.find("viewport"), "pointerdown",
         [this](auto &event) {
           if (!viewport || !(event.buttons & 4u)) return;
-          panning = true; pan_x = event.client_x; pan_y = event.client_y;
+          panning = true; orbiting = event.modifiers.shift; pan_x = event.client_x; pan_y = event.client_y;
           event.prevent_default();
         }));
     handlers.push_back(view->document.on(view->document.root(), "pointermove",
         [this](auto &event) {
           if (!panning || !viewport) return;
           if (!(event.buttons & 4u)) { panning = false; return; }
-          viewport->camera.pan(event.client_x - pan_x, event.client_y - pan_y);
+          if(orbiting) {
+            viewport->camera.orbit(event.client_x - pan_x, event.client_y - pan_y);
+            view->document.set_value(view->document.find("view-select"),"iso");
+          } else viewport->camera.pan(event.client_x - pan_x, event.client_y - pan_y);
           pan_x = event.client_x; pan_y = event.client_y;
           gpu_dirty = true;
         }));

@@ -12,6 +12,24 @@ import kestrel.camera;
 #include <iomanip>
 #include <iostream>
 int main() {
+  {
+    kestrel::camera orbit;
+    orbit.set_view("iso");
+    const auto yaw=orbit.yaw, pitch=orbit.pitch;
+    const auto target=orbit.target;
+    const auto revision=orbit.revision;
+    orbit.orbit(20,-10);
+    if(std::abs(orbit.yaw-(yaw-.14))>1e-12 ||
+       std::abs(orbit.pitch-(pitch-.07))>1e-12 ||
+       (orbit.target-target).length()>1e-12 || orbit.revision!=revision+1)
+      throw std::runtime_error("Native orbit differs from browser calculation");
+    orbit.orbit(0,10000);
+    if(std::abs(orbit.pitch-(std::numbers::pi/2-.002))>1e-12)
+      throw std::runtime_error("Orbit upper pitch limit");
+    orbit.orbit(0,-10000);
+    if(std::abs(orbit.pitch-(-std::numbers::pi/2+.002))>1e-12)
+      throw std::runtime_error("Orbit lower pitch limit");
+  }
   kestrel::camera c;
   std::cout << std::setprecision(17);
   auto dump = [&] {
