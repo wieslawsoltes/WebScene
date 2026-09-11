@@ -447,6 +447,9 @@ public:
   void clear_canvas(node_id);
   void fill_rect(node_id, float x, float y, float width, float height,
                  uint32_t rgba);
+  void fill_text(node_id, std::string text, float x, float y,
+                 std::string font, uint32_t rgba,
+                 std::string align = "start", std::string baseline = "alphabetic");
   const scene &render(float width, float height);
   uint64_t layout_passes() const;
   webscene_native::layout_rect bounds(node_id) const;

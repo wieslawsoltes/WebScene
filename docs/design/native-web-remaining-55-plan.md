@@ -1411,3 +1411,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   explorer shows nine layers and 265 objects with native summary title. Drawing
   labels and dimension text are absent: native render_data collects text, but
   hosted text drawing requires investigation. Full visual parity remains unmet.
+
+- Native Canvas text API: added fill_text using existing shared display-list
+  commands for paint/font/alignment/baseline/text. This supplies the missing native
+  entry point needed by Courtyard's text overlay without V8 or HTML parsing.
+  Rebuilt native_web_text and CTest passes Unicode content/coordinates, clear and
+  no layout-pass increase for drawing-only updates. Native render_data already
+  collects drawing labels; projecting and painting those onto the preview overlay
+  is next. This API addition alone does not restore visible Courtyard labels.

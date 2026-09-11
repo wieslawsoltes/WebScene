@@ -606,6 +606,25 @@ void document::fill_rect(node_id id, float x, float y, float w, float h,
   ++canvas.generation;
   state_->dom.mark_scene_changed();
 }
+void document::fill_text(node_id id, std::string text, float x, float y,
+                         std::string font, uint32_t rgba,
+                         std::string align, std::string baseline) {
+  auto &node=state_->node(id);
+  if(node.tag!="canvas") throw std::invalid_argument("not a canvas");
+  if(!std::isfinite(x)||!std::isfinite(y)) return;
+  auto &canvas=node.mutable_canvas();
+  const auto string_command=[&](uint32_t kind,std::string value) {
+    webscene_canvas_command command{};command.kind=kind;
+    command.resource_id=static_cast<uint32_t>(canvas.strings.size());
+    canvas.strings.push_back(std::move(value));canvas.commands.push_back(command);
+  };
+  char color[10];std::snprintf(color,sizeof(color),"#%08x",rgba);
+  string_command(40,color);string_command(48,std::move(font));
+  string_command(49,std::move(align));string_command(50,std::move(baseline));
+  string_command(25,std::move(text));
+  canvas.commands.back().data.values[0]=x;canvas.commands.back().data.values[1]=y;
+  ++canvas.generation;state_->dom.mark_scene_changed();
+}
 static bool class_has(const std::string &list, const std::string &name) {
   size_t i = 0;
   while (i < list.size()) {

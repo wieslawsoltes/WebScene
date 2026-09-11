@@ -40,6 +40,18 @@ int main() {
     hints.attribute(search,"placeholder","Not a range label");hints.attribute(search,"type","range");
     require(!contains("Not a range label"));
   }
+  {
+    document canvas_doc;auto canvas=canvas_doc.element(canvas_doc.body(),"canvas");
+    canvas_doc.render(200,100);const auto layouts=canvas_doc.layout_passes();
+    canvas_doc.fill_text(canvas,"Courtyard · 12000",12,30,"14px sans-serif",0xFFFFFFFF,"center","middle");
+    const auto& rendered=canvas_doc.render(200,100);
+    require(canvas_doc.layout_passes()==layouts);
+    require(std::string(rendered.bytes.begin(),rendered.bytes.end()).find("Courtyard · 12000")!=std::string::npos);
+    bool found=false;for(const auto& command:rendered.canvas)
+      if(command.kind==25 && command.data.values[0]==12 && command.data.values[1]==30)found=true;
+    require(found);canvas_doc.clear_canvas(canvas);
+    require(canvas_doc.render(200,100).canvas.empty());
+  }
   document d;
   auto field=d.element(d.body(),"input");d.attribute(field,"value","Find");
   d.focus(field);require(d.focused()==field && d.value(field)=="Find");
