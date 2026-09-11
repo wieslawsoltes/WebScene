@@ -876,3 +876,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   preference-change notification and compiled animation/transition behavior remain
   open; accepting the condition does not implement the declarations inside it.
   Original Kestrel parity and presented 60fps acceptance remain incomplete.
+
+- Foco reduced-motion propagation: native views read the attached visual-animation
+  service preference and refresh compiled styles when it changes. Foco 1519b2e0
+  wakes host frames from scene_publisher::set_reduced_motion only on a changed
+  value; Cocoa's existing OS-settings subscriptions feed that service. New hosted
+  native_web_foco_motion test passes for wake-up, style activation/deactivation
+  and no-op repeated values. This verifies the service-to-view path without
+  changing the machine's accessibility settings. Compiled animations/transitions,
+  original Kestrel parity and presented 60fps validation remain unfinished; audit
+  remains 31 distinct unsupported constructs.

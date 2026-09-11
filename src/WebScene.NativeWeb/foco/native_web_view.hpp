@@ -26,9 +26,11 @@ public:
     gpu_dirty_ = true;
     refresh();
   }
-  bool requires_host_frames() const noexcept override { return input_refresh_pending_; }
+  bool requires_host_frames() const noexcept override {
+    return input_refresh_pending_ || host_reduced_motion()!=reduced_motion_;
+  }
   bool advance_host_frame(double) override {
-    if (!input_refresh_pending_) return false;
+    if (!requires_host_frames()) return false;
     const auto previous = revision_;
     refresh();
     return revision_ != previous;
@@ -38,6 +40,8 @@ public:
     auto b = bounds();
     if (b.width <= 0 || b.height <= 0)
       return;
+    reduced_motion_=host_reduced_motion();
+    document.set_reduced_motion(reduced_motion_);
     const auto &scene = document.render(b.width, b.height);
     update_cursor();
     if (scene.revision == document_revision_ && !gpu_dirty_)
@@ -171,6 +175,11 @@ private:
           foco::cursor_kind::arrow);
     }
   }
+  bool host_reduced_motion() const noexcept {
+    const auto *sink=visual_animations();
+    return sink && sink->reduced_motion();
+  }
+  bool reduced_motion_{};
   bool input_refresh_pending_{};
   std::optional<foco::point> pointer_position_;
   void request_input_refresh() {
