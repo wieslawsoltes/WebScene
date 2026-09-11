@@ -1,0 +1,26 @@
+{
+  "webscene_revision": "ff3e095d6d22c208cb4e5ee170b1dbaf33127994",
+  "foco_revision": "e0d9e19e307adc9caa9d2e6e0bc350a6a68c00b3",
+  "workload": "FocoKestrelPreview --benchmark-courtyard; 265 entities, 30 text records, 360 host ticks",
+  "trace": "native-kestrel-pan-current.jsonl",
+  "trace_sha256": "5bf3eedcbd98f3ca70f6447500b7f7253a54bb20ea201156176169a63edf1d4b",
+  "callbacks": 361,
+  "valid_presentation_timestamps": 359,
+  "invalid_presentation_timestamps": 2,
+  "fps_from_valid_intervals": 59.999700423740386,
+  "median_ms": 16.66675000160467,
+  "p95_ms": 16.66683300572913,
+  "max_ms": 16.66687500255648,
+  "intervals_over_25ms": 0,
+  "pipeline_log": [
+    "Pan pipeline: seconds=5.98292 host_ticks=360 entities=265 text_records=30 published_images=360 images_per_second=60.1713 tick_mean_ms=3.98551 tick_max_ms=4.78192 scene_rebuilds=0 (publication timing, not display presentation timing)",
+    "Scene publication: commits=359 publications=359 no_ops=0",
+    "Compositor: presented=360 presented_per_second=60.1713 skipped=0 occluded=0 (backend success counts, not physical display timestamps)"
+  ],
+  "limitations": [
+    "Synthetic camera movement; not physical pointer latency.",
+    "Invalid presentation timestamps excluded, not inferred.",
+    "Does not establish continuous live window resize cadence or absence of elastic stretching.",
+    "Not full browser feature or visual parity."
+  ]
+}

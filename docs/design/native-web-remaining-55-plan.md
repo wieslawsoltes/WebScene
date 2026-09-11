@@ -8,6 +8,15 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Post-inspector panning check: the current original Courtyard benchmark ran 360
+ticks with 265 entities and 30 text records, no geometry rebuilds and no compositor
+skips. Of 361 Metal callbacks, 359 had positive presentation timestamps: 59.999700
+FPS, p95 16.666833 ms, maximum 16.666875 ms, no intervals over 25 ms. Two invalid
+timestamps are excluded rather than inferred. Raw trace, source revisions and
+summary are retained in performance/native-kestrel-pan-current.{json,jsonl}.
+This is evidence for synthetic panning only, not physical input latency, continuous
+OS resize performance or full browser parity.
+
 Arc Start/End angle rows now use compiled numeric fields with native degree/radian
 conversion and undo. Circle Area uses the original radius-based formula and
 three-decimal squared-unit display. Tests type 270 degrees into End angle, verify
