@@ -276,7 +276,8 @@ public:
             }
           }
         }
-        const bool text_entity=one->value("type",std::string{})=="TEXT";
+        const bool multiline_text=one->value("type",std::string{})=="MTEXT";
+        const bool text_entity=multiline_text || one->value("type",std::string{})=="TEXT";
         const bool point_entity=(text_entity || one->value("type",std::string{})=="POINT") && one->contains("position") && (*one)["position"].is_array();
         const auto entity_type=one->value("type",std::string{});
         const bool conic_entity=(entity_type=="CIRCLE" || entity_type=="ARC" || entity_type=="ELLIPSE") && one->contains("center") && (*one)["center"].is_array();
@@ -325,12 +326,13 @@ public:
             std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(2)<<geo::volume(*one)<<" "<<units<<"³";info("Signed volume",text.str());
           }
           if(text_entity) {
-            for(auto key:{"height","rotationDeg"}) {
-              const bool height=std::string_view(key)=="height";const auto label=height?"Text height":"Rotation";
+            for(auto key:{"height",multiline_text?"width":"rotationDeg"}) {
+              const bool height=std::string_view(key)=="height";const auto label=height?"Text height":multiline_text?"Paragraph width":"Rotation";
               auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
               document_.set_text(row.named("label"),label);document_.attribute(row.named("input"),"aria-label",label);document_.attribute(row.named("input"),"data-prop",key);
               if(height)document_.attribute(row.named("input"),"min","0.0001");
-              const double number=height?one->value("height",10.0):one->value("rotation",0.0)*180.0/std::numbers::pi;
+              if(multiline_text && !height)document_.attribute(row.named("input"),"min","0");
+              const double number=height?one->value("height",10.0):multiline_text?one->value("width",0.0):one->value("rotation",0.0)*180.0/std::numbers::pi;
               std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(4)<<number;
               auto value=text.str();while(value.ends_with('0'))value.pop_back();if(value.ends_with('.'))value.pop_back();document_.set_value(row.named("input"),value);
               handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),key=std::string(key)](auto&) {
@@ -340,11 +342,13 @@ public:
                 refresh();if(changed_)changed_();
               }));
             }
-            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-text-content");
-            document_.set_value(row.named("input"),one->value("text",std::string{}));
-            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input")](auto&) {
-              model_.change_text_property("text",document_.value(node));refresh();if(changed_)changed_();
-            }));
+            if(!multiline_text) {
+              auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-text-content");
+              document_.set_value(row.named("input"),one->value("text",std::string{}));
+              handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input")](auto&) {
+                model_.change_text_property("text",document_.value(node));refresh();if(changed_)changed_();
+              }));
+            }
           }
           if(conic_entity && entity_type!="ELLIPSE") {
             auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");

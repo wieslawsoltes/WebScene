@@ -31,6 +31,19 @@ struct inspector_fixture {
 };
 int main() {
   {
+    kestrel::drawing model;model.add("MTEXT",{{"position",{1,2,3}},{"height",10},{"width",40},{"text","First\\PSecond"}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    const auto before=model.data;inspector_fixture ui(model);
+    ui.enter("width","0");require(model.find(id)->at("width")==0);
+    require(model.undo()=="Edit width" && model.data==before);ui.panel->refresh();
+    ui.enter("width","-1");require(model.data==before);
+    ui.enter("height","25");require(model.find(id)->at("height")==25);
+    require(model.undo()=="Edit height" && model.data==before);ui.panel->refresh();
+    ui.enter("position.2","9");require(model.find(id)->at("position")[2]==9);
+    require(model.undo()=="Edit position.2" && model.data==before);
+    require(ui.find(ui.inspector,"text")==0 && ui.find(ui.inspector,"rotationDeg")==0);
+  }
+  {
     kestrel::drawing model;model.add("LINE",{{"points",{{0,0,0},{1,1,0}}},{"color","#ff0000"}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
     const auto before=model.data;inspector_fixture ui(model);

@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+MTEXT inspector scalar editing: compiled coordinate templates now expose Position
+XYZ, Text height and Paragraph width for native multiline-text entities. Width
+accepts zero and rejects negative/nonfinite values; height remains positive.
+The native inspector test enters each field through text input and Enter, checks
+invalid width rejection and exact undo restoration while preserving rich-text
+source. The native layer suite passes. Original HTML/CSS remains unchanged and
+no runtime HTML parsing is introduced. Paragraph counting and the original rich
+text composition action/dialog remain unimplemented; this is partial MTEXT
+inspector coverage, not multiline layout/rendering parity.
+
 Spectrum routed-input verification: --exercise-color-picker now waits for popup
 layout, locates its native spectrum, verifies window hit testing at two positions,
 and raises pressed/moved/released routed pointer events on the hit control. Both

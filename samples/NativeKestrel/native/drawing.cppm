@@ -407,7 +407,7 @@ public:
     if(axis>2 || !std::isfinite(value))return false;
     const auto ids=selected(true);if(ids.size()!=1)return false;
     auto* entity=find(ids.front());
-    if(!entity || (entity->value("type",std::string{})!="POINT" && entity->value("type",std::string{})!="TEXT") ||
+    if(!entity || (entity->value("type",std::string{})!="POINT" && entity->value("type",std::string{})!="TEXT" && entity->value("type",std::string{})!="MTEXT") ||
        !entity->contains("position") || !(*entity)["position"].is_array())return false;
     return transaction("Edit position."+std::to_string(axis),[&] {(*entity)["position"][axis]=value;});
   }
@@ -468,11 +468,14 @@ public:
   }
   bool change_text_property(const std::string& key,const json& value) {
     if(key=="text") {if(!value.is_string())return false;}
-    else if(key=="height" || key=="rotationDeg") {
-      if(!value.is_number() || !std::isfinite(value.get<double>()) || (key=="height" && value.get<double>()<=0))return false;
+    else if(key=="height" || key=="rotationDeg" || key=="width") {
+      if(!value.is_number() || !std::isfinite(value.get<double>()) || (key=="height" && value.get<double>()<=0) || (key=="width" && value.get<double>()<0))return false;
     } else return false;
     const auto ids=selected(true);if(ids.size()!=1)return false;
-    auto* entity=find(ids.front());if(!entity || entity->value("type",std::string{})!="TEXT")return false;
+    auto* entity=find(ids.front());if(!entity)return false;
+    const auto type=entity->value("type",std::string{});
+    if(type!="TEXT" && type!="MTEXT")return false;
+    if(key=="width" && type!="MTEXT")return false;
     return transaction("Edit "+key,[&] {
       if(key=="rotationDeg") {(*entity)["rotation"]=value.get<double>()*(std::numbers::pi/180.0);entity->erase("direction");}
       else (*entity)[key]=value;
