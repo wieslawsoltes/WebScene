@@ -22,6 +22,33 @@ export module kestrel.drawing;
 // Native port of KestrelCAD src/model.js. See ../LICENSE and README.md.
 export namespace kestrel {
 using json = nlohmann::ordered_json;
+// Paragraph boundaries from Kestrel's src/mtext.js scanner. Formatting arguments
+// and literal fields consume their contents before boundary recognition.
+inline size_t mtext_paragraph_count(const std::string& text) {
+  size_t count=1;
+  for(size_t i=0;i<text.size();) {
+    const char ch=text[i++];
+    if(ch=='\r' || ch=='\n') {
+      if(ch=='\r' && i<text.size() && text[i]=='\n')++i;
+      ++count;continue;
+    }
+    if(ch=='%' && i<text.size() && text[i]=='<') {
+      const auto end=text.find(">%",i+1);
+      if(end!=std::string::npos){i=end+2;continue;}
+    }
+    if(ch!='\\' || i==text.size())continue;
+    const char command=text[i++];
+    if(command=='P' || command=='N'){++count;continue;}
+    if(std::string_view("HWTAQCcfFSp").find(command)!=std::string_view::npos) {
+      while(i<text.size()) {
+        const char argument=text[i++];
+        if(argument==';')break;
+        if(argument=='\\' && command=='S' && i<text.size())++i;
+      }
+    }
+  }
+  return count;
+}
 inline std::string uid(std::string prefix = "e") {
   static std::atomic<uint64_t> sequence{};
   return prefix + "_native_" +

@@ -348,6 +348,11 @@ public:
               handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input")](auto&) {
                 model_.change_text_property("text",document_.value(node));refresh();if(changed_)changed_();
               }));
+            } else {
+              auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");
+              const auto count=std::to_string(mtext_paragraph_count(one->value("text",std::string{})));
+              document_.set_text(row.named("label"),"Paragraphs");
+              document_.set_text(row.named("value"),count);document_.attribute(row.named("value"),"title",count);
             }
           }
           if(conic_entity && entity_type!="ELLIPSE") {

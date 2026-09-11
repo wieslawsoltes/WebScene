@@ -30,6 +30,12 @@ struct inspector_fixture {
   }
 };
 int main() {
+  require(kestrel::mtext_paragraph_count("")==1);
+  require(kestrel::mtext_paragraph_count("a\\Pb\\Nc\r\nd\re\nf")==6);
+  require(kestrel::mtext_paragraph_count("a\\\\Pb\\{x\\}")==1);
+  require(kestrel::mtext_paragraph_count("%<literal\\P\n>%\\Pnext")==2);
+  require(kestrel::mtext_paragraph_count("\\fFont\\Pname;\\S1\\;\\P2;\\Pnext")==2);
+  require(kestrel::mtext_paragraph_count("\\Hunfinished\\Pignored")==1);
   {
     kestrel::drawing model;model.add("MTEXT",{{"position",{1,2,3}},{"height",10},{"width",40},{"text","First\\PSecond"}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);

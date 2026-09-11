@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+MTEXT paragraph information: native inspector now emits the original Paragraphs
+readonly row through the compiled template. A boundary scanner follows pinned
+Kestrel src/mtext.js handling for CR/LF, paragraph/column controls, escaped slashes,
+literal fields and semicolon-terminated formatting arguments (including escaped
+stack arguments). Six fixtures produce 1/6/1/2/2/1 in both the original JS parser
+executed as a development reference and the native tests; the layer suite passes.
+The shipped native app adds no JS. This scanner only counts boundaries: formatting
+validation, warnings, resource limits, rich-text composition and layout still need
+the full native MTEXT implementation.
+
 MTEXT inspector scalar editing: compiled coordinate templates now expose Position
 XYZ, Text height and Paragraph width for native multiline-text entities. Width
 accepts zero and rejects negative/nonfinite values; height remains positive.
