@@ -614,12 +614,12 @@ public:
             const auto before=model.data;
             const auto selected=*model.selection.begin();
             const auto original_layer=model.find(selected)->at("layer").get<std::string>();
-            const auto find_select=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
-              if(view->document.attribute(node,"data-prop")=="layer")return node;
-              for(auto child:view->document.children(node))if(auto result=self(self,child))return result;
+            const auto find_select=[&](auto&& self,webscene::native_web::node_id node,std::string_view property)->webscene::native_web::node_id {
+              if(view->document.attribute(node,"data-prop")==property)return node;
+              for(auto child:view->document.children(node))if(auto result=self(self,child,property))return result;
               return 0;
             };
-            const auto control=find_select(find_select,view->document.find("inspector"));
+            const auto control=find_select(find_select,view->document.find("inspector"),"layer");
             if(!control)throw std::runtime_error("Inspector layer control missing");
             view->document.focus(control);
             foco::key_event key;key.value=foco::key::home;view->key_event_received(key);
@@ -629,9 +629,25 @@ public:
             view->document.focus(view->document.find("viewport"));
             key={};key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
             if(model.data!=before)throw std::runtime_error("Inspector layer undo did not restore drawing");
-            const auto restored=find_select(find_select,view->document.find("inspector"));
+            const auto restored=find_select(find_select,view->document.find("inspector"),"layer");
             if(!restored || view->document.value(restored)!=original_layer)
               throw std::runtime_error("Inspector did not reflect layer undo");
+            for(auto property:{"lineweight","name"}) {
+              const auto input=find_select(find_select,view->document.find("inspector"),property);
+              if(!input)throw std::runtime_error("Inspector text control missing");
+              view->document.focus(input);
+              view->document.set_selection(input,0,view->document.value(input).size());
+              foco::text_input_event text;text.text=std::string_view(property)=="name"?"Hosted native wall":"1.25";
+              view->text_input_received(text);
+              key={};key.value=foco::key::enter;view->key_event_received(key);
+              if(std::string_view(property)=="name" ? model.find(selected)->value("name",std::string{})!="Hosted native wall"
+                  : model.find(selected)->value("lineweight",0.0)!=1.25)
+                throw std::runtime_error("Hosted inspector text commit failed");
+              view->document.focus(view->document.find("viewport"));
+              key={};key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
+              if(model.data!=before)throw std::runtime_error("Hosted inspector text undo failed");
+            }
+            std::cout<<"Hosted inspector text commits and undo passed\n";
             exercise_layer_edit=false;std::cout<<"Hosted inspector layer edit and undo passed\n";
           }
           exercise_picking=false;std::cout<<"Hosted geometry selection passed\n";

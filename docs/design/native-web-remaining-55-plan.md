@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Hosted text-commit verification: the inspector exercise now sends Foco
+text_input_event for Lineweight and Name, commits each through Foco's Enter key
+event, checks the selected entity's property, then sends platform-Z and requires
+exact drawing JSON restoration. It passed in FocoKestrelPreview with a delivered
+GPU frame and exit status zero. This covers host event forwarding; text selection
+is set through the native API, so OS text selection and IME remain unverified.
+
 Native text commit correction: inspector number/name tests previously dispatched
 change explicitly, masking that real text entry only emitted input. Native text
 controls now track user edits and emit change on focus departure; single-line
