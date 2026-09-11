@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Conic center inspector: CIRCLE, ARC and ELLIPSE expose original Center X/Y/Z
+fields through the shared compiled coordinate template. Native center edits
+require finite values and an editable single selection. Tests instantiate each
+entity's inspector, type Center X through text input, commit via Enter and require
+exact undo restoration. Radius, axes, angles and area fields remain to be ported;
+this does not complete conic inspector parity.
+
 Point geometry inspector: POINT Position X/Y/Z now reuse the compiled coordinate
 template used by lines. Native position editing checks finite values and editable
 single selection, and records undo transactions. A native document test types a

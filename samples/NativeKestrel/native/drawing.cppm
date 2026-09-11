@@ -407,6 +407,15 @@ public:
        !entity->contains("position") || !(*entity)["position"].is_array())return false;
     return transaction("Edit position."+std::to_string(axis),[&] {(*entity)["position"][axis]=value;});
   }
+  bool change_conic_center(size_t axis,double value) {
+    if(axis>2 || !std::isfinite(value))return false;
+    const auto ids=selected(true);if(ids.size()!=1)return false;
+    auto* entity=find(ids.front());if(!entity)return false;
+    const auto type=entity->value("type",std::string{});
+    if((type!="CIRCLE" && type!="ARC" && type!="ELLIPSE") ||
+       !entity->contains("center") || !(*entity)["center"].is_array())return false;
+    return transaction("Edit center."+std::to_string(axis),[&] {(*entity)["center"][axis]=value;});
+  }
   bool show_all_layers() {
     return transaction("Show all layers",[&] {
       for(auto& layer:data["layers"])layer["visible"]=true;

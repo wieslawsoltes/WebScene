@@ -8,6 +8,23 @@ import kestrel.layer_panel;
 using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
+  for(auto type:{"CIRCLE","ARC","ELLIPSE"}) {
+    kestrel::drawing model;model.add(type,{{"center",{1,2,3}},{"radius",5},{"rx",5},{"ry",3},{"startAngle",0},{"endAngle",1}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    document doc;doc.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
+    auto inspector=doc.element(doc.body(),"div");doc.attribute(inspector,"id","inspector");
+    auto list=doc.element(doc.body(),"div");doc.attribute(list,"id","explorer-list");
+    kestrel::layer_panel panel(doc,model,[]{});
+    const auto find=[&](auto&& self,node_id node)->node_id {
+      if(doc.attribute(node,"data-prop")=="center.0")return node;
+      for(auto child:doc.children(node))if(auto result=self(self,child))return result;
+      return 0;
+    };
+    const auto input=find(find,inspector);require(input!=0);
+    const auto before=model.data;doc.focus(input);doc.set_selection(input,0,doc.value(input).size());doc.text_input("42");doc.key("Enter");
+    require(model.find(id)->at("center")[0]==42);
+    require(model.undo()=="Edit center.0" && model.data==before);
+  }
   {
     kestrel::drawing model;model.add("POINT",{{"position",{1,2,3}}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
