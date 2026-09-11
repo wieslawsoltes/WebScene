@@ -1579,3 +1579,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   gesture counts. No claim of visual no-stretch or displayed 60fps. Raw logs are
   /tmp/kestrel-window-resize-current.log and matching .jsonl; app remains running
   under exec session 91177 for further investigation.
+
+- Live-resize presentation trace now records transaction mode, drawable ID and
+  dimensions plus callback arrival separately from presentedTime. Repeated real
+  OS drag: 381 transaction content callbacks had one valid presentation timestamp;
+  58 retained transaction callbacks had none. Content used 181 distinct sizes.
+  Callback arrival must not be substituted for display timing. Results added to
+  native-web-os-resize-evidence.json; no displayed-FPS conclusion. Current app
+  remains running under exec session 56253, PID 16828.

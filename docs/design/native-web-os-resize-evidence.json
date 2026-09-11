@@ -7,5 +7,28 @@
   "submissions": 426,
   "valid_presented_timestamps": 1,
   "retained_submissions": 51,
-  "conclusion": "Native live resize exercised; physical presentation rate and visual stretching remain unproven."
+  "conclusion": "Native live resize exercised; physical presentation rate and visual stretching remain unproven.",
+  "context_trace_followup": [
+    {
+      "transaction": false,
+      "retained": false,
+      "callbacks": 3,
+      "valid_presentation_timestamps": 1,
+      "distinct_dimensions": 1
+    },
+    {
+      "transaction": true,
+      "retained": true,
+      "callbacks": 58,
+      "valid_presentation_timestamps": 0,
+      "distinct_dimensions": 57
+    },
+    {
+      "transaction": true,
+      "retained": false,
+      "callbacks": 381,
+      "valid_presentation_timestamps": 1,
+      "distinct_dimensions": 181
+    }
+  ]
 }
