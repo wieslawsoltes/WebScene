@@ -233,7 +233,7 @@ if(FOCO_SOURCE_DIR AND APPLE AND WEBSCENE_NATIVE_WEB_GPU AND BUILD_TESTING)
 endif()
 
 if(FOCO_SOURCE_DIR)
- option(NATIVE_WEB_PREVIEW_SHARED_CSS "Use shared native CSS in the diagnostic Kestrel preview" OFF)
+ option(NATIVE_WEB_PREVIEW_SHARED_CSS "Use shared native CSS in the diagnostic Kestrel preview" ON)
  set(PREVIEW_CSS_OPTIONS)
  if(NATIVE_WEB_PREVIEW_SHARED_CSS)
   list(APPEND PREVIEW_CSS_OPTIONS --css-backend shared)

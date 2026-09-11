@@ -15,6 +15,7 @@ static bool exercise_objects=false;
 static bool exercise_navigation=false;
 static bool exercise_theme=false;
 static bool exercise_picking=false;
+static bool exercise_layer_edit=false;
 static bool exercise_shortcuts=false;
 static bool exercise_drag_selection=false;
 static bool benchmark_pan=false;
@@ -609,6 +610,30 @@ public:
             if(found)break;
           }
           if(!found)throw std::runtime_error("Hosted geometry click did not select an entity");
+          if(exercise_layer_edit) {
+            const auto before=model.data;
+            const auto selected=*model.selection.begin();
+            const auto original_layer=model.find(selected)->at("layer").get<std::string>();
+            const auto find_select=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
+              if(view->document.attribute(node,"data-prop")=="layer")return node;
+              for(auto child:view->document.children(node))if(auto result=self(self,child))return result;
+              return 0;
+            };
+            const auto control=find_select(find_select,view->document.find("inspector"));
+            if(!control)throw std::runtime_error("Inspector layer control missing");
+            view->document.focus(control);
+            foco::key_event key;key.value=foco::key::home;view->key_event_received(key);
+            const auto first_layer=model.data["layers"][0]["id"].get<std::string>();
+            if(first_layer==original_layer || model.find(selected)->at("layer")!=first_layer)
+              throw std::runtime_error("Inspector layer keyboard change failed");
+            view->document.focus(view->document.find("viewport"));
+            key={};key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
+            if(model.data!=before)throw std::runtime_error("Inspector layer undo did not restore drawing");
+            const auto restored=find_select(find_select,view->document.find("inspector"));
+            if(!restored || view->document.value(restored)!=original_layer)
+              throw std::runtime_error("Inspector did not reflect layer undo");
+            exercise_layer_edit=false;std::cout<<"Hosted inspector layer edit and undo passed\n";
+          }
           exercise_picking=false;std::cout<<"Hosted geometry selection passed\n";
         }
         if(exercise_theme && viewport && gpu_serial) {
@@ -693,6 +718,7 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
     else if(std::string_view(argv[i])=="--exercise-drag-selection") exercise_drag_selection=true;
     else if(std::string_view(argv[i])=="--exercise-shortcuts") exercise_shortcuts=true;
+    else if(std::string_view(argv[i])=="--exercise-layer-edit") {exercise_picking=true;exercise_layer_edit=true;}
     else if(std::string_view(argv[i])=="--exercise-picking") exercise_picking=true;
     else if(std::string_view(argv[i])=="--exercise-theme") exercise_theme=true;
     else if(std::string_view(argv[i])=="--exercise-failure") exercise_failure=true;

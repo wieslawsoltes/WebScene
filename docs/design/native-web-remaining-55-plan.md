@@ -8,7 +8,31 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Latest hosted verification: `--exercise-layer-edit --capture` selected Courtyard
+geometry through the viewport, changed the selected object's layer using the
+inspector select's Home key, and sent the platform undo shortcut through Foco.
+The drawing JSON was restored exactly and the rebuilt inspector displayed the
+original layer. The application captured a GPU frame and exited successfully.
+Shared stylesheet, shared document and native layer regression tests also pass.
+This verifies that interaction path only; remaining inspector fields, application
+commands, full browser parity and continuous displayed resize cadence are open.
+
 ### CSS architecture review
+
+Delivery decision: prioritize compiled HTML and predefined templates with
+build-time CSS preparation and the existing native CSS runtime. The original-HTML
+FocoKestrelPreview now defaults NATIVE_WEB_PREVIEW_SHARED_CSS to ON; existing CMake
+caches retain their explicit selection. The typed backend remains available for
+comparison and incremental optimization. This changes the preview delivery path,
+not the claim of full Kestrel parity or CSS compliance. Runtime value/inline-style
+interpretation remains and must be distinguished from stylesheet syntax parsing
+at build time. No JavaScript or runtime HTML parsing is introduced.
+
+Audit remaining gaps as compiler handoff, shared CSS semantics, or host behavior.
+Prioritize missing engine behavior and original application functionality before
+eliminating textual CSS value interpretation. Fully typed CSS lowering is a
+subsequent optimization; the earlier parser-free CSS gates below describe that
+stricter backend, not a prerequisite for testing the shared-runtime application.
 
 The compiler audit currently reports 30 distinct unsupported source constructs,
 not 30 isolated parser changes or a percentage of browser compatibility. Continue
@@ -25,13 +49,14 @@ stylesheet resolver (see the integration checkpoint below). The default applicat
 still uses typed rules; the shared adapter does not prove parser-free execution. Declaration values,
 media conditions and functional selector arguments still contain text interpreted
 by the shared machinery; emitting these records alone would not satisfy the
-no-runtime-CSS-parsing requirement.
+no-runtime-CSS-parsing requirement of the stricter typed backend.
 
 An embedded-CSS runtime-parser route is a proposed intermediate comparison mode,
 not a change to the final acceptance contract. It can establish which original UI
 features the shared engine actually renders before completing build-time lowering.
-Keep HTML construction and dynamic templates compiled in every mode. Keep the
-default application parser-free until an alternative mode is explicitly selected.
+Keep HTML construction and dynamic templates compiled in every mode. The original
+preview now selects prepared shared CSS by default; the separate typed sample
+remains available.
 
 Next integration gates:
 

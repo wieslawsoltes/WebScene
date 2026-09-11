@@ -197,9 +197,17 @@ input updates the native camera. Canvas sizing is supplied by native application
 logic, replacing the resize behavior in `renderer.js`, without editing the original
 HTML or CSS. Ribbon templates remain compiled C++ modules.
 
-This is still a diagnostic UI preview: unsupported CSS is reported and omitted,
-most original commands are not wired, and the displayed document labels and
-renderer-status text are still static. It is not the complete Kestrel port.
+The original-HTML preview defaults to prepared shared CSS
+(`NATIVE_WEB_PREVIEW_SHARED_CSS=ON`). Stylesheet syntax is parsed during compilation
+and emitted into C++ modules; WebScene's native CSS engine performs live cascade
+and value interpretation. HTML and dynamic templates remain compiled, with no
+JavaScript runtime. Existing CMake caches retain their selected backend.
+
+This is still a diagnostic UI preview: unsupported CSS is reported, and many
+original commands are not wired. Native selection, layer editing and undo are
+available, but this is not the complete Kestrel port. Run `--exercise-layer-edit
+--capture /tmp/kestrel-layer-edit.png` to verify the hosted inspector keyboard
+change and exact drawing/inspector restoration through undo.
 
 Visual check: native grid/mesh output fills the original viewport after sizing.
 The GPU attachment now occupies the canvas's DOM paint-order position; the
