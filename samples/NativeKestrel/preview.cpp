@@ -8,6 +8,7 @@
 #endif
 static std::string capture_path;
 static bool exercise_layer_filter=false;
+static bool exercise_objects=false;
 #include <array>
 #include <functional>
 #include <cmath>
@@ -143,6 +144,15 @@ public:
       if(!input.handled || layers->entries().size()!=1 || layers->entries()[0].id!="architecture")
         throw std::runtime_error("native layer filter exercise failed");
     }
+    if(exercise_objects) {
+      view->document.dispatch(view->document.find("objects-tab"),"click");
+      if(layers->entries().size()!=1) throw std::runtime_error("native object row missing");
+      const auto id=layers->entries().front().id;
+      view->document.dispatch(layers->entries().front().row,"click");
+      if(model.selection.size()!=1 || !model.selection.contains(id)
+          || view->document.attribute(layers->entries().front().row,"class")!="object-row active")
+        throw std::runtime_error("native object selection exercise failed");
+    }
     view->refresh();
 #endif
     handlers.push_back(view->document.on(view->document.root(), "click",
@@ -218,6 +228,7 @@ int main(int argc, char **argv) {
   for(int i=1;i<argc;++i) {
     if(std::string_view(argv[i])=="--capture" && i+1<argc) capture_path=argv[++i];
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
+    else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;
   }
   if (argc == 2 && std::string_view(argv[1]) == "--check-input-coalescing") {
     auto view = foco::make_ref<webscene::foco_host::view>();

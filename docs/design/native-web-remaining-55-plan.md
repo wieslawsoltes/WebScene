@@ -1166,3 +1166,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   remain unfinished; these tests do not establish visual parity or presented FPS.
   The FocoKestrelPreview application also rebuilds and links successfully with the
   updated templates and native explorer module; interactive capture is pending.
+
+- Hosted object-selection capture: added --exercise-objects to the diagnostic
+  Foco preview. It activates the original Objects tab, selects the generated row
+  through native dispatch and asserts the drawing selection and active row class.
+  Rebuilt and ran with --capture /tmp/kestrel-native-objects.png; clean exit and
+  GPU serial 1. Inspected capture: Box icon/name/A-WALL/suffix, active Objects tab,
+  highlighted row, summary selected=1 and highlighted GPU box are present. The
+  prior color swatch fix is visible too. This uses synthetic document events,
+  not a physical pointer test or presented-frame benchmark. Empty search input
+  still omits placeholder painting, the inspector is empty and renderer status
+  remains the original startup text; broader application parity is unfinished.
