@@ -8,6 +8,12 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Mesh/dimension native-control verification: a reusable compiled-inspector fixture
+now enters Mesh Center X and dimension Precision, Text override and Offset using
+text input plus Enter. Tests retain geometry/volume preservation, measurement
+text, clamping and exact undo checks. The native inspector suite passes. Hosted
+mesh/dimension interaction and remaining application parity remain open.
+
 Mesh inspector: compiled Center fields translate through the existing native
 geometry transform; Width/Depth/Height, Vertices/Faces and Signed volume readouts
 are populated. A model test verifies center translation, unchanged dimensions and

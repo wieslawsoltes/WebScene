@@ -9,12 +9,32 @@ import kestrel.examples;
 import kestrel.layer_panel;
 using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
+struct inspector_fixture {
+  document doc;
+  node_id inspector;
+  std::unique_ptr<kestrel::layer_panel> panel;
+  explicit inspector_fixture(kestrel::drawing& model) {
+    doc.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
+    inspector=doc.element(doc.body(),"div");doc.attribute(inspector,"id","inspector");
+    auto list=doc.element(doc.body(),"div");doc.attribute(list,"id","explorer-list");
+    panel=std::make_unique<kestrel::layer_panel>(doc,model,[]{});
+  }
+  node_id find(node_id node,const std::string& property) {
+    if(doc.attribute(node,"data-prop")==property)return node;
+    for(auto child:doc.children(node))if(auto result=find(child,property))return result;
+    return 0;
+  }
+  void enter(const std::string& property,const std::string& value) {
+    auto input=find(inspector,property);require(input!=0);
+    doc.focus(input);doc.set_selection(input,0,doc.value(input).size());doc.text_input(value);doc.key("Enter");
+  }
+};
 int main() {
   {
     kestrel::drawing model;model.add("MESH",kestrel::geo::box({0,0,0},10,20,30));
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
     const auto before=model.data;const auto bounds=kestrel::geo::mesh_bounds(*model.find(id));const auto volume=kestrel::geo::volume(*model.find(id));
-    require(kestrel::geo::change_mesh_center(model,0,50));const auto moved=kestrel::geo::mesh_bounds(*model.find(id));
+    inspector_fixture ui(model);ui.enter("meshCenter.0","50");const auto moved=kestrel::geo::mesh_bounds(*model.find(id));
     require(moved.center[0]==50 && moved.size==bounds.size && moved.center[1]==bounds.center[1] && moved.center[2]==bounds.center[2]);
     require(std::abs(kestrel::geo::volume(*model.find(id))-volume)<1e-8);
     require(model.undo()=="Edit meshCenter.0" && model.data==before);
@@ -22,8 +42,10 @@ int main() {
   {
     kestrel::drawing model;model.add("DIMENSION",{{"points",{{0,0,0},{3,4,0}}},{"textHeight",1},{"offset",2}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
-    const auto before=model.data;require(model.change_dimension_property("precision",9));require(model.find(id)->at("precision")==6);
-    require(model.change_dimension_property("text","Override"));require(model.change_dimension_property("offset",-3));require(!model.change_dimension_property("textHeight",0));
+    const auto before=model.data;inspector_fixture ui(model);
+    require(ui.doc.text_content(ui.inspector).find("5.000 mm")!=std::string::npos);
+    ui.enter("precision","9");require(model.find(id)->at("precision")==6);
+    ui.enter("text","Override");ui.enter("offset","-3");require(model.find(id)->at("text")=="Override" && model.find(id)->at("offset")==-3);require(!model.change_dimension_property("textHeight",0));
     require(model.undo()=="Edit offset" && model.undo()=="Edit text" && model.undo()=="Edit precision" && model.data==before);
   }
   {
