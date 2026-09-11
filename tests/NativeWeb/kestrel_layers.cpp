@@ -11,6 +11,13 @@ using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
   {
+    kestrel::drawing model;model.add("DIMENSION",{{"points",{{0,0,0},{3,4,0}}},{"textHeight",1},{"offset",2}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    const auto before=model.data;require(model.change_dimension_property("precision",9));require(model.find(id)->at("precision")==6);
+    require(model.change_dimension_property("text","Override"));require(model.change_dimension_property("offset",-3));require(!model.change_dimension_property("textHeight",0));
+    require(model.undo()=="Edit offset" && model.undo()=="Edit text" && model.undo()=="Edit precision" && model.data==before);
+  }
+  {
     kestrel::drawing model;model.add("TEXT",{{"position",{0,0,0}},{"height",10},{"text","Label"},{"direction",{1,0,0}}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
     document doc;doc.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));

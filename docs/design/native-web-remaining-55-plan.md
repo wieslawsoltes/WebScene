@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Dimension inspector: compiled Measurement, Offset, Text height, Text override and
+Precision fields now bind to native edits. Precision rounds/clamps to 0..6; text
+height must be positive. Model tests verify precision clamping, signed offset,
+override text, validation and exact undo. The absent precision display uses the
+original initial default 2; persisted application defaults and hosted dimension
+control verification remain open.
+
 TEXT native control verification: the inspector test now types multiline content
 into the compiled textarea, confirms Enter does not commit it, and commits on
 focus departure. Rotation and height are entered through numeric controls and

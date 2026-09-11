@@ -180,6 +180,32 @@ public:
           auto group_name=one->value("groupName",std::string{});
           read("Group",group_name.empty()?group:group_name);
         }
+        if(one->value("type",std::string{})=="DIMENSION" && one->contains("points") && (*one)["points"].size()==2) {
+          auto geometry=kestrel_layers::instantiate(document_,inspector,"inspector-geometry");inspector_roots_.push_back(geometry.named("root"));
+          const auto delta=geo::point((*one)["points"][1])-geo::point((*one)["points"][0]);
+          auto measurement=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");
+          std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(3)<<delta.length()<<" "<<model_.data.value("units",std::string("mm"));
+          document_.set_text(measurement.named("label"),"Measurement");document_.set_text(measurement.named("value"),text.str());document_.attribute(measurement.named("value"),"title",text.str());
+          for(auto key:{"offset","textHeight","text","precision"}) {
+            const std::string property=key;const bool content=property=="text";
+            const auto label=property=="offset"?"Offset":property=="textHeight"?"Text height":content?"Text override":"Precision";
+            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
+            document_.set_text(row.named("label"),label);document_.attribute(row.named("input"),"aria-label",label);document_.attribute(row.named("input"),"data-prop",key);
+            std::string value;
+            if(content) {document_.attribute(row.named("input"),"type","text");document_.remove_attribute(row.named("input"),"step");value=one->value("text",std::string{});}
+            else {std::ostringstream number;number.imbue(std::locale::classic());number<<std::fixed<<std::setprecision(4)<<one->value(key,property=="textHeight"?10.0:property=="precision"?2.0:0.0);value=number.str();while(value.ends_with('0'))value.pop_back();if(value.ends_with('.'))value.pop_back();}
+            if(property=="textHeight")document_.attribute(row.named("input"),"min","0.0001");
+            if(property=="precision") {document_.attribute(row.named("input"),"min","0");document_.attribute(row.named("input"),"max","6");document_.attribute(row.named("input"),"step","1");}
+            document_.set_value(row.named("input"),value);
+            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),property,content](auto&) {
+              const auto text=document_.value(node);
+              if(content)model_.change_dimension_property(property,text);
+              else {double value=0;size_t used=0;bool valid=true;try {value=std::stod(text,&used);}catch(const std::exception&){valid=false;}
+                if(valid && used==text.size())model_.change_dimension_property(property,value);}
+              refresh();if(changed_)changed_();
+            }));
+          }
+        }
         const bool spline=one->value("type",std::string{})=="SPLINE";
         const bool hatch=one->value("type",std::string{})=="HATCH";
         const auto point_key=one->contains("controlPoints")?"controlPoints":"points";

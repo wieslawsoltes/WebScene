@@ -474,6 +474,18 @@ public:
       else (*entity)[key]=value;
     });
   }
+  bool change_dimension_property(const std::string& key,const json& value) {
+    if(key=="text") {if(!value.is_string())return false;}
+    else if(key=="offset" || key=="textHeight" || key=="precision") {
+      if(!value.is_number() || !std::isfinite(value.get<double>()) || (key=="textHeight" && value.get<double>()<=0))return false;
+    } else return false;
+    const auto ids=selected(true);if(ids.size()!=1)return false;
+    auto* entity=find(ids.front());if(!entity || entity->value("type",std::string{})!="DIMENSION")return false;
+    return transaction("Edit "+key,[&] {
+      if(key=="precision")(*entity)[key]=int(std::clamp(std::floor(value.get<double>()+.5),0.0,6.0));
+      else (*entity)[key]=value;
+    });
+  }
   size_t erase_selected() {
     const auto ids=selected(true);
     if(ids.empty())return 0;
