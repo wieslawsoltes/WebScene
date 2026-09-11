@@ -1354,3 +1354,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   /tmp/kestrel-native-fences.log and /tmp/kestrel-native-fences.jsonl. This verifies
   actual hosted fence import without the earlier adapter rejection; focused
   dependency lifetime tests and live-resize deadlines remain to be verified.
+
+- Native Foco fence regression: new native_web_foco_gpu_dependencies test covers
+  pending-image dependency acceptance, count/event callbacks, invalid index/null
+  arguments and rejection of required waits without dependencies. It drops frame,
+  lease and producer references while retaining a consumer, verifies its dependency
+  still exists, then verifies destruction on consumer completion. Uses a fake
+  fence pointer only for callback/lifetime checks, never GPU submission. Rebuilt
+  target and CTest passes; actual Metal synchronization is covered separately by
+  the hosted probe. Live resize acceptance remains unfinished.
