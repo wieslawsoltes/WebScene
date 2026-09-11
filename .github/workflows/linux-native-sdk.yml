@@ -8,6 +8,7 @@ on:
       - 'src/WebScene.Sdk/**'
       - 'tests/NativeWeb/**'
       - 'eng/graphics/**'
+      - 'eng/sdk/**'
       - '.github/workflows/linux-native-sdk.yml'
   workflow_dispatch:
 permissions:
@@ -29,17 +30,25 @@ jobs:
       - name: Install compiler and native prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-18 clang-tools-18 ninja-build libfontconfig1-dev libfreetype-dev libvulkan-dev mesa-vulkan-drivers vulkan-tools
+          sudo apt-get install -y patchelf ninja-build libfontconfig1-dev libfreetype-dev libvulkan-dev mesa-vulkan-drivers vulkan-tools
           python3 -m pip install --break-system-packages cmake==3.31.6
       - uses: actions/cache@v4
         with:
           path: ~/.cache/webscene/llvm-22.1.1
-          key: linux-llvm-22.1.1-efc4d945744f951d
+          key: linux-cxx-llvm-22.1.1-efc4d945744f951d-v2
       - name: Install checksum-pinned LLVM
         run: |
           python3 eng/sdk/install-linux-llvm.py "$HOME/.cache/webscene/llvm-22.1.1"
           echo "WEBSCENE_LLVM_ROOT=$HOME/.cache/webscene/llvm-22.1.1" >> "$GITHUB_ENV"
           echo "$HOME/.cache/webscene/llvm-22.1.1/bin" >> "$GITHUB_PATH"
+      - name: Archive offline compiler profile
+        run: python3 eng/sdk/archive-linux-llvm.py "$WEBSCENE_LLVM_ROOT" artifacts/linux-native/llvm.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-native-compiler
+          path: artifacts/linux-native/llvm.tar.gz
+          compression-level: 0
+          retention-days: 7
       - name: Build native document, shared CSS and UI compiler
         run: |
           cmake -S src/WebScene.NativeWeb -B artifacts/linux-native/build -G Ninja \
@@ -55,6 +64,7 @@ jobs:
             -DCMAKE_INSTALL_PREFIX="$PWD/artifacts/linux-native/sdk"
           cmake --build artifacts/linux-native/sdk-build --parallel 2
           cmake --install artifacts/linux-native/sdk-build
+          python3 eng/sdk/stage-linux-runtime.py --llvm "$WEBSCENE_LLVM_ROOT" --sdk artifacts/linux-native/sdk
           tar -czf artifacts/linux-native/sdk.tar.gz -C artifacts/linux-native sdk
       - uses: actions/upload-artifact@v4
         if: always()
