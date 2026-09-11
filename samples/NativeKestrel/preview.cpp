@@ -54,6 +54,7 @@ class preview_app final : public foco::application {
   unsigned ticks{};
   unsigned pan_samples{};
   uint64_t pan_initial_serial{}, pan_initial_builds{};
+  foco::compositor_diagnostic_metrics pan_initial_compositor;
   std::chrono::steady_clock::time_point pan_start;
   double pan_tick_ms{}, pan_tick_max_ms{};
   bool gpu_dirty{true}, panning{};
@@ -217,6 +218,7 @@ public:
           if(!pan_samples) {
             pan_start=std::chrono::steady_clock::now();
             pan_initial_serial=gpu_serial;pan_initial_builds=viewport->scene_build_count();
+            if(auto* publisher=view->composition()) pan_initial_compositor=publisher->compositor_diagnostics();
           }
           viewport->camera.pan(2,0);gpu_dirty=true;
           ++pan_samples;
@@ -235,6 +237,16 @@ public:
                 <<" tick_mean_ms="<<pan_tick_ms/pan_samples<<" tick_max_ms="<<pan_tick_max_ms
                 <<" scene_rebuilds="<<(viewport->scene_build_count()-pan_initial_builds)
                 <<" (publication timing, not display presentation timing)\n";
+            if(auto* publisher=view->composition()) {
+              const auto metrics=publisher->compositor_diagnostics();
+              if(metrics.available && pan_initial_compositor.available)
+                std::cout<<"Compositor: presented="<<(metrics.presented_frame_count-pan_initial_compositor.presented_frame_count)
+                    <<" presented_per_second="<<(metrics.presented_frame_count-pan_initial_compositor.presented_frame_count)/seconds
+                    <<" skipped="<<(metrics.skipped_presentation_count-pan_initial_compositor.skipped_presentation_count)
+                    <<" occluded="<<metrics.occluded
+                    <<" (backend success counts, not physical display timestamps)\n";
+              else std::cout<<"Compositor diagnostics unavailable\n";
+            } else std::cout<<"Compositor publisher unavailable\n";
             window->close();lifetime->shutdown(0);return;
           }
         }

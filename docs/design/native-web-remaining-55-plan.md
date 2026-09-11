@@ -1205,3 +1205,15 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   panning scalability for this synthetic workload, not full original Kestrel
   geometry coverage or display-presented FPS. Single-run timing differences
   from the one-box run are not evidence of a performance improvement.
+
+- Compositor counter probe: panning benchmarks now sample the view publisher's
+  compositor diagnostics before/after motion, printing successful backend
+  presentations, skipped attempts and occlusion separately from GPU publications.
+  Source inspection shows presented_frame_count increments after backend success
+  in compositor-tick.cpp, not on physical display timestamps. Rebuilt and ran
+  --benchmark-pan-large: 360 publications / 5.97845 seconds, mean CPU tick
+  0.506081 ms, maximum 0.844125 ms, zero scene rebuilds. Diagnostics report available
+  but presented=0, skipped=0, occluded=0. Log /tmp/kestrel-pan-compositor.log.
+  This is an unresolved diagnostic-path mismatch, NOT evidence of zero displayed
+  frames or proof of 60 displayed FPS. Trace the active platform presentation path
+  and counter ownership before relying on these diagnostics for acceptance.
