@@ -30,5 +30,16 @@
       "valid_presentation_timestamps": 1,
       "distinct_dimensions": 181
     }
-  ]
+  ],
+  "midpoint_capture": {
+    "path": "/tmp/kestrel-live-resize-midpoint.png",
+    "method": "macOS screencapture of target CGWindow during held corner drag after 180 of 360 steps",
+    "pause_seconds": 0.2,
+    "observations": [
+      "Original narrow-window layout hides Properties panel",
+      "Ribbon becomes horizontally scrollable",
+      "Drawing is clipped to resized viewport; no obvious stretching in sampled frame"
+    ],
+    "limitations": "Paused sample cannot prove continuous no-stretch motion or displayed 60fps."
+  }
 }

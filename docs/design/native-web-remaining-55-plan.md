@@ -1587,3 +1587,10 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Callback arrival must not be substituted for display timing. Results added to
   native-web-os-resize-evidence.json; no displayed-FPS conclusion. Current app
   remains running under exec session 56253, PID 16828.
+
+- Actual window midpoint capture during held OS resize: screencapture targets the
+  Kestrel CGWindow, pauses 0.2 s at the inward endpoint, then restores the window.
+  /tmp/kestrel-live-resize-midpoint.png shows narrow-window media layout hiding
+  Properties, horizontal ribbon overflow, and clipped drawing without obvious
+  stretching in that frame. This is sampled visual evidence, not continuous
+  motion or 60fps proof; midpoint capture metadata added to resize evidence.
