@@ -1145,3 +1145,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Correct non-text control rendering next; this is not a full app-parity result.
   Ribbon/object/property integration, broader text editing and presented 60fps
   remain unfinished.
+
+- Native color-input painting: the shared native scene now paints input[type=color]
+  as an inset swatch instead of exposing the live hexadecimal value as text. Native
+  set_value updates repaint the swatch; malformed simple color values paint black.
+  The native text-input test checks authored mixed-case hex, value changes, fallback,
+  swatch dimensions and absence of text/caret commands. Rebuilt native_web_text and
+  its CTest passes. This is painting support only: picker activation, full input-type
+  value sanitization and browser-specific color-control appearance remain unfinished.

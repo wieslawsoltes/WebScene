@@ -3,6 +3,26 @@
 using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
+  {
+    document colors;
+    auto swatch=colors.element(colors.body(),"input");
+    colors.attribute(swatch,"type","color");colors.attribute(swatch,"value","#12Ab34");
+    rule box;box.inline_target=swatch;
+    box.declarations.push_back({false,+[](style& s){
+      s.set_width({40,length_unit::pixels});s.set_height({24,length_unit::pixels});
+    }});colors.add_rule(std::move(box));
+    auto verify=[&](uint32_t rgba) {
+      bool found=false;
+      for(const auto& command:colors.render(100,100).commands) {
+        if(command.node_id!=swatch) continue;
+        require(command.kind!=3U && command.kind!=14U);
+        if(command.kind==1U && command.rgba==rgba && command.width==34 && command.height==18) found=true;
+      }
+      require(found);
+    };
+    verify(0x12AB34FFU);colors.set_value(swatch,"#ff0088");verify(0xFF0088FFU);
+    colors.set_value(swatch,"invalid");verify(0x000000FFU);
+  }
   document d;
   auto field=d.element(d.body(),"input");d.attribute(field,"value","Find");
   d.focus(field);require(d.focused()==field && d.value(field)=="Find");

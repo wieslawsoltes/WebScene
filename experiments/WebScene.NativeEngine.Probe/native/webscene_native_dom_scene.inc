@@ -1497,7 +1497,26 @@ void native_document::append_scene(
             arrow_color, node.id});
     }
 
-    if (paint_self && (node.tag == "input" || node.tag == "textarea")) {
+    const auto input_type = node.attributes.find("type");
+    const bool color_input = node.tag == "input"
+        && input_type != node.attributes.end() && input_type->second == "color";
+    if (paint_self && color_input) {
+        // A color control presents its live value as a swatch, not editable text.
+        // Keep the value on the control so native application updates repaint it.
+        const auto& value = node.form_control().value;
+        const bool valid_color = value.size() == 7 && value.front() == '#'
+            && std::all_of(value.begin() + 1, value.end(), [](unsigned char c) {
+                return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+                    || (c >= 'A' && c <= 'F');
+            });
+        const auto inset = std::min(3.0F, std::min(node.layout.width, node.layout.height) * 0.5F);
+        commands.push_back(webscene_scene_command{
+            1U, 0U, node.layout.x + inset, node.layout.y + inset,
+            std::max(0.0F, node.layout.width - inset * 2),
+            std::max(0.0F, node.layout.height - inset * 2),
+            with_opacity(valid_color ? parse_color(value) : 0x000000FFU), node.id});
+    }
+    if (paint_self && !color_input && (node.tag == "input" || node.tag == "textarea")) {
         const auto font_size = resolved_font_size(node);
         const auto line_height = resolved_line_height(node, font_size);
         const auto padding_left = resolve_length(
