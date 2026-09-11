@@ -1243,3 +1243,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   investigate scheduling/commit-to-display latency rather than claiming publication
   throughput as displayed FPS. No debugger tools were available; used controlled
   before/after runtime traces instead.
+
+- Half-rate localization: pan probes now also sample scene_publisher commit,
+  publication and no-op counters. Rebuilt and ran the traced 1,000-entity workload:
+  359 GPU images / 5.98297 seconds, 358 scene commits and 358 publications,
+  zero no-op commits, but only 178 compositor presentations. Logs:
+  /tmp/kestrel-scene-publish.log and /tmp/kestrel-scene-publish-present.jsonl.
+  This localizes the half-rate loss AFTER native/Foco scene publication. Next
+  inspect compositor scheduling and drawable presentation, rather than changing
+  native geometry caching or assuming document invalidation still loses half
+  the updates. Actual displayed 60fps remains unachieved.
