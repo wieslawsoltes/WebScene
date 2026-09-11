@@ -20,6 +20,32 @@ int main() {
   root->measure({300,300});root->arrange({0,0,300,300});view->refresh();
   auto require=[](bool ok) {if(!ok) throw std::runtime_error("Foco reduced-motion propagation");};
   {
+    struct frame_owner final : foco::composition_resource_attachment {};
+    auto gpu_root=foco::make_ref<foco::window>();
+    auto gpu_view=foco::make_ref<webscene::foco_host::view>();
+    gpu_root->add_child(gpu_view);
+    foco::scene_publisher gpu_publisher;
+    foco::detail::window_composition_attachment gpu_attachment(*gpu_root,gpu_publisher);
+    foco::retained_scene retained;
+    auto canvas=gpu_view->document.element(gpu_view->document.body(),"canvas");
+    gpu_root->measure({200,200});gpu_root->arrange({0,0,200,200});
+    for(uint64_t generation=1;generation<=4;++generation) {
+      auto owner=std::make_shared<frame_owner>();
+      std::weak_ptr<const foco::composition_resource_attachment> weak=owner;
+      gpu_view->set_gpu_image(canvas,100,100,generation,owner);
+      gpu_publisher.commit(*gpu_root,foco::theme_variant::dark);
+      if(generation>1) require(gpu_publisher.metrics().publisher_visit_count==1);
+      const auto* scene=foco_scene_acquire_next(gpu_publisher.mailbox());
+      require(scene && retained.apply(*scene));
+      require(foco_scene_acknowledge(scene));
+      foco_scene_release(scene);
+      const auto id=(uint64_t{1}<<63u)|gpu_view->id();
+      require(retained.resources().contains(id));
+      require(retained.resources().at(id).attachment==owner);
+      owner.reset();require(!weak.expired());
+    }
+  }
+  {
     auto input=foco::make_ref<webscene::foco_host::view>();
     auto button=input->document.element(input->document.body(),"button");
     rule box;box.inline_target=button;

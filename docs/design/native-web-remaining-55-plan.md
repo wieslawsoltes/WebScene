@@ -1311,3 +1311,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   synthetic panning workload; physical input latency, live resize, original model
   and full Kestrel parity remain incomplete. Add focused leaf-attachment lifetime
   regression coverage next, beyond this successful hosted reproduction.
+
+- Native/Foco attachment regression: native_web_foco_motion now publishes four
+  successive GPU attachment generations through a native document canvas. It
+  verifies the single-leaf fast path (publisher_visit_count==1) after initial
+  publication, applies each mailbox diff to a retained scene, acknowledges and
+  releases the lease, then verifies exact attachment identity and continued
+  ownership. Rebuilt target and CTest passes. This guards the actual attachment
+  omission behind the panning failure; it does not exercise Metal imports or
+  substitute for the separately recorded 60fps presentation trace.
