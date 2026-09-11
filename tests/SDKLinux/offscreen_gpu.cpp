@@ -38,6 +38,15 @@ int main() {
     wgpu::AdapterInfo info{};require(surface.adapter().GetInfo(&info)==wgpu::Status::Success,"adapter identity unavailable");
     hardware=info.adapterType==wgpu::AdapterType::DiscreteGPU || info.adapterType==wgpu::AdapterType::IntegratedGPU;
     require(info.backendType==wgpu::BackendType::Vulkan,"Linux test did not run Vulkan");
+    // GPU completion must retire an abandoned snapshot while application
+    // frames are paused. No ProcessEvents or render timer drives this wait.
+    {
+      auto abandoned=paint(surface,1,0,0);abandoned.reset();
+      const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(20);
+      while(surface.busy_images() && std::chrono::steady_clock::now()<deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      require(surface.busy_images()==0,"hidden GPU completion did not retire dropped snapshot");
+    }
     auto red=resolve(surface,paint(surface,1,0,0));
     auto green=resolve(surface,paint(surface,0,1,0));
     auto blue=resolve(surface,paint(surface,0,0,1));
@@ -52,7 +61,7 @@ int main() {
     require(resized->value.describe().allocation_generation>generation,"resize did not advance generation");
     require(resized->value.describe().width==65 && resized->value.describe().height==7,"resized metadata mismatch");
     pixel(capture_offscreen_image(*resized),0,255,0);
-    pixel(capture_offscreen_image(*red),255,0,0); // old front image remains immutable across resize
+    pixel(capture_offscreen_image(*red),255,0,0);
     require(surface.resident_bytes()<=64*1024,"resident allocation budget exceeded");
     bool wrong_thread=false;
     std::thread foreign([&]{try{surface.resize(2,2);}catch(const std::logic_error&){wrong_thread=true;}});foreign.join();
@@ -69,7 +78,7 @@ int main() {
     require(budget_rejected,"capture ignored byte budget");
     captures=surface.capture_count();allocations=surface.created_images();surviving=std::move(red);
   }
-  pixel(capture_offscreen_image(*surviving),255,0,0); // retained lease owns device and provider
+  pixel(capture_offscreen_image(*surviving),255,0,0);
   surviving.reset();
   for(int i=0;i<3;++i) {
     native_webgpu_surface surface(10+i,13,5);
@@ -77,5 +86,5 @@ int main() {
   }
   std::cout<<"{\"backend\":\"Vulkan\",\"hardware\":"<<(hardware?"true":"false")
     <<",\"readbacksBeforeCapture\":0,\"explicitCaptures\":"<<captures
-    <<",\"allocations\":"<<allocations<<",\"pixelValidation\":true,\"retainedResize\":true,\"repeatedShutdown\":true}\n";
+    <<",\"allocations\":"<<allocations<<",\"hiddenCompletion\":true,\"pixelValidation\":true,\"retainedResize\":true,\"repeatedShutdown\":true}\n";
 }

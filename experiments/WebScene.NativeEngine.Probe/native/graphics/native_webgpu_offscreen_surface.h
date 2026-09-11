@@ -150,13 +150,19 @@ class native_webgpu_offscreen_surface final {
 #endif
     }
     static std::shared_ptr<native_webgpu_device> create_gpu() {
+        // Dawn's forceFallbackAdapter currently recognizes only SwiftShader,
+        // not other software Vulkan ICDs such as Mesa Lavapipe. The caller
+        // selects its ICD; verify the returned adapter rather than mislabeling
+        // a hardware/default adapter or silently rejecting a software driver.
         auto gpu=std::make_shared<native_webgpu_device>(
-            native_webgpu_device::create(backend(),{},software_requested()));
+            native_webgpu_device::create(backend()));
         wgpu::AdapterInfo info{};
         if(gpu->adapter.GetInfo(&info)!=wgpu::Status::Success)
             throw std::runtime_error("Cannot inspect offscreen GPU adapter");
         const bool hardware=info.adapterType==wgpu::AdapterType::DiscreteGPU ||
                             info.adapterType==wgpu::AdapterType::IntegratedGPU;
+        if(software_requested() && info.adapterType!=wgpu::AdapterType::CPU)
+            throw std::runtime_error("Software GPU requested: select a CPU Vulkan ICD with VK_ICD_FILENAMES");
         if(!hardware && !software_requested())
             throw std::runtime_error("Software GPU requires WEBSCENE_HEADLESS_FORCE_SOFTWARE_ADAPTER=1");
         return gpu;
