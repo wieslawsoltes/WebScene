@@ -16,6 +16,14 @@ inline void reset_cascaded_style(dom_node& node,
         node.style.scrollbar_hidden = false;
         node.style.scrollbar_visibility_important = false;
         node.style.reset_scrollbar_style();
+        if(node.parent) {
+            const auto& inherited=node.parent->style.scrollbar();
+            if(inherited.thumb_rgba!=node.style.scrollbar().thumb_rgba ||
+               inherited.track_rgba!=node.style.scrollbar().track_rgba) {
+                auto& bar=node.style.mutable_scrollbar();
+                bar.thumb_rgba=inherited.thumb_rgba;bar.track_rgba=inherited.track_rgba;
+            }
+        }
         if ((node.style.inline_property_mask & inline_position) == 0U) {
             node.style.position = position_mode::normal;
         }

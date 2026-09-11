@@ -63,11 +63,15 @@ enum inline_style_property : uint64_t {
     inline_background_image = 1ULL << 55U,
     inline_contain = 1ULL << 56U,
     inline_svg_text_anchor = 1ULL << 57U,
+    inline_scrollbar_width = 1ULL << 58U,
+    inline_scrollbar_color = 1ULL << 59U,
     inline_transition = inline_transition_property | inline_transition_duration
         | inline_transition_delay | inline_transition_timing
 };
 inline uint64_t property_mask(std::string_view name)
     {
+        if (name == "scrollbar-width") return inline_scrollbar_width;
+        if (name == "scrollbar-color") return inline_scrollbar_color;
         if (name == "width") return inline_width;
         if (name == "height") return inline_height;
         if (name == "min-width") return inline_min_width;

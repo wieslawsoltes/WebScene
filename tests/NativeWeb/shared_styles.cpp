@@ -38,6 +38,24 @@ void exercise(const webscene_native::css::prepared_stylesheet& input) {
   bool rejected=false;
   try {d.add_rule({});} catch(const std::logic_error&) {rejected=true;}
   require(rejected && report->diagnostics.size()==sheet->diagnostics.size());
+  auto container=d.element(d.body(),"div");d.attribute(container,"id","scroll-parent");
+  auto scroller=d.element(container,"div");d.attribute(scroller,"id","scroller");
+  auto tall=d.element(scroller,"div");d.attribute(tall,"class","tall");
+  d.attribute(scroller,"style","scrollbar-width:auto");
+  const auto has_rail=[&](uint32_t color,float width) {
+    const auto& scene=d.render(100,200);
+    for(const auto& command:scene.commands)
+      if(command.node_id==scroller && command.rgba==color && command.width==width) return true;
+    return false;
+  };
+  require(has_rail(0x0000ffff,4)); // Inherited colors; author !important beats inline normal.
+  d.attribute(scroller,"class","hide");require(!has_rail(0x0000ffff,4));
+  d.scroll_to(scroller,0,20);require(d.scroll_offset(scroller).second==20);
+  d.attribute(scroller,"class","auto");require(has_rail(0x7f7f7f40,4));
+  d.attribute(scroller,"style","scrollbar-width:auto!important;scrollbar-color:#00ff00 #000000");
+  require(has_rail(0x000000ff,6));
+  d.remove_attribute(scroller,"style");d.remove_attribute(scroller,"class");
+  require(has_rail(0x0000ffff,4));
   // Replacing the sheet changes styling through the same document invalidation.
   auto replacement=webscene_native::css::prepare_stylesheet("#target {width:44px;height:12px}","asset://new.css",[](const auto&){return true;});
   d.set_stylesheet_resolver(make_shared_stylesheet_resolver({*replacement},report));

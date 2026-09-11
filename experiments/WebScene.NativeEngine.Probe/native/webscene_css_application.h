@@ -7,6 +7,7 @@
 #include "webscene_css_text_values.h"
 #include "webscene_css_reset.h"
 #include "webscene_css_variables.h"
+#include "webscene_css_scrollbar_values.h"
 
 namespace webscene_native::css {
 // Apply an already-resolved declaration. The caller owns variable resolution,
@@ -17,6 +18,9 @@ void apply_resolved_declaration(native_document& document,dom_node& node,
     bool inline_origin,Decision& decision,LoadSvg&& load_svg)
 {
     const auto& name=declaration.name;
+    if(name=="scrollbar-width" || name=="scrollbar-color") {
+        apply_scrollbar_value(node,declaration,value,decision);return;
+    }
         if (margin_sides(name)!=0U) {
             css::apply_margin(node,declaration,value,inline_origin);
             return;

@@ -1026,3 +1026,18 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   source modifications or runtime HTML parsing were introduced. The production
   sample remains typed and this preview still uses shared value interpretation.
   Full Kestrel logic, resources, browser parity and presented 60fps remain open.
+
+- Shared CSS standard scrollbars: connected scrollbar-width auto/thin/none and
+  scrollbar-color explicit color pairs/auto/inheritance to existing native overlay
+  geometry. Added independent priority masks and parent color inheritance during
+  cascade reset. Values validate before updating priority state. Parsed and
+  generated stylesheet integration tests verify four-pixel blue rails inherited
+  from a parent, author-important versus inline-normal width, hidden rails with
+  retained scrolling, default colors, inline-important six-pixel rails, and style
+  removal restoring stylesheet values. Shared style/document, CSS service and
+  compiler suites pass; rebuilt reference runtime and scrollbar-style-drag passes.
+  This addresses two diagnostics from the shared preview; the packaged preview
+  has not been rebuilt for this checkpoint. CurrentColor/extended color functions,
+  forced-color behavior and full interaction with vendor scrollbar pseudo styling
+  are not established by these tests. Original-app parity and presented 60fps
+  remain unfinished.

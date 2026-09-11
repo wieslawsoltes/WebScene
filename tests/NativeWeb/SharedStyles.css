@@ -13,3 +13,8 @@
 
 .unused[data-label="a;b"] > span.note::before {content:"é\"\\"; color:red !important;}
 @keyframes turn {from {transform:rotate(-15deg)} to {transform:rotate(45deg)}}
+#scroll-parent {scrollbar-color: red blue;}
+#scroller {width:40px;height:30px;overflow-y:scroll;scrollbar-width:thin!important;}
+#scroller.hide {scrollbar-width:none!important;}
+#scroller.auto {scrollbar-color:auto;}
+#scroller .tall {height:100px;}
