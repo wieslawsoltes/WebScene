@@ -23,3 +23,10 @@ for item in sorted(seen):
     relative=item.relative_to(authoring if item.is_relative_to(authoring) else native)
     print(f'install(FILES "{item}" DESTINATION "include/{relative.parent.as_posix()}")')
     print(f'set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "{item}")')
+# Private implementation dependency for native SDK tools/hosts. Never part of
+# the native document API or a JavaScript/runtime component.
+json_root=root/'samples/NativeKestrel/third_party/nlohmann'
+print('if(CMAKE_SYSTEM_NAME STREQUAL "Linux")')
+print(f'install(FILES "{json_root}/json.hpp" DESTINATION include/third_party/nlohmann)')
+print(f'install(FILES "{json_root}/LICENSE.MIT" DESTINATION share/licenses/WebScene RENAME nlohmann-LICENSE)')
+print('endif()')
