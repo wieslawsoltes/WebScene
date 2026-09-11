@@ -22,6 +22,7 @@ struct document_state {
   std::thread::id owner{std::this_thread::get_id()};
   bool alive{true};
   bool styles_dirty{true};
+  bool reduced_motion{};
   uint64_t rendered_scene_generation{};
   bool keyboard_modality{true};
   node_id focus{}, hover{}, pressed{}, body_id{};
@@ -305,6 +306,13 @@ node_id document::focused() const {
   state_->check();
   return state_->focus;
 }
+void document::set_reduced_motion(bool enabled) {
+  state_->check();
+  if(state_->reduced_motion==enabled) return;
+  state_->reduced_motion=enabled;
+  state_->styles_dirty=true;
+  state_->dom.mark_dirty();
+}
 std::string document::cursor_at(float x, float y) const {
   state_->check();
   auto *node=state_->dom.hit_test(state_->dom.body(),x,y);
@@ -566,7 +574,8 @@ const scene &document::render(float width, float height) {
     std::vector<candidate> declarations;
     size_t order = 0;
     for (const auto &r : s.rules) {
-      bool match = width >= r.min_width && width <= r.max_width &&
+      bool match = (!r.reduced_motion || *r.reduced_motion==s.reduced_motion) &&
+                   width >= r.min_width && width <= r.max_width &&
                    height >= r.min_height && height <= r.max_height &&
                    (r.inline_target ? r.inline_target == n.id
                                     : !r.match.parts.empty() &&

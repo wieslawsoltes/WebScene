@@ -12,6 +12,16 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_reduced_motion_conditions(self):
+        result, out = self.compile('<div></div>',
+            '@media (prefers-reduced-motion: reduce) {div {width:45px}}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('std::optional<bool>{true}', out.read_text())
+        result, out = self.compile('<div></div>',
+            '@media (prefers-reduced-motion: reduce) {@media (prefers-reduced-motion: no-preference) {div {width:123px}}}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('123.0f', out.read_text())
+
     def test_screen_media_types(self):
         result, out = self.compile('<div></div>',
             '@media print {div {width:123px}} @media screen {div {width:45px}}')

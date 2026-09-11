@@ -1257,7 +1257,7 @@ static std::string selector_code(const selector_syntax_selector &sel) {
   }
   return result + "}," + std::to_string(sel.specificity) + "}";
 }
-struct media_bound { size_t axis; bool minimum; float value; };
+struct media_bound { size_t axis; bool minimum; float value; std::optional<bool> reduced_motion; };
 static media_bound compile_media_bound(const std::string &name, const std::string &prelude) {
   std::smatch match;
   static const std::regex grammar(R"(\s*\(\s*(min|max)-(width|height)\s*:\s*([^\s]+)\s*\)\s*)", std::regex::icase);
@@ -1268,6 +1268,8 @@ static media_bound compile_media_bound(const std::string &name, const std::strin
   const auto medium=ascii_keyword(trim(prelude));
   if(medium=="print" || medium=="not screen" || medium=="not all") return {0,false,-1};
   if(medium=="screen" || medium=="all" || medium=="not print") return {0,true,0};
+  static const std::regex motion(R"(\s*\(\s*prefers-reduced-motion\s*:\s*(reduce|no-preference)\s*\)\s*)",std::regex::icase);
+  if(std::regex_match(prelude,match,motion)) return {0,true,0,ascii_keyword(match[1])=="reduce"};
   if (!std::regex_match(prelude, match, grammar))
     throw std::runtime_error("only min/max width or height media conditions in px are supported");
   return {ascii_keyword(match[2]) == "width" ? size_t{0} : size_t{2},
@@ -1334,7 +1336,8 @@ struct compiler {
     out << "}";
   }
   void stylesheet(const std::string &text, bool exact_locations = false,
-                  std::array<float, 4> initial_bounds = {0, 1e9f, 0, 1e9f}) {
+                  std::array<float, 4> initial_bounds = {0, 1e9f, 0, 1e9f},
+                  std::optional<bool> initial_motion = {}) {
     const auto saved_locations = stylesheet_locations;
     stylesheet_locations = exact_locations;
     auto css = parse_css_syntax_stylesheet(text);
@@ -1344,16 +1347,22 @@ struct compiler {
       throw std::runtime_error("invalid CSS syntax (" + std::to_string(css.metrics.parse_error_count) + " parse errors)");
     }
     std::vector<std::array<float, 4>> bounds(css.rules.size(), initial_bounds);
+    std::vector<std::optional<bool>> motions(css.rules.size(),initial_motion);
     for (size_t i = 0; i < css.rules.size(); ++i) {
       const auto &r = css.rules[i];
       if (exact_locations) { locate_css(r.source_line, r.source_column); }
       auto &range = bounds[i];
-      if (r.parent_index != css_syntax_no_parent)
+      if (r.parent_index != css_syntax_no_parent) {
         range = bounds.at(r.parent_index);
+        motions[i] = motions.at(r.parent_index);
+      }
       if (r.kind == css_syntax_at_rule) {
         try {
           const auto bound = compile_media_bound(r.name, r.prelude);
-          if (bound.minimum)
+          if (bound.reduced_motion) {
+            if(motions[i] && motions[i]!=bound.reduced_motion) {range[0]=1;range[1]=0;}
+            motions[i]=bound.reduced_motion;
+          } else if (bound.minimum)
             range[bound.axis] = std::max(range[bound.axis], bound.value);
           else
             range[bound.axis + 1] = std::min(range[bound.axis + 1], bound.value);
@@ -1375,7 +1384,9 @@ struct compiler {
         out << "d.add_rule({" << selector << ",";
         declarations(css, r);
         out << "," << number(range[0]) << "," << number(range[1])
-            << ",0," << number(range[2]) << "," << number(range[3]) << "});\n";
+            << ",0," << number(range[2]) << "," << number(range[3]);
+        if(motions[i]) out << ",std::optional<bool>{" << (*motions[i]?"true":"false") << "}";
+        out << "});\n";
       }
     }
     stylesheet_locations = saved_locations;
@@ -1518,12 +1529,14 @@ struct compiler {
         if (n.tag == "link" && n.attributes.contains("disabled")) return;
       }
       std::array<float, 4> media_bounds{0, 1e9f, 0, 1e9f};
+      std::optional<bool> media_motion;
       if ((n.tag == "style" || n.tag == "link") && n.attributes.contains("media")) {
         const auto media = trim(n.attributes.at("media"));
         if (!media.empty() && ascii_keyword(media) != "all") {
           try {
             const auto bound = compile_media_bound("media", media);
-            media_bounds[bound.axis + (bound.minimum ? 0 : 1)] = bound.value;
+            if(bound.reduced_motion) media_motion=bound.reduced_motion;
+            else media_bounds[bound.axis + (bound.minimum ? 0 : 1)] = bound.value;
           } catch (const std::exception &) {
             if (!preview) throw;
             warning("skipped stylesheet with unsupported media: " + media);
@@ -1552,7 +1565,7 @@ struct compiler {
           const auto newline = at == 0 ? std::string::npos : content.rfind('\n', at - 1);
           stylesheet_first_column_offset = newline == std::string::npos ? at : at - newline - 1;
         }
-        stylesheet(css, at != std::string::npos, media_bounds);
+        stylesheet(css, at != std::string::npos, media_bounds, media_motion);
         stylesheet_line_offset = stylesheet_first_column_offset = 0;
       }
       if (n.tag == "link") {
@@ -1573,7 +1586,7 @@ struct compiler {
         auto saved_path = source;
         content = read(p);
         source = p;
-        stylesheet(content, true, media_bounds);
+        stylesheet(content, true, media_bounds, media_motion);
         content = saved;
         source = saved_path;
       }

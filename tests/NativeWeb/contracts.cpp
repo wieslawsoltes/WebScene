@@ -12,6 +12,21 @@ static int style_application_count = 0;
 int main() {
   using namespace webscene::native_web;
   {
+    document motion;
+    auto node=motion.element(motion.body(),"div");
+    rule normal;normal.inline_target=node;
+    normal.declarations.push_back({false,+[](style& s) {s.set_width({40,length_unit::pixels});}});
+    motion.add_rule(std::move(normal));
+    rule reduced;reduced.inline_target=node;reduced.reduced_motion=true;
+    reduced.declarations.push_back({false,+[](style& s) {s.set_width({70,length_unit::pixels});}});
+    motion.add_rule(std::move(reduced));motion.render(300,300);
+    check(motion.bounds(node).width==40,"motion preference defaults to no preference");
+    motion.set_reduced_motion(true);motion.render(300,300);
+    check(motion.bounds(node).width==70,"reduced motion rules activate");
+    motion.set_reduced_motion(false);motion.render(300,300);
+    check(motion.bounds(node).width==40,"reduced motion rules deactivate");
+  }
+  {
     document cursors;
     auto parent=cursors.element(cursors.body(),"div");
     auto child=cursors.element(parent,"div");

@@ -866,3 +866,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   output support or general media-query grammar; print rendering would require
   a distinct target/runtime mode. Reduced-motion preference and animations remain
   open, as do original Kestrel parity and presented 60fps panning/resize.
+
+- Reduced-motion media conditions: generated rules now carry an optional boolean
+  preference, and document.set_reduced_motion schedules recascade when it changes.
+  Compiler supports reduce/no-preference in at-rules and stylesheet media attributes;
+  nested contradictory conditions remain inactive. Compiler and contract suites
+  pass for emitted conditions and runtime activation/deactivation. Fresh original
+  CSS audit: **31 distinct unsupported constructs**. Host OS preference propagation,
+  preference-change notification and compiled animation/transition behavior remain
+  open; accepting the condition does not implement the declarations inside it.
+  Original Kestrel parity and presented 60fps acceptance remain incomplete.

@@ -323,6 +323,7 @@ struct rule {
   float min_width{}, max_width{1e9f};
   node_id inline_target{};
   float min_height{}, max_height{1e9f};
+  std::optional<bool> reduced_motion;
 };
 struct event {
   std::string type;
@@ -393,6 +394,7 @@ public:
   void focus(node_id);
   void key(std::string_view key, bool shift = false);
   node_id focused() const;
+  void set_reduced_motion(bool enabled);
   std::string cursor_at(float x, float y) const;
   void set_external_canvas(node_id, bool enabled);
   void clear_canvas(node_id);
