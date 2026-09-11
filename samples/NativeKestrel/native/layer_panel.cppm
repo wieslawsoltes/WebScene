@@ -101,7 +101,9 @@ public:
       document_.set_text(general.named("units"),unit_label);document_.attribute(general.named("units"),"title",unit_label);
       auto style=document_.find("style-select")?document_.value(document_.find("style-select")):"wireframe";
       std::replace(style.begin(),style.end(),'-',' ');document_.set_text(general.named("style"),style);document_.attribute(general.named("style"),"title",style);
-      document_.set_text(general.named("workspace"),"2D drafting");document_.attribute(general.named("workspace"),"title","2D drafting");
+      const auto workspace=document_.find("workspace-select");
+      const auto label=workspace && document_.value(workspace)=="3d"?"3D modeling":"2D drafting";
+      document_.set_text(general.named("workspace"),label);document_.attribute(general.named("workspace"),"title",label);
       handlers_.push_back(document_.on(general.named("layer"),"change",[this,node=general.named("layer")](auto&) {
         const auto value=document_.value(node);
         for(const auto& layer:model_.data["layers"])if(layer["id"]==value){model_.data["currentLayer"]=value;break;}

@@ -1677,3 +1677,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Properties layout. Selected-object inspector, color/default editing, ByLayer
   action and workspace-dependent summary refresh remain incomplete. The temporary
   workspace label is still 2D drafting until native workspace state is ported.
+
+- Native view-state synchronization: named view changes now follow original
+  2D/3D workspace policy and enable shaded edges for wireframe mesh drawings
+  entering non-top/bottom views. Orbit enters modeling state. Style/workspace
+  selectors, model-space label and inspector summary update together, guarded by
+  actual state changes to avoid per-orbit-frame inspector rebuilds. Rebuilt
+  --exercise-navigation exits 0; /tmp/kestrel-view-state.png confirms iso, shaded
+  edges and consistent 3D modeling labels. Full workspace-switch defaults, ribbon
+  changes and selected-object inspector remain unported.

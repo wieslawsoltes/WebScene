@@ -76,6 +76,34 @@ class preview_app final : public foco::application {
   double pan_tick_ms{}, pan_tick_max_ms{};
   bool gpu_dirty{true}, panning{}, orbiting{};
   float pan_x{}, pan_y{};
+  bool modeling{},displayed_modeling{};
+  std::string displayed_style;
+  void sync_view_state() {
+    if(!viewport)return;
+    const std::string style=viewport->options.style==kestrel::display_style::wireframe?"wireframe":
+      viewport->options.style==kestrel::display_style::shaded?"shaded":viewport->options.style==kestrel::display_style::shaded_edges?"shaded-edges":"xray";
+    if(style==displayed_style && modeling==displayed_modeling)return;
+    displayed_style=style;displayed_modeling=modeling;
+    view->document.set_value(view->document.find("style-select"),style);
+    view->document.set_value(view->document.find("workspace-select"),modeling?"3d":"2d");
+    view->document.set_text(view->document.find("drawing-kind"),modeling?"3D MODEL SPACE":"MODEL SPACE");
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+    if(layers)layers->refresh();
+#endif
+    view->refresh();
+  }
+  void set_camera_view(const std::string& name) {
+    if(!viewport)return;
+    viewport->camera.set_view(name);
+    view->document.set_value(view->document.find("view-select"),name);
+    if(name!="top" && name!="bottom") {
+      modeling=true;
+      if(viewport->options.style==kestrel::display_style::wireframe &&
+          std::any_of(model.data["entities"].begin(),model.data["entities"].end(),[](const auto& e){return e["type"]=="MESH";}))
+        viewport->options.style=kestrel::display_style::shaded_edges;
+    } else if(name=="top")modeling=false;
+    sync_view_state();gpu_dirty=true;
+  }
   bool selection_pressed{},selection_dragging{};
   float selection_x{},selection_y{};
   webscene::native_web::input_modifiers selection_modifiers;
@@ -322,9 +350,9 @@ public:
 #endif
               view->refresh();
             }
-            else if (action->starts_with("view-")) viewport->camera.set_view(action->substr(5));
+            else if (action->starts_with("view-")) set_camera_view(action->substr(5));
             else return;
-            gpu_dirty = true;
+            sync_view_state();gpu_dirty = true;
             event.prevent_default();
             return;
           }
@@ -332,7 +360,7 @@ public:
     handlers.push_back(view->document.on(view->document.find("view-select"),"change",
         [this](auto&) {
           if(!viewport)return;
-          viewport->camera.set_view(view->document.value(view->document.find("view-select")));
+          set_camera_view(view->document.value(view->document.find("view-select")));
           gpu_dirty=true;
         }));
     handlers.push_back(view->document.on(view->document.find("style-select"),"change",
@@ -344,7 +372,7 @@ public:
           else if(style=="shaded-edges") viewport->options.style=kestrel::display_style::shaded_edges;
           else if(style=="xray") viewport->options.style=kestrel::display_style::xray;
           else return;
-          gpu_dirty=true;
+          sync_view_state();gpu_dirty=true;
         }));
     handlers.push_back(view->document.on(view->document.find("viewport"), "pointerdown",
         [this](auto &event) {
@@ -378,6 +406,7 @@ public:
           if(orbiting) {
             viewport->camera.orbit(event.client_x - pan_x, event.client_y - pan_y);
             view->document.set_value(view->document.find("view-select"),"iso");
+            modeling=true;sync_view_state();
           } else viewport->camera.pan(event.client_x - pan_x, event.client_y - pan_y);
           pan_x = event.client_x; pan_y = event.client_y;
           gpu_dirty = true;
