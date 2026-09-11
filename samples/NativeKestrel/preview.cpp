@@ -290,7 +290,7 @@ public:
             window->close();lifetime->shutdown(0);return;
           }
         }
-        if(!capture_path.empty() && ++ticks==120) {
+        if(!capture_path.empty() && ++ticks==(benchmark_canvas_resize?61U:120U)) {
           if(!gpu_serial) {lifetime->shutdown(3);return;}
           auto png=foco::capture_platform_compositor_png(*window,1.f);
           if(!png) {std::cerr << png.failure().message; lifetime->shutdown(2);return;}

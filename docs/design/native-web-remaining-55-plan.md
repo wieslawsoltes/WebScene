@@ -1383,3 +1383,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   /tmp/kestrel-resize-validation.log and accompanying .jsonl Metal trace. This
   strengthens canvas-resize evidence without substituting it for AppKit window
   dragging or visual stale-frame inspection, which remain unfinished.
+
+- Shrunk-canvas visual check: resize benchmark capture now triggers at tick 61,
+  the first minimum-size point, instead of near the restored size. Rebuilt and
+  captured /tmp/kestrel-resize-minimum.png (clean exit). Inspected: native mesh grid
+  and primary box remain visible within reduced canvas, with right/bottom unused
+  space rather than an image stretched to the original viewport. Search/command
+  placeholders are now visible too. This single forced capture is visual evidence
+  at one point; it does not prove all transition frames or AppKit live resizing.
