@@ -596,6 +596,36 @@ class CompilerTests(unittest.TestCase):
         self.assertIn('"textarea"',generated)
         self.assertIn('"value","Ada"',generated)
 
+    def test_native_app_elements_and_template_attributes(self):
+        for backend in ['native', 'shared']:
+            with self.subTest(backend=backend), tempfile.TemporaryDirectory() as folder:
+                root=pathlib.Path(folder);source=root/'view.html';output=root/'view.cppm'
+                source.write_text('<html><body><strong>Title</strong><em>Note</em>'
+                    '<label for="search">Search</label><input id="search" autocomplete="off">'
+                    '<dialog id="details" open aria-label="Details"><p>Details</p></dialog>'
+                    '<template id="card"><strong data-ref="title">Movie</strong>'
+                    '<img data-ref="poster" alt="Poster" width="80" height="120"></template>'
+                    '</body></html>')
+                command=[UIC,source,output,'--module','test.app']
+                if backend=='shared':command+=['--css-backend','shared']
+                result=subprocess.run(command,capture_output=True,text=True)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertNotIn('warning:',result.stderr)
+                generated=output.read_text()
+                for value in ['"strong"','"em"','"label"','"dialog"','"img"',
+                              '"for","search"','"autocomplete","off"','"open",""',
+                              '"alt","Poster"','"data-ref","poster"']:
+                    self.assertIn(value,generated)
+
+    def test_native_app_attributes_remain_element_scoped(self):
+        for body in ['<div for="search"></div>', '<span open></span>',
+                     '<div autocomplete="off"></div>', '<p src="poster.png"></p>']:
+            with self.subTest(body=body):
+                result,output=self.compile(body)
+                self.assertNotEqual(result.returncode,0)
+                self.assertIn('unsupported attribute:',result.stderr)
+                self.assertFalse(output.exists())
+
     def test_element_rejections_use_current_parser_line(self):
         for element,message in [('<video>', 'unsupported Native Web element'),
                                 ('<script></script>', 'excludes scripts'),

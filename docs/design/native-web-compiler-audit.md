@@ -10,6 +10,29 @@ Audit supported features too: accepting syntax does not prove correct semantics.
 
 ## Current compatibility checkpoint
 
+### Native application HTML compilation (2026-09-11)
+
+FormaStudio, LumaPlayer and LumaCinema exposed a strict HTML compiler allowlist
+gap: native DOM elements were rejected before code generation. Compiled views
+now accept semantic text/structure (including `strong`, `em`, headings 4–6 and
+description lists), `label`, `dialog` and `img`. Element-specific attributes
+include label `for`, dialog `open`, image `src`/`alt`, and text-control
+`autocomplete`. The same lowering applies inside compiled templates.
+
+All three applications compile, link and package with `CSS_BACKEND shared`
+without `--preview` using the patched compiler and the preview.2 SDK libraries.
+The compiler regression suite passes 118 tests, including both CSS backends,
+template references and rejection of attributes on unrelated elements.
+
+This closes compilation of these application views, not browser-wide HTML
+conformance. Native label activation and modal dialogs are implemented by the
+existing document API. Image resource provisioning remains the host's job;
+accepting `src` does not introduce browser networking or asset embedding.
+`autocomplete` is retained as metadata, without a browser autofill service.
+Typography remains governed by the native style engine and application CSS;
+this compiler change does not add a browser UA stylesheet. Scripts and unknown
+elements remain strict errors.
+
 At implementation revision `6702b62e`, the unchanged reference stylesheet reports
 **55 distinct unsupported constructs** across **397 rules / 1475 declarations**,
 compared with the historical 80-construct baseline above. This is a diagnostic
