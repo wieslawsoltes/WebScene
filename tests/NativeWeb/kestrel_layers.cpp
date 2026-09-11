@@ -30,6 +30,21 @@ struct inspector_fixture {
   }
 };
 int main() {
+  {
+    kestrel::drawing model;model.add("LINE",{{"points",{{0,0,0},{1,1,0}}},{"color","#ff0000"}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    const auto before=model.data;inspector_fixture ui(model);
+    auto color=ui.find(ui.inspector,"color");require(color!=0 && ui.doc.value(color)=="#ff0000");
+    const auto button=[&](auto&& self,node_id node)->node_id {
+      if(ui.doc.attribute(node,"data-action")=="color-bylayer")return node;
+      for(auto child:ui.doc.children(node))if(auto result=self(self,child))return result;
+      return 0;
+    };
+    auto action=button(button,ui.inspector);require(action!=0);ui.doc.focus(action);ui.doc.key("Enter");
+    require(model.find(id)->at("color")=="bylayer");
+    require(ui.doc.value(ui.find(ui.inspector,"color"))==model.layer(*model.find(id)).at("color").get<std::string>());
+    require(model.undo()=="Color by layer" && model.data==before);
+  }
   for(auto point_key:{"points","controlPoints"}) {
     kestrel::drawing model;model.add("SPLINE",{{point_key,{{0,0,0},{2,3,0},{4,3,0},{6,0,0}}}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);

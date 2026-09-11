@@ -142,6 +142,18 @@ public:
         document_.attribute(option.named("root"),"value",layer["id"].get<std::string>());document_.set_text(option.named("root"),layer["name"].get<std::string>());
       }
       document_.set_value(general.named("layer"),one?one->value("layer",std::string{}):std::string{});
+      std::string color=one?one->value("color",std::string("bylayer")):"bylayer";
+      if(color.empty() || color=="bylayer") {
+        if(one)color=model_.layer(*one).value("color",std::string("#dce4ed"));
+        else for(const auto& layer:model_.data["layers"])if(layer["id"]==model_.data["currentLayer"])color=layer.value("color",std::string("#dce4ed"));
+      }
+      document_.set_value(general.named("color"),color);
+      handlers_.push_back(document_.on(general.named("color"),"change",[this,node=general.named("color")](auto&) {
+        model_.change_selected_appearance("color",document_.value(node));refresh();if(changed_)changed_();
+      }));
+      handlers_.push_back(document_.on(general.named("bylayer"),"click",[this](auto& event) {
+        model_.change_selected_appearance("color","bylayer");event.stop_propagation();refresh();if(changed_)changed_();
+      }));
       document_.set_value(general.named("linetype"),one?one->value("linetype",std::string("ByLayer")):"ByLayer");
       std::ostringstream weight;weight.imbue(std::locale::classic());
       weight<<std::fixed<<std::setprecision(4)<<(one?one->value("lineweight",0.0):0.0);

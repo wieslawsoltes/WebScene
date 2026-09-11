@@ -382,13 +382,17 @@ public:
       if(!value.is_string())return false;
       const auto type=value.get<std::string>();
       if(type!="ByLayer" && type!="Continuous" && type!="Dashed" && type!="Center")return false;
+    } else if(key=="color") {
+      if(!value.is_string())return false;
+      const auto color=value.get<std::string>();
+      if(color!="bylayer" && (color.size()!=7 || color[0]!='#' || !std::all_of(color.begin()+1,color.end(),[](unsigned char c){return std::isxdigit(c)!=0;})))return false;
     } else if(key=="lineweight") {
       if(!value.is_number() || !std::isfinite(value.get<double>()))return false;
     } else if(key=="name") {
       if(!value.is_string())return false;
     } else return false;
     const auto ids=selected(true);if(ids.empty())return false;
-    return transaction("Edit "+key,[&] {for(const auto& id:ids)if(auto* entity=find(id))(*entity)[key]=value;});
+    return transaction(key=="color" && value=="bylayer"?"Color by layer":"Edit "+key,[&] {for(const auto& id:ids)if(auto* entity=find(id))(*entity)[key]=value;});
   }
   bool change_line_endpoint(size_t endpoint,size_t axis,double value) {
     if(endpoint>1 || axis>2 || !std::isfinite(value))return false;

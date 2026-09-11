@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Selected Color row restored in its original position before Linetype. Native color
+updates validate hex/bylayer values; ByLayer changes editable selections with the
+original undo label and refreshes the swatch. A native button-keyboard test checks
+model state, inherited layer-color display and exact undo. Native color-picker
+dialog activation, persisted/default color behavior and hosted verification remain
+open; the swatch alone is not a complete color editor.
+
 Spline optional-property correction: adding degree to an ordered-json entity
 could invalidate the referenced point-array entry before knot generation. The
 editor now captures count and prepares knots before mutation. Native inspector
