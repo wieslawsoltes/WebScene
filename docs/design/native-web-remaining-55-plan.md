@@ -776,3 +776,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   and mutations/resize still run layout. Compiler and contract tests pass. This
   removes measured unnecessary passes but does not establish presented 60fps or
   complete original Kestrel behavior; Foco app-level profiling remains required.
+
+- Foco app validation after canvas reuse changes: rebuilt FocoKestrel in
+  artifacts/native-web-foco and ran --exercise-commands --capture. Process exited
+  zero after hosted line creation, undo and redo checks, with GPU serial=2. Viewed
+  /tmp/kestrel-canvas-reuse.png: native grid, box and created line are visible in
+  the simplified POC interface. This is not the original Kestrel UI and serial=2
+  is not an FPS measurement. otool lists Dawn and system frameworks, no V8 dylib;
+  undefined-symbol scan found no V8/HTML/CSS parser matches (not a complete static
+  dependency audit). Full original UI, behavior, packaging and presented 60fps
+  panning/resize acceptance remain outstanding.
