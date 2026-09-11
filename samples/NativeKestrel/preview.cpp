@@ -488,6 +488,8 @@ public:
             model.selection.insert(entity["id"].get<std::string>());if(model.selection.size()==2)break;
           }
           if(!group_dialog->open())throw std::runtime_error("Native group dialog failed to open");
+          const auto modal_bounds=view->document.bounds(view->document.find("modal"));
+          std::cout<<"Group dialog bounds: "<<modal_bounds.x<<","<<modal_bounds.y<<" "<<modal_bounds.width<<"x"<<modal_bounds.height<<"\n";
           show_group_dialog=false;
         }
         if(color_picker_pending) {color_picker_pending=false;color_picker->set_open(true);}

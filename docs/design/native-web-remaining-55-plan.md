@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Modal layout correction: runtime diagnostics located the original Group dialog
+at (0,800), 510x278.4, below the viewport. Shared native layout now takes
+default-positioned registered modals out of flow, sizes them against the viewport
+and centers their subtree; explicitly positioned dialogs keep the CSS path.
+Native tests verify centering at two viewport sizes and retain focus/isolation
+checks. The hosted capture /tmp/kestrel-group-centered.png now visibly shows the
+centered original Group form and focused input. Original HTML/CSS is unchanged.
+Backdrop paint/blur, authored static-position distinctions, oversized-dialog
+behavior and full modal browser parity still need coverage.
+
 Compiled Group dialog integration in progress: original body/field markup is a
 predefined template; native handlers populate the name/count, submit captured
 entities, cancel/Escape, restore focus and display validation errors. The existing

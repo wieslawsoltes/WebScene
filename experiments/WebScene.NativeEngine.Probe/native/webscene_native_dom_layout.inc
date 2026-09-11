@@ -97,6 +97,16 @@ void native_document::layout(float viewport_width, float viewport_height)
         std::max(1.0F, viewport_height)};
     body_->visible = true;
     body_->used_height_is_definite = true;
+    // Default-positioned modal dialogs leave normal document flow. Keep authored
+    // positioned dialogs on the ordinary CSS positioning path.
+    std::vector<dom_node*> centered_modals;
+    for(const auto& entry:modal_dialogs()) {
+        auto* modal=find_by_native_id(entry.dialog_id);
+        if(modal && modal->style.position==position_mode::normal) {
+            centered_modals.push_back(modal);
+            modal->style.position=position_mode::fixed;
+        }
+    }
     layout_children(*body_);
     // Sticky offsets are visual adjustments to completed normal-flow geometry.
     // Applying them during row layout uses unfinished table/group dimensions
@@ -115,6 +125,14 @@ void native_document::layout(float viewport_width, float viewport_height)
         node.list_marker_layout.y += dy;
         for (auto* child : composed_children(node)) self(self, *child, dx, dy);
     };
+    for(auto* modal:centered_modals) {
+        if(modal->visible) {
+            const float x=std::max(0.0F,(viewport_width_-modal->layout.width)*0.5F);
+            const float y=std::max(0.0F,(viewport_height_-modal->layout.height)*0.5F);
+            translate(translate,*modal,x-modal->layout.x,y-modal->layout.y);
+        }
+        modal->style.position=position_mode::normal;
+    }
     const auto apply_sticky = [&](const auto& self, dom_node& node) -> void {
         if (!node.visible || node.style.display == display_mode::none) return;
         if (node.style.position == position_mode::sticky) {

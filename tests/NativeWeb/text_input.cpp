@@ -6,8 +6,11 @@ int main() {
   {
     document d;auto outside=d.element(d.body(),"button");
     auto dialog=d.element(d.body(),"dialog");auto first=d.element(dialog,"input");auto last=d.element(dialog,"button");
+    rule box;box.inline_target=dialog;box.declarations.push_back({false,+[](style& s){s.set_width({200,length_unit::pixels});s.set_height({100,length_unit::pixels});}});d.add_rule(std::move(box));
     d.focus(outside);require(!d.set_modal(outside,true));
     require(d.set_modal(dialog,true));require(d.focused()==0 && d.attribute(dialog,"open").has_value());
+    d.render(800,600);require(d.bounds(dialog).x==300 && d.bounds(dialog).y==250);
+    d.render(600,400);require(d.bounds(dialog).x==200 && d.bounds(dialog).y==150);
     d.focus(first);require(d.focused()==first);d.focus(outside);require(d.focused()==first);
     d.key("Tab");require(d.focused()==last);d.key("Tab");require(d.focused()==first);
     auto nested=d.element(d.body(),"dialog");auto nested_input=d.element(nested,"input");
