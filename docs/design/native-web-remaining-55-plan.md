@@ -8,6 +8,18 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Color-picker integration work in progress: selected swatches now anchor Foco's
+existing compact color_picker flyout; native color changes apply to the captured
+selection only and refresh the model/DOM. --exercise-color-picker opens the flyout,
+sets a color through the picker API and verifies exact undo; that path passes.
+However --show-color-picker --capture fails while the flyout remains open:
+Graphite reports an incomplete semantic record for color_spectrum (kind 15,
+geometry box). The legacy Graphite node painter supports color_spectrum, but
+scene-storage.cpp does not emit its retained semantic drawing record. This is a
+rendering gap to fix before considering the picker usable; no visual success is
+claimed. The selection guard and first-color close behavior also need interactive
+review after rendering works. No source HTML/CSS changes or JS were introduced.
+
 Selected Color row restored in its original position before Linetype. Native color
 updates validate hex/bylayer values; ByLayer changes editable selections with the
 original undo label and refreshes the swatch. A native button-keyboard test checks

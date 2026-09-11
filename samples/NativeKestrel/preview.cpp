@@ -1,5 +1,7 @@
 #include "native_web_view.hpp"
 #include <foco/app_builder.hpp>
+#include <foco/controls.hpp>
+#include <iomanip>
 #include <iostream>
 #include <fstream>
 #include <chrono>
@@ -17,6 +19,8 @@ static bool exercise_theme=false;
 static bool exercise_picking=false;
 static bool exercise_layer_edit=false;
 static bool exercise_line_edit=false;
+static bool exercise_color_picker=false;
+static bool show_color_picker=false;
 static bool exercise_shortcuts=false;
 static bool exercise_drag_selection=false;
 static bool benchmark_pan=false;
@@ -62,6 +66,10 @@ class preview_app final : public foco::application {
   kestrel::drawing model;
 #ifdef KESTREL_PREVIEW_SHARED_CSS
   std::unique_ptr<kestrel::layer_panel> layers;
+  foco::ref<foco::color_picker> color_picker;
+  bool color_picker_pending{};
+  std::unordered_set<std::string> color_selection;
+  std::optional<kestrel::json> color_test_before;
 #endif
   std::unique_ptr<kestrel::viewport> viewport;
   uint32_t gpu_width{}, gpu_height{};
@@ -258,6 +266,26 @@ public:
       model.add("MESH",kestrel::geo::box({double(i%40)*8-160,double(i/40)*8-100,0},6,6,5));
 #ifdef KESTREL_PREVIEW_SHARED_CSS
     layers=std::make_unique<kestrel::layer_panel>(view->document,model,[this]{gpu_dirty=true;view->refresh();});
+    color_picker=foco::make_ref<foco::color_picker>();
+    color_picker->set_is_compact(true);color_picker->set_alpha_enabled(false);
+    color_picker->set_horizontal_alignment(foco::horizontal_alignment::left);
+    color_picker->set_vertical_alignment(foco::vertical_alignment::top);
+    color_picker->set_visibility(foco::visibility::collapsed);window->add_child(color_picker);
+    color_picker->on_color_changed([this](foco::color value) {
+      if(model.selection!=color_selection)return;
+      std::ostringstream text;text<<'#'<<std::hex<<std::setfill('0')<<std::setw(2)<<unsigned(value.r)<<std::setw(2)<<unsigned(value.g)<<std::setw(2)<<unsigned(value.b);
+      color_picker->set_open(false);color_picker->set_visibility(foco::visibility::collapsed);
+      model.change_selected_appearance("color",text.str());layers->refresh();gpu_dirty=true;view->refresh();
+    });
+    handlers.push_back(view->document.on(view->document.root(),"click",[this](auto& event) {
+      if(view->document.attribute(event.target,"data-prop")!="color" || model.selection.empty())return;
+      const auto bounds=view->document.bounds(event.target);
+      const auto color=foco::color::parse(view->document.value(event.target));if(!color)return;
+      color_selection=model.selection;color_picker->set_color(*color,false);
+      color_picker->set_margin({bounds.x,bounds.y,0,0});color_picker->set_width(bounds.width);color_picker->set_height(bounds.height);
+      color_picker->set_visibility(foco::visibility::visible);color_picker_pending=true;
+      event.prevent_default();event.stop_propagation();
+    }));
     if(exercise_layer_filter) {
       view->document.focus(view->document.find("explorer-search"));
       foco::text_input_event input;input.text="a-wall";view->text_input_received(input);
@@ -445,6 +473,18 @@ public:
         }));
     window->frame = [this, lifetime] {
       try {
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+        if(color_picker_pending) {color_picker_pending=false;color_picker->set_open(true);}
+        else if(color_picker && !color_picker->is_open())color_picker->set_visibility(foco::visibility::collapsed);
+        if(color_test_before && color_picker->is_open() && !show_color_picker) {
+          color_picker->set_color({255,0,128,255});
+          for(const auto& id:model.selection)if(model.find(id)->value("color",std::string{})!="#ff0080")throw std::runtime_error("Native color picker commit failed");
+          view->document.focus(view->document.find("viewport"));
+          foco::key_event key;key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
+          if(model.data!=*color_test_before)throw std::runtime_error("Native color picker undo failed");
+          color_test_before.reset();std::cout<<"Native Foco color picker open, commit and undo passed\n";
+        }
+#endif
         if(exercise_failure) throw std::runtime_error("Requested preview failure exercise");
         if(benchmark_pan && viewport) {
           if(!pan_samples) {
@@ -615,6 +655,17 @@ public:
             if(found)break;
           }
           if(!found)throw std::runtime_error("Hosted geometry click did not select an entity");
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+          if(exercise_color_picker) {
+            const auto find_color=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
+              if(view->document.attribute(node,"data-prop")=="color")return node;
+              for(auto child:view->document.children(node))if(auto result=self(self,child))return result;
+              return 0;
+            };
+            const auto input=find_color(find_color,view->document.find("inspector"));if(!input)throw std::runtime_error("Color swatch missing");
+            color_test_before=model.data;view->refresh();view->document.dispatch(input,"click");exercise_color_picker=false;
+          }
+#endif
           if(exercise_line_edit) {
             const auto find_endpoint=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
               if(view->document.attribute(node,"data-prop")=="points.1.0")return node;
@@ -778,6 +829,8 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
     else if(std::string_view(argv[i])=="--exercise-drag-selection") exercise_drag_selection=true;
     else if(std::string_view(argv[i])=="--exercise-shortcuts") exercise_shortcuts=true;
+    else if(std::string_view(argv[i])=="--show-color-picker") {exercise_picking=true;exercise_color_picker=true;show_color_picker=true;}
+    else if(std::string_view(argv[i])=="--exercise-color-picker") {exercise_picking=true;exercise_color_picker=true;}
     else if(std::string_view(argv[i])=="--exercise-line-edit") {exercise_picking=true;exercise_line_edit=true;}
     else if(std::string_view(argv[i])=="--exercise-layer-edit") {exercise_picking=true;exercise_layer_edit=true;}
     else if(std::string_view(argv[i])=="--exercise-picking") exercise_picking=true;
