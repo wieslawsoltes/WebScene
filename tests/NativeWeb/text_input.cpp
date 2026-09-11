@@ -4,6 +4,18 @@ using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
   {
+    document d;auto first=d.element(d.body(),"button");
+    auto background=d.element(d.body(),"div");d.attribute(background,"inert","");
+    auto input=d.element(background,"input");d.attribute(input,"tabindex","1");
+    auto last=d.element(d.body(),"button");
+    d.focus(first);d.focus(input);require(d.focused()==first);
+    d.key("Tab");require(d.focused()==last);
+    d.key("Tab",true);require(d.focused()==first);
+    d.remove_attribute(background,"inert");d.focus(input);require(d.focused()==input);
+    d.attribute(input,"inert","");d.focus(first);d.focus(input);require(d.focused()==first);
+    d.key("Tab");require(d.focused()==last);
+  }
+  {
     document d;auto box=d.element(d.body(),"input");d.attribute(box,"type","checkbox");d.attribute(box,"value","must not paint");
     rule size;size.inline_target=box;size.declarations.push_back({false,+[](style& s){s.set_width({16,length_unit::pixels});s.set_height({16,length_unit::pixels});}});d.add_rule(std::move(size));
     const auto marks=[&] {

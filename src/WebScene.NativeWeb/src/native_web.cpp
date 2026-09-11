@@ -326,7 +326,7 @@ static bool focusable(const dom_node &n) {
 }
 void document::focus(node_id id) {
   state_->check();
-  if (id && !focusable(state_->node(id)))
+  if (id && (!focusable(state_->node(id)) || state_->dom.is_inert(state_->node(id))))
     return;
   auto old = state_->focus;
   if (old == id)
@@ -627,7 +627,7 @@ void document::key(std::string_view key, input_modifiers modifiers) {
     const auto visit = [&](auto &&self, dom_node &n) -> void {
       if (n.style.display == display_mode::none)
         return;
-      if (focusable(n) && tab_index(n).value_or(0) >= 0)
+      if (focusable(n) && !state_->dom.is_inert(n) && tab_index(n).value_or(0) >= 0)
         nodes.push_back(n.id);
       for (auto *c : n.children)
         self(self, *c);

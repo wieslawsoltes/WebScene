@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Modal prerequisite: native document focus and Tab candidate collection now consult
+the existing engine is_inert check, which covers explicit inert ancestors and
+registered modal scopes. Tests verify direct focus rejection, forward/reverse Tab
+skipping (including positive tabindex), direct inert attributes and restoring
+eligibility after removing inert. The native text/input suite passes. Public
+show/close modal APIs, focus restoration, Escape cancellation and the compiled
+Group dialog still need implementation; this is not complete dialog support.
+
 Group model foundation: group_entities accepts the dialog's captured entity IDs,
 requires at least two distinct editable members, generates a shared group ID/name,
 and commits one Create group undo transaction. Tests verify captured versus live
