@@ -403,10 +403,20 @@ public:
           if(viewport->options.style!=kestrel::display_style::shaded_edges)
             throw std::runtime_error("Style dropdown did not update native renderer");
           const auto toggle_panel=[&](std::string_view action) {
-            const auto button=view->document.element(view->document.body(),"button");
-            view->document.attribute(button,"data-action",std::string(action));
-            view->document.dispatch(button,"click");
-            view->document.remove(button);
+            const auto find_action=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
+              if(view->document.attribute(node,"data-action")==action)return node;
+              for(auto child:view->document.children(node)) if(auto found=self(self,child))return found;
+              return 0;
+            };
+            // These original controls remain available while their panel is hidden.
+            const auto scope=view->document.find(action=="toggle-explorer"?"viewport-controls":"statusbar");
+            const auto button=find_action(find_action,scope);
+            if(!button)throw std::runtime_error("Original panel toggle missing");
+            const auto bounds=view->document.bounds(button);
+            if(bounds.width<=0 || bounds.height<=0)throw std::runtime_error("Original panel toggle has no hit area");
+            foco::pointer_event click;click.position={host.x+bounds.x+bounds.width/2,host.y+bounds.y+bounds.height/2};
+            click.kind=foco::pointer_event_kind::pressed;click.buttons=1;view->pointer_event_received(click);
+            click.kind=foco::pointer_event_kind::released;click.buttons=0;view->pointer_event_received(click);
             view->document.render(host.width,host.height);
             return view->document.bounds(view->document.find("scene")).width;
           };

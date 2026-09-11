@@ -1561,3 +1561,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   /tmp/kestrel-shell-icons.png visibly includes search/settings/panel arrows and
   other previously missing shell icons. Icon visibility is proven; individual
   commands still require their own port/interaction verification.
+
+- Original panel pointer verification replaces temporary test buttons: locate
+  authored viewport-controls/statusbar actions, require nonzero hit areas, then
+  inject Foco primary pointer press/release at their centers. The hosted exercise
+  verifies both hide actions expand canvas width and both show actions restore it;
+  original controls remain reachable with panels hidden. Rebuilt run exits 0 with
+  success marker in /tmp/kestrel-original-panel-pointer.log. This closes the
+  original-control hit-routing gap for these two actions, not OS event delivery
+  or intermediate resize presentation timing.
