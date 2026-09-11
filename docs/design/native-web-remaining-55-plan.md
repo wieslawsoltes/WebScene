@@ -1217,3 +1217,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   This is an unresolved diagnostic-path mismatch, NOT evidence of zero displayed
   frames or proof of 60 displayed FPS. Trace the active platform presentation path
   and counter ownership before relying on these diagnostics for acceptance.
+
+- Direct Metal presentation evidence: discovered existing Cocoa Graphite host
+  trace_metal_presentation, enabled by FOCO_PRESENT_TRACE_JSONL. It attaches an
+  addPresentedHandler to CAMetalDrawable and records presentedTime. Ran the
+  1,000-entity pan probe with trace /tmp/kestrel-metal-present.jsonl and log
+  /tmp/kestrel-metal-pan.log. GPU publication remained 360 / 5.97837 seconds, but
+  trace contains exactly one callback with presentedTime=0 (no valid display
+  timestamps). Consequently no displayed FPS can be calculated. Next investigate
+  active Cocoa host presentation scheduling/invalidation and drawable delivery;
+  do not infer successful on-screen animation from GPU publications or forced
+  compositor captures. Existing generic presentation counters also stayed zero.
