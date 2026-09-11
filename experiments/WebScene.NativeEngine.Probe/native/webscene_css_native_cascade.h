@@ -17,6 +17,7 @@ bool apply_native_cascade(native_document& document,dom_node& node,
     const std::unordered_map<std::string,std::string>& variables,
     bool focused,LoadSvg&& load_svg,Observe&& observe,bool inline_attributes=false)
 {
+    if(node.tag=="input" || node.tag=="textarea") forms::ensure_text_value(node);
     const auto previous=node.style;
     if(node.kind!=dom_node_kind::element) {
         node.style.display=node.kind==dom_node_kind::text?display_mode::inline_flow:display_mode::none;

@@ -178,6 +178,10 @@ public:
       e.handled = true;
     }
   }
+  void text_input_received(foco::text_input_event& event) override {
+    if(document.disposed()) {refresh();return;}
+    if(document.text_input(event.text)) {event.handled=true;request_input_refresh();}
+  }
   std::string_view type_name() const noexcept override {
     return "NativeWebView";
   }

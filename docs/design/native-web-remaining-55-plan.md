@@ -1102,3 +1102,18 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   querying final focus. Native contracts, transitions, layer selection and compiler
   suites pass alongside hosted motion/input tests. This does not implement general
   text editing, shortcuts or IME; full app parity and presented 60fps remain open.
+
+- Native committed text: reused form-control value/selection/caret storage and
+  extracted authored-value initialization for both the existing runtime and native
+  documents. Added live value/set_value APIs, focus for text controls, committed
+  text insertion with beforeinput cancellation and input data/type metadata, and
+  Foco text_input_event forwarding. Read-only controls reject edits; hidden inputs
+  do not become focusable via tabindex. Untouched defaults follow value attributes
+  and textarea child updates, while dirty live values remain independent. Tests
+  cover Unicode text, cancellation, read-only state, default/live value separation,
+  textarea newline defaults, removal/disposal during beforeinput and hosted text
+  delivery. Native text/contracts/shared-document/compiler and hosted input tests
+  pass; rebuilt runtime native-text-input and textarea-value-lifecycle regressions
+  pass. No runtime HTML parsing was added. This is committed-text groundwork:
+  deletion/navigation, selection APIs, clipboard, input-type sanitization, caret
+  blinking and IME composition remain incomplete, as do full Kestrel and 60fps.

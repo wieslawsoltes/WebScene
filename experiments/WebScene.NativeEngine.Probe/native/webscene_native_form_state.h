@@ -62,11 +62,37 @@ inline bool is_text_control(const dom_node* node)
         if (node->tag == "textarea") return true;
         const auto type = node->attributes.find("type");
         if (type == node->attributes.end()) return true;
-        return type->second != "checkbox" && type->second != "radio"
+        return type->second != "hidden" && type->second != "checkbox" && type->second != "radio"
             && type->second != "button" && type->second != "submit"
             && type->second != "reset" && type->second != "file"
             && type->second != "image" && type->second != "range"
             && type->second != "color";
     }
+
+// Initialize the live value once from authored markup. No HTML parser is needed.
+inline void ensure_text_value(dom_node& node) {
+    auto& control=node.mutable_form_control();
+    if(control.value_initialized) return;
+    if(node.tag=="textarea") {
+        control.value.clear();
+        std::string text;
+        const auto collect=[&](auto&& self,const dom_node& current)->void {
+            if(current.kind==dom_node_kind::text) text+=current.text_content;
+            for(auto* child:current.children) if(child) self(self,*child);
+        };
+        collect(collect,node);
+        for(size_t i=0;i<text.size();++i) {
+            if(text[i]=='\r') {control.value+='\n';if(i+1<text.size() && text[i+1]=='\n') ++i;}
+            else control.value+=text[i];
+        }
+        control.dirty_value=false;
+    } else {
+        auto attribute=node.attributes.find("value");
+        control.value=attribute==node.attributes.end()?std::string{}:attribute->second;
+    }
+    control.value_initialized=true;
+    control.selection_start=control.selection_end=control.value.size();
+    control.selection_direction=text_selection_direction::none;
+}
 
 }

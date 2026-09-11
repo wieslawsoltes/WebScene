@@ -1,5 +1,6 @@
 #include "webscene/native_web.hpp"
 #include "webscene_native_style_defaults.h"
+#include "webscene_native_form_state.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -103,10 +104,16 @@ node_id document::body() const {
   state_->check();
   return state_->body_id;
 }
+static void invalidate_textarea_default(dom_node* node) {
+  for(auto* ancestor=node;ancestor;ancestor=ancestor->parent)
+    if(ancestor->tag=="textarea" && !ancestor->form_control().dirty_value)
+      ancestor->mutable_form_control().value_initialized=false;
+}
 node_id document::element(node_id parent, std::string tag) {
   auto &p = state_->node(parent);
   auto &n = state_->dom.create_element(std::move(tag));
   state_->dom.append_child(p, n);
+  invalidate_textarea_default(&p);
   state_->styles_dirty = true;
   return n.id;
 }
@@ -117,6 +124,7 @@ node_id document::text(node_id parent, std::string value) {
 }
 void document::set_text(node_id id, std::string value) {
   auto &n = state_->node(id);
+  invalidate_textarea_default(&n);
   if (n.tag == "#text")
     n.text_content = std::move(value);
   else {
@@ -143,6 +151,7 @@ void document::attribute(node_id id, std::string name, std::string value) {
   if ((name == "style" && !state_->resolver) || name.starts_with("on"))
     throw std::invalid_argument(
         "use compiled styles and native event subscriptions");
+  if(name=="value" && n.tag=="input" && !n.form_control().dirty_value) n.mutable_form_control().value_initialized=false;
   if (name == "id")
     n.id_attribute = value;
   if (name == "class")
@@ -172,6 +181,7 @@ std::pair<float, float> document::scroll_offset(node_id id) const {
 void document::remove_attribute(node_id id, std::string_view name) {
   auto &n = state_->node(id);
   if (!n.attributes.erase(std::string(name))) return;
+  if(name=="value" && n.tag=="input" && !n.form_control().dirty_value) n.mutable_form_control().value_initialized=false;
   if (name == "id") n.id_attribute.clear();
   if (name == "class") n.class_name.clear();
   state_->styles_dirty = true;
@@ -181,6 +191,7 @@ void document::remove(node_id id) {
   auto &n = state_->node(id);
   if (id == body() || id == root())
     throw std::invalid_argument("cannot remove document body");
+  invalidate_textarea_default(n.parent);
   std::vector<node_id> removed;
   const auto collect = [&](auto &&self, dom_node &node) -> void {
     removed.push_back(node.id);
@@ -237,7 +248,7 @@ subscription document::on(node_id node, std::string type,
   state_->listeners.emplace(id, listener{node, std::move(type), std::move(cb)});
   return subscription(state_, id);
 }
-bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y, uint32_t buttons, std::string property_name, float elapsed_time_seconds, input_modifiers modifiers) {
+bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y, uint32_t buttons, std::string property_name, float elapsed_time_seconds, input_modifiers modifiers, std::string data, std::string input_type) {
   auto &n = state_->node(target);
   std::vector<node_id> path;
   for (auto *p = &n; p; p = p->parent)
@@ -250,6 +261,7 @@ bool document::dispatch(node_id target, std::string type, float client_x, float 
   e.property_name = std::move(property_name);
   e.elapsed_time_seconds = elapsed_time_seconds;
   e.modifiers = modifiers;
+  e.data=std::move(data);e.input_type=std::move(input_type);
   for (auto id : path) {
     if (!state_->alive)
       return false;
@@ -300,9 +312,10 @@ static std::optional<int> tab_index(const dom_node &n) {
   return negative ? -result : result;
 }
 static bool focusable(const dom_node &n) {
+  if(n.tag=="input" && n.attributes.contains("type") && n.attributes.at("type")=="hidden") return false;
   for (auto *ancestor = &n; ancestor; ancestor = ancestor->parent)
     if (ancestor->style.display == display_mode::none) return false;
-  return (n.tag == "button" || tab_index(n).has_value()) &&
+  return (n.tag == "button" || forms::is_text_control(&n) || tab_index(n).has_value()) &&
          !n.attributes.contains("disabled");
 }
 void document::focus(node_id id) {
@@ -312,6 +325,12 @@ void document::focus(node_id id) {
   auto old = state_->focus;
   if (old == id)
     return;
+  if(auto* previous=state_->dom.find_by_native_id(old)) {
+    if(previous->has_form_control()) {auto& control=previous->mutable_form_control();control.input_focused=false;control.caret_visible=false;}
+  }
+  if(auto* next=state_->dom.find_by_native_id(id);next && forms::is_text_control(next)) {
+    forms::ensure_text_value(*next);next->mutable_form_control().input_focused=true;next->mutable_form_control().caret_visible=true;
+  }
   state_->focus = id;
   state_->styles_dirty = true;
   state_->dom.mark_dirty();
@@ -323,6 +342,43 @@ void document::focus(node_id id) {
 node_id document::focused() const {
   state_->check();
   return state_->focus;
+}
+std::string document::value(node_id id) const {
+  auto& node=state_->node(id);
+  if(node.tag!="input" && node.tag!="textarea") throw std::invalid_argument("value requires a text control");
+  forms::ensure_text_value(node);return node.form_control().value;
+}
+void document::set_value(node_id id,std::string value) {
+  auto& node=state_->node(id);
+  if(node.tag!="input" && node.tag!="textarea") throw std::invalid_argument("value requires a text control");
+  auto& control=node.mutable_form_control();
+  control.value=std::move(value);control.value_initialized=true;control.dirty_value=true;
+  control.selection_start=control.selection_end=control.value.size();
+  control.selection_direction=text_selection_direction::none;
+  state_->styles_dirty=true;state_->dom.mark_dirty();
+}
+bool document::text_input(std::string text) {
+  state_->check();
+  const auto id=state_->focus;
+  auto* node=state_->dom.find_by_native_id(id);
+  if(!forms::is_text_control(node) || state_->dom.is_inert(*node)) return false;
+  if(node->attributes.contains("readonly")) return true;
+  if(node->tag=="input") std::erase_if(text,[](char c){return c=='\r' || c=='\n';});
+  if(text.empty()) return true;
+  if(!dispatch(id,"beforeinput",0,0,0,0,{},0,{},text,"insertText")) return true;
+  node=state_->dom.find_by_native_id(id);
+  if(!node || !state_->connected(*node) || !forms::is_text_control(node) ||
+     node->attributes.contains("readonly") || state_->dom.is_inert(*node)) return true;
+  forms::ensure_text_value(*node);
+  auto& control=node->mutable_form_control();
+  const auto start=std::min(control.selection_start,control.value.size());
+  const auto end=std::min(std::max(control.selection_start,control.selection_end),control.value.size());
+  control.value.replace(start,end-start,text);control.dirty_value=true;
+  control.selection_start=control.selection_end=start+text.size();
+  control.selection_direction=text_selection_direction::none;control.selection_explicitly_set=true;control.caret_visible=true;
+  state_->styles_dirty=true;state_->dom.mark_dirty();
+  dispatch(id,"input",0,0,0,0,{},0,{},std::move(text),"insertText");
+  return true;
 }
 bool document::has_active_animations() const {
   state_->check();return state_->dom.has_active_animations() || !state_->pending_transition_events.empty();
@@ -595,6 +651,7 @@ const scene &document::render(float width, float height) {
       out.width == width && out.height == height)
     return out;
   const auto cascade = [&](auto &&self, dom_node &n, const computed_variables &inherited) -> void {
+    if(n.tag=="input" || n.tag=="textarea") forms::ensure_text_value(n);
     n.style = node_style{};
     n.style.display = native_default_display_for_node(n);
     if (n.parent) {
