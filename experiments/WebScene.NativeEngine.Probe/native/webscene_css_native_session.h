@@ -27,7 +27,8 @@ public:
     bool pending() const noexcept { return pending_; }
     void set_environment(media_environment environment) {
         if(environment.width==environment_.width && environment.height==environment_.height &&
-           environment.dark==environment_.dark) return;
+           environment.dark==environment_.dark &&
+           environment.reduced_motion==environment_.reduced_motion) return;
         environment_=environment;
         sheets_.set_environment(environment);
         // Geometry can change even when no media query changes activation.

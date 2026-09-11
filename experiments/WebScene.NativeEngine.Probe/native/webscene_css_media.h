@@ -3,7 +3,7 @@
 #include <cstdlib>
 
 namespace webscene_native::css {
-struct media_environment { float width; float height; bool dark=false; };
+struct media_environment { float width; float height; bool dark=false; bool reduced_motion=false; };
 inline bool media_matches(std::string query, const media_environment& environment)
     {
         std::transform(query.begin(), query.end(), query.begin(), [](unsigned char character) {
@@ -57,7 +57,7 @@ inline bool media_matches(std::string query, const media_environment& environmen
                 } else if (feature == "pointer" || feature == "any-pointer") {
                     matches = value == "fine";
                 } else if (feature == "prefers-reduced-motion") {
-                    matches = value == "no-preference";
+                    matches = value == (environment.reduced_motion ? "reduce" : "no-preference");
                 } else if (feature == "prefers-color-scheme") {
                     matches = value == (
                         environment.dark

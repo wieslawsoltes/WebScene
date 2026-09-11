@@ -30,6 +30,7 @@ struct document_state {
   std::mutex listener_mutex;
   std::map<uint64_t, listener> listeners;
   std::vector<rule> rules;
+  std::unique_ptr<stylesheet_resolver> resolver;
   std::vector<native_document::transition_event_record> pending_transition_events;
   scene output;
   document_state(webscene_text_measure_callback cb, void *data)
@@ -89,6 +90,7 @@ void document::dispose() {
   std::lock_guard lock(state_->listener_mutex);
   state_->listeners.clear();
   state_->rules.clear();
+  state_->resolver.reset();
   state_->pending_transition_events.clear();
   state_->output = {};
   state_->dom.clear();
@@ -214,8 +216,17 @@ node_id document::find(std::string_view id) const {
 }
 void document::add_rule(rule r) {
   state_->check();
+  if(state_->resolver) throw std::logic_error("typed rules cannot be mixed with a stylesheet resolver");
   state_->rules.push_back(std::move(r));
   state_->styles_dirty = true;
+  state_->dom.mark_dirty();
+}
+void document::set_stylesheet_resolver(std::unique_ptr<stylesheet_resolver> resolver) {
+  state_->check();
+  if(resolver && !state_->rules.empty())
+    throw std::logic_error("stylesheet resolver cannot replace existing typed rules");
+  state_->resolver=std::move(resolver);
+  state_->styles_dirty=true;
   state_->dom.mark_dirty();
 }
 subscription document::on(node_id node, std::string type,
@@ -647,7 +658,10 @@ const scene &document::render(float width, float height) {
       self(self, *c, variables);
   };
   if (s.styles_dirty || out.width != width || out.height != height) {
-    cascade(cascade, s.dom.body(), {});
+    if(s.resolver)
+      s.resolver->resolve(s.dom,{width,height,s.hover,s.focus,s.keyboard_modality,s.reduced_motion});
+    else
+      cascade(cascade, s.dom.body(), {});
     auto events=s.dom.take_transition_events();
     s.pending_transition_events.insert(s.pending_transition_events.end(),
         std::make_move_iterator(events.begin()),std::make_move_iterator(events.end()));

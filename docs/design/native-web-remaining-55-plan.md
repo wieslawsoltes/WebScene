@@ -20,8 +20,9 @@ cascade for both parsed and compiled documents. Build-time preparation should
 emit stylesheet data into generated C++ modules, consumed by the same native
 engine. Do not expand a second implementation of CSS semantics as the long-term
 architecture. The extracted prepared_stylesheet, stylesheet_owner and
-native_style_session are groundwork; they are not yet connected to native_web's
-compiled document and do not yet prove parser-free execution. Declaration values,
+native_style_session now connect to native_web through an explicitly selected
+stylesheet resolver (see the integration checkpoint below). The default application
+still uses typed rules; the shared adapter does not prove parser-free execution. Declaration values,
 media conditions and functional selector arguments still contain text interpreted
 by the shared machinery; emitting these records alone would not satisfy the
 no-runtime-CSS-parsing requirement.
@@ -952,3 +953,20 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   no retained stream or frame demand. Native contracts, compiler, transitions and
   hosted motion tests pass. This does not establish general callback-disposal
   safety for every input path, original Kestrel parity or presented 60fps.
+
+- Shared stylesheet document handoff: added an owned stylesheet_resolver seam and
+  separate opt-in webscene_native_web_shared_css target. The adapter accepts
+  prepared_stylesheet records, projects viewport/hover/focus/reduced-motion state
+  and runs the existing native cascade on document invalidation. It retains
+  preparation/application diagnostics and is destroyed before native tree cleanup.
+  Mixing this backend with typed generated rules throws rather than silently
+  discarding one source of styling. Replacing the resolver invalidates styles.
+  A generated C++ HTML module and predefined row template now exercise this path:
+  initial layout, hover, class/text updates, focus, responsive media, reduced
+  motion, insertion/removal, replacement and disposal pass. Canvas-only drawing
+  retains the layout-pass count. Six tests pass: shared styles, native CSS service,
+  module smoke, transitions, contracts and compiler. This comparison test prepares
+  CSS at runtime; it never parses HTML at runtime. The default app remains on the
+  typed backend. Shared-engine SVG resource loading, color preference projection,
+  remaining interaction states, typed prepared values and actual Kestrel/Foco
+  integration remain unfinished. No original-app parity or 60fps claim.

@@ -373,6 +373,19 @@ private:
   std::weak_ptr<document_state> state_;
   uint64_t id_{};
 };
+// Internal engine seam. Implementations run on the document thread and must not
+// mutate the tree or call user callbacks during resolve. The document owns the
+// resolver and destroys it before clearing its native tree.
+struct style_environment {
+  float width{}, height{};
+  node_id hover{}, focus{};
+  bool focus_visible{}, reduced_motion{};
+};
+class stylesheet_resolver {
+public:
+  virtual ~stylesheet_resolver() = default;
+  virtual void resolve(webscene_native::native_document&, const style_environment&) = 0;
+};
 // A document is confined to its creating thread. Hosts dispatch work to that
 // thread. IDs are local to this document and never recycled during its
 // lifetime.
@@ -397,6 +410,9 @@ public:
   void remove(node_id);
   node_id find(std::string_view id) const;
   void add_rule(rule);
+  // Alternate cascade backend; cannot be mixed with generated typed rules.
+  // Replacing the resolver invalidates styles. nullptr restores typed styles.
+  void set_stylesheet_resolver(std::unique_ptr<stylesheet_resolver>);
   subscription on(node_id, std::string type, std::function<void(event &)>);
   // Returns false when a listener prevents the default action or disposes the
   // document.
