@@ -1373,3 +1373,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   /tmp/kestrel-canvas-resize.jsonl. This is canvas resizing within a fixed window,
   not AppKit live window dragging; visual verification of per-frame matching
   content and native window resize acceptance remain unfinished.
+
+- Resize workload validity checks: preview now validates every published lease's
+  actual dimensions against current canvas dimensions. Canvas-resize benchmark
+  counts real viewport dimension changes and host ticks ending without a matching
+  image, failing if fewer than 300 changes occur or any matching image is missing.
+  Rebuilt/reran: 359 dimension changes, zero ticks without matching content,
+  360 image publications, 360 compositor presentations, zero skips over 5.98677s.
+  /tmp/kestrel-resize-validation.log and accompanying .jsonl Metal trace. This
+  strengthens canvas-resize evidence without substituting it for AppKit window
+  dragging or visual stale-frame inspection, which remain unfinished.

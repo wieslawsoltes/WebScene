@@ -56,7 +56,8 @@ class preview_app final : public foco::application {
   uint32_t gpu_width{}, gpu_height{};
   uint64_t gpu_serial{};
   unsigned ticks{};
-  unsigned pan_samples{};
+  unsigned pan_samples{}, resize_samples{}, missing_resize_images{};
+  uint32_t published_width{}, published_height{};
   uint64_t pan_initial_serial{}, pan_initial_builds{};
   foco::compositor_diagnostic_metrics pan_initial_compositor;
   foco::scene_publication_metrics pan_initial_publication;
@@ -76,10 +77,15 @@ class preview_app final : public foco::application {
     }
     if (w != gpu_width || h != gpu_height) {
       viewport->resize(w, h);
+      if(benchmark_canvas_resize && pan_samples) ++resize_samples;
       gpu_width = w; gpu_height = h; gpu_dirty = true;
     }
     const auto publish = [&] {
       if (auto image = viewport->poll(true)) {
+        const auto metadata=image->value.describe();
+        if(metadata.width!=w || metadata.height!=h)
+          throw std::runtime_error("GPU image dimensions do not match the current canvas");
+        published_width=metadata.width;published_height=metadata.height;
         ++gpu_serial;
         view->set_gpu_image(node, w, h, gpu_serial,
             webscene::foco_host::make_gpu_image(node, gpu_serial, std::move(image)));
@@ -90,6 +96,8 @@ class preview_app final : public foco::application {
       gpu_dirty = false;
       publish(); // Foco waits on the retained producer fences before sampling.
     }
+    if(benchmark_canvas_resize && pan_samples &&
+        (published_width!=w || published_height!=h)) ++missing_resize_images;
   }
 #endif
   void select_tab(size_t selected) {
@@ -259,6 +267,12 @@ public:
                 <<" tick_mean_ms="<<pan_tick_ms/pan_samples<<" tick_max_ms="<<pan_tick_max_ms
                 <<" scene_rebuilds="<<(viewport->scene_build_count()-pan_initial_builds)
                 <<" (publication timing, not display presentation timing)\n";
+            if(benchmark_canvas_resize) {
+              std::cout<<"Resize validation: dimension_changes="<<resize_samples
+                  <<" ticks_without_matching_image="<<missing_resize_images<<'\n';
+              if(resize_samples<300 || missing_resize_images)
+                throw std::runtime_error("Canvas resize workload did not sustain matching GPU images");
+            }
             if(auto* publisher=view->composition()) {
               const auto publication=publisher->metrics();
               std::cout<<"Scene publication: commits="<<(publication.commit_attempt_count-pan_initial_publication.commit_attempt_count)
