@@ -1,0 +1,62 @@
+{
+  "webscene_revision": "17f59aa4fae2d90f2efedcdf0c4bbd4aa04b19f9",
+  "foco_revision": "259843090d8f75b604d294e2aadae9d7cf6dcce6",
+  "command": "FocoKestrelPreview --benchmark-courtyard",
+  "runs": [
+    {
+      "trace": "native-kestrel-pan-repeat-0.jsonl",
+      "sha256": "f3041626bffe2f644d91a1963a79fd4bbbf7eb059bb7da1df70b6e47c529040c",
+      "callbacks": 360,
+      "valid_timestamps": 357,
+      "invalid_timestamps": 3,
+      "fps": 59.999765316742895,
+      "p95_ms": 16.666791998432018,
+      "max_ms": 16.66687500255648,
+      "intervals_over_25ms": 0,
+      "pipeline_log": [
+        "Pan pipeline: seconds=5.97996 host_ticks=360 entities=265 text_records=30 published_images=360 images_per_second=60.201 tick_mean_ms=3.99784 tick_max_ms=5.24992 scene_rebuilds=0 (publication timing, not display presentation timing)",
+        "Scene publication: commits=359 publications=359 no_ops=0",
+        "Compositor: presented=358 presented_per_second=59.8666 skipped=1 occluded=0 (backend success counts, not physical display timestamps)"
+      ]
+    },
+    {
+      "trace": "native-kestrel-pan-repeat-1.jsonl",
+      "sha256": "05b5b7bf75c714642c1feb5c8beacdf33d17f5dc010521141721b1d36168c991",
+      "callbacks": 359,
+      "valid_timestamps": 356,
+      "invalid_timestamps": 3,
+      "fps": 59.999760846022646,
+      "p95_ms": 16.666791998432018,
+      "max_ms": 16.66687500255648,
+      "intervals_over_25ms": 0,
+      "pipeline_log": [
+        "Pan pipeline: seconds=5.98627 host_ticks=360 entities=265 text_records=30 published_images=360 images_per_second=60.1377 tick_mean_ms=3.99879 tick_max_ms=4.87533 scene_rebuilds=0 (publication timing, not display presentation timing)",
+        "Scene publication: commits=359 publications=359 no_ops=0",
+        "Compositor diagnostics unavailable"
+      ]
+    },
+    {
+      "trace": "native-kestrel-pan-repeat-2.jsonl",
+      "sha256": "022b204b2232ead0afbea0273597a08295cdbf92c12d025cb15b1e2493cbc063",
+      "callbacks": 361,
+      "valid_timestamps": 359,
+      "invalid_timestamps": 2,
+      "fps": 59.99975153737166,
+      "p95_ms": 16.666791998432018,
+      "max_ms": 16.66687500255648,
+      "intervals_over_25ms": 0,
+      "pipeline_log": [
+        "Pan pipeline: seconds=5.98733 host_ticks=360 entities=265 text_records=30 published_images=360 images_per_second=60.127 tick_mean_ms=4.08073 tick_max_ms=4.97187 scene_rebuilds=0 (publication timing, not display presentation timing)",
+        "Scene publication: commits=359 publications=359 no_ops=0",
+        "Compositor: presented=359 presented_per_second=59.96 skipped=0 occluded=0 (backend success counts, not physical display timestamps)"
+      ]
+    }
+  ],
+  "conclusion": "Three fresh launches did not reproduce the previously captured startup gap. Earlier evidence is retained.",
+  "limitations": [
+    "Synthetic panning, not physical pointer latency.",
+    "Zero presentation timestamps excluded, never inferred.",
+    "No live resize or continuous no-stretch evidence.",
+    "Does not resolve the earlier startup variability."
+  ]
+}

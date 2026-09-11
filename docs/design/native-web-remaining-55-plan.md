@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Startup-gap repeatability check: three consecutive fresh process launches of the
+same Courtyard benchmark produce approximately 59.9998fps with no positive
+presentation interval above 16.667ms. Raw traces and revision/hash metadata live
+in performance/native-kestrel-pan-repeat-summary.json. The earlier 50ms startup
+gap did not recur; preserve its trace and leave startup variability unresolved.
+No renderer scheduling change is justified from these observations alone. These
+synthetic pan runs do not prove live-resize cadence or physical pointer latency.
+
 Post-inspector hosted performance check: latest NativeKestrel builds and runs the
 Courtyard pan benchmark. Evidence in performance/native-kestrel-pan-post-inspector.json
 and its raw trace records 360 callbacks, 358 positive presentation timestamps,
