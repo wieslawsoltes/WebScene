@@ -2455,3 +2455,14 @@ build and existing OSNAP click/Undo regressions pass, GPU serial 2. The current
 capture fixture disables OSNAP before its final image, so it does not visually
 verify markers. Dedicated selected-target capture and marker cleanup checks are
 still required.
+
+### Delivery steering: hybrid application now
+
+User explicitly selected hybrid JS/C++ support now, retaining existing JS CAD
+logic and pausing further general feature ports to C++ today. HTML-producing JS
+must be moved to compiled templates/C++ construction; runtime HTML parsing remains
+forbidden. Added complete pinned 37-script migration inputs and source/hash/API
+inventory under samples/NativeKestrel/hybrid. This corrects the earlier eight-file
+source-size picture: entry scripts total 9,621 lines, with 27 HTML API occurrence
+sites before auditing all producers. Hybrid is not running yet. See hybrid README
+for shared-DOM, single-state ownership and implementation/verification gates.
