@@ -8,6 +8,15 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Post-inspector hosted performance check: latest NativeKestrel builds and runs the
+Courtyard pan benchmark. Evidence in performance/native-kestrel-pan-post-inspector.json
+and its raw trace records 360 callbacks, 358 positive presentation timestamps,
+59.665fps average, 16.667ms p95 and one 50ms interval between the first two positive
+timestamps. No other interval exceeds 25ms. Geometry rebuilds remain zero and
+the compositor reports zero skips. Preserve this startup gap as a remaining issue;
+do not replace it with the earlier clean trace or claim uninterrupted 60fps.
+Live window-resize presentation and full browser parity remain unproven.
+
 MTEXT paragraph information: native inspector now emits the original Paragraphs
 readonly row through the compiled template. A boundary scanner follows pinned
 Kestrel src/mtext.js handling for CR/LF, paragraph/column controls, escaped slashes,
