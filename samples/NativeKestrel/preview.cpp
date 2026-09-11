@@ -114,6 +114,16 @@ class preview_app final : public foco::application {
   float pan_x{}, pan_y{};
   bool modeling{},displayed_modeling{};
   std::string displayed_style;
+  void sync_drafting_status() {
+    if(!viewport)return;
+    for(auto button:view->document.children(view->document.find("status-toggles"))) {
+      const auto name=view->document.attribute(button,"data-action").value_or("");
+      if(name=="grid" || name=="snap" || name=="ortho" || name=="polar") {
+        const bool enabled=name=="grid"?viewport->grid_enabled:name=="snap"?drafting_snap:name=="ortho"?drafting_ortho:drafting_polar;
+        view->document.attribute(button,"class",enabled?"active":"");
+      }
+    }
+  }
   void sync_view_state() {
     if(!viewport)return;
     const std::string style=viewport->options.style==kestrel::display_style::wireframe?"wireframe":
@@ -215,6 +225,7 @@ class preview_app final : public foco::application {
     auto h = static_cast<uint32_t>(bounds.height);
     if (!viewport) {
       viewport = std::make_unique<kestrel::viewport>(node, w, h);
+      sync_drafting_status();
       viewport->options.style = (benchmark_pan && !benchmark_courtyard) || exercise_objects || exercise_layer_filter
           ? kestrel::display_style::shaded_edges : kestrel::display_style::wireframe;
       if((!benchmark_pan || benchmark_courtyard) && !exercise_objects && !exercise_layer_filter) {
@@ -405,7 +416,7 @@ public:
           else if(event.key=="y")model.redo();
           else return;
         } else if(event.key=="Delete" || event.key=="Backspace")model.erase_selected();
-        else if(event.key=="F7")viewport->grid_enabled=!viewport->grid_enabled;
+        else if(event.key=="F7") {viewport->grid_enabled=!viewport->grid_enabled;sync_drafting_status();}
         else return;
       }
 #ifdef KESTREL_PREVIEW_SHARED_CSS
@@ -464,14 +475,10 @@ public:
               if(*action=="snap")drafting_snap=!drafting_snap;
               if(*action=="ortho") {drafting_ortho=!drafting_ortho;if(drafting_ortho)drafting_polar=false;}
               if(*action=="polar") {drafting_polar=!drafting_polar;if(drafting_polar)drafting_ortho=false;}
-              for(auto button:view->document.children(view->document.find("status-toggles"))) {
-                const auto name=view->document.attribute(button,"data-action").value_or("");
-                if(name=="snap" || name=="ortho" || name=="polar")
-                  view->document.attribute(button,"class",(name=="snap"?drafting_snap:name=="ortho"?drafting_ortho:drafting_polar)?"active":"");
-              }
+              sync_drafting_status();
               overlay_dirty=true;view->refresh();
             }
-            else if (*action == "grid") viewport->grid_enabled = !viewport->grid_enabled;
+            else if (*action == "grid") {viewport->grid_enabled = !viewport->grid_enabled;sync_drafting_status();}
             else if (*action == "selectall" || *action == "clear-selection") {
               if(*action=="selectall") model.select_all_editable();else model.selection.clear();
 #ifdef KESTREL_PREVIEW_SHARED_CSS
@@ -875,6 +882,26 @@ public:
             const auto unconstrained=viewport->camera.unproject(area.width*.7,area.height*.65,0);
             if(!line_pointer || !unconstrained || std::hypot(line_pointer->x-unconstrained->x,line_pointer->y-unconstrained->y)>.01)
               throw std::runtime_error("Shift release on pointer movement did not restore unconstrained preview");
+            const auto toggle=[&](std::string_view name) {
+              for(auto button:view->document.children(view->document.find("status-toggles")))
+                if(view->document.attribute(button,"data-action")==name) {
+                  const auto b=view->document.bounds(button);click(b.x+b.width/2,b.y+b.height/2);return button;
+                }
+              throw std::runtime_error("Compiled status toggle missing");
+            };
+            const auto ortho=toggle("ortho");
+            if(!drafting_ortho || view->document.attribute(ortho,"class")!="active")throw std::runtime_error("Ortho toggle failed");
+            const auto polar=toggle("polar");
+            if(drafting_ortho || !drafting_polar || view->document.attribute(ortho,"class")=="active" || view->document.attribute(polar,"class")!="active")
+              throw std::runtime_error("Polar mutual exclusion failed");
+            toggle("polar");toggle("snap");redraw_overlay(gpu_width,gpu_height);
+            if(!drafting_snap || !line_pointer || std::abs(line_pointer->x/100-std::round(line_pointer->x/100))>1e-8 ||
+                std::abs(line_pointer->y/100-std::round(line_pointer->y/100))>1e-8)throw std::runtime_error("Grid snap toggle did not constrain preview");
+            toggle("snap");
+            const bool grid=viewport->grid_enabled;const auto grid_button=toggle("grid");
+            if(viewport->grid_enabled==grid || (view->document.attribute(grid_button,"class")=="active")!=viewport->grid_enabled)
+              throw std::runtime_error("Grid toggle display mismatches renderer");
+            toggle("grid");redraw_overlay(gpu_width,gpu_height);
             viewport->camera.pan(40,15);redraw_overlay(gpu_width,gpu_height);
             if(!line_pointer)throw std::runtime_error("Pan lost preview pointer");
             const auto projected=viewport->camera.project(*line_pointer);

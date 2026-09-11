@@ -2379,3 +2379,14 @@ Full hosted build and existing Line regression pass; inspected /tmp/kestrel-stat
 shows original six buttons. Dedicated toggle interaction checks, grid active-state
 synchronization, settings persistence/editors, OSNAP and lineweight behavior remain
 open. Title preservation is not proof of native tooltip display.
+
+### Hosted status toggle verification
+
+Status active classes now synchronize Grid at viewport creation, pointer toggle
+and F7, alongside Snap/Ortho/Polar. Hosted preview check clicks original compiled
+buttons through Foco input, verifies Ortho/Polar mutual exclusion and classes,
+checks snapped preview coordinates are multiples of 100, and compares Grid class
+with renderer state before restoring settings. Build and hosted run pass, GPU
+serial 2, exit 0. Polar angle geometry is unit-tested but not yet independently
+asserted in this hosted toggle check; configurable spacing/angles, persistence,
+OSNAP and LWT remain unfinished.
