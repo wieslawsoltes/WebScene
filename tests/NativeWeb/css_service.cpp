@@ -22,6 +22,7 @@
 #include "webscene_css_text_values.h"
 #include "webscene_css_decoration_values.h"
 #include "webscene_css_application.h"
+#include "webscene_css_cascade_reset.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -656,5 +657,18 @@ int main(int argc,char** argv) {
     declare("height","90px");
     styled_document.layout(500,200);
     if(view.layout.width!=320 || view.style.row_gap.value!=8 || view.style.height.value!=40) return 124;
+    view.class_name.clear();
+    view.style.visibility_hidden=true;
+    view.style.mutable_before_pseudo().content="stale";
+    webscene_native::css::reset_cascaded_style(view,variable_root);
+    styled_document.layout(500,200);
+    if(view.layout.width!=500 || view.style.visibility_hidden || view.style.important_property_mask!=0 ||
+       view.style.custom_properties().values.contains("--size") ||
+       !view.style.mutable_before_pseudo().content.empty()) return 125;
+    view.style.width={123,webscene_native::length_unit::pixels};
+    view.style.inline_property_mask=property_mask("width");
+    webscene_native::css::reset_cascaded_style(view,variable_root);
+    styled_document.layout(500,200);
+    if(view.layout.width!=123) return 126;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

@@ -46,6 +46,7 @@
 #include "webscene_css_text_values.h"
 #include "webscene_css_decoration_values.h"
 #include "webscene_css_application.h"
+#include "webscene_css_cascade_reset.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"

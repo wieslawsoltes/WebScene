@@ -641,3 +641,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   iframe cascade and keyframe regressions pass. The ordinary path borrows authored
   declarations; only aliases allocate normalized copies. Existing substitution and
   precedence limitations remain; rule ordering/invalidation are not yet integrated.
+
+- Cascade reset extraction: runtime and native callers now share clearing of
+  previous stylesheet state through webscene_css_cascade_reset.h. Native tests
+  verify stale dimensions, visibility, custom/pseudo values and important flags
+  clear while an inline width survives and determines layout. Runtime dynamic
+  iframe cascade, active-class pseudo border, variable dimensions and all-unset
+  regressions pass. This preserves existing reset behavior/limitations; candidate
+  selection, ordering and the document cascade lifecycle are still unfinished.
