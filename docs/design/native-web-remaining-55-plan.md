@@ -8,6 +8,12 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+TEXT inspector: original Position, Text height, Rotation and textarea content now
+use compiled rows and native change handlers. Rotation converts degrees to radians
+and removes explicit direction as the original app does. Model tests cover content,
+height validation, direction removal and exact undo. Native document/host tests
+for the new text inspector and rich MTEXT editing remain open.
+
 Hatch control verification: tests now type Spacing and commit with Enter, select
 Pattern using ArrowDown and verify model values and exact undo. Removed the added
 wrapper around hatch rows so each original property-row is directly in its section;

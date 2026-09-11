@@ -238,7 +238,8 @@ public:
             }
           }
         }
-        const bool point_entity=one->value("type",std::string{})=="POINT" && one->contains("position") && (*one)["position"].is_array();
+        const bool text_entity=one->value("type",std::string{})=="TEXT";
+        const bool point_entity=(text_entity || one->value("type",std::string{})=="POINT") && one->contains("position") && (*one)["position"].is_array();
         const auto entity_type=one->value("type",std::string{});
         const bool conic_entity=(entity_type=="CIRCLE" || entity_type=="ARC" || entity_type=="ELLIPSE") && one->contains("center") && (*one)["center"].is_array();
         const bool single_coordinate=point_entity || conic_entity;
@@ -273,6 +274,28 @@ public:
               refresh();if(changed_)changed_();
             }));
             if(!single_coordinate && endpoint==0) {const double delta=coordinate(1,axis)-coordinate(0,axis);squared_length+=delta*delta;}
+          }
+          if(text_entity) {
+            for(auto key:{"height","rotationDeg"}) {
+              const bool height=std::string_view(key)=="height";const auto label=height?"Text height":"Rotation";
+              auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
+              document_.set_text(row.named("label"),label);document_.attribute(row.named("input"),"aria-label",label);document_.attribute(row.named("input"),"data-prop",key);
+              if(height)document_.attribute(row.named("input"),"min","0.0001");
+              const double number=height?one->value("height",10.0):one->value("rotation",0.0)*180.0/std::numbers::pi;
+              std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(4)<<number;
+              auto value=text.str();while(value.ends_with('0'))value.pop_back();if(value.ends_with('.'))value.pop_back();document_.set_value(row.named("input"),value);
+              handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),key=std::string(key)](auto&) {
+                const auto text=document_.value(node);double value=0;size_t used=0;bool valid=true;
+                try {value=std::stod(text,&used);}catch(const std::exception&){valid=false;}
+                if(valid && used==text.size())model_.change_text_property(key,value);
+                refresh();if(changed_)changed_();
+              }));
+            }
+            auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-text-content");
+            document_.set_value(row.named("input"),one->value("text",std::string{}));
+            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input")](auto&) {
+              model_.change_text_property("text",document_.value(node));refresh();if(changed_)changed_();
+            }));
           }
           if(conic_entity && entity_type!="ELLIPSE") {
             auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");

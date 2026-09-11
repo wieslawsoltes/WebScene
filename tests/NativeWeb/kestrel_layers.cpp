@@ -11,6 +11,14 @@ using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
   {
+    kestrel::drawing model;model.add("TEXT",{{"position",{0,0,0}},{"height",10},{"text","Label"},{"direction",{1,0,0}}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    const auto before=model.data;require(model.change_text_property("text","Room\nA"));require(model.change_text_property("rotationDeg",90));
+    require(!model.find(id)->contains("direction"));require(std::abs(model.find(id)->at("rotation").get<double>()-std::numbers::pi/2)<1e-12);
+    require(!model.change_text_property("height",0));require(model.change_text_property("height",20));
+    require(model.undo()=="Edit height" && model.undo()=="Edit rotationDeg" && model.undo()=="Edit text" && model.data==before);
+  }
+  {
     kestrel::drawing model;model.add("HATCH",{{"points",{{0,0,0},{3,0,0},{3,4,0}}},{"pattern","ANSI31"},{"spacing",10}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
     document doc;doc.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
