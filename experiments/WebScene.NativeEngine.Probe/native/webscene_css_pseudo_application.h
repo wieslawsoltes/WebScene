@@ -12,6 +12,7 @@ inline int split_pseudo_element_selector(const std::string& selector, std::strin
         };
         if (const auto kind = split_suffix("::before", 1); kind != 0) return kind;
         if (const auto kind = split_suffix("::after", 2); kind != 0) return kind;
+        if (const auto kind = split_suffix("::backdrop", 7); kind != 0) return kind;
         if (const auto kind = split_suffix("::-webkit-scrollbar-thumb", 4); kind != 0) return kind;
         if (const auto kind = split_suffix("::-webkit-scrollbar-track", 5); kind != 0) return kind;
         if (const auto kind = split_suffix("::-webkit-scrollbar-corner", 6); kind != 0) return kind;

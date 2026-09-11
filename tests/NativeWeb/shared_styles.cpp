@@ -87,6 +87,10 @@ std::vector<std::string> exercise(const webscene_native::css::prepared_styleshee
   require(serialized().find("stroke=\"green\"")==std::string::npos);
   require(serialized().find("stroke=\"red\"")!=std::string::npos);
   require(serialized().find("fill=\"none\"")!=std::string::npos);
+  auto modal=d.element(d.body(),"dialog");require(d.set_modal(modal,true));
+  const auto& modal_scene=render(100,200);
+  require(std::ranges::count_if(modal_scene.commands,[&](const auto& command){return command.node_id==modal && command.rgba==0x080e185e && command.width==100 && command.height==200;})==1);
+  require(d.set_modal(modal,false));d.remove(modal);
   d.attribute(mark,"style","fill:purple;stroke:orange");
   d.attribute(mark,"class","paint");
   require(serialized().find("fill=\"purple\"")!=std::string::npos);
@@ -120,6 +124,17 @@ void compare_selector(const webscene_native::css::compiled_css_selector& a,
   }
 }
 int main() {
+  {
+    document d;auto modal=d.element(d.body(),"dialog");d.attribute(modal,"id","modal");
+    auto sheet=webscene_native::css::prepare_stylesheet(
+      "dialog {width:100px;height:50px} dialog::backdrop{background:#080e185e!important} #modal::backdrop{background:red} dialog.clear::backdrop{background:transparent!important}",
+      "asset://backdrop.css",[](const auto&){return true;});
+    d.set_stylesheet_resolver(make_shared_stylesheet_resolver({*sheet},{}));
+    const auto backdrop=[&](float width,float height){const auto& scene=d.render(width,height);return std::ranges::count_if(scene.commands,[&](const auto& command){return command.node_id==modal && command.rgba==0x080e185e && command.width==width && command.height==height;});};
+    require(backdrop(300,200)==0);require(d.set_modal(modal,true));require(backdrop(300,200)==1);require(backdrop(400,250)==1);
+    d.attribute(modal,"class","clear");require(backdrop(400,250)==0);d.remove_attribute(modal,"class");require(backdrop(400,250)==1);
+    require(d.set_modal(modal,false));require(backdrop(400,250)==0);
+  }
   {
     document d;auto target=d.element(d.body(),"div");d.attribute(target,"id","scheme-target");
     auto sheet=webscene_native::css::prepare_stylesheet(

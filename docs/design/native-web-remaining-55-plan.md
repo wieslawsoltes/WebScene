@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Shared native backdrop color: ::backdrop now has a recognized pseudo kind, native
+dialog color storage, shared cascade handling for solid background/background-color
+with important precedence, and viewport-sized foreground paint immediately before
+each modal. Tests cover closed/open/resize, transparent overrides, priority and
+parsed/generated stylesheet equivalence. The hosted original Group capture
+/tmp/kestrel-group-backdrop.png visibly dims the UI and WebGPU canvas behind the
+dialog. No app HTML/CSS was rewritten. Backdrop blur, broader background syntax,
+currentColor and the legacy V8 cascade path remain outside this implementation;
+unsupported declarations continue to be reported.
+
 Native label activation: pointer activation now resolves explicit for/id targets
 and implicit wrapped controls, focuses and activates the associated control after
 an uncancelled label click, and avoids reactivation from direct control clicks.

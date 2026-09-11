@@ -46,6 +46,9 @@ void native_document::build_scene(
         if (entry.dialog_id > native_id_index_.size()) continue;
         const auto* modal = native_id_index_[entry.dialog_id - 1U];
         if (modal == nullptr || !display_tree_allows_render(*this, *modal)) continue;
+        if(modal->dialog_state && (modal->dialog_state->backdrop_rgba&0xffU))
+            commands.push_back(webscene_scene_command{9U,0U,0,0,viewport_width_,viewport_height_,
+                modal->dialog_state->backdrop_rgba,modal->id,0,0,0,0,0});
         bool hidden = false;
         std::vector<const dom_node*> ancestors;
         for (auto* ancestor = composed_parent(*modal); ancestor != nullptr;

@@ -26,3 +26,4 @@
 #mark.bad {stroke-width:-1px!important;}
 
 #mark.paint {fill:blue;stroke:green;}
+dialog::backdrop {background:#080e185e;}

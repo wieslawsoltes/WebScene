@@ -19,6 +19,7 @@ bool apply_native_cascade(native_document& document,dom_node& node,
 {
     if(node.tag=="input" || node.tag=="textarea") forms::ensure_text_value(node);
     const auto previous=node.style;
+    if(node.dialog_state)node.dialog_state->backdrop_rgba=0;
     if(node.kind!=dom_node_kind::element) {
         node.style.display=node.kind==dom_node_kind::text?display_mode::inline_flow:display_mode::none;
     } else {
@@ -57,9 +58,24 @@ bool apply_native_cascade(native_document& document,dom_node& node,
         }
         recompute_cascaded_line_height(node,matched.ordinary,variables);
         recompute_inline_font_relative_metrics(node);
+        bool backdrop_important=false;
         for(const auto& [kind,rule]:matched.pseudo) {
             for(const auto& declaration:rule->declarations()) {
-                if(kind>=3) apply_scrollbar_declaration(node,kind,declaration,variables);
+                if(kind==7) {
+                    property_result result;result.classification="unsupported";
+                    if(node.tag=="dialog" && (declaration.name=="background" || declaration.name=="background-color")) {
+                        if(backdrop_important && !declaration.important)continue;
+                        const auto value=resolve_value(node,declaration.value,variables);
+                        const auto color=native_document::parse_color(value);
+                        if(color || value=="transparent" || value=="#0000" || value=="#00000000") {
+                            if(!node.dialog_state)node.dialog_state=std::make_unique<dom_node::dialog_data>();
+                            node.dialog_state->backdrop_rgba=color;result.classification="supported";
+                            backdrop_important=declaration.important;
+                        }
+                    }
+                    observe(declaration,result);
+                }
+                else if(kind>=3) apply_scrollbar_declaration(node,kind,declaration,variables);
                 else {
                     auto& pseudo=kind==1?node.style.mutable_before_pseudo():node.style.mutable_after_pseudo();
                     property_result result;
