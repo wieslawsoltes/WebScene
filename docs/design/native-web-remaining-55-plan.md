@@ -1363,3 +1363,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   fence pointer only for callback/lifetime checks, never GPU submission. Rebuilt
   target and CTest passes; actual Metal synchronization is covered separately by
   the hosted probe. Live resize acceptance remains unfinished.
+
+- Hosted canvas-resize workload: --benchmark-canvas-resize drives three 120-tick
+  shrink/grow cycles via native inline dimensions while panning 1,000 meshes.
+  Rebuilt/reran with Metal trace: 360 image publications, 359 scene publications,
+  359 compositor presentations, zero skipped, zero geometry rebuilds. 359 valid
+  presentedTime timestamps give 59.999605 FPS, p95 16.666875 ms and maximum
+  16.666917 ms. Logs /tmp/kestrel-canvas-resize.log and
+  /tmp/kestrel-canvas-resize.jsonl. This is canvas resizing within a fixed window,
+  not AppKit live window dragging; visual verification of per-frame matching
+  content and native window resize acceptance remain unfinished.

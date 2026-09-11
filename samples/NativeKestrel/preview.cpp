@@ -12,6 +12,7 @@ static bool exercise_layer_filter=false;
 static bool exercise_objects=false;
 static bool benchmark_pan=false;
 static bool benchmark_large=false;
+static bool benchmark_canvas_resize=false;
 #include <array>
 #include <functional>
 #include <cmath>
@@ -231,6 +232,17 @@ public:
             if(auto* publisher=view->composition()) {pan_initial_compositor=publisher->compositor_diagnostics();pan_initial_publication=publisher->metrics();}
           }
           viewport->camera.pan(2,0);gpu_dirty=true;
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+          if(benchmark_canvas_resize) {
+            const auto area=view->document.bounds(view->document.find("viewport"));
+            const auto phase=pan_samples%120;
+            const auto inset=phase<60?phase:120-phase;
+            view->document.attribute(view->document.find("scene"),"style",
+                "width:"+std::to_string(std::max(1,int(area.width)-int(inset)*2))+"px;height:"+
+                std::to_string(std::max(1,int(area.height)-int(inset)))+"px");
+            view->refresh();
+          }
+#endif
           ++pan_samples;
         }
         const auto tick_start=std::chrono::steady_clock::now();
@@ -240,7 +252,7 @@ public:
           pan_tick_ms+=milliseconds;pan_tick_max_ms=std::max(pan_tick_max_ms,milliseconds);
           if(pan_samples==360) {
             const auto seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-pan_start).count();
-            std::cout<<"Pan pipeline: seconds="<<seconds<<" host_ticks="<<pan_samples
+            std::cout<<(benchmark_canvas_resize?"Canvas resize pipeline: seconds=":"Pan pipeline: seconds=")<<seconds<<" host_ticks="<<pan_samples
                 <<" entities="<<model.data["entities"].size()
                 <<" published_images="<<(gpu_serial-pan_initial_serial)
                 <<" images_per_second="<<(gpu_serial-pan_initial_serial)/seconds
@@ -290,6 +302,7 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;
     else if(std::string_view(argv[i])=="--benchmark-pan") benchmark_pan=true;
     else if(std::string_view(argv[i])=="--benchmark-pan-large") {benchmark_pan=true;benchmark_large=true;}
+    else if(std::string_view(argv[i])=="--benchmark-canvas-resize") {benchmark_pan=true;benchmark_large=true;benchmark_canvas_resize=true;}
   }
   if (argc == 2 && std::string_view(argv[1]) == "--check-input-coalescing") {
     auto view = foco::make_ref<webscene::foco_host::view>();
