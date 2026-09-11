@@ -2230,3 +2230,16 @@ original document. Rebuilt hosted run passes, GPU serial 2, exit 0. Polar input
 uses the same native parser but has only unit-level evidence so far. Scalar
 lengths, snapping, preview, general command dispatch and JavaScript Number grammar
 parity remain open.
+
+### Drafting Number grammar alignment
+
+Replaced locale-dependent stod with validated decimal syntax and classic-locale
+conversion plus unsigned 0x/0o/0b integer handling. Coordinate trimming recognizes
+the same 25 ECMAScript whitespace tokens used for group names. Explicit tests
+cover radix integers, exponent/leading-dot/trailing-dot decimals, Unicode trim,
+signed-hex and hex-float rejection, invalid radix digits and decimal underflow.
+Node Number reference outputs agree for the tested forms. Initial native test
+exposed libc++ underflow failbit; validated zero underflow now follows Number.
+Native drawing suite passes after that correction. This is tested grammar
+alignment, not exhaustive floating-point conversion conformance or hosted proof;
+the next hosted build must incorporate the updated drawing module.

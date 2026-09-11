@@ -8,6 +8,8 @@ module;
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <locale>
+#include <sstream>
 #include <numbers>
 #include <numeric>
 #include <optional>
@@ -608,15 +610,42 @@ public:
 // Coordinate entry shared by native drafting tools; base is pending or last accepted point.
 inline std::array<double,3> parse_drafting_point(std::string text,std::array<double,3> base={}) {
   const auto trim=[](std::string value) {
-    auto first=value.find_first_not_of(" \t\r\n");
-    return first==std::string::npos?std::string{}:value.substr(first,value.find_last_not_of(" \t\r\n")-first+1);
+    constexpr std::array<std::string_view,25> whitespace={
+      "\t","\n","\v","\f","\r"," ","\xc2\xa0","\xe1\x9a\x80",
+      "\xe2\x80\x80","\xe2\x80\x81","\xe2\x80\x82","\xe2\x80\x83",
+      "\xe2\x80\x84","\xe2\x80\x85","\xe2\x80\x86","\xe2\x80\x87",
+      "\xe2\x80\x88","\xe2\x80\x89","\xe2\x80\x8a","\xe2\x80\xa8",
+      "\xe2\x80\xa9","\xe2\x80\xaf","\xe2\x81\x9f","\xe3\x80\x80","\xef\xbb\xbf"};
+    std::string_view rest=value;
+    for(bool front:{true,false})for(;;) {
+      bool removed=false;
+      for(auto space:whitespace)if(front?rest.starts_with(space):rest.ends_with(space)) {
+        if(front)rest.remove_prefix(space.size());else rest.remove_suffix(space.size());
+        removed=true;break;
+      }
+      if(!removed)break;
+    }
+    return std::string(rest);
   };
   const auto number=[&](std::string value) {
     value=trim(value);if(value.empty())return 0.0;
-    size_t used{};double n{};
-    try { n=std::stod(value,&used); } catch(...) { throw std::invalid_argument("Invalid coordinate value"); }
-    if(used!=value.size() || !std::isfinite(n) || n < -1e12 || n > 1e12)
-      throw std::invalid_argument("Invalid coordinate value");
+    double n{};
+    if(value.size()>2 && value[0]=='0' && std::string_view("xXoObB").find(value[1])!=std::string_view::npos) {
+      const int radix=value[1]=='x'||value[1]=='X'?16:value[1]=='o'||value[1]=='O'?8:2;
+      for(size_t i=2;i<value.size();++i) {
+        const char c=value[i];const int digit=c>='0'&&c<='9'?c-'0':c>='a'&&c<='f'?c-'a'+10:c>='A'&&c<='F'?c-'A'+10:-1;
+        if(digit<0 || digit>=radix)throw std::invalid_argument("Invalid coordinate value");
+        n=n*radix+digit;
+      }
+    } else {
+      static const std::regex decimal(R"([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)");
+      if(!std::regex_match(value,decimal))throw std::invalid_argument("Invalid coordinate value");
+      std::istringstream input(value);input.imbue(std::locale::classic());input>>n;
+      // The decimal grammar is already validated; libc++ reports underflow as
+      // failbit with a zero result, whereas JavaScript Number returns zero.
+      if(input.fail() && n!=0)throw std::invalid_argument("Invalid coordinate value");
+    }
+    if(!std::isfinite(n) || n < -1e12 || n > 1e12)throw std::invalid_argument("Invalid coordinate value");
     return n;
   };
   text=trim(text);const bool relative=text.starts_with('@');if(relative)text.erase(0,1);
