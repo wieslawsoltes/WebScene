@@ -111,6 +111,16 @@ void compare_selector(const webscene_native::css::compiled_css_selector& a,
   }
 }
 int main() {
+  {
+    document d;auto target=d.element(d.body(),"div");d.attribute(target,"id","theme-target");
+    auto sheet=webscene_native::css::prepare_stylesheet(
+      ":root {--size:40px} :root[data-theme=light] {--size:90px} #theme-target {width:var(--size);height:10px}",
+      "asset://theme.css",[](const auto&){return true;});
+    d.set_stylesheet_resolver(make_shared_stylesheet_resolver({*sheet},{}));
+    d.render(200,100);require(d.bounds(target).width==40);
+    d.attribute(d.root(),"data-theme","light");d.render(200,100);require(d.bounds(target).width==90);
+    d.attribute(d.root(),"data-theme","dark");d.render(200,100);require(d.bounds(target).width==40);
+  }
   auto generated=compiled_css::build();
   std::ifstream file(generated.source_address);
   require(bool(file));

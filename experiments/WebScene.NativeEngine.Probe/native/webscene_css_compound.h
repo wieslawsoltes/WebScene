@@ -23,8 +23,8 @@ inline bool compound_matches(const Host& host,const dom_node& node,
         // root participate as both tags.  A frame document is parented beneath
         // its owning iframe in the unified native tree.
         const auto explicit_document_element = node.tag == "html"
-            && node.parent != nullptr
-            && (node.parent == &document.body() || node.parent->tag == "iframe");
+            && (node.parent == nullptr || node.parent == &document.body()
+                || node.parent->tag == "iframe");
         const auto has_explicit_document_element = node.tag == "body"
             && std::any_of(node.children.begin(), node.children.end(), [](const auto* child) {
                 return child != nullptr && child->tag == "html";

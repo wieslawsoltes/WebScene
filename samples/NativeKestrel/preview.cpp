@@ -13,6 +13,7 @@ static bool exercise_failure=false;
 static bool exercise_layer_filter=false;
 static bool exercise_objects=false;
 static bool exercise_navigation=false;
+static bool exercise_theme=false;
 static bool benchmark_pan=false;
 static bool benchmark_courtyard=false;
 static bool benchmark_large=false;
@@ -242,7 +243,19 @@ public:
           for (auto node = event.target; node; node = view->document.parent(node)) {
             auto action = view->document.attribute(node, "data-action");
             if (!action) continue;
-            if(*action=="toggle-explorer" || *action=="toggle-properties") {
+            if(*action=="theme") {
+              const bool light=view->document.attribute(view->document.root(),"data-theme")!="light";
+              view->document.attribute(view->document.root(),"data-theme",light?"light":"dark");
+              viewport->options.light_theme=light;
+              const auto update_icon=[&](auto&& self,webscene::native_web::node_id current,bool theme_button)->void {
+                theme_button=theme_button || view->document.attribute(current,"data-action")=="theme";
+                if(theme_button && view->document.attribute(current,"d"))
+                  view->document.attribute(current,"d",light?"M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11z":"M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM12 1v3M12 20v3M1 12h3M20 12h3M4 4l2 2M18 18l2 2M4 20l2-2M18 6l2-2");
+                for(auto child:view->document.children(current))self(self,child,theme_button);
+              };
+              update_icon(update_icon,view->document.root(),false);view->refresh();
+            }
+            else if(*action=="toggle-explorer" || *action=="toggle-properties") {
               const auto workbench=view->document.find("workbench");
               const std::string name=*action=="toggle-explorer"?"hide-explorer":"hide-properties";
               std::istringstream input(view->document.attribute(workbench,"class").value_or(""));
@@ -431,6 +444,20 @@ public:
             throw std::runtime_error("Panel toggle did not restore viewport width");
           navigation_serial=gpu_serial;navigation_exercised=true;
         }
+        if(exercise_theme && viewport && gpu_serial) {
+          const auto find_theme=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
+            if(view->document.attribute(node,"data-action")=="theme")return node;
+            for(auto child:view->document.children(node))if(auto found=self(self,child))return found;
+            return 0;
+          };
+          const auto button=find_theme(find_theme,view->document.root());
+          if(!button)throw std::runtime_error("Original theme button missing");
+          view->document.dispatch(button,"click");
+          if(!viewport->options.light_theme || view->document.attribute(view->document.root(),"data-theme")!="light")
+            throw std::runtime_error("Native light theme failed");
+          exercise_theme=false;
+          std::cout<<"Native theme changed to light\n";
+        }
         const auto tick_start=std::chrono::steady_clock::now();
         tick();
         if(exercise_navigation && navigation_exercised && gpu_serial>navigation_serial) {
@@ -497,6 +524,7 @@ int main(int argc, char **argv) {
   for(int i=1;i<argc;++i) {
     if(std::string_view(argv[i])=="--capture" && i+1<argc) capture_path=argv[++i];
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
+    else if(std::string_view(argv[i])=="--exercise-theme") exercise_theme=true;
     else if(std::string_view(argv[i])=="--exercise-failure") exercise_failure=true;
     else if(std::string_view(argv[i])=="--exercise-navigation") exercise_navigation=true;
     else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;

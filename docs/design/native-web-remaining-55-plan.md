@@ -1594,3 +1594,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Properties, horizontal ribbon overflow, and clipped drawing without obvious
   stretching in that frame. This is sampled visual evidence, not continuous
   motion or 60fps proof; midpoint capture metadata added to resize evidence.
+
+- Native theme action now updates authored root data-theme, GPU light-theme
+  options and original sun/moon SVG path. Hosted light-theme capture initially
+  exposed :root failing for native parentless html nodes: shared compound matcher
+  recognized wrapper-based roots only. Added parentless html recognition and a
+  shared CSS regression proving root-attribute custom-variable recascade dark to
+  light and back. Rebuilt shared-style suite passes. Hosted capture exits 0;
+  /tmp/kestrel-native-light-fixed.png confirms light shell, grid, geometry, text
+  overlay and moon icon. Original stylesheet remains unchanged. Preferences and
+  sheet-specific theme policy remain unported.
