@@ -267,6 +267,38 @@ inline std::optional<object_snap_result> nearest_object_snap(const drawing& mode
   }
   return best;
 }
+// Native callers must invalidate after direct model.data writes outside transactions.
+class object_snap_index {
+  const drawing* owner_{};
+  uint64_t revision_{};
+  std::vector<object_snap_result> candidates_;
+  size_t builds_{};
+public:
+  void invalidate() { owner_=nullptr; }
+  size_t geometry_builds() const { return builds_; }
+  std::optional<object_snap_result> nearest(const drawing& model,const camera& camera,double x,double y,std::string_view excluded={}) {
+    if(owner_!=&model || revision_!=model.revision) {
+      std::vector<object_snap_result> next;
+      for(const auto& entity:model.data.at("entities")) {
+        if(!model.visible(entity))continue;
+        const auto id=entity.at("id").get<std::string>();
+        for(const auto& snap:geo::geometry(entity).snaps)next.push_back({snap.point,{},snap.type,id,0});
+      }
+      candidates_=std::move(next);owner_=&model;revision_=model.revision;++builds_;
+    }
+    std::optional<object_snap_result> best;
+    for(const auto& candidate:candidates_) {
+      if(candidate.entity_id==excluded)continue;
+      const auto screen=camera.project(candidate.point);
+      if(screen.z<0 || screen.z>1)continue;
+      const auto distance=std::hypot(screen.x-x,screen.y-y);
+      if(distance<11 && (!best || distance<best->distance)) {
+        best=candidate;best->screen=screen;best->distance=distance;
+      }
+    }
+    return best;
+  }
+};
 struct pick_result {std::string id;double distance,depth;};
 inline std::optional<pick_result> pick(const drawing& model,const camera& camera,
     display_style style,double x,double y) {

@@ -2401,3 +2401,14 @@ references. This baseline scans/rebuilds geometry and is not connected to pointe
 motion: retain geometry/spatial indexing before enabling OSNAP in the application.
 Original intersection candidate handling, nearby-index ordering/ties and marker
 rendering remain open. This is not full object-snap parity.
+
+### Retained native object-snap candidates
+
+Added object_snap_index retaining visible native geometry snap candidates by
+model identity/revision. Pointer/camera changes reuse geometry; query projection
+uses the current camera. Transactions and Undo rebuild candidates; direct writes
+to public model.data require explicit invalidate(). Native render-data tests
+verify reuse, pan reprojection, transaction/Undo refresh and explicit invalidation.
+The class currently scans retained candidates; despite its index name it is not
+yet a spatial index. Screen-space lookup, intersection candidates and application
+OSNAP wiring/markers remain open. No pointer performance acceptance claim yet.
