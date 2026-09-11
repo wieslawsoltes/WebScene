@@ -4,6 +4,23 @@
 import kestrel.render_data;
 int main() {
   {
+    kestrel::drawing model;
+    model.data["entities"]=kestrel::json::array();
+    const auto id=model.add("LINE",{{"points",{{0,0,0},{100,0,0}}}});
+    kestrel::camera camera;camera.resize(800,600);camera.set_view("top");
+    const auto screen=camera.project({0,0,0});
+    auto snap=kestrel::nearest_object_snap(model,camera,screen.x+2,screen.y+1);
+    if(!snap || snap->entity_id!=id || snap->type!="endpoint" || snap->point.x!=0)
+      throw std::runtime_error("Endpoint snap failed");
+    if(kestrel::nearest_object_snap(model,camera,screen.x,screen.y,id))throw std::runtime_error("Excluded object snapped");
+    (*model.find(id))["hidden"]=true;
+    if(kestrel::nearest_object_snap(model,camera,screen.x,screen.y))throw std::runtime_error("Hidden object snapped");
+    (*model.find(id))["hidden"]=false;
+    for(auto& layer:model.data["layers"])layer["locked"]=true;
+    if(!kestrel::nearest_object_snap(model,camera,screen.x,screen.y))throw std::runtime_error("Visible locked reference did not snap");
+  }
+
+  {
     const auto d=kestrel::preview_dashes(-1000000000,50,1000000000,50,100,100);
     if(d.empty() || d.size()>13)throw std::runtime_error("Distant preview not bounded by viewport");
     for(const auto& line:d)if(line[0]<-.001 || line[2]>100.001 || line[1]!=50 || line[3]!=50)

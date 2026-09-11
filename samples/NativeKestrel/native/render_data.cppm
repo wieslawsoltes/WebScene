@@ -244,6 +244,29 @@ inline render_data build_grid(const camera &camera, vec3 origin,
 }
 // Native equivalent of app.js hit/selectAt. Spatial indexing can be added
 // without changing the screen-space distance and depth ordering below.
+struct object_snap_result {
+  vec3 point,screen;
+  std::string type,entity_id;
+  double distance{};
+};
+// Baseline candidate selection; a retained spatial index can supply this same result.
+inline std::optional<object_snap_result> nearest_object_snap(const drawing& model,const camera& camera,
+    double x,double y,std::string_view exclude_id={}) {
+  std::optional<object_snap_result> best;
+  for(const auto& entity:model.data.at("entities")) {
+    const auto id=entity.at("id").get<std::string>();
+    if(id==exclude_id || !model.visible(entity))continue;
+    const auto geometry=geo::geometry(entity);
+    for(const auto& snap:geometry.snaps) {
+      const auto screen=camera.project(snap.point);
+      if(screen.z<0 || screen.z>1)continue;
+      const auto distance=std::hypot(screen.x-x,screen.y-y);
+      if(distance<11 && (!best || distance<best->distance))
+        best=object_snap_result{snap.point,screen,snap.type,id,distance};
+    }
+  }
+  return best;
+}
 struct pick_result {std::string id;double distance,depth;};
 inline std::optional<pick_result> pick(const drawing& model,const camera& camera,
     display_style style,double x,double y) {

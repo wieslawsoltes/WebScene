@@ -2390,3 +2390,14 @@ with renderer state before restoring settings. Build and hosted run pass, GPU
 serial 2, exit 0. Polar angle geometry is unit-tested but not yet independently
 asserted in this hosted toggle check; configurable spacing/angles, persistence,
 OSNAP and LWT remain unfinished.
+
+### Native object-snap candidate baseline
+
+Added nearest_object_snap to render-data using existing native geometry snaps,
+projected distance <11 pixels, visibility filtering and excluded entity IDs.
+It returns world/screen point, type, entity ID and distance. Native render-data
+tests pass endpoint selection, exclusion, hidden entities and visible locked
+references. This baseline scans/rebuilds geometry and is not connected to pointer
+motion: retain geometry/spatial indexing before enabling OSNAP in the application.
+Original intersection candidate handling, nearby-index ordering/ties and marker
+rendering remain open. This is not full object-snap parity.
