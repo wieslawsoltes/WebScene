@@ -2356,3 +2356,14 @@ Shift release. Cocoa audit confirms input key enum lacks modifier key values and
 Foco's input view lacks flagsChanged. Add modifier values/mapping and explicit
 flagsChanged routing in Foco next, then verify physical or injected Cocoa modifier
 events through the complete route.
+
+### Cocoa modifier routing implementation
+
+Foco appends Shift/Control/Alt/Meta key values and maps both Cocoa sides. Its input
+view now handles flagsChanged with device-specific left/right mask bits, routing
+press/release through existing input callbacks. Native WebScene maps these keys
+to DOM names. Hosted test uses actual key::shift instead of the previous surrogate
+letter and passes stationary preview release, pointer commit and cleanup checks.
+Full Foco preview rebuild passes, hosted run exits 0 with GPU serial 2. Physical
+Cocoa event injection, both-side chord transitions and focus-loss reconciliation
+remain unverified; this hosted test enters at the Foco view API.

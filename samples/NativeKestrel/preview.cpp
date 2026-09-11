@@ -835,10 +835,10 @@ public:
             size_t strokes=0;for(const auto& command:scene.canvas)if(command.kind==20)++strokes;
             if(strokes<2)throw std::runtime_error("Pending Line emitted no dashed Canvas strokes");
             view->document.focus(view->document.find("viewport"));
-            foco::key_event modifier_key;modifier_key.value=foco::key::a;modifier_key.modifiers=foco::key_modifiers::shift;
+            foco::key_event modifier_key;modifier_key.value=foco::key::shift;modifier_key.modifiers=foco::key_modifiers::shift;
             view->key_event_received(modifier_key);redraw_overlay(gpu_width,gpu_height);
             if(!drafting_shift || !line_pointer)throw std::runtime_error("Hosted key modifiers did not update stationary preview");
-            modifier_key={};modifier_key.value=foco::key::a;
+            modifier_key={};modifier_key.value=foco::key::shift;
             view->key_released_received(modifier_key);redraw_overlay(gpu_width,gpu_height);
             if(drafting_shift || !modifier_key.handled)throw std::runtime_error("Hosted key release did not clear stationary modifier");
             const auto released=viewport->camera.unproject(area.width*.7,area.height*.65,0);

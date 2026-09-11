@@ -173,7 +173,11 @@ public:
     return !document.disposed() && document.focused() != 0;
   }
   static std::string_view dom_key(foco::key value) {
-    return value == foco::key::backspace ? "Backspace"
+    return value == foco::key::shift ? "Shift"
+                           : value == foco::key::control ? "Control"
+                           : value == foco::key::alt ? "Alt"
+                           : value == foco::key::meta ? "Meta"
+                           : value == foco::key::backspace ? "Backspace"
                            : value == foco::key::delete_key ? "Delete"
                            : value == foco::key::escape ? "Escape"
                            : value == foco::key::a ? "a"
