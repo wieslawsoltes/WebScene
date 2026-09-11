@@ -746,3 +746,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   and positional selector regressions pass. Nested functional selector queries
   and generated stylesheet serialization still require work before claiming a
   fully parser-free native CSS application. Full Kestrel parity remains unproven.
+
+- Native style session: a document-borrowing session now owns prepared sheets and
+  query state, coalesces explicit invalidations, and refreshes before host layout.
+  Sheet replacement/removal, viewport changes, focus/hover and target changes
+  schedule refresh; unchanged interaction/viewport inputs do not. DOM mutators
+  still must explicitly invalidate. Native tests pass for focus styling, class
+  mutation, repeated invalidation coalescing, no-op flush and removal cleanup.
+  This is not yet wired to the Foco sample or native DOM mutation hooks, and full
+  document refresh is not a suitable unconditional animation-frame operation.
+  Resource callbacks, selective invalidation, original Kestrel parity and 60fps
+  panning/resize verification remain outstanding.

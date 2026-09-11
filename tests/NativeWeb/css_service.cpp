@@ -17,6 +17,7 @@
 #include "webscene_css_stylesheet.h"
 #include "webscene_css_stylesheet_owner.h"
 #include "webscene_css_native_cascade.h"
+#include "webscene_css_native_session.h"
 #include "webscene_css_media.h"
 #include "webscene_css_property_mask.h"
 #include "webscene_css_reset.h"
@@ -855,5 +856,27 @@ int main(int argc,char** argv) {
     webscene_native::css::apply_native_document_cascade(tree_document,tree_sheets,tree_query,
         [](const auto&,auto&,auto&,auto&) {return false;},[](const auto&,const auto&) {});
     if(tree_child.style.width.value!=90) return 157;
+    webscene_native::css::native_style_session session(tree_document);
+    auto session_sheet=webscene_native::css::prepare_stylesheet(
+        ".child {width: 40px} .child:focus {width: 70px} .changed {width: 100px}",
+        "asset://app/session.css",[](const auto&) {return true;});
+    if(!session_sheet) return 158;
+    session.replace(1,std::move(*session_sheet));
+    const auto session_flush=[&] {
+        return session.flush([](const auto&,auto&,auto&,auto&) {return false;},[](const auto&,const auto&) {});
+    };
+    if(!session_flush() || session.pending() || session_flush() || tree_child.style.width.value!=40) return 159;
+    session.set_interaction(nullptr,&tree_child,true);
+    if(!session_flush() || tree_child.style.width.value!=70) return 160;
+    session.set_interaction(nullptr,&tree_child,true);
+    if(session_flush()) return 161;
+    session.set_interaction(nullptr,nullptr,false);
+    tree_child.class_name="changed";session.invalidate();session.invalidate();
+    if(!session_flush() || session_flush() || tree_child.style.width.value!=100) return 162;
+    session.set_environment({1000,600,false});
+    if(!session_flush()) return 163;
+    session.set_environment({1000,600,false});
+    if(session_flush()) return 164;
+    if(!session.remove(1) || !session_flush() || tree_child.style.width.value==100) return 165;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
