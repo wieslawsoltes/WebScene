@@ -2,10 +2,17 @@
 #include <webscene/shared_css.hpp>
 #include <iostream>
 import kestrel.drawing;
+import kestrel.examples;
 import kestrel.layer_panel;
 using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
+  {
+    kestrel::drawing courtyard;kestrel::load_courtyard(courtyard);
+    require(courtyard.data["entities"].size()==265 && courtyard.data["layers"].size()==9);
+    require(courtyard.data["name"]=="Courtyard House · Ground floor");
+    for(const auto& entity:courtyard.data["entities"]) require(!courtyard.layer(entity).is_null());
+  }
   document d;d.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
   auto list=d.element(d.body(),"div");d.attribute(list,"id","explorer-list");
   auto badge=d.element(d.body(),"span");d.attribute(badge,"id","layer-count");

@@ -1391,3 +1391,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   space rather than an image stretched to the original viewport. Search/command
   placeholders are now visible too. This single forced capture is visual evidence
   at one point; it does not prove all transition frames or AppKit live resizing.
+
+- Original Courtyard drawing fixture: generated the pinned upstream examples.js
+  courtyard through its original math/geometry/model implementation offline, and
+  embedded the resulting project JSON in kestrel.examples C++ module. Native
+  load_courtyard applies it through the native drawing validator: 265 entities,
+  nine layers, original project name; all entity layers resolve. Rebuilt
+  kestrel_native_layers and CTest passes. Offline JavaScript generation is not
+  deployed or run by the app; runtime parsing is drawing JSON, never HTML.
+  Preview still uses its diagnostic box until this fixture is connected with
+  camera fitting and original render-style selection. Full drawing render parity
+  and application behavior remain unverified.

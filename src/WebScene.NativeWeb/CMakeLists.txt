@@ -135,6 +135,7 @@ if(BUILD_TESTING)
  target_sources(kestrel_native PUBLIC FILE_SET CXX_MODULES BASE_DIRS "${WEBSCENE_ROOT}/samples/NativeKestrel/native" FILES
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/math.cppm"
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/drawing.cppm"
+   "${WEBSCENE_ROOT}/samples/NativeKestrel/native/examples.cppm"
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/camera.cppm"
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/geometry.cppm"
    "${WEBSCENE_ROOT}/samples/NativeKestrel/native/render_data.cppm"
