@@ -11,3 +11,9 @@ add_executable(compiled_native compiled_native.cpp)
 webscene_compile_html(compiled_native Main.html MODULE linux.contract.ui CSS_BACKEND shared)
 target_link_libraries(compiled_native PRIVATE WebScene::NativeWeb WebScene::SharedCSS)
 add_test(NAME compiled_native COMMAND compiled_native)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME installed_package_components
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/package_components.py"
+    --sdk "${WebScene_SDK_ROOT}" --compiler "${CMAKE_CXX_COMPILER}")
+set_tests_properties(installed_package_components PROPERTIES TIMEOUT 90)
