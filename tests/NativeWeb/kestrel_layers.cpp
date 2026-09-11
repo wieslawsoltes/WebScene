@@ -8,6 +8,19 @@ using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
   {
+    kestrel::drawing drawing;
+    drawing.data["layers"][0]["visible"]=false;
+    drawing.data["layers"][0]["locked"]=true;
+    const auto before=drawing.data;
+    require(drawing.show_all_layers());
+    for(const auto& layer:drawing.data["layers"])require(layer["visible"].get<bool>());
+    require(drawing.data["layers"][0]["locked"].get<bool>());
+    require(!drawing.show_all_layers());
+    require(drawing.undo()=="Show all layers" && drawing.data==before);
+    require(drawing.redo()=="Show all layers");
+    require(drawing.data["layers"][0]["visible"].get<bool>());
+  }
+  {
     kestrel::drawing courtyard;kestrel::load_courtyard(courtyard);
     require(courtyard.data["entities"].size()==265 && courtyard.data["layers"].size()==9);
     require(courtyard.data["name"]=="Courtyard House · Ground floor");

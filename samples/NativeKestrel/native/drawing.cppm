@@ -372,6 +372,11 @@ public:
     changed(label);
     return true;
   }
+  bool show_all_layers() {
+    return transaction("Show all layers",[&] {
+      for(auto& layer:data["layers"])layer["visible"]=true;
+    });
+  }
   size_t erase_selected() {
     const auto ids=selected(true);
     if(ids.empty())return 0;

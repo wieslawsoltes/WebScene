@@ -1604,3 +1604,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   /tmp/kestrel-native-light-fixed.png confirms light shell, grid, geometry, text
   overlay and moon icon. Original stylesheet remains unchanged. Preferences and
   sheet-specific theme policy remain unported.
+
+- Native Show all layers action: original all-layers-on command invokes an
+  undoable Show all layers transaction, refreshing explorer and GPU state. Tests
+  verify visibility restoration, preserved locks, no redundant history entry,
+  exact undo restoration and redo; layer suite passes. Preview rebuilt. Also
+  rebuilt/reran shared generated-document CSS suite after parentless :root fix;
+  linked/embedded/inline CSS test passes. Physical command interaction and full
+  layer manager remain separate gaps.
