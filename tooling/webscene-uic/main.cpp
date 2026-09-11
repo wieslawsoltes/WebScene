@@ -1,4 +1,5 @@
 #include "webscene_css_state.h"
+#include "webscene_css_transitions.h"
 #include "webscene/native_web.hpp"
 #include "webscene_css_parser.h"
 #include "webscene_html_parser.h"
@@ -719,6 +720,30 @@ static std::string assignments(const std::string &name,
     auto integer = std::stoll(value);
     if (integer < INT32_MIN || integer > INT32_MAX) throw std::runtime_error("z-index outside native integer range");
     return "s.set_z_index(" + std::to_string(integer) + ");";
+  }
+  if (name == "transition") {
+    if(ascii_keyword(value)=="none") return "s.clear_transitions();";
+    auto parts=component_values(value);
+    node_style::transition_timing timing;
+    bool property=false,easing=false;int times=0;
+    for(const auto& part:parts) {
+      const auto token=ascii_keyword(part);
+      if(token=="opacity" && !property) {property=true;continue;}
+      if(auto ms=webscene_native::css::css_time_ms(token)) {
+        if(times==0) {if(*ms<0) throw std::runtime_error("negative transition duration");timing.duration_ms=*ms;}
+        else if(times==1) timing.delay_ms=*ms;
+        else throw std::runtime_error("too many transition times");
+        ++times;continue;
+      }
+      if(!easing && (token=="ease" || token=="linear" || token=="ease-in" || token=="ease-out" || token=="ease-in-out")) {
+        webscene_native::css::parse_transition_timing(token,timing);easing=true;continue;
+      }
+      throw std::runtime_error("compiled transition supports opacity with time and named easing");
+    }
+    if(!property) throw std::runtime_error("compiled transition requires opacity property");
+    return "s.clear_transitions();s.set_opacity_transition("+number(timing.duration_ms)+","+
+      number(timing.delay_ms)+","+number(timing.x1)+","+number(timing.y1)+","+
+      number(timing.x2)+","+number(timing.y2)+");";
   }
   if (name == "cursor") {
     const auto keyword=ascii_keyword(value);

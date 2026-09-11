@@ -897,3 +897,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Compiler transition/keyframe syntax, richer timings, cancellation/disposal edge
   cases and visual animation parity remain open. Audit stays at 31; this is clock
   plumbing, not proof of Kestrel animation or presented 60fps behavior.
+
+- Compiled opacity transitions: shorthand supports opacity, validated duration and
+  optional delay, named easing and none, emitted as typed C++ timing data. A new
+  generated C++ module test verifies delayed start, completion and cancellation.
+  Native opacity transitions now cancel on transition-property:none even when the
+  target is unchanged. Queued events retain frame demand after cancellation;
+  hosted tests verify delivery and return to idle. Compiler/contracts/generated
+  transition tests, runtime host-clock regression and hosted motion tests pass.
+  Fresh original CSS audit: **30 distinct unsupported constructs**. Multiple
+  properties, fill transitions, cubic/steps timing, compiled keyframes and broader
+  cancellation semantics remain unfinished. No full parity or 60fps claim.

@@ -12,6 +12,15 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_opacity_transition_shorthand(self):
+        for value in ['opacity 100ms linear 20ms', 'opacity .2s ease-in', 'none']:
+            result, out = self.compile('<div></div>', 'div {transition:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('clear_transitions', out.read_text())
+        for value in ['opacity -1s', 'opacity 1s 2s 3s', 'fill 1s', 'opacity 1s linear ease']:
+            result, _ = self.compile('<div></div>', 'div {transition:'+value+'}')
+            self.assertNotEqual(result.returncode, 0, value)
+
     def test_reduced_motion_conditions(self):
         result, out = self.compile('<div></div>',
             '@media (prefers-reduced-motion: reduce) {div {width:45px}}')

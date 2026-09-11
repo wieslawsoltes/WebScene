@@ -68,9 +68,16 @@ public:
     return found == variables_.end() ? nullptr : &found->second;
   }
   void set_align_self(align_mode mode, bool specified = true) { value_.align_self = mode; value_.align_self_specified = specified; }
-  void set_opacity_transition(float duration_ms) {
-    auto &timing=value_.mutable_animations().opacity_transition;
-    timing={std::max(0.0f,duration_ms),0,0,0,1,1};
+  void set_opacity_transition(float duration_ms, float delay_ms=0,
+      float x1=0, float y1=0, float x2=1, float y2=1) {
+    value_.mutable_animations().transition_property_value="opacity";
+    value_.mutable_animations().opacity_transition={std::max(0.0f,duration_ms),delay_ms,x1,y1,x2,y2};
+  }
+  void clear_transitions() {
+    auto &a=value_.mutable_animations();
+    a.transition_property_value="none";
+    a.opacity_transition={};a.color_transition={};a.transform_transition={};
+    a.left_transition={};a.top_transition={};
   }
   void set_cursor(std::string value) { value_.mutable_textual().cursor=std::move(value); }
   void set_table_layout_fixed(bool fixed) { value_.table_layout_fixed = fixed; }

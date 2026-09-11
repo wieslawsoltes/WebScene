@@ -30,6 +30,7 @@ struct document_state {
   std::mutex listener_mutex;
   std::map<uint64_t, listener> listeners;
   std::vector<rule> rules;
+  std::vector<native_document::transition_event_record> pending_transition_events;
   scene output;
   document_state(webscene_text_measure_callback cb, void *data)
       : dom(cb, data) {
@@ -309,7 +310,7 @@ node_id document::focused() const {
   return state_->focus;
 }
 bool document::has_active_animations() const {
-  state_->check();return state_->dom.has_active_animations();
+  state_->check();return state_->dom.has_active_animations() || !state_->pending_transition_events.empty();
 }
 bool document::advance_animations(double timestamp_ms) {
   state_->check();
@@ -317,7 +318,9 @@ bool document::advance_animations(double timestamp_ms) {
     throw std::invalid_argument("invalid animation timestamp");
   state_->dom.signal_animation_frame(timestamp_ms);
   const auto changed=state_->dom.advance_animations();
-  const auto events=state_->dom.take_transition_events();
+  auto events=std::exchange(state_->pending_transition_events,{});
+  auto fresh=state_->dom.take_transition_events();
+  events.insert(events.end(),std::make_move_iterator(fresh.begin()),std::make_move_iterator(fresh.end()));
   for(const auto& event:events) {
     if(!state_->alive) break;
     if(state_->dom.find_by_native_id(event.node_id))
@@ -642,6 +645,9 @@ const scene &document::render(float width, float height) {
   };
   if (s.styles_dirty || out.width != width || out.height != height) {
     cascade(cascade, s.dom.body(), {});
+    auto events=s.dom.take_transition_events();
+    s.pending_transition_events.insert(s.pending_transition_events.end(),
+        std::make_move_iterator(events.begin()),std::make_move_iterator(events.end()));
     s.styles_dirty = false;
     s.dom.mark_dirty();
   }

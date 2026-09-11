@@ -40,6 +40,17 @@ int main() {
   require(view->requires_host_frames());
   view->advance_host_frame(103);
   require(!view->requires_host_frames());
+  int cancelled=0;
+  auto cancellation=view->document.on(node,"transitioncancel",[&](auto&){++cancelled;});
+  rule restore;restore.inline_target=node;
+  restore.declarations.push_back({false,+[](style& s) {s.set_opacity(1);}});
+  view->document.add_rule(std::move(restore));view->refresh();view->advance_host_frame(153);
+  rule stop;stop.inline_target=node;
+  stop.declarations.push_back({false,+[](style& s) {s.clear_transitions();}});
+  view->document.add_rule(std::move(stop));view->refresh();
+  require(view->requires_host_frames()); // Pending cancellation must be delivered.
+  view->advance_host_frame(154);
+  require(cancelled==1 && !view->requires_host_frames());
   publisher.set_host_frame_request_callback({});
   std::cout<<"Foco native reduced-motion propagation passed\n";
 }
