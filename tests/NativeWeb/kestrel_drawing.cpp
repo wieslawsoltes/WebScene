@@ -32,6 +32,12 @@ int main() {
     check(model.group_entities({a,b}," \t"),"blank group name failed");
     check(model.find(a)->at("groupName")=="Group","blank group name fallback failed");
     check(model.undo()=="Create group" && model.data==before,"fallback group undo failed");
+    check(model.group_entities({a,b},"\xc2\xa0\xe3\x80\x80" "Bâtiment 🏠" "\xef\xbb\xbf"),"Unicode group failed");
+    check(model.find(a)->at("groupName")=="Bâtiment 🏠","Unicode whitespace or content changed");
+    check(model.undo()=="Create group" && model.data==before,"Unicode group undo failed");
+    check(model.group_entities({a,b},"\xe3\x80\x80\xc2\xa0"),"Unicode blank name failed");
+    check(model.find(a)->at("groupName")=="Group","Unicode blank fallback failed");
+    check(model.undo()=="Create group" && model.data==before,"Unicode blank undo failed");
     (*model.find(b))["hidden"]=true;const auto hidden=model.data;
     check(!model.group_entities({a,b},"Hidden") && model.data==hidden,"noneditable captured member grouped");
   }

@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Group Unicode trim parity: group creation now trims the 25 ECMAScript whitespace
+code points using UTF-8 boundaries, preserving accented/astral name content and
+falling back to Group for all-whitespace names. A development Node reference
+enumeration confirms the whitespace set and expected nonbreaking/ideographic/BOM
+fixtures. Native tests verify the names and exact undo; the drawing suite passes.
+No JavaScript dependency is added to the application.
+
 Hosted Group interaction verified: --exercise-group-dialog opens the compiled
 original dialog, sends Foco text input into its focused name field, presses/releases
 the rendered Create group button, requires applied names and closed modal, then

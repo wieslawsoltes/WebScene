@@ -547,9 +547,26 @@ public:
       unique.insert(id);
     }
     if(unique.size()<2)return false;
-    const auto first=name.find_first_not_of(" \t\r\n\f\v");
-    if(first==std::string::npos)name="Group";
-    else name=name.substr(first,name.find_last_not_of(" \t\r\n\f\v")-first+1);
+    // ECMAScript trim whitespace, encoded as UTF-8 to preserve native names.
+    constexpr std::array<std::string_view,25> whitespace={
+      "\t","\n","\v","\f","\r"," ","\xc2\xa0","\xe1\x9a\x80",
+      "\xe2\x80\x80","\xe2\x80\x81","\xe2\x80\x82","\xe2\x80\x83",
+      "\xe2\x80\x84","\xe2\x80\x85","\xe2\x80\x86","\xe2\x80\x87",
+      "\xe2\x80\x88","\xe2\x80\x89","\xe2\x80\x8a","\xe2\x80\xa8",
+      "\xe2\x80\xa9","\xe2\x80\xaf","\xe2\x81\x9f","\xe3\x80\x80","\xef\xbb\xbf"};
+    std::string_view trimmed=name;
+    const auto trim_edge=[&](bool front) {
+      for(;;) {
+        bool removed=false;
+        for(auto space:whitespace)if(front?trimmed.starts_with(space):trimmed.ends_with(space)) {
+          if(front)trimmed.remove_prefix(space.size());else trimmed.remove_suffix(space.size());
+          removed=true;break;
+        }
+        if(!removed)return;
+      }
+    };
+    trim_edge(true);trim_edge(false);
+    name=trimmed.empty()?"Group":std::string(trimmed);
     const auto group_id=uid("group");
     return transaction("Create group",[&] {
       for(const auto& id:unique) {
