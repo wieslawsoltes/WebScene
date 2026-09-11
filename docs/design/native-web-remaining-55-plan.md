@@ -1298,3 +1298,16 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   resource attachment/generation. Next inspect scene resource attachment retention
   and cache population. Temporary renderer logging removed; Foco's uncommitted
   render-status preservation experiment remains. Rendering still incomplete.
+
+- Root cause fixed in Foco: single-leaf publication append_resource copied bytes
+  but omitted resource_attachments, unlike the general publication paths. It now
+  retains attachment ID/generation/value. Cocoa also preserves painter skipped
+  status instead of falsely triggering device recovery. Rebuilt/reran the traced
+  1,000-entity native pan benchmark: 360 GPU publications, 359 scene publications,
+  359 compositor presentations, zero skips. Metal trace contains 357 positive
+  presentation timestamps: 59.999762 FPS, median 16.666750 ms, p95 16.666792 ms,
+  max 16.666875 ms. /tmp/kestrel-leaf-fixed.log and
+  /tmp/kestrel-leaf-fixed.jsonl. This is actual presentation evidence for the
+  synthetic panning workload; physical input latency, live resize, original model
+  and full Kestrel parity remain incomplete. Add focused leaf-attachment lifetime
+  regression coverage next, beyond this successful hosted reproduction.
