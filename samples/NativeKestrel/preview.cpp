@@ -20,6 +20,7 @@ static bool exercise_picking=false;
 static bool exercise_layer_edit=false;
 static bool exercise_line_edit=false;
 static bool exercise_line_draw=false;
+static bool show_line_preview=false;
 static bool exercise_color_picker=false;
 static bool show_color_picker=false;
 static bool show_group_dialog=false;
@@ -798,6 +799,21 @@ public:
           view->document.focus(view->document.find("viewport"));
           key={};key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
           if(model.data!=before)throw std::runtime_error("Typed Line Undo failed");
+          if(show_line_preview) {
+            box=view->document.bounds(button);click(box.x+box.width/2,box.y+box.height/2);
+            click(area.x+area.width*.3,area.y+area.height*.35);
+            const auto pending=model.data;
+            foco::pointer_event move;move.kind=foco::pointer_event_kind::moved;
+            move.position={host.x+area.x+area.width*.7f,host.y+area.y+area.height*.65f};
+            view->pointer_event_received(move);
+            if(!line_pointer || !overlay_dirty || model.data!=pending)
+              throw std::runtime_error("Preview pointer movement changed geometry or failed to invalidate overlay");
+            redraw_overlay(gpu_width,gpu_height);view->refresh();
+            const auto& scene=view->document.render(host.width,host.height);
+            size_t strokes=0;for(const auto& command:scene.canvas)if(command.kind==20)++strokes;
+            if(strokes<2)throw std::runtime_error("Pending Line emitted no dashed Canvas strokes");
+            std::cout<<"Hosted pending Line preview emitted "<<strokes<<" strokes without committing geometry\n";
+          }
           exercise_line_draw=false;
           std::cout<<"Hosted original Line ribbon, pointer geometry, Escape and Undo passed\n";
         }
@@ -1049,6 +1065,7 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-shortcuts") exercise_shortcuts=true;
     else if(std::string_view(argv[i])=="--show-color-picker") {exercise_picking=true;exercise_color_picker=true;show_color_picker=true;}
     else if(std::string_view(argv[i])=="--exercise-color-picker") {exercise_picking=true;exercise_color_picker=true;}
+    else if(std::string_view(argv[i])=="--show-line-preview") {exercise_line_draw=true;show_line_preview=true;}
     else if(std::string_view(argv[i])=="--exercise-line-draw") exercise_line_draw=true;
     else if(std::string_view(argv[i])=="--exercise-line-edit") {exercise_picking=true;exercise_line_edit=true;}
     else if(std::string_view(argv[i])=="--exercise-layer-edit") {exercise_picking=true;exercise_layer_edit=true;}

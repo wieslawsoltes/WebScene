@@ -2275,3 +2275,14 @@ fully offscreen and zero-length segments. Floating comparisons use a 1e-9
 tolerance. Preview calls this shared helper; hosted rebuild and visual motion
 verification remain required. This closes excessive offscreen dash generation,
 not the broader preview fidelity or performance acceptance gates.
+
+### Hosted pending Line preview capture
+
+Added --show-line-preview, which runs existing Line regressions then clicks a
+first point and sends Foco pointer movement. It checks unchanged model state,
+overlay invalidation and emitted stroke commands. Hosted run passed with 40
+Canvas strokes and GPU serial 2, exit 0. Inspected /tmp/kestrel-pending-line.png:
+the cyan dashed segment is visible over the drawing alongside the original Line
+banner and command prompt. This is static dark-theme render evidence, not a
+continuous-motion latency or 60fps proof. Light theme, cleanup capture, snapping
+and physical pointer motion still need verification.
