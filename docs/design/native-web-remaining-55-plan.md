@@ -696,3 +696,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   selector scanning limitations are preserved. Hover/variable dependency indexing,
   candidate collection and native document invalidation remain to be integrated;
   this does not increase audited compiler coverage or prove Kestrel parity.
+
+- Candidate collection extraction: shared native collect_candidates now combines
+  fallback, tag, root alias, ID, attribute, focus and class rule buckets. Runtime
+  class lookup allocation policy and benchmark counters remain in its callback;
+  sorting/deduplication and full matching remain separate. Native service tests
+  cover combined buckets and repeated whitespace-separated classes. Rebuilt runtime
+  positional selector, active pseudo border, iframe recascade and media-query
+  regressions pass. This preserves existing selection policy; native stylesheet
+  ownership/invalidation and full Kestrel parity/performance remain unfinished.

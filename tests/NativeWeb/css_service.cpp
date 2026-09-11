@@ -4,6 +4,7 @@
 #include "webscene_css_query.h"
 #include "webscene_css_rule_operations.h"
 #include "webscene_css_rule_index.h"
+#include "webscene_css_candidates.h"
 #include "webscene_css_variables.h"
 #include "webscene_css_box_values.h"
 #include "webscene_css_transitions.h"
@@ -774,5 +775,19 @@ int main(int argc,char** argv) {
        indexed.unindexed_rules!=std::vector<size_t>{6} ||
        !indexed.descendant_attribute_dependencies.contains("data-state") ||
        indexed.descendant_attribute_dependencies.contains("title")) return 140;
+    ordered_node.tag="button";
+    ordered_node.id_attribute="panel";
+    ordered_node.class_name=" item  item\t";
+    ordered_node.attributes["title"]="example";
+    auto candidate_indices=webscene_native::css::collect_candidates(ordered_node,true,
+        indexed.rules_by_tag,indexed.rules_by_id,indexed.rules_by_attribute,
+        indexed.focus_rules,indexed.unindexed_rules,
+        [&](auto& result,std::string_view name) {
+            auto found=indexed.rules_by_class.find(std::string(name));
+            if(found!=indexed.rules_by_class.end())
+                result.insert(result.end(),found->second.begin(),found->second.end());
+        });
+    std::sort(candidate_indices.begin(),candidate_indices.end());
+    if(candidate_indices!=std::vector<size_t>{0,0,1,2,3,4,6}) return 141;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
