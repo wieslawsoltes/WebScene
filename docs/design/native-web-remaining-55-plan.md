@@ -1264,3 +1264,16 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   next rebuild). Next profile phases inside render: drawable acquisition,
   painter, GPU waits/submission. Do not assume this is an explicit 30Hz throttle;
   successful calls exceed the 16.7ms frame budget.
+
+- Render-phase and backing investigation: existing FOCO_RESIZE_TRACE_JSON spans
+  show median ensure-backing 16.502 ms, paint-scene 2.297 ms, snap-recording
+  2.016 ms; drawable acquisition effectively zero. Log
+  /tmp/kestrel-render-phases.log. Temporary backing-allocation logging then found
+  180 allocations, ALL starting with no texture, dimensions 0x0 and scale 0,
+  allocating the same 2560x1600 backing at scale 2. Log
+  /tmp/kestrel-backing-probe.log. Thus stable-window panning is repeatedly losing
+  the retained backing, not resizing between different dimensions. Trace reset/
+  recovery paths (including renderer status handling) next. Temporary logging
+  removed from Foco source; last-built binary retains it until rebuild. This is
+  stronger evidence than the earlier scheduler hypothesis; do not change frame
+  cadence to hide backing recreation. Displayed 60fps remains unmet.
