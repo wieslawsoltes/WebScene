@@ -837,3 +837,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   deferred host-frame style updates, so style-driven cursor changes can lag until
   subsequent input; that ordering remains open along with move/custom-image cursors,
   original Kestrel parity and measured 60fps panning/resize.
+
+- Cocoa deferred cursor ordering: Foco 0a4be755 separates cursor refresh from input
+  dispatch and refreshes again after host-frame callbacks/layout in both Cocoa
+  presentation paths. Post-frame refresh is restricted to the key window and
+  avoids redundant NSCursor updates when the effective kind is unchanged.
+  FocoKestrel rebuild and hosted line/undo/redo capture pass (exit zero, serial=2).
+  This smoke test does not observe OS cursor state; stationary-pointer visual
+  validation remains required. Compiler audit remains 33, and full original
+  Kestrel parity and presented 60fps panning/resize remain incomplete.
