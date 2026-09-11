@@ -1457,3 +1457,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   rebuilt kestrel_native_layers CTest passes and FocoKestrelPreview builds.
   Clear-selection's original tool-cancellation behavior and inspector updates
   remain pending with the broader native application controller port.
+
+- Native existing-selection erase/history actions: drawing.erase_selected filters
+  through selected(true), removes editable IDs in one named transaction and skips
+  empty selection. Preview routes original erase/undo/redo actions into native
+  history, refreshes explorer and invalidates GPU content. Courtyard regression
+  verifies erase count, exact data restoration by Undo, Redo removal and empty
+  no-op. Rebuilt native layer test passes and FocoKestrelPreview builds. Original
+  interactive erase tool on empty selection, command history messages, cancellation
+  and inspector synchronization remain incomplete.

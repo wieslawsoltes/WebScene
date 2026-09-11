@@ -372,6 +372,14 @@ public:
     changed(label);
     return true;
   }
+  size_t erase_selected() {
+    const auto ids=selected(true);
+    if(ids.empty())return 0;
+    transaction("Erase "+std::to_string(ids.size())+" objects",[&] {
+      remove(std::unordered_set<std::string>(ids.begin(),ids.end()));
+    });
+    return ids.size();
+  }
   std::optional<std::string> undo() {
     if (undo_.empty())
       return {};

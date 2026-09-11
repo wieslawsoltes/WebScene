@@ -12,6 +12,12 @@ int main() {
     require(courtyard.data["entities"].size()==265 && courtyard.data["layers"].size()==9);
     require(courtyard.data["name"]=="Courtyard House · Ground floor");
     for(const auto& entity:courtyard.data["entities"]) require(!courtyard.layer(entity).is_null());
+    const auto original=courtyard.data;
+    courtyard.selection={courtyard.data["entities"][0]["id"].get<std::string>()};
+    require(courtyard.erase_selected()==1 && courtyard.data["entities"].size()==264);
+    require(courtyard.undo().has_value() && courtyard.data==original);
+    require(courtyard.redo().has_value() && courtyard.data["entities"].size()==264);
+    courtyard.selection.clear();require(courtyard.erase_selected()==0);
   }
   document d;d.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
   auto list=d.element(d.body(),"div");d.attribute(list,"id","explorer-list");

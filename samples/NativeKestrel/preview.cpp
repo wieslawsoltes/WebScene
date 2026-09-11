@@ -250,6 +250,14 @@ public:
 #endif
               view->refresh();
             }
+            else if (*action == "erase" || *action == "undo" || *action == "redo") {
+              if(*action=="erase") model.erase_selected();
+              else if(*action=="undo") model.undo();else model.redo();
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+              if(layers) layers->refresh();
+#endif
+              view->refresh();
+            }
             else if (action->starts_with("view-")) viewport->camera.set_view(action->substr(5));
             else return;
             gpu_dirty = true;
