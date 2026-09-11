@@ -1659,3 +1659,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   update original selection-window style/class, select on release, and hide on
   release/cancel/Escape; preview builds. Hosted drag/capture verification remains
   required, along with broader mesh/text/group differential coverage.
+
+- Hosted drag selection verification: --exercise-drag-selection injects primary
+  press/move/release into the original viewport, checks visible crossing rectangle
+  geometry/class, verifies multiple selected entities and hidden rectangle after
+  release, then cancels another drag and checks unchanged selection/cleanup.
+  Rebuilt run exits 0, selects 257 Courtyard entities and captures GPU serial 2 at
+  /tmp/kestrel-drag-selected.png; inspected cyan geometry/text highlights and
+  selected count. Physical pointer capture outside the window and full browser
+  differential rectangle selection remain open.

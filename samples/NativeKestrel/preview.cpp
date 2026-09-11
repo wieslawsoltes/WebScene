@@ -16,6 +16,7 @@ static bool exercise_navigation=false;
 static bool exercise_theme=false;
 static bool exercise_picking=false;
 static bool exercise_shortcuts=false;
+static bool exercise_drag_selection=false;
 static bool benchmark_pan=false;
 static bool benchmark_courtyard=false;
 static bool benchmark_large=false;
@@ -509,6 +510,30 @@ public:
             throw std::runtime_error("Panel toggle did not restore viewport width");
           navigation_serial=gpu_serial;navigation_exercised=true;
         }
+        if(exercise_drag_selection && viewport && gpu_serial) {
+          const auto area=view->document.bounds(view->document.find("scene"));
+          const auto host=view->bounds();const auto box=view->document.find("selection-window");
+          const auto pointer=[&](foco::pointer_event_kind kind,float x,float y,uint32_t buttons) {
+            foco::pointer_event event;event.kind=kind;event.buttons=buttons;event.position={host.x+area.x+x,host.y+area.y+y};
+            view->pointer_event_received(event);
+          };
+          model.selection.clear();
+          pointer(foco::pointer_event_kind::pressed,area.width-30,area.height-45,1);
+          pointer(foco::pointer_event_kind::moved,30,55,1);
+          view->document.render(host.width,host.height);
+          if(view->document.attribute(box,"hidden") || view->document.attribute(box,"class")!="crossing" || view->document.bounds(box).width<100)
+            throw std::runtime_error("Crossing rectangle did not appear");
+          pointer(foco::pointer_event_kind::released,30,55,0);
+          if(model.selection.size()<2 || !view->document.attribute(box,"hidden"))
+            throw std::runtime_error("Hosted drag selection failed");
+          const auto selected=model.selection;
+          pointer(foco::pointer_event_kind::pressed,30,55,1);
+          pointer(foco::pointer_event_kind::moved,100,120,1);
+          pointer(foco::pointer_event_kind::cancelled,100,120,0);
+          if(model.selection!=selected || !view->document.attribute(box,"hidden"))
+            throw std::runtime_error("Drag cancellation changed selection or left its rectangle visible");
+          exercise_drag_selection=false;std::cout<<"Hosted drag selection passed; selected="<<model.selection.size()<<'\n';
+        }
         if(exercise_shortcuts && viewport && gpu_serial) {
           const auto press=[&](foco::key key,foco::key_modifiers modifiers={}) {
             foco::key_event event;event.value=key;event.modifiers=modifiers;view->key_event_received(event);
@@ -637,6 +662,7 @@ int main(int argc, char **argv) {
   for(int i=1;i<argc;++i) {
     if(std::string_view(argv[i])=="--capture" && i+1<argc) capture_path=argv[++i];
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
+    else if(std::string_view(argv[i])=="--exercise-drag-selection") exercise_drag_selection=true;
     else if(std::string_view(argv[i])=="--exercise-shortcuts") exercise_shortcuts=true;
     else if(std::string_view(argv[i])=="--exercise-picking") exercise_picking=true;
     else if(std::string_view(argv[i])=="--exercise-theme") exercise_theme=true;
