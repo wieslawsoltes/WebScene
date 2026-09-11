@@ -20,6 +20,7 @@ int main() {
     courtyard.selection.clear();require(courtyard.erase_selected()==0);
   }
   document d;d.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
+  auto tabs=d.element(d.body(),"div");d.attribute(tabs,"id","document-tabs");
   auto list=d.element(d.body(),"div");d.attribute(list,"id","explorer-list");
   auto badge=d.element(d.body(),"span");d.attribute(badge,"id","layer-count");
   auto search=d.element(d.body(),"input");d.attribute(search,"id","explorer-search");
@@ -29,6 +30,7 @@ int main() {
   {
     kestrel::layer_panel panel(d,model,[&]{++changes;});
     require(panel.entries().size()==model.data["layers"].size());
+    require(d.text_content(tabs).find("Untitled")!=std::string::npos);
     d.focus(search);d.text_input("a-wall");require(panel.entries().size()==1 && panel.entries()[0].id=="architecture");
     d.text_input("not-found");require(panel.entries().empty());
     const auto& empty=d.render(300,300);
@@ -43,6 +45,7 @@ int main() {
     auto first=panel.entries().front();
     d.dispatch(first.visibility,"click");
     require(!model.data["layers"][0]["visible"].get<bool>() && changes==1);
+    require(d.text_content(tabs).find("·")!=std::string::npos);
     require(model.data["currentLayer"]=="architecture"); // Toggle must not select its row.
     require(d.attribute(panel.entries()[0].visibility,"aria-label")=="Show 0");
     require(d.attribute(panel.entries()[0].row,"class")->find("off")!=std::string::npos);

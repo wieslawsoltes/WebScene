@@ -1466,3 +1466,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   no-op. Rebuilt native layer test passes and FocoKestrelPreview builds. Original
   interactive erase tool on empty selection, command history messages, cancellation
   and inspector synchronization remain incomplete.
+
+- Original active-document tab view: added predefined clean/dirty tab templates
+  copied from original refreshTabs markup/icon, with native named references.
+  Native panel refresh supplies active document name, ID, close accessible label
+  and dirty marker from drawing state. Tests with document-tabs verify initial
+  name and dirty marker after a transaction; rebuilt native layer CTest passes.
+  This is the single active document view only: switching/closing and multi-document
+  lifecycle still require application controller work. No runtime HTML parsing.

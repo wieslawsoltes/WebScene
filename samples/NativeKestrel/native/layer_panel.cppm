@@ -23,7 +23,7 @@ private:
   webscene::native_web::subscription filter_handler_;
   std::vector<webscene::native_web::subscription> tab_handlers_;
   bool objects_{};
-  webscene::native_web::node_id empty_{};
+  webscene::native_web::node_id empty_{}, document_tab_{};
   static std::string lowercase(std::string text) {
 #ifdef __APPLE__
     auto source=CFStringCreateWithBytes(kCFAllocatorDefault,reinterpret_cast<const UInt8*>(text.data()),text.size(),kCFStringEncodingUTF8,false);
@@ -48,6 +48,8 @@ private:
     if(!document_.disposed()) for(const auto& row:rows_) document_.remove(row.row);
     if(empty_ && !document_.disposed()) document_.remove(empty_);
     empty_=0;
+    if(document_tab_ && !document_.disposed()) document_.remove(document_tab_);
+    document_tab_=0;
     rows_.clear();
   }
 public:
@@ -66,6 +68,14 @@ public:
   const std::vector<entry>& entries() const {return rows_;}
   void refresh() {
     clear();
+    if(auto tabs=document_.find("document-tabs")) {
+      auto tab=kestrel_layers::instantiate(document_,tabs,model_.dirty?"document-dirty":"document-clean");
+      document_tab_=tab.named("tab");
+      const auto name=model_.data.value("name",std::string("Untitled"));
+      document_.attribute(document_tab_,"data-doc",model_.data.value("id",std::string("native-active")));
+      document_.set_text(tab.named("name"),name);
+      document_.attribute(tab.named("close"),"aria-label","Close "+name);
+    }
     const auto parent=document_.find("explorer-list");
     if(!parent) throw std::logic_error("layer panel requires explorer-list");
     const auto filter=document_.find("explorer-search");
