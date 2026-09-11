@@ -10,6 +10,34 @@ void require(bool value) {if(!value) throw std::runtime_error("native layer pane
 int main() {
   {
     kestrel::drawing model;kestrel::camera camera;camera.resize(800,600);
+    model.add("MESH",kestrel::geo::box({-50,-50,0},100,100,20));
+    const auto far_id=model.data["entities"].back()["id"].get<std::string>();
+    const auto point=camera.project({10,5,0});
+    require(!kestrel::pick(model,camera,kestrel::display_style::wireframe,point.x,point.y));
+    auto hit=kestrel::pick(model,camera,kestrel::display_style::shaded,point.x,point.y);
+    require(hit && hit->id==far_id && hit->distance==7.5);
+    model.add("MESH",kestrel::geo::box({-50,-50,80},100,100,20));
+    const auto near_id=model.data["entities"].back()["id"].get<std::string>();
+    hit=kestrel::pick(model,camera,kestrel::display_style::shaded_edges,point.x,point.y);
+    require(hit && hit->id==near_id);
+    model.data["entities"].back()["hidden"]=true;
+    hit=kestrel::pick(model,camera,kestrel::display_style::shaded,point.x,point.y);
+    require(hit && hit->id==far_id);
+  }
+  {
+    kestrel::drawing model;kestrel::camera camera;camera.resize(800,600);
+    model.add("TEXT",{{"position",{0,0,0}},{"height",20},{"text","Room\nLabel"},{"align","center"}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();
+    for(auto world:{kestrel::vec3{0,8,0},kestrel::vec3{0,-22,0}}) {
+      auto point=camera.project(world);
+      auto hit=kestrel::pick(model,camera,kestrel::display_style::wireframe,point.x,point.y);
+      require(hit && hit->id==id && hit->distance==2);
+    }
+    auto outside=camera.project({100,0,0});
+    require(!kestrel::pick(model,camera,kestrel::display_style::wireframe,outside.x,outside.y));
+  }
+  {
+    kestrel::drawing model;kestrel::camera camera;camera.resize(800,600);
     model.add("LINE",{{"points",{{-50,0,0},{50,0,0}}}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();
     auto point=camera.project({0,0,0});

@@ -1624,3 +1624,10 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   exits 0 and capture /tmp/kestrel-native-picked.png shows selected count 1 and
   updated drawing. Spatial indexing, rich/composed text hit bounds, dedicated
   mesh/text picking tests, drag-box selection, grips and hover remain incomplete.
+
+- Picking validation expanded: native tests now cover mesh interior exclusion in
+  wireframe, face picking in shaded mode, nearer overlapping face depth, hidden
+  mesh exclusion, and centered multiline text hit/miss bounds. Rebuilt layer/
+  picking test passes. This closes the dedicated basic mesh/text test gap from
+  aa2ce684; composed text, spatial indexing and comprehensive browser differential
+  picking coverage remain open.
