@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Point geometry inspector: POINT Position X/Y/Z now reuse the compiled coordinate
+template used by lines. Native position editing checks finite values and editable
+single selection, and records undo transactions. A native document test types a
+negative Z coordinate, commits through Enter and verifies exact undo restoration.
+The complete native layer/inspector regression target passes. Other entity editors,
+full application behavior and physical resize performance remain open.
+
 Hosted line edit: `--exercise-line-edit --capture` selects an original Courtyard
 LINE through pointer events, enters an End X change through Foco text/Enter events,
 checks native geometry, waits for a subsequent GPU image publication, and invokes

@@ -178,37 +178,43 @@ public:
           auto group_name=one->value("groupName",std::string{});
           read("Group",group_name.empty()?group:group_name);
         }
-        if(one->value("type",std::string{})=="LINE" && one->contains("points") &&
+        const bool point_entity=one->value("type",std::string{})=="POINT" && one->contains("position") && (*one)["position"].is_array();
+        if(point_entity || (one->value("type",std::string{})=="LINE" && one->contains("points") &&
            (*one)["points"].is_array() && (*one)["points"].size()==2 &&
-           (*one)["points"][0].is_array() && (*one)["points"][1].is_array()) {
+           (*one)["points"][0].is_array() && (*one)["points"][1].is_array())) {
           const auto coordinate=[&](size_t endpoint,size_t axis) {
-            const auto& point=(*one)["points"][endpoint];
+            const auto& point=point_entity?(*one)["position"]:(*one)["points"][endpoint];
             return axis<point.size() && point[axis].is_number()?point[axis].get<double>():0.0;
           };
           auto geometry=kestrel_layers::instantiate(document_,inspector,"inspector-geometry");
           inspector_roots_.push_back(geometry.named("root"));
           double squared_length=0;
-          for(size_t endpoint=0;endpoint<2;++endpoint)for(size_t axis=0;axis<3;++axis) {
+          for(size_t endpoint=0;endpoint<(point_entity?1U:2U);++endpoint)for(size_t axis=0;axis<3;++axis) {
             auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
-            const auto label=std::string(endpoint?"End ":"Start ")+"XYZ"[axis];
-            const auto property="points."+std::to_string(endpoint)+"."+std::to_string(axis);
+            const auto label=std::string(point_entity?"Position ":endpoint?"End ":"Start ")+"XYZ"[axis];
+            const auto property=(point_entity?std::string("position"):"points."+std::to_string(endpoint))+"."+std::to_string(axis);
             document_.set_text(row.named("label"),label);
             document_.attribute(row.named("input"),"aria-label",label);
             document_.attribute(row.named("input"),"data-prop",property);
             std::ostringstream value;value.imbue(std::locale::classic());value<<std::fixed<<std::setprecision(4)<<coordinate(endpoint,axis);
             auto formatted=value.str();while(formatted.ends_with('0'))formatted.pop_back();if(formatted.ends_with('.'))formatted.pop_back();
             document_.set_value(row.named("input"),formatted=="-0"?"0":formatted);
-            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),endpoint,axis](auto&) {
+            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),endpoint,axis,point_entity](auto&) {
               const auto text=document_.value(node);double number=0;size_t used=0;bool valid=true;
               try {number=std::stod(text,&used);}catch(const std::exception&){valid=false;}
-              if(valid && used==text.size())model_.change_line_endpoint(endpoint,axis,number);
+              if(valid && used==text.size()) {
+                if(point_entity)model_.change_point_position(axis,number);
+                else model_.change_line_endpoint(endpoint,axis,number);
+              }
               refresh();if(changed_)changed_();
             }));
-            if(endpoint==0) {const double delta=coordinate(1,axis)-coordinate(0,axis);squared_length+=delta*delta;}
+            if(!point_entity && endpoint==0) {const double delta=coordinate(1,axis)-coordinate(0,axis);squared_length+=delta*delta;}
           }
+          if(!point_entity) {
           auto length=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");
           std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(3)<<std::sqrt(squared_length)<<" "<<model_.data.value("units",std::string("mm"));
           document_.set_text(length.named("label"),"Length");document_.set_text(length.named("value"),text.str());document_.attribute(length.named("value"),"title",text.str());
+          }
         }
       }
       handlers_.push_back(document_.on(general.named("layer"),"change",[this,node=general.named("layer")](auto&) {

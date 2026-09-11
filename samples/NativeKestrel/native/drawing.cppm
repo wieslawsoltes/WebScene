@@ -399,6 +399,14 @@ public:
       (*entity)["points"][endpoint][axis]=value;
     });
   }
+  bool change_point_position(size_t axis,double value) {
+    if(axis>2 || !std::isfinite(value))return false;
+    const auto ids=selected(true);if(ids.size()!=1)return false;
+    auto* entity=find(ids.front());
+    if(!entity || entity->value("type",std::string{})!="POINT" ||
+       !entity->contains("position") || !(*entity)["position"].is_array())return false;
+    return transaction("Edit position."+std::to_string(axis),[&] {(*entity)["position"][axis]=value;});
+  }
   bool show_all_layers() {
     return transaction("Show all layers",[&] {
       for(auto& layer:data["layers"])layer["visible"]=true;

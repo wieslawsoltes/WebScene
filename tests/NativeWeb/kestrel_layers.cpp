@@ -9,6 +9,24 @@ using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
   {
+    kestrel::drawing model;model.add("POINT",{{"position",{1,2,3}}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    document doc;doc.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
+    auto inspector=doc.element(doc.body(),"div");doc.attribute(inspector,"id","inspector");
+    auto list=doc.element(doc.body(),"div");doc.attribute(list,"id","explorer-list");
+    kestrel::layer_panel panel(doc,model,[]{});
+    const auto find=[&](auto&& self,node_id node)->node_id {
+      if(doc.attribute(node,"data-prop")=="position.2")return node;
+      for(auto child:doc.children(node))if(auto result=self(self,child))return result;
+      return 0;
+    };
+    const auto input=find(find,inspector);require(input!=0 && doc.value(input)=="3");
+    const auto before=model.data;doc.focus(input);doc.set_selection(input,0,1);doc.text_input("-8.5");doc.key("Enter");
+    require(model.find(id)->at("position")[2]==-8.5);
+    require(model.undo()=="Edit position.2" && model.data==before);
+    require(!model.change_point_position(3,0));
+  }
+  {
     kestrel::drawing model;model.add("LINE",{{"points",{{0,0,0},{10,0,0}}}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
     document doc;doc.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
