@@ -13,6 +13,16 @@ int main() {
     d.set_value(select,"SE isometric");require(d.value(select)=="SE isometric" && events==0);
     d.set_value(select,"missing");require(d.value(select).empty());
     d.set_value(select,"top");require(d.value(select)=="top");
+    auto disabled=d.element(select,"option");d.attribute(disabled,"value","disabled");d.attribute(disabled,"disabled","");
+    auto last=d.element(select,"option");d.attribute(last,"value","last");
+    d.focus(select);d.key("ArrowDown");require(d.value(select)=="SE isometric" && events==1);
+    d.key("ArrowDown");require(d.value(select)=="last" && events==2);
+    d.key("ArrowDown");require(d.value(select)=="last" && events==2);
+    d.key("Home");require(d.value(select)=="top" && events==3);
+    d.attribute(group,"disabled","");d.key("ArrowDown");require(d.value(select)=="last" && events==4);
+    d.key("ArrowUp");require(d.value(select)=="top" && events==5);
+    auto dispose=d.on(select,"input",[&](auto&){d.dispose();});
+    d.key("End");require(d.disposed() && events==5);
   }
   {
     document colors;

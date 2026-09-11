@@ -173,6 +173,10 @@ public:
     if(document.disposed()) {refresh();return;}
     std::string_view key = e.value == foco::key::backspace ? "Backspace"
                            : e.value == foco::key::delete_key ? "Delete"
+                           : e.value == foco::key::down ? "ArrowDown"
+                           : e.value == foco::key::up ? "ArrowUp"
+                           : e.value == foco::key::home ? "Home"
+                           : e.value == foco::key::end ? "End"
                            : e.value == foco::key::tab     ? "Tab"
                            : e.value == foco::key::enter ? "Enter"
                            : e.value == foco::key::space ? " "

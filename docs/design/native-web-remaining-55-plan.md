@@ -1526,3 +1526,10 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   success marker. Courtyard pan also exits 0 after 360 frames, 359 compositor
   presentations, zero skips in 5.98628 s, zero geometry rebuilds. These are backend
   counts, not physical display timestamp measurements or OS resize evidence.
+
+- Native single-select keyboard navigation: selects are focusable; Up/Down and
+  Home/End change live selection, skip disabled options/optgroups, stop at list
+  boundaries, and emit input followed by change only for an actual change.
+  Disposal from input prevents the subsequent change dispatch. Native text tests
+  cover these behaviors and pass. Foco forwards the four navigation keys.
+  Multiple selection, native popup interaction and typeahead remain unfinished.

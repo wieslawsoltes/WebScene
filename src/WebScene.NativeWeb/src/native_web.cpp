@@ -315,7 +315,7 @@ static bool focusable(const dom_node &n) {
   if(n.tag=="input" && n.attributes.contains("type") && n.attributes.at("type")=="hidden") return false;
   for (auto *ancestor = &n; ancestor; ancestor = ancestor->parent)
     if (ancestor->style.display == display_mode::none) return false;
-  return (n.tag == "button" || forms::is_text_control(&n) || tab_index(n).has_value()) &&
+  return (n.tag == "button" || n.tag == "select" || forms::is_text_control(&n) || tab_index(n).has_value()) &&
          !n.attributes.contains("disabled");
 }
 void document::focus(node_id id) {
@@ -515,6 +515,37 @@ void document::key(std::string_view key, input_modifiers modifiers) {
     state_->keyboard_modality = true;
     state_->styles_dirty = true;
     state_->dom.mark_dirty();
+  }
+  if(key=="ArrowDown" || key=="ArrowUp" || key=="Home" || key=="End") {
+    const auto id=state_->focus;
+    auto* node=state_->dom.find_by_native_id(id);
+    if(node && node->tag=="select" && !node->attributes.contains("multiple") &&
+       !node->attributes.contains("disabled") && !state_->dom.is_inert(*node) &&
+       !modifiers.control && !modifiers.meta && !modifiers.alt) {
+      std::vector<dom_node*> options;forms::collect_descendants_by_tag(*node,"option",options);
+      int selected=-1;
+      for(int i=0;i<int(options.size());++i) if(forms::option_is_selected(*options[i])) {selected=i;break;}
+      const int step=(key=="ArrowUp" || key=="End")?-1:1;
+      int next=key=="Home"?0:key=="End"?int(options.size())-1:
+          selected<0?(step>0?0:int(options.size())-1):selected+step;
+      for(;next>=0 && next<int(options.size());next+=step) {
+        bool disabled=false;
+        for(auto* ancestor=options[next];ancestor && ancestor!=node;ancestor=ancestor->parent)
+          if(ancestor->attributes.contains("disabled")) {disabled=true;break;}
+        if(disabled)continue;
+        if(next==selected)return;
+        for(int i=0;i<int(options.size());++i) {
+          auto& control=options[i]->mutable_form_control();
+          control.selectedness_initialized=true;control.selectedness=i==next;
+        }
+        node->mutable_form_control().selection_explicitly_empty=false;
+        state_->styles_dirty=true;state_->dom.mark_dirty();
+        dispatch(id,"input");
+        if(state_->alive && state_->dom.find_by_native_id(id)) dispatch(id,"change");
+        return;
+      }
+      return;
+    }
   }
   if(key=="Backspace" || key=="Delete") {
     if(modifiers.control || modifiers.alt || modifiers.meta) return;
