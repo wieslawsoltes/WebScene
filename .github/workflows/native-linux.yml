@@ -8,6 +8,7 @@ on:
       - 'experiments/WebScene.NativeEngine.Probe/native/**'
       - 'tooling/webscene-uic/**'
       - 'tests/NativeWeb/**'
+      - 'tests/SDKLinux/**'
       - '.github/workflows/native-linux.yml'
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - 'experiments/WebScene.NativeEngine.Probe/native/**'
       - 'tooling/webscene-uic/**'
       - 'tests/NativeWeb/**'
+      - 'tests/SDKLinux/**'
       - '.github/workflows/native-linux.yml'
   workflow_dispatch:
 permissions:
@@ -51,6 +53,9 @@ jobs:
           cmake -G Ninja -S src/WebScene.Sdk -B artifacts/native-sdk -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 -DWEBSCENE_SDK_ENABLE_WEBGPU=OFF -DCMAKE_INSTALL_PREFIX="$PWD/artifacts/sdk"
           cmake --build artifacts/native-sdk --parallel 2 2>&1 | tee artifacts/native-sdk-build.log
           cmake --install artifacts/native-sdk
+          cmake -G Ninja -S tests/SDKLinux -B artifacts/native-sdk-consumer -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_PREFIX_PATH="$PWD/artifacts/sdk" -DWEBSCENE_TEST_WEBGPU=OFF
+          cmake --build artifacts/native-sdk-consumer --parallel 2 2>&1 | tee artifacts/native-sdk-consumer-build.log
+          ctest --test-dir artifacts/native-sdk-consumer --output-on-failure --output-junit installed-sdk-tests.xml 2>&1 | tee artifacts/native-sdk-consumer-tests.log
           tar -czf artifacts/native-linux-sdk-no-gpu.tar.gz -C artifacts sdk
       - uses: actions/upload-artifact@v4
         if: always()
@@ -61,4 +66,7 @@ jobs:
             artifacts/native-linux/native-linux-tests.xml
             artifacts/native-linux/Testing/Temporary/
             artifacts/native-linux-sdk-no-gpu.tar.gz
+            artifacts/native-sdk-consumer/compiled_native
+            artifacts/native-sdk-consumer/installed-sdk-tests.xml
+            artifacts/native-sdk-consumer/Testing/Temporary/
           retention-days: 14
