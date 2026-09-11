@@ -829,5 +829,31 @@ int main(int argc,char** argv) {
     sheets.remove(7);
     recascade_native();
     if(ordered_node.style.width.value==210) return 151;
+    webscene_native::native_document tree_document;
+    auto& tree_parent=tree_document.create_element("div");tree_parent.class_name="parent";
+    auto& tree_child=tree_document.create_element("div");tree_child.class_name="child";
+    tree_document.append_child(tree_document.body(),tree_parent);
+    tree_document.append_child(tree_parent,tree_child);
+    webscene_native::css::query_host tree_query(tree_document);
+    webscene_native::css::stylesheet_owner tree_sheets;
+    const auto tree_update=[&](const std::string& css) {
+        auto prepared=webscene_native::css::prepare_stylesheet(css,"asset://app/tree.css",[](const auto&) {return true;});
+        if(!prepared) return false;
+        tree_sheets.replace(1,std::move(*prepared));
+        webscene_native::css::apply_native_document_cascade(tree_document,tree_sheets,tree_query,
+            [](const auto&,auto&,auto&,auto&) {return false;},[](const auto&,const auto&) {});
+        return true;
+    };
+    if(!tree_update(":root {--size: 80px} .parent {--local: var(--size)} .child {width: var(--local)}") ||
+       tree_child.style.width.value!=80) return 152;
+    if(!tree_update(":root {--size: 120px} .parent {--local: var(--size)} .child {width: var(--local)}") ||
+       tree_child.style.width.value!=120) return 153;
+    if(!tree_update(".child {width: var(--local, 25px)}") || tree_child.style.width.value!=25) return 154;
+    if(!tree_update(".child {width: 30px} @media (min-width: 600px) {.child {width: 90px}}") ||
+       tree_child.style.width.value!=30) return 155;
+    if(!tree_sheets.set_environment({800,600,false})) return 156;
+    webscene_native::css::apply_native_document_cascade(tree_document,tree_sheets,tree_query,
+        [](const auto&,auto&,auto&,auto&) {return false;},[](const auto&,const auto&) {});
+    if(tree_child.style.width.value!=90) return 157;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

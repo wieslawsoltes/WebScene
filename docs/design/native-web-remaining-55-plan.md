@@ -728,3 +728,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   runtime HTML parsing is used. Automatic tree scheduling, root variable refresh,
   scoped sheets, interaction invalidation and application hosting remain unfinished;
   this test proves computed-style updates, not browser parity or frame performance.
+
+- Native document cascade pass: explicit full-document refresh rebuilds active root
+  variables and traverses the light DOM parent-before-child using an iterative
+  stack. Native tests pass for inherited variable updates, removed variables falling
+  back, and media activation changing computed width after a viewport update.
+  This is a correctness refresh path for host-scheduled changes, not a per-frame
+  operation. Automatic mutation hooks, selective invalidation, shadow scopes,
+  parser-free prepared pseudo matching, native app integration and presented-frame
+  performance remain open. No original Kestrel parity claim is made.

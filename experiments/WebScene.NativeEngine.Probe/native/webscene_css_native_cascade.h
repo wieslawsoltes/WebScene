@@ -55,4 +55,27 @@ bool apply_native_cascade(native_document& document,dom_node& node,
     else document.mark_scene_changed();
     return layout_changed;
 }
+// Explicit full-document refresh for stylesheet, viewport and DOM changes.
+// This correctness path is not a per-frame operation. Hosts may later schedule
+// smaller invalidated subtrees; callbacks must not mutate the tree during traversal.
+template<class LoadSvg,class Observe>
+bool apply_native_document_cascade(native_document& document,
+    const stylesheet_owner& sheets,query_host& query,LoadSvg&& load_svg,Observe&& observe)
+{
+    std::unordered_map<std::string,std::string> variables;
+    std::unordered_set<std::string> important;
+    rebuild_root_variables(sheets.state().rules,variables,important);
+    const auto* focus=query.selector_interaction_state().focused;
+    std::vector<dom_node*> pending{&document.body()};
+    bool layout_changed=false;
+    while(!pending.empty()) {
+        auto* node=pending.back();
+        pending.pop_back();
+        layout_changed|=apply_native_cascade(document,*node,sheets,query,variables,
+            node==focus,load_svg,observe);
+        for(auto child=node->children.rbegin();child!=node->children.rend();++child)
+            if(*child) pending.push_back(*child);
+    }
+    return layout_changed;
+}
 } // namespace webscene_native::css
