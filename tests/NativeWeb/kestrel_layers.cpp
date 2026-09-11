@@ -10,6 +10,21 @@ void require(bool value) {if(!value) throw std::runtime_error("native layer pane
 int main() {
   {
     kestrel::drawing model;kestrel::camera camera;camera.resize(800,600);
+    model.add("LINE",{{"points",{{-100,0,0},{100,0,0}}}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();
+    kestrel::select_window(model,camera,kestrel::display_style::wireframe,{380,280,0},{420,320,0});
+    require(model.selection.empty()); // Window must contain the whole entity.
+    kestrel::select_window(model,camera,kestrel::display_style::wireframe,{420,280,0},{380,320,0});
+    require(model.selection.contains(id)); // Crossing intersects the middle only.
+    kestrel::select_window(model,camera,kestrel::display_style::wireframe,{290,280,0},{510,320,0});
+    require(model.selection.contains(id));
+    model.data["layers"][0]["locked"]=true;
+    model.data["entities"][0]["layer"]=model.data["layers"][0]["id"];
+    kestrel::select_window(model,camera,kestrel::display_style::wireframe,{420,280,0},{380,320,0});
+    require(model.selection.empty());
+  }
+  {
+    kestrel::drawing model;kestrel::camera camera;camera.resize(800,600);
     model.add("MESH",kestrel::geo::box({-50,-50,0},100,100,20));
     const auto far_id=model.data["entities"].back()["id"].get<std::string>();
     const auto point=camera.project({10,5,0});

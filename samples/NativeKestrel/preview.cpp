@@ -75,7 +75,7 @@ class preview_app final : public foco::application {
   double pan_tick_ms{}, pan_tick_max_ms{};
   bool gpu_dirty{true}, panning{}, orbiting{};
   float pan_x{}, pan_y{};
-  bool selection_pressed{};
+  bool selection_pressed{},selection_dragging{};
   float selection_x{},selection_y{};
   webscene::native_web::input_modifiers selection_modifiers;
   void fit_drawing() {
@@ -247,7 +247,7 @@ public:
       for(auto id:{"modal","command-palette"})if(auto dialog=view->document.find(id))
         if(view->document.attribute(dialog,"open"))return;
       if(event.key=="Escape") {
-        panning=false;selection_pressed=false;model.selection.clear();
+        panning=false;selection_pressed=false;view->document.attribute(view->document.find("selection-window"),"hidden","");model.selection.clear();
       } else {
         for(auto node=event.target;node;node=view->document.parent(node)) {
           const auto tag=view->document.tag_name(node);
@@ -349,7 +349,7 @@ public:
         [this](auto &event) {
           if(!viewport)return;
           if((event.buttons&1u) && (event.target==view->document.find("viewport") || event.target==view->document.find("scene") || event.target==view->document.find("overlay"))) {
-            selection_pressed=true;selection_x=event.client_x;selection_y=event.client_y;selection_modifiers=event.modifiers;
+            selection_pressed=true;selection_dragging=false;selection_x=event.client_x;selection_y=event.client_y;selection_modifiers=event.modifiers;
           }
           if(!(event.buttons&4u))return;
           panning = true; orbiting = event.modifiers.shift; pan_x = event.client_x; pan_y = event.client_y;
@@ -357,7 +357,21 @@ public:
         }));
     handlers.push_back(view->document.on(view->document.root(), "pointermove",
         [this](auto &event) {
-          if(selection_pressed && std::hypot(event.client_x-selection_x,event.client_y-selection_y)>4)selection_pressed=false;
+          if(selection_pressed) {
+            selection_dragging=selection_dragging || std::hypot(event.client_x-selection_x,event.client_y-selection_y)>4;
+#ifdef KESTREL_PREVIEW_SHARED_CSS
+            if(selection_dragging) {
+              const auto area=view->document.bounds(view->document.find("viewport"));
+              const auto box=view->document.find("selection-window");
+              view->document.remove_attribute(box,"hidden");
+              view->document.attribute(box,"class",event.client_x<selection_x?"crossing":"");
+              view->document.attribute(box,"style","left:"+std::to_string(std::min(selection_x,event.client_x)-area.x)+"px;top:"+
+                  std::to_string(std::min(selection_y,event.client_y)-area.y)+"px;width:"+std::to_string(std::abs(event.client_x-selection_x))+
+                  "px;height:"+std::to_string(std::abs(event.client_y-selection_y))+"px");
+              view->refresh();
+            }
+#endif
+          }
           if (!panning || !viewport) return;
           if (!(event.buttons & 4u)) { panning = false; return; }
           if(orbiting) {
@@ -371,14 +385,17 @@ public:
       if(!std::exchange(selection_pressed,false) || !viewport)return;
       const auto area=view->document.bounds(view->document.find("scene"));
       const bool control=selection_modifiers.control || selection_modifiers.meta;
-      kestrel::select_at(model,viewport->camera,viewport->options.style,event.client_x-area.x,event.client_y-area.y,
+      view->document.attribute(view->document.find("selection-window"),"hidden","");
+      if(selection_dragging) kestrel::select_window(model,viewport->camera,viewport->options.style,
+          {selection_x-area.x,selection_y-area.y,0},{event.client_x-area.x,event.client_y-area.y,0},selection_modifiers.shift || control);
+      else kestrel::select_at(model,viewport->camera,viewport->options.style,event.client_x-area.x,event.client_y-area.y,
           selection_modifiers.shift || control,control);
 #ifdef KESTREL_PREVIEW_SHARED_CSS
       if(layers)layers->refresh();
 #endif
       gpu_dirty=true;view->refresh();
     }));
-    handlers.push_back(view->document.on(view->document.root(),"pointercancel",[this](auto&){selection_pressed=false;}));
+    handlers.push_back(view->document.on(view->document.root(),"pointercancel",[this](auto&){selection_pressed=false;view->document.attribute(view->document.find("selection-window"),"hidden","");view->refresh();}));
     for (auto type : {"pointerup", "pointercancel"})
       handlers.push_back(view->document.on(view->document.root(), type,
           [this](auto &) { panning = false; }));

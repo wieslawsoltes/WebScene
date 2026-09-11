@@ -1649,3 +1649,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   redo, exact document restoration, Backspace text isolation, Escape and grid.
   Rebuilt run exits 0 with success marker and GPU serial 2 capture. Full tool
   cancellation, remaining shortcut commands and physical-key delivery remain open.
+
+- Native window/crossing selection: added containment and crossing tests using
+  projected entity bounds, segment intersections, basic text overlap and shaded
+  face containment. Editable group expansion and additive selection follow the
+  original selectWindow model. Native tests prove crossing can select a segment
+  with both endpoints outside, containment rejects partial entities, full bounds
+  selects and locked layers are excluded. Suite passes. Preview primary drags
+  update original selection-window style/class, select on release, and hide on
+  release/cancel/Escape; preview builds. Hosted drag/capture verification remains
+  required, along with broader mesh/text/group differential coverage.

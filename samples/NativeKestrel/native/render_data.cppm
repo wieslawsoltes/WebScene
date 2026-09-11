@@ -293,4 +293,44 @@ inline void select_at(drawing& model,const camera& camera,display_style style,
   for(const auto& id:ids)if(remove)model.selection.erase(id);else model.selection.insert(id);
 }
 
+inline void select_window(drawing& model,const camera& camera,display_style style,
+    vec3 start,vec3 end,bool add=false) {
+  const double left=std::min(start.x,end.x),right=std::max(start.x,end.x),
+    top=std::min(start.y,end.y),bottom=std::max(start.y,end.y);
+  const bool crossing=end.x<start.x;
+  const auto within=[&](vec3 p){return p.x>=left && p.x<=right && p.y>=top && p.y<=bottom;};
+  const std::array<vec3,4> corners{vec3{left,top,0},vec3{right,top,0},vec3{right,bottom,0},vec3{left,bottom,0}};
+  std::array<geo::segment,4> edges;for(size_t i=0;i<4;++i)edges[i]={corners[i],corners[(i+1)%4]};
+  std::vector<std::string> ids;
+  for(const auto& entity:model.data["entities"]) {
+    if(!model.editable(entity))continue;
+    const auto g=geo::geometry(entity);if(g.points.empty())continue;
+    double x0=INFINITY,y0=INFINITY,x1=-INFINITY,y1=-INFINITY;
+    for(auto point:g.points){point=camera.project(point);x0=std::min(x0,point.x);y0=std::min(y0,point.y);x1=std::max(x1,point.x);y1=std::max(y1,point.y);}
+    bool hit=!crossing && x0>=left && y0>=top && x1<=right && y1<=bottom;
+    if(crossing && !(x1<left || x0>right || y1<top || y0>bottom)) {
+      hit=!g.texts.empty();
+      const auto& segments=entity["type"]=="MESH" && style==display_style::wireframe?g.wire_segments:g.segments;
+      for(const auto& segment:segments) {
+        const auto a=camera.project(segment[0]),b=camera.project(segment[1]);
+        hit=hit || within(a) || within(b);
+        for(const auto& edge:edges)if(auto h=line_intersection(a,b,edge[0],edge[1]))
+          hit=hit || (h->t>=0 && h->t<=1 && h->u>=0 && h->u<=1);
+      }
+      if(style!=display_style::wireframe)for(const auto& triangle:g.triangles) {
+        const auto a=camera.project(triangle.points[0]),b=camera.project(triangle.points[1]),c=camera.project(triangle.points[2]);
+        const auto cross=[](vec3 p,vec3 q,double x,double y){return (q.x-p.x)*(y-p.y)-(q.y-p.y)*(x-p.x);};
+        const auto ab=cross(a,b,left,top),bc=cross(b,c,left,top),ca=cross(c,a,left,top);
+        if(std::abs(cross(a,b,c.x,c.y))>1e-10)hit=hit || ((ab>=0 && bc>=0 && ca>=0)||(ab<=0 && bc<=0 && ca<=0));
+      }
+    }
+    if(!hit)continue;
+    ids.push_back(entity.at("id").get<std::string>());
+    if(entity.contains("group") && entity["group"].is_string() && entity["group"]!="")
+      for(const auto& other:model.data["entities"])if(other.value("group",json{})==entity["group"] && model.editable(other))ids.push_back(other.at("id").get<std::string>());
+  }
+  if(!add)model.selection.clear();
+  for(const auto& id:ids)model.selection.insert(id);
+}
+
 } // namespace kestrel
