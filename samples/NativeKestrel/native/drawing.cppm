@@ -377,6 +377,19 @@ public:
     const auto ids=selected(true);if(ids.empty())return false;
     return transaction("Edit layer",[&] {for(const auto& id:ids)if(auto* entity=find(id))(*entity)["layer"]=layer_id;});
   }
+  bool change_selected_appearance(const std::string& key,const json& value) {
+    if(key=="linetype") {
+      if(!value.is_string())return false;
+      const auto type=value.get<std::string>();
+      if(type!="ByLayer" && type!="Continuous" && type!="Dashed" && type!="Center")return false;
+    } else if(key=="lineweight") {
+      if(!value.is_number() || !std::isfinite(value.get<double>()))return false;
+    } else if(key=="name") {
+      if(!value.is_string())return false;
+    } else return false;
+    const auto ids=selected(true);if(ids.empty())return false;
+    return transaction("Edit "+key,[&] {for(const auto& id:ids)if(auto* entity=find(id))(*entity)[key]=value;});
+  }
   bool show_all_layers() {
     return transaction("Show all layers",[&] {
       for(auto& layer:data["layers"])layer["visible"]=true;

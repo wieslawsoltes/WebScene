@@ -11,6 +11,33 @@ int main() {
   {
     kestrel::drawing model;model.add("LINE",{{"points",{{0,0,0},{10,0,0}}}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    document doc;doc.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
+    auto inspector=doc.element(doc.body(),"div");doc.attribute(inspector,"id","inspector");
+    auto list=doc.element(doc.body(),"div");doc.attribute(list,"id","explorer-list");
+    kestrel::layer_panel panel(doc,model,[]{});
+    const auto control=[&](auto&& self,node_id root,const std::string& property)->node_id {
+      if(doc.attribute(root,"data-prop")==property)return root;
+      for(auto child:doc.children(root))if(auto result=self(self,child,property))return result;
+      return 0;
+    };
+    const auto before=model.data;
+    auto type=control(control,inspector,"linetype");require(type!=0);doc.focus(type);doc.key("End");
+    require(model.find(id)->at("linetype")=="Center");
+    auto weight=control(control,inspector,"lineweight");require(weight!=0);
+    doc.set_value(weight,"1.25");doc.dispatch(weight,"change");require(model.find(id)->at("lineweight")==1.25);
+    auto name=control(control,inspector,"name");require(name!=0);
+    doc.set_value(name,"Native wall");doc.dispatch(name,"change");require(model.find(id)->at("name")=="Native wall");
+    require(model.undo()=="Edit name" && model.undo()=="Edit lineweight" && model.undo()=="Edit linetype");
+    require(model.data==before);
+    require(!model.change_selected_appearance("linetype","invalid"));
+    require(!model.change_selected_appearance("lineweight","invalid"));
+    model.data["layers"][1]["locked"]=true;
+    const auto locked=model.data;
+    require(!model.change_selected_appearance("name","Locked change") && model.data==locked);
+  }
+  {
+    kestrel::drawing model;model.add("LINE",{{"points",{{0,0,0},{10,0,0}}}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
     const auto target=model.data["layers"][0]["id"].get<std::string>();
     model.data["layers"][0]["locked"]=true;
     const auto before=model.data;

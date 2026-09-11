@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Inspector continuation: original Linetype and Lineweight rows and the single-object
+Name row now instantiate from predefined compiled templates. Native edits apply
+only to editable selected entities and create undo transactions. Native document
+tests exercise keyboard selection of Center linetype, weight and name changes,
+exact undo restoration, invalid values and locked-layer rejection. Color controls,
+geometry fields, validation feedback and complete control behavior remain open;
+this is not full inspector parity.
+
 Latest hosted verification: `--exercise-layer-edit --capture` selected Courtyard
 geometry through the viewport, changed the selected object's layer using the
 inspector select's Home key, and sent the platform undo shortcut through Foco.

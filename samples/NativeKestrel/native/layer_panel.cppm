@@ -136,6 +136,27 @@ public:
         document_.attribute(option.named("root"),"value",layer["id"].get<std::string>());document_.set_text(option.named("root"),layer["name"].get<std::string>());
       }
       document_.set_value(general.named("layer"),one?one->value("layer",std::string{}):std::string{});
+      document_.set_value(general.named("linetype"),one?one->value("linetype",std::string("ByLayer")):"ByLayer");
+      document_.set_value(general.named("lineweight"),one?std::to_string(one->value("lineweight",0.0)):"0");
+      for(auto key:{"linetype","lineweight"}) {
+        const auto node=general.named(key);
+        handlers_.push_back(document_.on(node,"change",[this,node,key=std::string(key)](auto&) {
+          const auto value=document_.value(node);
+          if(key=="lineweight") {
+            try {size_t used=0;const auto number=std::stod(value,&used);
+              if(used==value.size())model_.change_selected_appearance(key,number);
+            } catch(const std::exception&) {}
+          } else model_.change_selected_appearance(key,value);
+          refresh();if(changed_)changed_();
+        }));
+      }
+      if(one) {
+        auto name=kestrel_layers::instantiate(document_,general.named("root"),"inspector-selected-name");
+        document_.set_value(name.named("name"),one->value("name",std::string{}));
+        handlers_.push_back(document_.on(name.named("name"),"change",[this,node=name.named("name")](auto&) {
+          model_.change_selected_appearance("name",document_.value(node));refresh();if(changed_)changed_();
+        }));
+      }
       handlers_.push_back(document_.on(general.named("layer"),"change",[this,node=general.named("layer")](auto&) {
         model_.change_selected_layer(document_.value(node));refresh();if(changed_)changed_();
       }));
