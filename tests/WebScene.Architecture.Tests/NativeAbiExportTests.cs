@@ -21,6 +21,7 @@ public sealed class NativeAbiExportTests
     [InlineData("webscene_engine_configure_diagnostics")]
     [InlineData("webscene_engine_take_diagnostic")]
     [InlineData("webscene_engine_copy_runtime_failure")]
+    [InlineData("webscene_engine_register_compiled_document_v1")]
     public void MissingDiagnosticExportIsDetected(string omittedFunction)
     {
         var declarations = ReadPublicFunctions();
@@ -46,13 +47,16 @@ public sealed class NativeAbiExportTests
             WEBSCENE_API void webscene_benchmark_only(void);
             #endif
             WEBSCENE_API void webscene_after_benchmark(void);
+            extern "C" WEBSCENE_API uint8_t webscene_cpp_package(const package* value);
             """;
-        Assert.Equal(new[] { "webscene_pointer", "webscene_multiline", "webscene_after_benchmark" },
+        Assert.Equal(new[] { "webscene_pointer", "webscene_multiline", "webscene_after_benchmark", "webscene_cpp_package" },
             NativeAbiContract.PublicFunctions(header));
     }
 
     private static string[] ReadPublicFunctions() =>
-        NativeAbiContract.PublicFunctions(File.ReadAllText(Path.Combine(NativeDirectory(), "webscene_native_engine.h")));
+        new[] { "webscene_native_engine.h", "webscene/compiled_document.hpp" }
+            .SelectMany(header => NativeAbiContract.PublicFunctions(
+                File.ReadAllText(Path.Combine(NativeDirectory(), header)))).ToArray();
 
     private static string[] ReadMacOsExports() =>
         File.ReadAllLines(Path.Combine(NativeDirectory(), "webscene_native_engine.exports"))

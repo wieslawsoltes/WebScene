@@ -13,7 +13,7 @@ internal static class NativeAbiContract
             @"^\s*#if defined\(WEBSCENE_NATIVE_ENGINE_\w+_BENCHMARK_COUNTERS\)[^\r\n]*\r?\n.*?^\s*#endif[^\r\n]*",
             "", RegexOptions.Multiline | RegexOptions.Singleline);
         return Regex.Matches(header,
-                @"^\s*WEBSCENE_API\s+[^;]*?\b(webscene_\w+)\s*\(", RegexOptions.Multiline)
+                @"^\s*(?:extern\s+""C""\s+)?WEBSCENE_API\s+[^;]*?\b(webscene_\w+)\s*\(", RegexOptions.Multiline)
             .Select(match => match.Groups[1].Value).ToArray();
     }
 }
