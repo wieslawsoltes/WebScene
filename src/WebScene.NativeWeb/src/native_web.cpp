@@ -345,11 +345,20 @@ node_id document::focused() const {
 }
 std::string document::value(node_id id) const {
   auto& node=state_->node(id);
+  if(node.tag=="select") {
+    std::vector<dom_node*> options;forms::collect_descendants_by_tag(node,"option",options);
+    for(auto* option:options) if(forms::option_is_selected(*option)) return forms::option_value(*option);
+    return {};
+  }
   if(node.tag!="input" && node.tag!="textarea") throw std::invalid_argument("value requires a text control");
   forms::ensure_text_value(node);return node.form_control().value;
 }
 void document::set_value(node_id id,std::string value) {
   auto& node=state_->node(id);
+  if(node.tag=="select") {
+    forms::set_select_value(node,value);
+    state_->styles_dirty=true;state_->dom.mark_dirty();return;
+  }
   if(node.tag!="input" && node.tag!="textarea") throw std::invalid_argument("value requires a text control");
   auto& control=node.mutable_form_control();
   control.value=std::move(value);control.value_initialized=true;control.dirty_value=true;

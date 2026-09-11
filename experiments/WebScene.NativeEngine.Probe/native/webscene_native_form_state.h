@@ -53,6 +53,34 @@ inline bool option_is_selected(dom_node& option)
         return !options.empty() && options.front() == &option;
     }
 
+inline std::string option_value(const dom_node& option) {
+    if(auto authored=option.attributes.find("value");authored!=option.attributes.end()) return authored->second;
+    std::string text;
+    const auto append=[&](auto&& self,const dom_node& node)->void {
+        if(node.kind==dom_node_kind::text) text+=node.text_content;
+        for(auto* child:node.children) if(child) self(self,*child);
+    };
+    append(append,option);
+    std::string result;bool space=false;
+    for(char c:text) {
+        if(c==' ' || c=='\t' || c=='\n' || c=='\r' || c=='\f') {space=!result.empty();continue;}
+        if(space) result+=' ';
+        result+=c;space=false;
+    }
+    return result;
+}
+inline void set_select_value(dom_node& select,std::string_view value) {
+    std::vector<dom_node*> options;collect_descendants_by_tag(select,"option",options);
+    bool matched=false;
+    for(auto* option:options) {
+        auto& state=option->mutable_form_control();
+        state.selectedness_initialized=true;
+        state.selectedness=!matched && option_value(*option)==value;
+        matched=matched || state.selectedness;
+    }
+    select.mutable_form_control().selection_explicitly_empty=!matched;
+}
+
 inline bool is_text_control(const dom_node* node)
     {
         if (node == nullptr || (node->tag != "input" && node->tag != "textarea")

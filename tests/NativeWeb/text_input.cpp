@@ -4,6 +4,17 @@ using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
   {
+    document d;auto select=d.element(d.body(),"select");
+    auto first=d.element(select,"option");d.attribute(first,"value","top");d.set_text(first,"Top");
+    auto group=d.element(select,"optgroup");auto second=d.element(group,"option");
+    d.set_text(second,"  SE\n isometric  ");
+    require(d.value(select)=="top");
+    unsigned events=0;auto handler=d.on(select,"change",[&](auto&){++events;});
+    d.set_value(select,"SE isometric");require(d.value(select)=="SE isometric" && events==0);
+    d.set_value(select,"missing");require(d.value(select).empty());
+    d.set_value(select,"top");require(d.value(select)=="top");
+  }
+  {
     document colors;
     auto swatch=colors.element(colors.body(),"input");
     colors.attribute(swatch,"type","color");colors.attribute(swatch,"value","#12Ab34");

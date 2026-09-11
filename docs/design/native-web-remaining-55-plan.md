@@ -1490,3 +1490,17 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   both pitch limits; existing browser camera-reference comparisons pass.
   This does not yet port the browser workspace/navigation class updates or prove
   physical pointer capture outside the window.
+
+- Hosted navigation exercise: --exercise-navigation injects Foco pointer events
+  into the mounted original UI and checks orbit/pan mode remains determined by
+  pointer-down modifiers, release and cancellation stop navigation, and a new
+  GPU image is published. It exposed set_value rejecting the original select;
+  native value/set_value now supports selects using live option selectedness,
+  normalized fallback text and explicit empty selection for unmatched values.
+  Native text tests pass, including programmatic change-event suppression.
+  Rebuilt/reran hosted exercise: success marker and GPU serial 2 capture at
+  /tmp/kestrel-native-orbit.png; inspected rotated Courtyard and SE isometric
+  selector. Physical pointer capture, full select interaction and window resize
+  performance remain unproven. Failure shutdown currently returned process zero
+  in the initial failed exercise; inspect explicit success markers until the
+  preview exit-code propagation is corrected.

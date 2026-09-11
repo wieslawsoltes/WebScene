@@ -10,6 +10,7 @@
 static std::string capture_path;
 static bool exercise_layer_filter=false;
 static bool exercise_objects=false;
+static bool exercise_navigation=false;
 static bool benchmark_pan=false;
 static bool benchmark_courtyard=false;
 static bool benchmark_large=false;
@@ -58,6 +59,8 @@ class preview_app final : public foco::application {
   uint32_t gpu_width{}, gpu_height{};
   uint64_t gpu_serial{};
   unsigned ticks{};
+  bool navigation_exercised{};
+  uint64_t navigation_serial{};
   unsigned pan_samples{}, resize_samples{}, missing_resize_images{};
   uint32_t published_width{}, published_height{};
   uint64_t pan_initial_serial{}, pan_initial_builds{};
@@ -319,8 +322,47 @@ public:
 #endif
           ++pan_samples;
         }
+        if(exercise_navigation && viewport && gpu_serial && !navigation_exercised) {
+          const auto area=view->document.bounds(view->document.find("scene"));
+          const auto host=view->bounds();
+          const float x=host.x+area.x+area.width/2, y=host.y+area.y+area.height/2;
+          auto send=[&](foco::pointer_event_kind kind,float dx,float dy,uint32_t buttons,bool shift) {
+            foco::pointer_event event;event.kind=kind;event.position={x+dx,y+dy};
+            event.buttons=buttons;
+            if(shift) event.modifiers=foco::key_modifiers::shift;
+            view->pointer_event_received(event);
+          };
+          const auto yaw=viewport->camera.yaw;
+          const auto target=viewport->camera.target;
+          send(foco::pointer_event_kind::pressed,0,0,4,true);
+          send(foco::pointer_event_kind::moved,40,-30,4,false);
+          if(std::abs(viewport->camera.yaw-(yaw-.28))>1e-10 ||
+             (viewport->camera.target-target).length()>1e-10)
+            throw std::runtime_error("Hosted Shift+middle orbit failed");
+          send(foco::pointer_event_kind::released,40,-30,0,false);
+          const auto revision=viewport->camera.revision;
+          send(foco::pointer_event_kind::moved,60,-40,0,false);
+          if(viewport->camera.revision!=revision)
+            throw std::runtime_error("Navigation continued after release");
+          send(foco::pointer_event_kind::pressed,0,0,4,false);
+          send(foco::pointer_event_kind::moved,15,10,4,true);
+          if((viewport->camera.target-target).length()<1e-8 ||
+             std::abs(viewport->camera.yaw-(yaw-.28))>1e-10)
+            throw std::runtime_error("Hosted middle pan failed");
+          send(foco::pointer_event_kind::cancelled,15,10,0,false);
+          const auto cancelled_revision=viewport->camera.revision;
+          send(foco::pointer_event_kind::moved,30,20,4,false);
+          if(viewport->camera.revision!=cancelled_revision)
+            throw std::runtime_error("Navigation continued after cancellation");
+          navigation_serial=gpu_serial;navigation_exercised=true;
+        }
         const auto tick_start=std::chrono::steady_clock::now();
         tick();
+        if(exercise_navigation && navigation_exercised && gpu_serial>navigation_serial) {
+          std::cout << "Hosted navigation passed; updated GPU image published\n";
+          exercise_navigation=false;
+          if(capture_path.empty()) {window->close();lifetime->shutdown(0);return;}
+        }
         if(benchmark_pan && pan_samples) {
           const auto milliseconds=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-tick_start).count();
           pan_tick_ms+=milliseconds;pan_tick_max_ms=std::max(pan_tick_max_ms,milliseconds);
@@ -380,6 +422,7 @@ int main(int argc, char **argv) {
   for(int i=1;i<argc;++i) {
     if(std::string_view(argv[i])=="--capture" && i+1<argc) capture_path=argv[++i];
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
+    else if(std::string_view(argv[i])=="--exercise-navigation") exercise_navigation=true;
     else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;
     else if(std::string_view(argv[i])=="--benchmark-pan") benchmark_pan=true;
     else if(std::string_view(argv[i])=="--benchmark-courtyard") {benchmark_pan=true;benchmark_courtyard=true;}
