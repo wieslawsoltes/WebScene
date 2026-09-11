@@ -125,6 +125,12 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if(selected=="modal-backdrop") {
+            auto* focused_engine=webscene_engine_create(0);
+            require(focused_engine!=nullptr,"backdrop engine creation failed");
+            test_modal_backdrop_scene(focused_engine);
+            webscene_engine_destroy(focused_engine);return 0;
+        }
         if (selected == "paint-only-cascade") {
             auto* focused_engine=webscene_engine_create(0);
             require(focused_engine != nullptr,"paint invalidation engine creation failed");
@@ -662,6 +668,7 @@ int main()
     test_dimension_custom_property_recascade(engine);
     test_dimension_custom_property_inheritance(engine);
     test_geometry_variable_positions(engine);
+    test_modal_backdrop_scene(engine);
     test_responsive_positioned_sizing(engine);
     test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(engine);
     test_go_to_tab_lines_and_calendar_scroll_ranges(engine);

@@ -1,3 +1,41 @@
+void test_modal_backdrop_scene(webscene_engine* engine)
+{
+    resize(engine,400,300,1);
+    execute(engine,R"JS(
+      document.body.innerHTML='<style>dialog{width:100px;height:50px}dialog::backdrop{background:#080e185e!important}dialog.clear::backdrop{background:transparent!important}</style><dialog id="backdrop-probe">Dialog</dialog>';
+      globalThis.backdropProbe=document.getElementById('backdrop-probe');
+      backdropProbe.showModal();
+    )JS","backdrop-setup.js");
+    uint64_t revision=0;
+    const auto expect_backdrop=[&](bool expected) {
+        webscene_engine_request_scene_checkpoint(engine);
+        for(int attempt=0;attempt<100;++attempt) {
+            const auto* scene=webscene_engine_acquire_latest_scene(engine);
+            bool matched=false;
+            if(scene) {
+                if(scene->header.revision>revision) {
+                    unsigned count=0;
+                    for(uint32_t i=0;i<scene->header.command_count;++i) {
+                        const auto& command=scene->commands[i];
+                        if(command.kind==9U && command.rgba==0x080e185eU && command.width==400 && command.height==300)++count;
+                    }
+                    matched=count==(expected?1U:0U);
+                    if(matched)revision=scene->header.revision;
+                }
+                webscene_scene_acknowledge(scene);webscene_scene_release(scene);
+            }
+            if(matched)return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        fail("V8 modal backdrop scene did not match expected state");
+    };
+    expect_backdrop(true);
+    execute(engine,"backdropProbe.className='clear';","backdrop-clear.js");expect_backdrop(false);
+    execute(engine,"backdropProbe.className='';","backdrop-restore.js");expect_backdrop(true);
+    execute(engine,"backdropProbe.close();","backdrop-close.js");expect_backdrop(false);
+    execute(engine,"document.body.innerHTML='';","backdrop-cleanup.js");
+}
+
 void test_responsive_positioned_sizing(webscene_engine* engine)
 {
     resize(engine, 1280, 720, 1);

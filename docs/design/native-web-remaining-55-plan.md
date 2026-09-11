@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+V8 backdrop scene verification: new modal-backdrop runtime test opens a JavaScript
+dialog, acquires emitted scene records, requires one viewport-sized authored
+backdrop, toggles a transparent class off/on and closes the dialog. It requires
+new scene revisions for each state and acknowledges/releases acquired scenes.
+The rebuilt V8 engine test passes. This is reference-path verification only;
+native Kestrel still uses compiled templates with no JS or runtime HTML parsing.
+Pixel equivalence, blur and broader backdrop syntax remain unverified.
+
 Backdrop cascade convergence: extracted solid backdrop application into the
 shared pseudo-declaration helper, using the existing CSS color-token validator.
 Both native cascade and the two V8 cascade paths now call it, resetting backdrop
