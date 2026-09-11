@@ -3,25 +3,17 @@
 #include "webscene_css_media.h"
 #include <source_location>
 #include <iostream>
+#include <fstream>
+#include <iterator>
 import webscene.test.shared_styles;
+import webscene.test.prepared_styles;
 
 using namespace webscene::native_web;
 void require(bool value, std::source_location where=std::source_location::current()) {
   if(!value) throw std::runtime_error("shared stylesheet contract failed at line " + std::to_string(where.line()));
 }
-int main() {
-  auto sheet=webscene_native::css::prepare_stylesheet(R"CSS(
-    body { margin:0; padding:0; }
-    #target { display:block; width:80px; height:20px; padding:0; border:0; }
-    #target.changed {width:120px;}
-    #target:focus {height:30px;}
-    #target:hover {width:90px;}
-    .row {height:17px; width:40px;}
-    canvas {width:40px; height:40px;}
-    @media (max-width:150px) {#target {width:60px;}}
-    @media (prefers-reduced-motion:reduce) {#target:focus {height:10px;}}
-  )CSS","asset://shared.css",[](const auto&){return true;});
-  require(bool(sheet));
+void exercise(const webscene_native::css::prepared_stylesheet& input) {
+  const auto* sheet=&input;
   document d;
   compiled_ui::build(d);
   auto report=std::make_shared<shared_css_report>();
@@ -45,7 +37,7 @@ int main() {
   require(d.layout_passes()==passes);
   bool rejected=false;
   try {d.add_rule({});} catch(const std::logic_error&) {rejected=true;}
-  require(rejected && report->diagnostics.empty());
+  require(rejected && report->diagnostics.size()==sheet->diagnostics.size());
   // Replacing the sheet changes styling through the same document invalidation.
   auto replacement=webscene_native::css::prepare_stylesheet("#target {width:44px;height:12px}","asset://new.css",[](const auto&){return true;});
   d.set_stylesheet_resolver(make_shared_stylesheet_resolver({*replacement},report));
@@ -55,5 +47,49 @@ int main() {
   try {typed.set_stylesheet_resolver(make_shared_stylesheet_resolver({*sheet},report));}
   catch(const std::logic_error&) {rejected=true;}
   require(rejected);
-  std::cout<<"Compiled HTML and shared native CSS integration passed\n";
+
+}
+
+void compare_selector(const webscene_native::css::compiled_css_selector& a,
+                      const webscene_native::css::compiled_css_selector& b) {
+  require(a.compounds==b.compounds && a.combinators==b.combinators && a.specificity==b.specificity);
+  require(a.compiled_compounds.size()==b.compiled_compounds.size());
+  for(size_t i=0;i<a.compiled_compounds.size();++i) {
+    const auto& x=a.compiled_compounds[i];const auto& y=b.compiled_compounds[i];
+    require(x.tag==y.tag && x.identities==y.identities && x.attributes==y.attributes &&
+        x.valid==y.valid && x.pseudo_element==y.pseudo_element && x.pseudos.size()==y.pseudos.size());
+    for(size_t j=0;j<x.pseudos.size();++j)
+      require(x.pseudos[j].name==y.pseudos[j].name && x.pseudos[j].argument==y.pseudos[j].argument);
+  }
+}
+int main() {
+  auto generated=compiled_css::build();
+  std::ifstream file(generated.source_address);
+  require(bool(file));
+  const std::string text((std::istreambuf_iterator<char>(file)),{});
+  auto parsed=webscene_native::css::prepare_stylesheet(text,generated.source_address,[](const auto&){return true;});
+  require(bool(parsed));
+  require(parsed->rules.size()==generated.rules.size());
+  require(parsed->keyframes.size()==generated.keyframes.size());
+  require(generated.keyframes.at("fade").opacity_stops.size()==2);
+  require(generated.keyframes.at("fade").opacity_stops[1].opacity==1);
+  require(generated.keyframes.at("turn").rotation_stops.size()==2);
+  require(generated.keyframes.at("turn").rotation_stops[0].degrees==-15);
+  require(generated.diagnostics.size()==parsed->diagnostics.size());
+  for(size_t i=0;i<generated.diagnostics.size();++i) {
+    const auto& a=parsed->diagnostics[i];const auto& b=generated.diagnostics[i];
+    require(a.feature==b.feature && a.classification==b.classification && a.detail==b.detail);
+  }
+  for(size_t i=0;i<parsed->rules.size();++i) {
+    const auto& a=*parsed->rules[i];const auto& b=*generated.rules[i];
+    require(a.selector==b.selector && a.specificity==b.specificity && a.media_queries==b.media_queries);
+    compare_selector(a.compiled_selector,b.compiled_selector);
+    compare_selector(a.compiled_pseudo_origin,b.compiled_pseudo_origin);
+    require(a.declarations.size()==b.declarations.size());
+    for(size_t j=0;j<a.declarations.size();++j)
+      require(a.declarations[j].name==b.declarations[j].name &&
+          a.declarations[j].value==b.declarations[j].value && a.declarations[j].important==b.declarations[j].important);
+  }
+  exercise(*parsed);exercise(generated);
+  std::cout<<"Parsed and generated CSS on compiled HTML integration passed\n";
 }

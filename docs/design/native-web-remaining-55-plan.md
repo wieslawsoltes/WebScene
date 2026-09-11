@@ -970,3 +970,22 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   typed backend. Shared-engine SVG resource loading, color preference projection,
   remaining interaction states, typed prepared values and actual Kestrel/Foco
   integration remain unfinished. No original-app parity or 60fps claim.
+
+- Build-time shared CSS preparation: webscene-uic --prepare-css input.css
+  output.cppm --module module.name now emits a C++ module whose compiled_css::build
+  returns prepared_stylesheet data. It uses the existing Rust parser and emits
+  prepared selector compounds/pseudo origins, declarations, media conditions,
+  keyframes and diagnostics. Output preserves rule order and sorts keyframe names
+  for deterministic generation. CMake exposes webscene_prepare_css_module.
+  Parsed and generated preparation run through identical compiled-HTML mutation,
+  focus/hover, resizing, preference and template tests. Round-trip assertions cover
+  selector fields, escaping, declarations, keyframes and diagnostics; compiler
+  tests cover deterministic output, invalid module names and input overwrite
+  rejection. Shared style, CSS service and compiler suites pass. The unchanged
+  original Kestrel stylesheet produces a 348,956-byte module that Clang successfully
+  precompiles; its two partial-keyframe diagnostics remain visible. This emission
+  does not validate every property's rendering semantics. Textual values, media
+  and functional selector arguments still require shared-engine interpretation,
+  so this is build-time stylesheet parsing, not the final parser-free backend.
+  The packaged Kestrel app has not switched to this path; parity, resources and
+  presented 60fps remain unfinished.

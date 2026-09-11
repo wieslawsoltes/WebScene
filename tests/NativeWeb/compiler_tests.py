@@ -12,6 +12,28 @@ class CompilerTests(unittest.TestCase):
         source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
         result=subprocess.run([UIC,source,output],capture_output=True,text=True)
         return result,output
+    def test_prepared_css_module(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder);source=root/'style.css';output=root/'style.cppm'
+            source.write_text('div {color:red} @keyframes fade {from {opacity:0} to {opacity:1}}')
+            command=[UIC,'--prepare-css',source,output,'--module','test.styles']
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            first=output.read_bytes()
+            self.assertIn(b'export module test.styles;',first)
+            self.assertIn(b'r->compiled_selector',first)
+            self.assertIn('partially-supported',result.stderr)
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(first,output.read_bytes())
+            result=subprocess.run(command[:-1]+['invalid;module'],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertEqual(first,output.read_bytes())
+            original=source.read_bytes()
+            result=subprocess.run([UIC,'--prepare-css',source,source,'--module','test.styles'],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertEqual(original,source.read_bytes())
+
     def test_opacity_transition_shorthand(self):
         for value in ['opacity 100ms linear 20ms', 'opacity .2s ease-in', 'none']:
             result, out = self.compile('<div></div>', 'div {transition:'+value+'}')
