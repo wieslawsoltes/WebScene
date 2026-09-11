@@ -1492,7 +1492,7 @@ struct compiler {
         std::ranges::transform(state, state.begin(), [](unsigned char c) { return std::tolower(c); });
         if (state == "until-found") throw std::runtime_error("hidden until-found requires native find/reveal support");
       }
-      if (k != "hidden" && k != "id" && k != "class" && k != "width" && k != "height" &&
+      if (k != "title" && k != "hidden" && k != "id" && k != "class" && k != "width" && k != "height" &&
           k != "tabindex" && k != "disabled" && k != "type" && k != "role" &&
           !k.starts_with("aria-") && !k.starts_with("data-") &&
           !(n.tag == "col" && k == "span") &&

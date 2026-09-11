@@ -71,6 +71,7 @@ class preview_app final : public foco::application {
   kestrel::line_command line_tool{model};
   bool line_active{};
   bool drafting_shift{};
+  bool drafting_snap{},drafting_ortho{},drafting_polar{};
   std::optional<kestrel::vec3> line_pointer;
   std::optional<std::array<double,2>> line_pointer_client;
   bool overlay_dirty{};
@@ -156,7 +157,7 @@ class preview_app final : public foco::application {
     if(!point)return {};
     std::optional<std::array<double,3>> base;
     if(!line_tool.points().empty())base=line_tool.points().back();
-    const auto result=kestrel::constrain_drafting_point({point->x,point->y,point->z},base,false,100,drafting_shift,false,15);
+    const auto result=kestrel::constrain_drafting_point({point->x,point->y,point->z},base,drafting_snap,100,drafting_ortho || drafting_shift,drafting_polar,15);
     return kestrel::vec3{result[0],result[1],result[2]};
   }
   void redraw_overlay(uint32_t w,uint32_t h) {
@@ -286,6 +287,7 @@ public:
       handlers.push_back(view->document.on(tabs[i],"click",[this,i](auto&){select_tab(i);}));
     }
     select_tab(0);
+    kestrel_tabs::instantiate(view->document,view->document.find("status-toggles"),"status-toggles");
 #ifdef KESTREL_PREVIEW_SHARED_CSS
     view->document.render(1280,800);
     std::set<std::string> diagnostics;
@@ -458,6 +460,17 @@ public:
             else if (*action == "fit") fit_drawing();
             else if (*action == "zoomin") viewport->camera.zoom_at(1.35);
             else if (*action == "zoomout") viewport->camera.zoom_at(1.0/1.35);
+            else if(*action=="snap" || *action=="ortho" || *action=="polar") {
+              if(*action=="snap")drafting_snap=!drafting_snap;
+              if(*action=="ortho") {drafting_ortho=!drafting_ortho;if(drafting_ortho)drafting_polar=false;}
+              if(*action=="polar") {drafting_polar=!drafting_polar;if(drafting_polar)drafting_ortho=false;}
+              for(auto button:view->document.children(view->document.find("status-toggles"))) {
+                const auto name=view->document.attribute(button,"data-action").value_or("");
+                if(name=="snap" || name=="ortho" || name=="polar")
+                  view->document.attribute(button,"class",(name=="snap"?drafting_snap:name=="ortho"?drafting_ortho:drafting_polar)?"active":"");
+              }
+              overlay_dirty=true;view->refresh();
+            }
             else if (*action == "grid") viewport->grid_enabled = !viewport->grid_enabled;
             else if (*action == "selectall" || *action == "clear-selection") {
               if(*action=="selectall") model.select_all_editable();else model.selection.clear();

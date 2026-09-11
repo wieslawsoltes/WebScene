@@ -2367,3 +2367,15 @@ letter and passes stationary preview release, pointer commit and cleanup checks.
 Full Foco preview rebuild passes, hosted run exits 0 with GPU serial 2. Physical
 Cocoa event injection, both-side chord transitions and focus-loss reconciliation
 remain unverified; this hosted test enters at the Foco view API.
+
+### Original compiled status toggle markup
+
+Copied original app.js status markup output using the original UI icon/command
+metadata into a predefined RibbonTabs template, instantiated at status-toggles.
+Compiler now preserves standard title attributes in templates. Native SNAP,
+ORTHO and POLAR action handlers feed the shared pointer constraints and enforce
+ortho/polar mutual exclusion; spacing is currently 100 and polar step 15 degrees.
+Full hosted build and existing Line regression pass; inspected /tmp/kestrel-status.png
+shows original six buttons. Dedicated toggle interaction checks, grid active-state
+synchronization, settings persistence/editors, OSNAP and lineweight behavior remain
+open. Title preservation is not proof of native tooltip display.
