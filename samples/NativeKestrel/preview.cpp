@@ -35,7 +35,10 @@ class preview_window final : public foco::window {
 public:
   std::function<void()> frame;
   bool requires_host_frames() const noexcept override { return bool(frame); }
-  bool advance_host_frame(double) override { if (frame) frame(); return false; }
+  bool advance_host_frame(double) override {
+    if (frame) frame();
+    return has_pending_scene_changes();
+  }
 };
 class preview_app final : public foco::application {
   foco::ref<preview_window> window;

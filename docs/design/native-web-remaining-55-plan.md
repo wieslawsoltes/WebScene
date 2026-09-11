@@ -1228,3 +1228,18 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   active Cocoa host presentation scheduling/invalidation and drawable delivery;
   do not infer successful on-screen animation from GPU publications or forced
   compositor captures. Existing generic presentation counters also stayed zero.
+
+- Host callback change reporting fix: preview_window::advance_host_frame no longer
+  unconditionally returns false after invoking the native GPU callback; it reports
+  has_pending_scene_changes(), allowing Foco's host_changed commit path to publish
+  the updated subtree. Rebuilt and repeated the traced 1,000-entity benchmark.
+  GPU publications: 360 / 5.98299 seconds (60.1706/s); compositor successful
+  presentations: 179 (~29.9181/s). Metal trace has 180 callbacks, 177 valid positive
+  presentedTime values; valid interval FPS 29.99985, median 33.33350 ms,
+  p95 33.333583 ms, maximum 33.333625 ms. Logs:
+  /tmp/kestrel-host-change.log and /tmp/kestrel-host-change-present.jsonl.
+  This fixes missing presentation caused by false host-change reporting and exposes
+  a real half-rate presentation issue. Actual 60fps acceptance still FAILS;
+  investigate scheduling/commit-to-display latency rather than claiming publication
+  throughput as displayed FPS. No debugger tools were available; used controlled
+  before/after runtime traces instead.
