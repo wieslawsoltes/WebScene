@@ -274,6 +274,9 @@ endif()
 if(APPLE AND TARGET dawn::webgpu_dawn)
  foreach(app IN ITEMS FocoKestrel FocoKestrelPreview)
   if(TARGET ${app})
+   # The shared Rust archive also serves build-time HTML compilation. Discard
+   # unused HTML parser code from native application executables.
+   target_link_options(${app} PRIVATE "LINKER:-dead_strip")
    set_target_properties(${app} PROPERTIES
     BUILD_WITH_INSTALL_RPATH TRUE
     INSTALL_RPATH "@executable_path/../Frameworks")

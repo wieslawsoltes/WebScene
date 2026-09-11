@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Bundle symbol isolation: a broader audit found html5ever code linked into the
+preview from the shared Rust archive despite no HTML entry-point call in native
+authoring. Native macOS app targets now dead-strip unused code. The executable
+shrinks from 18,120,944 to 14,353,808 bytes; Dawn remains 9,222,256 bytes. The new
+tests/NativeWeb/audit_macos_bundle.py flags the old bundle's html5ever symbols and
+passes the new bundle's source-asset, dependency/rpath, symbol-family and local
+signature checks. The rebuilt app also passes the routed spectrum/undo capture
+exercise (exit 0, GPU serial 3). This is structural evidence, not proof of every
+runtime path or complete application parity; shared CSS interpretation remains.
+
 Native app relocation fix: FocoKestrel and FocoKestrelPreview now bundle Dawn in
 Contents/Frameworks, use @executable_path/../Frameworks instead of an absolute
 external SDK rpath, and receive local ad-hoc signatures after copying the library.
