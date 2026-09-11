@@ -268,7 +268,7 @@
         if (trace_css) css_profile_candidate_checks += candidates.size();
 #endif
         auto matching=css::match_candidates(document,node,css_rules,candidates,
-            [this](const dom_node& subject,const std::string& selector) {
+            [this](const dom_node& subject,const css_rule&,const std::string& selector) {
                 return css_selector_matches(subject,selector);
             },[this](const dom_node& subject,const css_rule& rule) {
                 return css_rule_matches(subject,rule);

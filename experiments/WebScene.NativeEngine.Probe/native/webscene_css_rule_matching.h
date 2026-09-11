@@ -33,7 +33,7 @@ rule_matches match_candidates(native_document& document,const dom_node& node,
             std::string pseudo_origin;
             const auto pseudo_kind = split_pseudo_element_selector(rule.selector(), pseudo_origin);
             if (pseudo_kind != 0) {
-                if (!pseudo_origin.empty() && match_selector(node,pseudo_origin)) {
+                if (!pseudo_origin.empty() && match_selector(node,rule,pseudo_origin)) {
                     result.pseudo.emplace_back(pseudo_kind, &rule);
                 }
                 continue;

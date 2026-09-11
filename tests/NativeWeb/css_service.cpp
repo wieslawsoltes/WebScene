@@ -727,7 +727,7 @@ int main(int argc,char** argv) {
     webscene_native::css::query_host match_query(ordered_document);
     const auto collect=[&] {
         return webscene_native::css::match_candidates(ordered_document,ordered_node,match_rules,match_indices,
-            [&](const auto& node,const auto& selector) { return match_query.css_selector_matches(node,selector); },
+            [&](const auto& node,const auto&,const auto& selector) { return match_query.css_selector_matches(node,selector); },
             [&](const auto& node,const auto& rule) { return match_query.matches_prepared(node,rule.compiled_selector()); });
     };
     auto collected_matches=collect();

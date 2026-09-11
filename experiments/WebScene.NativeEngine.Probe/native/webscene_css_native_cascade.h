@@ -23,7 +23,7 @@ bool apply_native_cascade(native_document& document,dom_node& node,
         reset_cascaded_style(node,variables);
         auto indices=sheets.candidates(node,focused);
         auto matched=match_candidates(document,node,sheets.state().rules,indices,
-            [&](const auto& subject,const auto& selector) { return query.css_selector_matches(subject,selector); },
+            [&](const auto& subject,const auto& rule,const auto&) { return query.matches_prepared(subject,rule.payload->compiled_pseudo_origin); },
             [&](const auto& subject,const auto& rule) { return query.matches_prepared(subject,rule.compiled_selector()); });
         apply_matched_declarations(node,matched.ordinary,[&](const css_declaration& declaration,bool inline_origin) {
             property_result result;

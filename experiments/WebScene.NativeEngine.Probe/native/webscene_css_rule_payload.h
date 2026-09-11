@@ -1,4 +1,5 @@
 #pragma once
+#include "webscene_css_pseudo_application.h"
 #include "webscene_css_state.h"
 #include <mutex>
 
@@ -82,6 +83,9 @@ std::shared_ptr<const css_rule_payload> intern_rule_payload(
         auto payload = std::make_shared<css_rule_payload>();
         payload->selector = std::move(selector);
         payload->compiled_selector = compile(payload->selector);
+        std::string pseudo_origin;
+        if (split_pseudo_element_selector(payload->selector, pseudo_origin) != 0 && !pseudo_origin.empty())
+            payload->compiled_pseudo_origin = compile(pseudo_origin);
         payload->specificity = payload->compiled_selector.specificity;
         payload->declarations = declarations;
         payload->media_queries = media_queries;

@@ -74,6 +74,7 @@ using css_index_string_set = std::unordered_set<std::string>;
     struct css_rule_payload final {
         std::string selector;
         compiled_css_selector compiled_selector;
+        compiled_css_selector compiled_pseudo_origin;
         std::vector<css_declaration> declarations;
         std::vector<std::string> media_queries;
         uint32_t specificity{0};

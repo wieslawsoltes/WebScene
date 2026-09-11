@@ -737,3 +737,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   operation. Automatic mutation hooks, selective invalidation, shadow scopes,
   parser-free prepared pseudo matching, native app integration and presented-frame
   performance remain open. No original Kestrel parity claim is made.
+
+- Prepared pseudo origin selectors: immutable rule payload preparation now compiles
+  the originating selector for pseudo-element rules. Native cascade matching uses
+  that representation directly instead of submitting the origin string to the
+  query parser. Existing runtime matching callbacks retain their host behavior.
+  Native cascade/pseudo tests and rebuilt runtime pseudo border, iframe recascade
+  and positional selector regressions pass. Nested functional selector queries
+  and generated stylesheet serialization still require work before claiming a
+  fully parser-free native CSS application. Full Kestrel parity remains unproven.
