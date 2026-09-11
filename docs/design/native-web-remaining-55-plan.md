@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Group/picking integration verified: the native picking fixture now creates its
+group through group_entities instead of manually assigning metadata. It verifies
+ordinary group selection, individual selection with ignore-group, Ungroup from
+one member, single-object picking after ungroup and restored group picking after
+exact undo. The existing pick implementation already matches the original app's
+visible-peer selection and modifiers; no new selection algorithm was needed.
+The native layer suite passes.
+
 V8 backdrop scene verification: new modal-backdrop runtime test opens a JavaScript
 dialog, acquires emitted scene records, requires one viewport-sized authored
 backdrop, toggles a transparent class off/on and closes the dialog. It requires
