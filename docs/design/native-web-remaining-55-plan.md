@@ -826,3 +826,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   deferred style changes remain to be verified; grabbing/move/not-allowed, custom
   cursor images, full browser parity and performance remain open. Border-collapse
   was rechecked and remains open because shared-edge conflict resolution is absent.
+
+- Cocoa interaction cursors: Foco bf7b065a adds grab/grabbing/not_allowed enum
+  values and native open-hand/closed-hand/operation-not-allowed NSCursor mappings.
+  Other platform backends explicitly retain arrow fallback. Native Web maps compiled
+  grab/grabbing/not-allowed keywords to those values; the FocoKestrel macOS build,
+  compiler suite and contracts pass. Diagnostic fixtures now use unsupported zoom-in.
+  Fresh original CSS audit: **33 distinct unsupported constructs**. These shapes
+  have not been visually verified. Cocoa currently applies cursor selection before
+  deferred host-frame style updates, so style-driven cursor changes can lag until
+  subsequent input; that ordering remains open along with move/custom-image cursors,
+  original Kestrel parity and measured 60fps panning/resize.

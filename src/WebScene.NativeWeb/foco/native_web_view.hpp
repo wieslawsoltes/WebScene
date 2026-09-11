@@ -161,6 +161,9 @@ private:
     if (pointer_position_) {
       const auto cursor=document.cursor_at(pointer_position_->x,pointer_position_->y);
       set_cursor(cursor=="pointer" ? foco::cursor_kind::hand :
+          cursor=="grab" ? foco::cursor_kind::grab :
+          cursor=="grabbing" ? foco::cursor_kind::grabbing :
+          cursor=="not-allowed" ? foco::cursor_kind::not_allowed :
           cursor=="text" ? foco::cursor_kind::ibeam :
           cursor=="crosshair" ? foco::cursor_kind::cross :
           cursor=="col-resize" || cursor=="ew-resize" ? foco::cursor_kind::size_west_east :

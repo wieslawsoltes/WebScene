@@ -723,7 +723,7 @@ static std::string assignments(const std::string &name,
   if (name == "cursor") {
     const auto keyword=ascii_keyword(value);
     if(keyword=="inherit" || keyword=="unset") return "s.set_cursor(\"\");";
-    const std::set<std::string> supported{"auto","default","pointer","text","crosshair","col-resize","row-resize","ew-resize","ns-resize"};
+    const std::set<std::string> supported{"auto","default","pointer","text","crosshair","col-resize","row-resize","ew-resize","ns-resize","grab","grabbing","not-allowed"};
     if(!supported.contains(keyword)) throw std::runtime_error("unsupported native cursor: "+value);
     return "s.set_cursor("+quote(keyword)+");";
   }
