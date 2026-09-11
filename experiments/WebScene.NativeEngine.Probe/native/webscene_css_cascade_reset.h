@@ -176,6 +176,8 @@ inline void reset_cascaded_style(dom_node& node,
             if ((node.style.inline_property_mask & inline_font_smoothing) == 0U) {
                 textual->font_smoothing.clear();
             }
+            if ((node.style.inline_property_mask & inline_svg_stroke_width) == 0U)
+                textual->svg_stroke_width.clear();
             textual->list_style_position.clear();
             textual->list_style_type.clear();
             if ((node.style.inline_property_mask & inline_text_align) == 0U) {

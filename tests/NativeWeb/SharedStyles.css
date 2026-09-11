@@ -18,3 +18,8 @@
 #scroller.hide {scrollbar-width:none!important;}
 #scroller.auto {scrollbar-color:auto;}
 #scroller .tall {height:100px;}
+
+#mark.wide {stroke-width:3px;}
+#mark.inherited {stroke-width:inherit;}
+
+#mark.bad {stroke-width:-1px!important;}

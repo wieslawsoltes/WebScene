@@ -56,6 +56,20 @@ void exercise(const webscene_native::css::prepared_stylesheet& input) {
   require(has_rail(0x000000ff,6));
   d.remove_attribute(scroller,"style");d.remove_attribute(scroller,"class");
   require(has_rail(0x0000ffff,4));
+  auto mark=d.find("mark");
+  const auto serialized=[&] {
+    const auto& scene=d.render(100,200);
+    return std::string(scene.bytes.begin(),scene.bytes.end());
+  };
+  d.attribute(mark,"class","wide");
+  require(serialized().find("stroke-width=\"3px\"")!=std::string::npos);
+  d.remove_attribute(mark,"class");
+  require(serialized().find("stroke-width=\"3px\"")==std::string::npos);
+  require(serialized().find("stroke-width=\"1\"")!=std::string::npos);
+  d.attribute(mark,"class","inherited");
+  require(serialized().find("stroke-width=\"1\"")==std::string::npos);
+  d.attribute(mark,"class","bad");d.attribute(mark,"style","stroke-width:4px");
+  require(serialized().find("stroke-width=\"4px\"")!=std::string::npos);
   // Replacing the sheet changes styling through the same document invalidation.
   auto replacement=webscene_native::css::prepare_stylesheet("#target {width:44px;height:12px}","asset://new.css",[](const auto&){return true;});
   d.set_stylesheet_resolver(make_shared_stylesheet_resolver({*replacement},report));

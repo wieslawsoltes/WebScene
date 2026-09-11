@@ -18,6 +18,14 @@ void apply_resolved_declaration(native_document& document,dom_node& node,
     bool inline_origin,Decision& decision,LoadSvg&& load_svg)
 {
     const auto& name=declaration.name;
+    if(name=="stroke-width") {
+        apply_text_value(node,name,value,decision,[&](uint64_t mask) {
+            return !declaration.important && ((node.style.inline_property_mask|node.style.important_property_mask)&mask)!=0;
+        });
+        if(declaration.important && decision.classification=="supported")
+            node.style.important_property_mask|=inline_svg_stroke_width;
+        return;
+    }
     if(name=="scrollbar-width" || name=="scrollbar-color") {
         apply_scrollbar_value(node,declaration,value,decision);return;
     }

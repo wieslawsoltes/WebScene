@@ -1041,3 +1041,16 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   forced-color behavior and full interaction with vendor scrollbar pseudo styling
   are not established by these tests. Original-app parity and presented 60fps
   remain unfinished.
+
+- Shared CSS SVG stroke width: connected stroke-width to the existing SVG
+  serialization field, with its own precedence mask and reset on recascade.
+  Nonnegative numbers, px and percentage tokens are accepted; initial and explicit
+  inheritance resolve before projection. Validation precedes priority updates so
+  invalid important widths cannot block valid inline values. Parsed/generated
+  stylesheet tests verify an authored presentation width is overridden by CSS,
+  class removal restores it, explicit inheritance uses the ancestor width, and an
+  invalid important declaration leaves a valid inline width effective. Shared
+  style/document, CSS service and compiler suites pass. Evidence covers emitted
+  SVG data; no new Foco pixel comparison or packaged preview capture was made.
+  Font-relative units, full SVG styling parity, full Kestrel behavior and presented
+  60fps remain unverified or unfinished.

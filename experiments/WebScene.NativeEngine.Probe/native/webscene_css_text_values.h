@@ -234,6 +234,27 @@ bool apply_text_value(dom_node& node,const std::string& name,const std::string& 
                 ? std::string{} : value;
             decision.classification = "partially-supported";
             decision.semantic_slice = "solid SVG paint, none, and currentColor";
+        } else if (name == "stroke-width" && !is_inline(inline_svg_stroke_width)) {
+            std::string resolved=value;
+            if(value=="initial") resolved="1";
+            else if(value=="inherit" || value=="unset") {
+                resolved="1";
+                for(auto* parent=node.parent;parent;parent=parent->parent) {
+                    if(!parent->style.textual().svg_stroke_width.empty()) {
+                        resolved=parent->style.textual().svg_stroke_width;break;
+                    }
+                    const auto attribute=parent->attributes.find("stroke-width");
+                    if(attribute!=parent->attributes.end()) {resolved=attribute->second;break;}
+                }
+            }
+            char* end=nullptr;
+            const auto numeric=std::strtof(resolved.c_str(),&end);
+            const std::string_view unit(end);
+            if(end==resolved.c_str() || !std::isfinite(numeric) || numeric<0 ||
+               (!unit.empty() && unit!="px" && unit!="%")) {
+                decision.classification="unsupported";
+                decision.semantic_slice="nonnegative SVG numbers, px, percentages and inheritance";
+            } else node.style.mutable_textual().svg_stroke_width=resolved;
         } else if (name == "text-anchor" && !is_inline(inline_svg_text_anchor)) {
             if (value == "start" || value == "middle" || value == "end") {
                 node.style.mutable_textual().svg_text_anchor = value;
