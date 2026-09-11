@@ -1,0 +1,74 @@
+name: Linux native SDK and headless WebGPU
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/linux-native-sdk-headless-gpu]
+  pull_request:
+    paths:
+      - 'src/WebScene.NativeWeb/**'
+      - 'src/WebScene.Sdk/**'
+      - 'experiments/WebScene.NativeEngine.Probe/native/graphics/**'
+      - 'eng/sdk/**'
+      - 'tests/SDKNativeLinux/**'
+      - '.github/workflows/native-sdk-linux.yml'
+permissions:
+  contents: read
+concurrency:
+  group: native-linux-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  native-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native compiler prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 clang-tools-18 ninja-build
+      - name: Build original native document/compiler contracts
+        run: |
+          cmake -S src/WebScene.NativeWeb -B artifacts/native-contracts -G Ninja -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_BUILD_TYPE=Debug
+          cmake --build artifacts/native-contracts --parallel 2
+          ctest --test-dir artifacts/native-contracts --output-on-failure --output-junit "$GITHUB_WORKSPACE/native-contracts.xml"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-native-contract-results
+          path: |
+            native-contracts.xml
+            artifacts/native-contracts/Testing/Temporary/
+  vulkan-sdk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/graphics-sdk
+        with:
+          rid: linux-x64
+          component: dawn
+      - name: Save verified dependency before downstream tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-pinned-dawn
+          path: artifacts/graphics-sdk/linux-x64/dawn/
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Headless build and Vulkan software-driver prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 clang-tools-18 libvulkan-dev mesa-vulkan-drivers vulkan-tools
+      - name: Build installed native-only SDK and exercise real Vulkan offscreen images
+        env:
+          CC: clang-18
+          CXX: clang++-18
+          DISPLAY: ''
+          WAYLAND_DISPLAY: ''
+        run: bash eng/sdk/build-linux.sh "$GITHUB_WORKSPACE/artifacts/graphics-sdk/linux-x64" "$GITHUB_WORKSPACE/artifacts/linux-native"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webscene-linux-native-sdk
+          path: artifacts/linux-native/
+          include-hidden-files: true
+          if-no-files-found: warn
