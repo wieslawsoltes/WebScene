@@ -4,6 +4,19 @@ using namespace webscene::native_web;
 void require(bool condition) {if(!condition) throw std::runtime_error("native text input contract failed");}
 int main() {
   {
+    document d;auto input=d.element(d.body(),"input");d.set_value(input,"abc");d.focus(input);
+    unsigned calls=0;
+    auto handler=d.on(d.root(),"keydown",[&](auto& event) {
+      require(event.target==input && event.current_target==d.root());
+      require(event.key=="Backspace" && event.modifiers.shift);
+      ++calls;event.prevent_default();
+    });
+    d.key("Backspace",true);require(calls==1 && d.value(input)=="abc");
+    handler={};d.key("Backspace");require(d.value(input)=="ab");
+    auto dispose=d.on(input,"keydown",[&](auto&){d.dispose();});
+    d.key("Delete");require(d.disposed());
+  }
+  {
     document d;auto select=d.element(d.body(),"select");
     auto first=d.element(select,"option");d.attribute(first,"value","top");d.set_text(first,"Top");
     auto group=d.element(select,"optgroup");auto second=d.element(group,"option");

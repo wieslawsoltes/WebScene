@@ -1631,3 +1631,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   picking test passes. This closes the dedicated basic mesh/text test gap from
   aa2ce684; composed text, spatial indexing and comprehensive browser differential
   picking coverage remain open.
+
+- Native keyboard event seam: document.key now dispatches bubbling keydown with
+  explicit key and modifiers before built-in keyboard defaults. prevent_default
+  suppresses default editing; disposal from the listener stops processing safely.
+  Native text suite rebuilt/passes, including root bubbling, modifier preservation,
+  cancelled deletion, ordinary deletion and disposal. Kestrel shortcut routing
+  and full host key coverage still need implementation; this is their native API
+  prerequisite, not a claim that erase/undo shortcuts are working yet.

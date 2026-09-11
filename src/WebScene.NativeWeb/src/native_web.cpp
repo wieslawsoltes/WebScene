@@ -248,7 +248,7 @@ subscription document::on(node_id node, std::string type,
   state_->listeners.emplace(id, listener{node, std::move(type), std::move(cb)});
   return subscription(state_, id);
 }
-bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y, uint32_t buttons, std::string property_name, float elapsed_time_seconds, input_modifiers modifiers, std::string data, std::string input_type) {
+bool document::dispatch(node_id target, std::string type, float client_x, float client_y, float delta_y, uint32_t buttons, std::string property_name, float elapsed_time_seconds, input_modifiers modifiers, std::string data, std::string input_type, std::string key) {
   auto &n = state_->node(target);
   std::vector<node_id> path;
   for (auto *p = &n; p; p = p->parent)
@@ -261,7 +261,7 @@ bool document::dispatch(node_id target, std::string type, float client_x, float 
   e.property_name = std::move(property_name);
   e.elapsed_time_seconds = elapsed_time_seconds;
   e.modifiers = modifiers;
-  e.data=std::move(data);e.input_type=std::move(input_type);
+  e.data=std::move(data);e.input_type=std::move(input_type);e.key=std::move(key);
   for (auto id : path) {
     if (!state_->alive)
       return false;
@@ -511,6 +511,8 @@ void document::key(std::string_view key, bool shift) {
 void document::key(std::string_view key, input_modifiers modifiers) {
   const bool shift=modifiers.shift;
   state_->check();
+  const auto target=state_->focus?state_->focus:root();
+  if(!dispatch(target,"keydown",0,0,0,0,{},0,modifiers,{},{},std::string(key))) return;
   if (!state_->keyboard_modality) {
     state_->keyboard_modality = true;
     state_->styles_dirty = true;

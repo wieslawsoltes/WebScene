@@ -348,6 +348,7 @@ struct event {
   input_modifiers modifiers;
   std::string data;
   std::string input_type;
+  std::string key;
   void stop_propagation() { propagation_stopped = true; }
   void prevent_default() { default_prevented = true; }
 };
@@ -425,7 +426,7 @@ public:
   bool dispatch(node_id, std::string type, float client_x = 0,
                 float client_y = 0, float delta_y = 0, uint32_t buttons = 0,
                 std::string property_name = {}, float elapsed_time_seconds = 0,
-                input_modifiers modifiers = {}, std::string data = {}, std::string input_type = {});
+                input_modifiers modifiers = {}, std::string data = {}, std::string input_type = {}, std::string key = {});
   void pointer(std::string type, float x, float y, uint32_t buttons = 1, input_modifiers = {});
   void wheel(float x, float y, float delta_y, input_modifiers = {});
   void focus(node_id);
