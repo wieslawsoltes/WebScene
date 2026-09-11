@@ -125,6 +125,13 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "paint-only-cascade") {
+            auto* focused_engine=webscene_engine_create(0);
+            require(focused_engine != nullptr,"paint invalidation engine creation failed");
+            test_paint_only_stylesheet_recascade_does_not_force_layout(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "all-unset") {
             auto* focused_engine=webscene_engine_create(0);
             require(focused_engine != nullptr,"reset test engine creation failed");

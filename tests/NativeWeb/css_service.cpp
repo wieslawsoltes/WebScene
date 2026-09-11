@@ -26,6 +26,7 @@
 #include "webscene_css_cascade_application.h"
 #include "webscene_css_pseudo_application.h"
 #include "webscene_css_rule_matching.h"
+#include "webscene_css_cascade_finalization.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -734,5 +735,21 @@ int main(int argc,char** argv) {
     ordered_node.class_name.clear();
     collected_matches=collect();
     if(!collected_matches.ordinary.empty() || !collected_matches.pseudo.empty()) return 135;
+    auto font_payload=std::make_shared<webscene_native::css::css_rule_payload>();
+    font_payload->declarations={{"line-height","2em",false},{"font-size","30px",false}};
+    webscene_native::css::css_rule font_rule{font_payload,0,0,true};
+    std::vector<const webscene_native::css::css_rule*> font_rules{&font_rule};
+    ordered_node.style.font_size=30;
+    ordered_node.style.line_height=20;
+    webscene_native::css::recompute_cascaded_line_height(ordered_node,font_rules,variable_root);
+    if(ordered_node.style.line_height!=60) return 136;
+    auto geometry_style=ordered_node.style;
+    geometry_style.background_rgba=0xFFFFFFFF;
+    if(!webscene_native::css::computed_layout_style_equal(ordered_node.style,geometry_style)) return 137;
+    geometry_style.width={999,webscene_native::length_unit::pixels};
+    if(webscene_native::css::computed_layout_style_equal(ordered_node.style,geometry_style)) return 138;
+    geometry_style=ordered_node.style;
+    geometry_style.mutable_before_pseudo().padding_left={9,webscene_native::length_unit::pixels};
+    if(webscene_native::css::computed_layout_style_equal(ordered_node.style,geometry_style)) return 139;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

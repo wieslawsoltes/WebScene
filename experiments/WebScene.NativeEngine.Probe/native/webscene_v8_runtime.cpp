@@ -50,6 +50,7 @@
 #include "webscene_css_cascade_application.h"
 #include "webscene_css_pseudo_application.h"
 #include "webscene_css_rule_matching.h"
+#include "webscene_css_cascade_finalization.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"

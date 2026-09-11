@@ -674,3 +674,15 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   selector regressions pass. Results borrow their rule storage until application
   completes. Candidate index construction, font finalization and invalidation still
   need integration into a complete native document stylesheet owner.
+
+- Cascade finalization extraction: native callers and the existing runtime now
+  share relative line-height finalization against the winning font size and
+  computed layout-style comparison. A regression exposed missing pseudo padding
+  in the comparison; all four padding edges now participate so those changes
+  invalidate geometry while background-color-only changes remain paint-only.
+  Native CSS service tests and runtime paint-only cascade, variable dimensions,
+  dimension inheritance and active pseudo-border regressions pass. Both builds
+  are current. This does not change compiler support counts or introduce runtime
+  CSS parsing into compiled applications. Native stylesheet ownership, candidate
+  indexing and invalidation integration remain unfinished; full original Kestrel
+  parity and presented 60fps panning/resize remain unverified.
