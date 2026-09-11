@@ -16,6 +16,7 @@ static bool exercise_navigation=false;
 static bool exercise_theme=false;
 static bool exercise_picking=false;
 static bool exercise_layer_edit=false;
+static bool exercise_line_edit=false;
 static bool exercise_shortcuts=false;
 static bool exercise_drag_selection=false;
 static bool benchmark_pan=false;
@@ -65,6 +66,8 @@ class preview_app final : public foco::application {
   std::unique_ptr<kestrel::viewport> viewport;
   uint32_t gpu_width{}, gpu_height{};
   uint64_t gpu_serial{};
+  uint64_t line_edit_serial{};
+  std::optional<kestrel::json> line_edit_before;
   unsigned ticks{};
   bool navigation_exercised{};
   uint64_t navigation_serial{};
@@ -597,7 +600,7 @@ public:
           const auto area=view->document.bounds(view->document.find("scene"));
           bool found=false;
           for(const auto& entity:model.data["entities"]) {
-            if(!model.visible(entity))continue;
+            if(!model.visible(entity) || (exercise_line_edit && entity.value("type",std::string{})!="LINE"))continue;
             const auto geometry=kestrel::geo::geometry(entity);
             for(const auto& segment:geometry.segments) {
               const auto point=viewport->camera.project((segment[0]+segment[1])*.5);
@@ -605,11 +608,30 @@ public:
               foco::pointer_event click;click.position={float(view->bounds().x+area.x+point.x),float(view->bounds().y+area.y+point.y)};
               click.kind=foco::pointer_event_kind::pressed;click.buttons=1;view->pointer_event_received(click);
               click.kind=foco::pointer_event_kind::released;click.buttons=0;view->pointer_event_received(click);
-              found=!model.selection.empty();break;
+              found=!model.selection.empty();
+              if(exercise_line_edit)found=model.selection.size()==1 && model.find(*model.selection.begin())->value("type",std::string{})=="LINE";
+              if(found)break;
             }
             if(found)break;
           }
           if(!found)throw std::runtime_error("Hosted geometry click did not select an entity");
+          if(exercise_line_edit) {
+            const auto find_endpoint=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
+              if(view->document.attribute(node,"data-prop")=="points.1.0")return node;
+              for(auto child:view->document.children(node))if(auto found=self(self,child))return found;
+              return 0;
+            };
+            const auto input=find_endpoint(find_endpoint,view->document.find("inspector"));
+            if(!input)throw std::runtime_error("Hosted line endpoint control missing");
+            line_edit_before=model.data;line_edit_serial=gpu_serial;
+            const auto selected=*model.selection.begin();
+            const double value=model.find(selected)->at("points")[1][0].get<double>()+500;
+            view->document.focus(input);view->document.set_selection(input,0,view->document.value(input).size());
+            foco::text_input_event text;text.text=std::to_string(value);view->text_input_received(text);
+            foco::key_event key;key.value=foco::key::enter;view->key_event_received(key);
+            if(model.find(selected)->at("points")[1][0]!=value)throw std::runtime_error("Hosted endpoint commit failed");
+            exercise_line_edit=false;
+          }
           if(exercise_layer_edit) {
             const auto before=model.data;
             const auto selected=*model.selection.begin();
@@ -651,6 +673,12 @@ public:
             exercise_layer_edit=false;std::cout<<"Hosted inspector layer edit and undo passed\n";
           }
           exercise_picking=false;std::cout<<"Hosted geometry selection passed\n";
+        }
+        if(line_edit_before && gpu_serial>line_edit_serial) {
+          view->document.focus(view->document.find("viewport"));
+          foco::key_event key;key.value=foco::key::z;key.modifiers=foco::key_modifiers::platform;view->key_event_received(key);
+          if(model.data!=*line_edit_before)throw std::runtime_error("Hosted endpoint undo failed");
+          line_edit_before.reset();std::cout<<"Hosted line endpoint commit, GPU publication and undo passed\n";
         }
         if(exercise_theme && viewport && gpu_serial) {
           const auto find_theme=[&](auto&& self,webscene::native_web::node_id node)->webscene::native_web::node_id {
@@ -734,6 +762,7 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
     else if(std::string_view(argv[i])=="--exercise-drag-selection") exercise_drag_selection=true;
     else if(std::string_view(argv[i])=="--exercise-shortcuts") exercise_shortcuts=true;
+    else if(std::string_view(argv[i])=="--exercise-line-edit") {exercise_picking=true;exercise_line_edit=true;}
     else if(std::string_view(argv[i])=="--exercise-layer-edit") {exercise_picking=true;exercise_layer_edit=true;}
     else if(std::string_view(argv[i])=="--exercise-picking") exercise_picking=true;
     else if(std::string_view(argv[i])=="--exercise-theme") exercise_theme=true;

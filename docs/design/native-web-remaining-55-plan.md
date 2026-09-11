@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Hosted line edit: `--exercise-line-edit --capture` selects an original Courtyard
+LINE through pointer events, enters an End X change through Foco text/Enter events,
+checks native geometry, waits for a subsequent GPU image publication, and invokes
+platform undo with exact drawing restoration. The run passed and captured GPU
+serial 3 with exit status zero. Publication is not a pixel comparison or physical
+presentation timestamp, so browser visual parity and 60fps gates remain open.
+
 Line geometry inspector: compiled section/coordinate templates now expose the
 original six Start/End coordinates and calculated Length for a single LINE.
 Native finite endpoint edits respect editable selection and use undo transactions.
