@@ -24,6 +24,12 @@ int main() {
       return 0;
     };
     const auto before=model.data;
+    auto coordinate=control(control,inspector,"points.1.0");require(coordinate!=0);
+    doc.focus(coordinate);doc.set_selection(coordinate,0,doc.value(coordinate).size());doc.text_input("25");doc.key("Enter");
+    require(model.find(id)->at("points")[1][0]==25);
+    require(doc.text_content(inspector).find("25.000 mm")!=std::string::npos);
+    require(model.undo()=="Edit points.1.0" && model.data==before);panel.refresh();
+    require(!model.change_line_endpoint(2,0,1));
     auto type=control(control,inspector,"linetype");require(type!=0);doc.focus(type);doc.key("End");
     require(model.find(id)->at("linetype")=="Center");
     auto weight=control(control,inspector,"lineweight");require(weight!=0);

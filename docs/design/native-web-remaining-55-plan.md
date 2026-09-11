@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Line geometry inspector: compiled section/coordinate templates now expose the
+original six Start/End coordinates and calculated Length for a single LINE.
+Native finite endpoint edits respect editable selection and use undo transactions.
+The native document test types End X, commits with Enter, verifies changed geometry
+and displayed length, and requires exact undo restoration. Missing endpoint arrays
+are guarded; absent Z components display zero. Other entity geometry editors and
+full browser interaction parity remain open.
+
 Inspector information: single selections now show the original Layer state row
 (locked, visible/editable or hidden) and optional Group row, using a predefined
 compiled read-only property template. Group names fall back to group IDs.

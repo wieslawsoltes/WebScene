@@ -390,6 +390,15 @@ public:
     const auto ids=selected(true);if(ids.empty())return false;
     return transaction("Edit "+key,[&] {for(const auto& id:ids)if(auto* entity=find(id))(*entity)[key]=value;});
   }
+  bool change_line_endpoint(size_t endpoint,size_t axis,double value) {
+    if(endpoint>1 || axis>2 || !std::isfinite(value))return false;
+    const auto ids=selected(true);if(ids.size()!=1)return false;
+    auto* entity=find(ids.front());
+    if(!entity || entity->value("type",std::string{})!="LINE")return false;
+    return transaction("Edit points."+std::to_string(endpoint)+"."+std::to_string(axis),[&] {
+      (*entity)["points"][endpoint][axis]=value;
+    });
+  }
   bool show_all_layers() {
     return transaction("Show all layers",[&] {
       for(auto& layer:data["layers"])layer["visible"]=true;
