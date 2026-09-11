@@ -163,6 +163,9 @@ public:
     text("summary-entities",std::to_string(model_.data["entities"].size()));
     text("summary-selected",std::to_string(model_.selection.size()));
     text("summary-name",model_.data.value("name",std::string("Untitled")));
+    text("title-name",model_.data.value("name",std::string("Untitled")));
+    text("selection-status",model_.selection.empty()?"No selection":std::to_string(model_.selection.size())+" selected");
+    text("units-status",model_.data.value("units",std::string("mm")));
     text("summary-units",model_.data.value("units",std::string("mm")));
   }
 };

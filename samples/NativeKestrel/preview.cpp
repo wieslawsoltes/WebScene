@@ -102,6 +102,8 @@ class preview_app final : public foco::application {
           throw std::runtime_error("GPU image dimensions do not match the current canvas");
         published_width=metadata.width;published_height=metadata.height;
         ++gpu_serial;
+        if(gpu_serial==1) if(auto label=view->document.find("engine-label"))
+          view->document.set_text(label,"WebGPU");
         const auto overlay=view->document.find("overlay");
         view->document.attribute(overlay,"width",std::to_string(w));
         view->document.attribute(overlay,"height",std::to_string(h));

@@ -1474,3 +1474,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   name and dirty marker after a transaction; rebuilt native layer CTest passes.
   This is the single active document view only: switching/closing and multi-document
   lifecycle still require application controller work. No runtime HTML parsing.
+
+- Native document status bindings: title-name, selection-status and units-status
+  now follow the native drawing during explorer refresh. The renderer badge
+  changes to WebGPU only after the first native GPU image arrives. The native
+  layer test checks initial title/status and selection updates and passes.
+  Rebuilt FocoKestrelPreview and captured /tmp/kestrel-status-current.png with
+  clean exit; inspected Courtyard title, active document tab, units and renderer
+  badge. This does not establish full command parity or OS live-resize timing.

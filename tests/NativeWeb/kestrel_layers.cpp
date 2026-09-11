@@ -20,6 +20,8 @@ int main() {
     courtyard.selection.clear();require(courtyard.erase_selected()==0);
   }
   document d;d.set_stylesheet_resolver(make_shared_stylesheet_resolver({},{}));
+  auto title=d.element(d.body(),"span");d.attribute(title,"id","title-name");
+  auto selected_status=d.element(d.body(),"span");d.attribute(selected_status,"id","selection-status");
   auto tabs=d.element(d.body(),"div");d.attribute(tabs,"id","document-tabs");
   auto list=d.element(d.body(),"div");d.attribute(list,"id","explorer-list");
   auto badge=d.element(d.body(),"span");d.attribute(badge,"id","layer-count");
@@ -31,6 +33,7 @@ int main() {
     kestrel::layer_panel panel(d,model,[&]{++changes;});
     require(panel.entries().size()==model.data["layers"].size());
     require(d.text_content(tabs).find("Untitled")!=std::string::npos);
+    require(d.text_content(title)=="Untitled" && d.text_content(selected_status)=="No selection");
     d.focus(search);d.text_input("a-wall");require(panel.entries().size()==1 && panel.entries()[0].id=="architecture");
     d.text_input("not-found");require(panel.entries().empty());
     const auto& empty=d.render(300,300);
@@ -66,6 +69,7 @@ int main() {
     d.dispatch(panel.entries()[1].row,"click",0,0,0,0,{},0,{true});
     require(model.selection.size()==1 && model.selection.contains("visible"));
     require(model.data["currentLayer"]==current);
+    require(d.text_content(selected_status)=="1 selected");
     model.data["layers"][1]["visible"]=false;
     d.dispatch(panel.entries()[1].row,"click",0,0,0,0,{},0,{true});
     require(model.selection.empty());
