@@ -1253,3 +1253,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   inspect compositor scheduling and drawable presentation, rather than changing
   native geometry caching or assuming document invalidation still loses half
   the updates. Actual displayed 60fps remains unachieved.
+
+- Half-rate CPU timing investigation: temporary timing around the active Cocoa
+  presentation worker's compositor_->tick localized an over-budget render call.
+  1,000-entity run: 180 successful ticks, median 20.1494 ms, p95 21.1624 ms,
+  max 59.1078 ms (includes startup); 181 non-rendering ticks, median 2.6968 ms,
+  p95 3.3933 ms. GPU publications 360, scene publications 359, compositor
+  presentations 179. Log /tmp/present-cpu.log. Temporary host instrumentation
+  removed after measurement (built executable still includes the probe until
+  next rebuild). Next profile phases inside render: drawable acquisition,
+  painter, GPU waits/submission. Do not assume this is an explicit 30Hz throttle;
+  successful calls exceed the 16.7ms frame budget.
