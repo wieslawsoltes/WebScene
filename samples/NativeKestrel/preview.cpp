@@ -11,6 +11,7 @@ static std::string capture_path;
 static bool exercise_layer_filter=false;
 static bool exercise_objects=false;
 static bool benchmark_pan=false;
+static bool benchmark_courtyard=false;
 static bool benchmark_large=false;
 static bool benchmark_canvas_resize=false;
 #include <array>
@@ -74,9 +75,9 @@ class preview_app final : public foco::application {
     auto h = static_cast<uint32_t>(bounds.height);
     if (!viewport) {
       viewport = std::make_unique<kestrel::viewport>(node, w, h);
-      viewport->options.style = benchmark_pan || exercise_objects || exercise_layer_filter
+      viewport->options.style = (benchmark_pan && !benchmark_courtyard) || exercise_objects || exercise_layer_filter
           ? kestrel::display_style::shaded_edges : kestrel::display_style::wireframe;
-      if(!benchmark_pan && !exercise_objects && !exercise_layer_filter) {
+      if((!benchmark_pan || benchmark_courtyard) && !exercise_objects && !exercise_layer_filter) {
         std::vector<kestrel::vec3> points;
         for(const auto& entity:model.data["entities"]) if(model.visible(entity)) {
           const auto geometry=kestrel::geo::geometry(entity,1);
@@ -200,7 +201,7 @@ public:
 #endif
     }
     view->refresh();
-    if(!benchmark_pan && !exercise_objects && !exercise_layer_filter)
+    if((!benchmark_pan || benchmark_courtyard) && !exercise_objects && !exercise_layer_filter)
       kestrel::load_courtyard(model);
     else model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
     if(benchmark_large) for(unsigned i=1;i<1000;++i)
@@ -279,7 +280,7 @@ public:
             pan_initial_serial=gpu_serial;pan_initial_builds=viewport->scene_build_count();
             if(auto* publisher=view->composition()) {pan_initial_compositor=publisher->compositor_diagnostics();pan_initial_publication=publisher->metrics();}
           }
-          viewport->camera.pan(2,0);gpu_dirty=true;
+          viewport->camera.pan(benchmark_courtyard && (pan_samples/60)%2 ? -2 : 2,0);gpu_dirty=true;
 #ifdef KESTREL_PREVIEW_SHARED_CSS
           if(benchmark_canvas_resize) {
             const auto area=view->document.bounds(view->document.find("viewport"));
@@ -302,6 +303,7 @@ public:
             const auto seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-pan_start).count();
             std::cout<<(benchmark_canvas_resize?"Canvas resize pipeline: seconds=":"Pan pipeline: seconds=")<<seconds<<" host_ticks="<<pan_samples
                 <<" entities="<<model.data["entities"].size()
+                <<" text_records="<<viewport->scene_content().texts.size()
                 <<" published_images="<<(gpu_serial-pan_initial_serial)
                 <<" images_per_second="<<(gpu_serial-pan_initial_serial)/seconds
                 <<" tick_mean_ms="<<pan_tick_ms/pan_samples<<" tick_max_ms="<<pan_tick_max_ms
@@ -355,6 +357,7 @@ int main(int argc, char **argv) {
     else if(std::string_view(argv[i])=="--exercise-layer-filter") exercise_layer_filter=true;
     else if(std::string_view(argv[i])=="--exercise-objects") exercise_objects=true;
     else if(std::string_view(argv[i])=="--benchmark-pan") benchmark_pan=true;
+    else if(std::string_view(argv[i])=="--benchmark-courtyard") {benchmark_pan=true;benchmark_courtyard=true;}
     else if(std::string_view(argv[i])=="--benchmark-pan-large") {benchmark_pan=true;benchmark_large=true;}
     else if(std::string_view(argv[i])=="--benchmark-canvas-resize") {benchmark_pan=true;benchmark_large=true;benchmark_canvas_resize=true;}
   }

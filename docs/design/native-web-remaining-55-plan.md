@@ -1430,3 +1430,14 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   native_web_text and CTest passes. Dimension background masks, formatted MText,
   custom font handling, complete original renderer overlays and performance with
   text are still unverified/incomplete; this is not full browser parity.
+
+- Original drawing panning workload: --benchmark-courtyard fits the original
+  drawing and pans back/forth through 360 ticks, keeping labels within view.
+  Rebuilt/reran: 265 entities, 30 text records, 360 GPU publications, zero geometry
+  rebuilds, mean CPU tick 3.49867 ms, max 4.33971 ms. Scene publications 359;
+  compositor presentations 358 and one skipped attempt. 356 valid Metal times
+  yield 59.999662 FPS, p95 16.666833 ms, max 16.666917 ms. Logs
+  /tmp/kestrel-courtyard-pan.log and /tmp/kestrel-courtyard-pan.jsonl. The positive
+  timestamp series sustains 60fps with the current text overlay, but the isolated
+  skipped attempt is not characterized, and this does not prove physical input
+  latency, live window resize or complete original app functionality.
