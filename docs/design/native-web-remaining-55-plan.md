@@ -1402,3 +1402,12 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   Preview still uses its diagnostic box until this fixture is connected with
   camera fitting and original render-style selection. Full drawing render parity
   and application behavior remain unverified.
+
+- Courtyard connected to hosted preview: ordinary launch now loads the original
+  embedded 265-entity fixture, selects wireframe and fits visible geometry. Existing
+  synthetic benchmarks and interaction probes retain their deterministic box
+  fixtures. Rebuilt/captured /tmp/kestrel-native-courtyard.png with clean exit.
+  Inspected walls, openings/door arcs, furniture, hatches and dimension lines;
+  explorer shows nine layers and 265 objects with native summary title. Drawing
+  labels and dimension text are absent: native render_data collects text, but
+  hosted text drawing requires investigation. Full visual parity remains unmet.

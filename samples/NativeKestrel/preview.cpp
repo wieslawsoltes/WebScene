@@ -28,6 +28,7 @@ import kestrel.preview.tabs;
 import kestrel.preview.groups;
 #ifdef KESTREL_PREVIEW_GPU
 import kestrel.viewport;
+import kestrel.examples;
 #ifdef KESTREL_PREVIEW_SHARED_CSS
 import kestrel.layer_panel;
 #endif
@@ -73,7 +74,16 @@ class preview_app final : public foco::application {
     auto h = static_cast<uint32_t>(bounds.height);
     if (!viewport) {
       viewport = std::make_unique<kestrel::viewport>(node, w, h);
-      viewport->options.style = kestrel::display_style::shaded_edges;
+      viewport->options.style = benchmark_pan || exercise_objects || exercise_layer_filter
+          ? kestrel::display_style::shaded_edges : kestrel::display_style::wireframe;
+      if(!benchmark_pan && !exercise_objects && !exercise_layer_filter) {
+        std::vector<kestrel::vec3> points;
+        for(const auto& entity:model.data["entities"]) if(model.visible(entity)) {
+          const auto geometry=kestrel::geo::geometry(entity,1);
+          points.insert(points.end(),geometry.points.begin(),geometry.points.end());
+        }
+        viewport->camera.fit(points);
+      }
     }
     if (w != gpu_width || h != gpu_height) {
       viewport->resize(w, h);
@@ -162,7 +172,9 @@ public:
 #endif
     }
     view->refresh();
-    model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
+    if(!benchmark_pan && !exercise_objects && !exercise_layer_filter)
+      kestrel::load_courtyard(model);
+    else model.add("MESH", kestrel::geo::box({-50, -40, 0}, 100, 80, 60));
     if(benchmark_large) for(unsigned i=1;i<1000;++i)
       model.add("MESH",kestrel::geo::box({double(i%40)*8-160,double(i/40)*8-100,0},6,6,5));
 #ifdef KESTREL_PREVIEW_SHARED_CSS
