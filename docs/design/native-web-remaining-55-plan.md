@@ -2321,3 +2321,15 @@ camera alignment and cleanup regressions pass (GPU serial 2). A dedicated hosted
 Shift press/release/commit assertion is still required. Grid/polar/status toggles
 are not wired yet; original status-toggles HTML is generated in upstream app.js
 and needs a predefined compiled template. Object snaps remain separate work.
+
+### Hosted Shift preview/commit agreement
+
+Extended hosted preview exercise to send Shift-modified pointer movement, require
+an axis-constrained preview, commit through Shift pointer press/release and compare
+the resulting endpoint against that preview. Command-field Undo restores the
+exact prior document and anchor. A subsequent unmodified pointer movement restores
+unconstrained preview. Rebuilt hosted run passes, GPU serial 2, exit 0.
+Stationary Shift release remains unproven: Foco key_event has no press/release
+field, so a DOM keyup listener alone does not prove host release delivery. Audit
+that input seam before claiming stationary modifier fidelity. Grid/polar toggles,
+object snaps and overall performance/parity gates remain open.

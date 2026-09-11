@@ -834,6 +834,24 @@ public:
             const auto& scene=view->document.render(host.width,host.height);
             size_t strokes=0;for(const auto& command:scene.canvas)if(command.kind==20)++strokes;
             if(strokes<2)throw std::runtime_error("Pending Line emitted no dashed Canvas strokes");
+            move.modifiers=foco::key_modifiers::shift;view->pointer_event_received(move);
+            redraw_overlay(gpu_width,gpu_height);
+            const auto anchor=line_tool.points().back();
+            if(!line_pointer || (std::abs(line_pointer->x-anchor[0])>1e-8 && std::abs(line_pointer->y-anchor[1])>1e-8))
+              throw std::runtime_error("Shift preview did not constrain an axis");
+            const auto constrained=*line_pointer;
+            foco::pointer_event commit=move;commit.kind=foco::pointer_event_kind::pressed;commit.buttons=1;view->pointer_event_received(commit);
+            commit.kind=foco::pointer_event_kind::released;commit.buttons=0;view->pointer_event_received(commit);
+            const auto& endpoint=model.data["entities"].back()["points"][1];
+            if(model.data["entities"].size()!=pending["entities"].size()+1 || !near(endpoint,constrained))
+              throw std::runtime_error("Shift committed endpoint differs from preview");
+            type_command("U");
+            if(model.data!=pending || line_tool.points().size()!=1)throw std::runtime_error("Shift segment Undo failed");
+            move.modifiers=foco::key_modifiers::none;view->pointer_event_received(move);
+            redraw_overlay(gpu_width,gpu_height);
+            const auto unconstrained=viewport->camera.unproject(area.width*.7,area.height*.65,0);
+            if(!line_pointer || !unconstrained || std::hypot(line_pointer->x-unconstrained->x,line_pointer->y-unconstrained->y)>.01)
+              throw std::runtime_error("Shift release on pointer movement did not restore unconstrained preview");
             viewport->camera.pan(40,15);redraw_overlay(gpu_width,gpu_height);
             if(!line_pointer)throw std::runtime_error("Pan lost preview pointer");
             const auto projected=viewport->camera.project(*line_pointer);
