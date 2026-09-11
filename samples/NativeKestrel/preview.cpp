@@ -74,6 +74,7 @@ class preview_app final : public foco::application {
   bool drafting_snap{},drafting_ortho{},drafting_polar{};
   bool drafting_osnap{true};
   kestrel::object_snap_index snap_index;
+  std::optional<kestrel::object_snap_result> snap_target;
   std::optional<kestrel::vec3> line_pointer;
   std::optional<std::array<double,2>> line_pointer_client;
   bool overlay_dirty{};
@@ -165,9 +166,10 @@ class preview_app final : public foco::application {
     viewport->camera.fit(points);gpu_dirty=true;
   }
   std::optional<kestrel::vec3> drafting_pointer(double x,double y) {
+    snap_target.reset();
     auto point=viewport->camera.unproject(x,y,0);
     if(!point)return {};
-    if(drafting_osnap)if(auto snap=snap_index.nearest(model,viewport->camera,x,y))return snap->point;
+    if(drafting_osnap) {snap_target=snap_index.nearest(model,viewport->camera,x,y);if(snap_target)return snap_target->point;}
     std::optional<std::array<double,3>> base;
     if(!line_tool.points().empty())base=line_tool.points().back();
     const auto result=kestrel::constrain_drafting_point({point->x,point->y,point->z},base,drafting_snap,100,drafting_ortho || drafting_shift,drafting_polar,15);
@@ -217,6 +219,26 @@ class preview_app final : public foco::application {
         for(const auto& dash:kestrel::preview_dashes(a.x,a.y,b.x,b.y,w,h))
           view->document.stroke_line(overlay,dash[0],dash[1],dash[2],dash[3],1.45f,color);
       }
+    }
+    if(line_active && line_pointer && drafting_osnap && snap_target) {
+      const auto p=viewport->camera.project(snap_target->point);
+      const uint32_t color=viewport->options.light_theme?0x28956cff:0x7ad4a8ff;
+      const auto stroke=[&](double x1,double y1,double x2,double y2) {
+        view->document.stroke_line(overlay,p.x+x1,p.y+y1,p.x+x2,p.y+y2,1.4f,color);
+      };
+      if(snap_target->type=="center" || snap_target->type=="quadrant") {
+        for(int i=0;i<32;++i) {
+          const auto a=i*2*std::acos(-1.0)/32,b=(i+1)*2*std::acos(-1.0)/32;
+          stroke(6*std::cos(a),6*std::sin(a),6*std::cos(b),6*std::sin(b));
+        }
+      } else if(snap_target->type=="midpoint") {
+        stroke(0,-6,6,6);stroke(6,6,-6,6);stroke(-6,6,0,-6);
+      } else if(snap_target->type=="intersection") {
+        stroke(-6,-6,6,6);stroke(6,-6,-6,6);
+      } else {
+        stroke(-6,-6,6,-6);stroke(6,-6,6,6);stroke(6,6,-6,6);stroke(-6,6,-6,-6);
+      }
+      view->document.fill_text(overlay,snap_target->type,p.x+11,p.y-11,"10px \"Segoe UI\",sans-serif",color,"left","alphabetic");
     }
     overlay_dirty=false;
   }

@@ -2443,3 +2443,15 @@ Build and hosted check pass, GPU serial 2, exit 0. Existing geometric test fixtu
 explicitly disable OSNAP while testing raw coordinate projection. Snap marker
 rendering, default-on interaction captures, direct-model-write invalidation audit
 and OSNAP latency remain open; full Kestrel parity is not established.
+
+### Initial native snap marker feedback
+
+Drafting pointer retains selected snap metadata; overlay draws original 6-pixel
+marker shapes (midpoint triangle, intersection cross, other square) and 10px type
+label with original light/dark colors. Center/quadrant circles currently use 32
+line segments, so exact native arc rendering remains a fidelity task. Marker
+visibility follows active Line, valid pointer, OSNAP and selected target. Hosted
+build and existing OSNAP click/Undo regressions pass, GPU serial 2. The current
+capture fixture disables OSNAP before its final image, so it does not visually
+verify markers. Dedicated selected-target capture and marker cleanup checks are
+still required.
