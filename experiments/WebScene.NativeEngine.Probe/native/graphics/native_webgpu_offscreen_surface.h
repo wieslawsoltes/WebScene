@@ -2,20 +2,78 @@
 #include "native_webgpu_device.h"
 #include "dawn_canvas_images.h"
 #include "image_lease_abi.h"
+#include <condition_variable>
 #include <cstdlib>
+#include <deque>
 #include <cstring>
 #include <limits>
 #include <optional>
 #include <thread>
 
 namespace webscene::graphics {
+// Dedicated native completion progress. Wait on submitted-work futures instead
+// of driving a render timer or waiting on the application/owner thread. Dawn's
+// spontaneous callback mode alone does not guarantee progress when all frames
+// are paused. This service never touches document state or presents a frame.
+class offscreen_completion_service {
+    struct state {
+        std::shared_ptr<native_webgpu_device> gpu;
+        std::mutex mutex;
+        std::condition_variable wake;
+        std::deque<wgpu::Future> pending;
+        bool closing=false;
+        explicit state(std::shared_ptr<native_webgpu_device> value):gpu(std::move(value)) {}
+    };
+    std::shared_ptr<state> state_;
+    std::thread worker_;
+    static void work(const std::shared_ptr<state>& state) noexcept {
+        for(;;) {
+            wgpu::Future future;
+            {
+                std::unique_lock lock(state->mutex);
+                state->wake.wait(lock,[&]{return state->closing || !state->pending.empty();});
+                if(state->pending.empty()) return;
+                future=state->pending.front();state->pending.pop_front();
+            }
+            // The only blocking GPU wait is on this completion worker (or an
+            // explicitly requested capture). Timeout is a device failure,
+            // never a fabricated successful frame or owner-thread GPU wait.
+            if(state->gpu->instance.WaitAny(future,30'000'000'000ULL)!=wgpu::WaitStatus::Success) {
+                state->gpu->failed->store(true);
+                state->gpu->device.Destroy();
+                state->gpu->instance.WaitAny(future,0);
+            }
+        }
+    }
+public:
+    explicit offscreen_completion_service(std::shared_ptr<native_webgpu_device> gpu)
+        :state_(std::make_shared<state>(std::move(gpu))),worker_([state=state_]{work(state);}) {}
+    offscreen_completion_service(const offscreen_completion_service&)=delete;
+    offscreen_completion_service& operator=(const offscreen_completion_service&)=delete;
+    ~offscreen_completion_service() {
+        {std::lock_guard lock(state_->mutex);state_->closing=true;}
+        state_->wake.notify_one();
+        // The worker owns its independent state until the final completion.
+        // A lease may have its final release inside a native callback.
+        if(worker_.get_id()==std::this_thread::get_id()) worker_.detach();
+        else worker_.join();
+    }
+    void enqueue(wgpu::Future future) const {
+        std::lock_guard lock(state_->mutex);
+        if(state_->closing || state_->pending.size()>=128)
+            throw std::runtime_error("Offscreen GPU completion admission backpressure");
+        state_->pending.push_back(future);state_->wake.notify_one();
+    }
+};
+
 // No OS window or external-memory handle is required. Images remain on the
 // application's Dawn device. This is NOT a Vulkan-to-EGL/Wayland presenter.
 struct offscreen_gpu_dependencies final : webscene_gpu_producer_dependencies {
     std::shared_ptr<native_webgpu_device> gpu;
+    offscreen_completion_service completion;
     mutable std::atomic<uint64_t> captures{};
     explicit offscreen_gpu_dependencies(std::shared_ptr<native_webgpu_device> value)
-        : gpu(std::move(value)) {}
+        : gpu(std::move(value)),completion(gpu) {}
     size_t count() const noexcept override { return 0; }
     bool metal_event(size_t,void*& event,uint64_t& value) const override {
         event=nullptr;value=0;return false;
@@ -95,8 +153,9 @@ inline offscreen_capture capture_offscreen_image(const webscene_gpu_image_lease_
     queue.Submit(1,&commands);
     // The captured owner is intentionally released by this completion, not by
     // the lifetime of the blocking caller or by a cancelled buffer mapping.
-    queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
+    auto completed=queue.OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
         [owner](wgpu::QueueWorkDoneStatus,wgpu::StringView) {});
+    dependencies->completion.enqueue(completed);
     struct mapped_state { bool ok=false; std::vector<uint8_t> pixels; };
     auto state=std::make_shared<mapped_state>();
     auto future=buffer.MapAsync(wgpu::MapMode::Read,0,bd.size,wgpu::CallbackMode::WaitAnyOnly,
@@ -155,7 +214,7 @@ class native_webgpu_offscreen_surface final {
         // selects its ICD; verify the returned adapter rather than mislabeling
         // a hardware/default adapter or silently rejecting a software driver.
         auto gpu=std::make_shared<native_webgpu_device>(
-            native_webgpu_device::create(backend()));
+            native_webgpu_device::create(backend(),{wgpu::FeatureName::ImplicitDeviceSynchronization}));
         wgpu::AdapterInfo info{};
         if(gpu->adapter.GetInfo(&info)!=wgpu::Status::Success)
             throw std::runtime_error("Cannot inspect offscreen GPU adapter");
@@ -172,8 +231,9 @@ class native_webgpu_offscreen_surface final {
     }
     std::optional<dawn_canvas_images::submitted_frame> retire() {
         if(!current_) return {};
-        auto value=images_.retire_submitted(std::move(*current_));
-        current_.reset();return value;
+        wgpu::Future future;
+        auto value=images_.retire_submitted(std::move(*current_),{},&future);
+        current_.reset();dependencies_->completion.enqueue(future);return value;
     }
 public:
     native_webgpu_offscreen_surface(uint64_t canvas,uint32_t width,uint32_t height,

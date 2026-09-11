@@ -64,7 +64,7 @@ public:
     // Even if retaining a snapshot hits the ticket limit, keep the producer
     // reserved until ALL work already submitted to its queue has completed.
     std::optional<submitted_frame> retire_submitted(frame&& input,
-        std::shared_ptr<completion_wake> completion={}) {
+        std::shared_ptr<completion_wake> completion={}, wgpu::Future* submitted_future=nullptr) {
         check_thread();
         if (!input.producer.belongs_to(storage_.get()))
             throw std::invalid_argument("foreign canvas producer");
@@ -72,13 +72,14 @@ public:
         auto pending=std::make_shared<frame>(std::move(input));
         pending->producer.begin();
         auto image=pending->producer.publish();
-        storage_->device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
+        auto future=storage_->device.GetQueue().OnSubmittedWorkDone(wgpu::CallbackMode::AllowSpontaneous,
             [pending,status,completion](wgpu::QueueWorkDoneStatus result,wgpu::StringView) {
                 pending->producer.complete();
                 status->store(result==wgpu::QueueWorkDoneStatus::Success
                     ? submission_status::success : submission_status::failed,std::memory_order_release);
                 if (completion) completion->signal();
             });
+        if (submitted_future) *submitted_future=future;
         if (!image) return {}; // callback still owns the submitted producer
         return submitted_frame{std::move(*image),std::move(status)};
     }
