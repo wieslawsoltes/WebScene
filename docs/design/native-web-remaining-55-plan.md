@@ -8,6 +8,14 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Backdrop cascade convergence: extracted solid backdrop application into the
+shared pseudo-declaration helper, using the existing CSS color-token validator.
+Both native cascade and the two V8 cascade paths now call it, resetting backdrop
+color before each matched pseudo pass. This also prevents V8 from treating the
+new backdrop pseudo kind as ::after. Native shared-style tests pass; V8 engine
+and tests build, and fixed-auto-height-dialog regression passes. Direct V8
+backdrop scene/pixel parity and blur remain unverified.
+
 Shared native backdrop color: ::backdrop now has a recognized pseudo kind, native
 dialog color storage, shared cascade handling for solid background/background-color
 with important precedence, and viewport-sized foreground paint immediately before

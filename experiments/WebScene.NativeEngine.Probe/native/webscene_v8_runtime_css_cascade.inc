@@ -294,7 +294,14 @@
         // computed style. Apply them only after its custom and ordinary
         // declarations so `::before { background:var(--active-bg) }` resolves
         // the state variable authored on the active element.
+        bool backdrop_important=false;
+        if(node.dialog_state)node.dialog_state->backdrop_rgba=0;
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
+            if(pseudo_kind==7) {
+                for(const auto& declaration:rule->declarations())
+                    (void)css::apply_backdrop_declaration(node,declaration,css_variables,backdrop_important);
+                continue;
+            }
             if (pseudo_kind >= 3 && pseudo_kind <= 6) {
                 for (const auto& declaration : rule->declarations()) {
                     apply_scrollbar_css_declaration(node, pseudo_kind, declaration);
@@ -496,7 +503,14 @@
         }
         recompute_cascaded_line_height(node, matched_rules);
         recompute_inline_font_relative_metrics(node);
+        bool backdrop_important=false;
+        if(node.dialog_state)node.dialog_state->backdrop_rgba=0;
         for (const auto& [pseudo_kind, rule] : matched_pseudo_rules) {
+            if(pseudo_kind==7) {
+                for(const auto& declaration:rule->declarations())
+                    (void)css::apply_backdrop_declaration(node,declaration,css_variables,backdrop_important);
+                continue;
+            }
             if (pseudo_kind >= 3 && pseudo_kind <= 6) {
                 for (const auto& declaration : rule->declarations()) {
                     apply_scrollbar_css_declaration(node, pseudo_kind, declaration);

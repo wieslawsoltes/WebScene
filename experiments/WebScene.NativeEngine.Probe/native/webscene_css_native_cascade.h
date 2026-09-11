@@ -62,17 +62,7 @@ bool apply_native_cascade(native_document& document,dom_node& node,
         for(const auto& [kind,rule]:matched.pseudo) {
             for(const auto& declaration:rule->declarations()) {
                 if(kind==7) {
-                    property_result result;result.classification="unsupported";
-                    if(node.tag=="dialog" && (declaration.name=="background" || declaration.name=="background-color")) {
-                        if(backdrop_important && !declaration.important)continue;
-                        const auto value=resolve_value(node,declaration.value,variables);
-                        const auto color=native_document::parse_color(value);
-                        if(color || value=="transparent" || value=="#0000" || value=="#00000000") {
-                            if(!node.dialog_state)node.dialog_state=std::make_unique<dom_node::dialog_data>();
-                            node.dialog_state->backdrop_rgba=color;result.classification="supported";
-                            backdrop_important=declaration.important;
-                        }
-                    }
+                    const auto result=apply_backdrop_declaration(node,declaration,variables,backdrop_important);
                     observe(declaration,result);
                 }
                 else if(kind>=3) apply_scrollbar_declaration(node,kind,declaration,variables);

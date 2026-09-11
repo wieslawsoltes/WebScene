@@ -3,6 +3,20 @@
 #include "webscene_css_variables.h"
 
 namespace webscene_native::css {
+inline property_result apply_backdrop_declaration(dom_node& node,const css_declaration& declaration,
+    const std::unordered_map<std::string,std::string>& variables,bool& important) {
+    property_result result;result.classification="unsupported";
+    if(node.tag!="dialog" || (declaration.name!="background" && declaration.name!="background-color"))return result;
+    if(important && !declaration.important){result.classification="supported";return result;}
+    const auto value=resolve_value(node,declaration.value,variables);
+    const auto color=native_document::parse_color(value);
+    if(is_explicit_color_token(value,color)) {
+        if(!node.dialog_state)node.dialog_state=std::make_unique<dom_node::dialog_data>();
+        node.dialog_state->backdrop_rgba=color;important=declaration.important;
+        result.classification="supported";
+    }
+    return result;
+}
 inline int split_pseudo_element_selector(const std::string& selector, std::string& origin)
     {
         const auto split_suffix = [&](std::string_view suffix, int kind) {
