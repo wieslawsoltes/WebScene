@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Spline optional-property correction: adding degree to an ordered-json entity
+could invalidate the referenced point-array entry before knot generation. The
+editor now captures count and prepares knots before mutation. Native inspector
+tests cover both points and controlPoints entities with omitted degree/knots,
+enter degree through the compiled control and require exact undo. This removes a
+native imported-entity lifetime hazard; full import/application parity remains open.
+
 Mesh/dimension native-control verification: a reusable compiled-inspector fixture
 now enters Mesh Center X and dimension Precision, Text override and Offset using
 text input plus Enter. Tests retain geometry/volume preservation, measurement

@@ -30,6 +30,14 @@ struct inspector_fixture {
   }
 };
 int main() {
+  for(auto point_key:{"points","controlPoints"}) {
+    kestrel::drawing model;model.add("SPLINE",{{point_key,{{0,0,0},{2,3,0},{4,3,0},{6,0,0}}}});
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    require(!model.find(id)->contains("degree") && !model.find(id)->contains("knots"));
+    const auto before=model.data;inspector_fixture ui(model);ui.enter("degree","2");
+    require(model.find(id)->at("degree")==2 && model.find(id)->at("knots")==kestrel::json({0,0,0,.5,1,1,1}));
+    require(model.undo()=="Edit degree" && model.data==before);
+  }
   {
     kestrel::drawing model;model.add("MESH",kestrel::geo::box({0,0,0},10,20,30));
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);

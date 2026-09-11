@@ -79,10 +79,13 @@ inline bool change_spline_degree(drawing& model,double value) {
   if(!std::isfinite(value))return false;
   const auto ids=model.selected(true);if(ids.size()!=1)return false;
   auto* entity=model.find(ids.front());if(!entity || entity->value("type",std::string{})!="SPLINE")return false;
-  const auto& points=entity->contains("controlPoints")?entity->at("controlPoints"):entity->at("points");
-  if(points.size()<2)return false;
-  const auto degree=size_t(std::clamp(std::floor(value+.5),1.0,double(std::min(size_t(10),points.size()-1))));
-  return model.transaction("Edit degree",[&] {(*entity)["degree"]=degree;(*entity)["knots"]=uniform_knots(points.size(),degree);});
+  const auto count=(entity->contains("controlPoints")?entity->at("controlPoints"):entity->at("points")).size();
+  if(count<2)return false;
+  const auto degree=size_t(std::clamp(std::floor(value+.5),1.0,double(std::min(size_t(10),count-1))));
+  // Adding a missing ordered-json property can relocate the point-array entry.
+  // Prepare the replacement before mutating the entity.
+  const auto knots=uniform_knots(count,degree);
+  return model.transaction("Edit degree",[&] {(*entity)["degree"]=degree;(*entity)["knots"]=knots;});
 }
 inline vec3 nurbs(const json &e, double t) {
   auto p =
