@@ -12,9 +12,9 @@ struct webscene_css_byte_slice final {
 
 using webscene_css_begin_rule_callback = uint8_t(*)(
     void*, uint32_t, uint8_t, size_t,
-    webscene_css_byte_slice, webscene_css_byte_slice, size_t*);
+    webscene_css_byte_slice, webscene_css_byte_slice, size_t*, uint32_t, uint32_t);
 using webscene_css_declaration_callback = uint8_t(*)(
-    void*, webscene_css_byte_slice, webscene_css_byte_slice, uint8_t);
+    void*, webscene_css_byte_slice, webscene_css_byte_slice, uint8_t, uint32_t, uint32_t);
 using webscene_css_end_rule_callback = uint8_t(*)(void*, size_t, size_t);
 
 struct webscene_css_sink_vtable final {
@@ -25,6 +25,8 @@ struct webscene_css_sink_vtable final {
 
 struct webscene_css_stream_result final {
     uint32_t status;
+    uint32_t first_error_line;
+    uint32_t first_error_column;
     uint64_t parse_error_count;
     uint64_t rule_count;
     uint64_t declaration_count;

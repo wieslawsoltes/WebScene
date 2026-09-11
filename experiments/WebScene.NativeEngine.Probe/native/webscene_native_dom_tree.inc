@@ -197,6 +197,37 @@ std::vector<std::string> native_document::wrap_text_lines(
     const dom_node& node,
     bool allow_wrap) const
 {
+    std::string_view white_space;
+    for (auto* current = &node; current; current = current->parent) {
+        if (current->style.textual().white_space.empty()) continue;
+        white_space = current->style.textual().white_space;
+        break;
+    }
+    if (white_space == "pre-line" && value.find('\n') != std::string::npos) {
+        std::vector<std::string> lines;
+        size_t start = 0;
+        while (start < value.size()) {
+            auto end = value.find('\n', start);
+            auto segment = value.substr(start, end == std::string::npos ? end : end - start);
+            auto wrapped = wrap_text_lines(segment, available_width, node, allow_wrap);
+            if (wrapped.empty()) lines.emplace_back();
+            else lines.insert(lines.end(), wrapped.begin(), wrapped.end());
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+        return lines;
+    }
+    if (white_space == "pre") {
+        std::vector<std::string> lines;
+        size_t start = 0;
+        for (size_t i = 0; i < value.size(); ++i) {
+            if (value[i] != '\n') continue;
+            lines.push_back(value.substr(start, i - start));
+            start = i + 1;
+        }
+        if (start < value.size()) lines.push_back(value.substr(start));
+        return lines;
+    }
     if (!has_visible_text(value)) return {};
     if (!allow_wrap) {
         std::istringstream source(value);

@@ -2268,6 +2268,11 @@
 
     frame_hydration_result hydrate_frame(dom_node& frame)
     {
+        if (!allow_runtime_html) {
+            frame_last_error_value = "Runtime HTML frame parsing is disabled for this compiled document";
+            ++frame_script_error_count;
+            return frame_hydration_result::failed;
+        }
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (profile_startup && startup_frame_started == std::chrono::steady_clock::time_point{}) {
             startup_frame_started = std::chrono::steady_clock::now();

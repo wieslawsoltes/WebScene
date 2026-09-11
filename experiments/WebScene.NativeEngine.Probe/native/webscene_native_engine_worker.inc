@@ -182,12 +182,14 @@
                 return true;
             },
             [this] {
+                notify_host_work();
                 if (host_request_available_callback_ != nullptr) {
                     host_request_available_callback_(
                         host_request_available_user_data_);
                 }
             },
             [this] {
+                notify_host_work();
                 if (interop_callback_available_callback_ != nullptr) {
                     interop_callback_available_callback_(
                         interop_callback_available_user_data_);
@@ -455,14 +457,16 @@
                         true,
                         std::memory_order_acq_rel)
                     && host_animation_frame_requested_.load(
-                            std::memory_order_acquire) == 0U
-                    && animation_frame_requested_callback_ != nullptr) {
+                            std::memory_order_acquire) == 0U) {
                     // Chromium queues ordinary mousemove input for the next
                     // BeginMainFrame. Wake an otherwise-idle host compositor so
                     // the same rule does not strand pointer input on fallback
                     // renderers that only request frames on demand.
-                    animation_frame_requested_callback_(
-                        animation_frame_requested_user_data_);
+                    notify_host_work();
+                    if (animation_frame_requested_callback_ != nullptr) {
+                        animation_frame_requested_callback_(
+                            animation_frame_requested_user_data_);
+                    }
                 }
             };
             while (applied_input_groups < 8U) {
@@ -902,10 +906,22 @@
 #endif
                 if (auto* url = std::get_if<url_request>(&request)) {
                     if (url->initial_viewport) apply(*url->initial_viewport);
-                    if (runtime_ != nullptr
-                        && runtime_->load_url(
-                            url->url,
-                            std::move(url->document_start_scripts))) {
+                    bool loaded = false;
+                    if (runtime_ != nullptr) {
+                        if (url->compiled_package) {
+                            auto package = *url->compiled_package;
+                            package.base_url = url->url;
+                            loaded = runtime_->load_compiled_document(package);
+                        } else
+#if defined(WEBSCENE_COMPILED_APPLICATION)
+                        if (!url->compiled_name.empty()) {
+                            auto package = webscene_native::compiled_application(url->compiled_name, url->url);
+                            loaded = runtime_->load_compiled_document(package);
+                        } else
+#endif
+                        loaded = runtime_->load_url(url->url, std::move(url->document_start_scripts));
+                    }
+                    if (loaded) {
                         native_scene_active_ = true;
                         frame_scripts_executed_.store(
                             runtime_->frame_scripts_executed(),
@@ -1132,6 +1148,23 @@
             }
 #endif
 
+#if defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+            if (runtime_ != nullptr && !host_frame_applied && !changed
+                && document_.scene_generation() == starting_scene_generation
+                && !deferred_input.has_value() && inputs_.empty()
+                && !resize_pending_.load(std::memory_order_acquire)
+                && !runtime_->has_pending_tasks() && !runtime_->has_open_gpu_output()) {
+                bool did_work = false;
+                if (!runtime_->pump_idle_platform_tasks(did_work)) {
+                    script_errors_.fetch_add(1, std::memory_order_relaxed);
+                    set_last_error(runtime_->last_error());
+                }
+                if (did_work) {
+                    update_compilation_metrics();
+                    update_component_readiness();
+                }
+            }
+#endif
             update_host_animation_frame_demand();
             changed = changed
                 || document_.scene_generation() != starting_scene_generation

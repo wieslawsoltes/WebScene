@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light"><meta name="description" content="Kestrel CAD — a local-first 2D and 3D CAD editor with a custom WebGPU engine.">
+<title>Kestrel CAD</title><link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<a class="skip-link" href="#command-input">Skip to command line</a>
+<div id="shell">
+ <header id="titlebar">
+  <button id="app-menu-button" class="brand-button" aria-label="Kestrel file menu" title="File menu"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 4h7v11L23 4h8L17 18l13 10H19L12 21v7H5z" fill="currentColor"/></svg><span>KESTREL<span class="brand-cad">CAD</span></span><span class="chevron">⌄</span></button>
+  <div class="quick-access" id="quick-access"></div>
+  <div class="title-document"><span id="title-name">Courtyard House</span><span class="title-separator">—</span><span class="muted">Kestrel CAD</span></div>
+  <div class="title-right"><span class="local-indicator"><i></i><span id="save-state">Local workspace</span></span><button class="title-search" data-action="palette" title="Find a command (Ctrl+K)"><span data-icon="search"></span><span>Find a command</span><kbd>⌘ K</kbd></button><button class="icon-button" data-action="theme" title="Switch light / dark theme" aria-label="Switch theme"><span data-icon="sun"></span></button><button class="icon-button" data-action="help" title="Help and shortcuts" aria-label="Help"><span data-icon="help"></span></button></div>
+ </header>
+ <div id="ribbon-tabs"><nav id="ribbon-tab-list" role="tablist" aria-label="Ribbon"></nav><div class="workspace-control"><span data-icon="workspace"></span><select id="workspace-select" aria-label="Workspace"><option value="2d">Drafting &amp; annotation</option><option value="3d">3D modeling</option></select></div></div>
+ <section id="ribbon" aria-label="Tools"></section>
+ <div id="documentbar"><div id="document-tabs" role="tablist" aria-label="Open drawings"></div><button class="document-add" data-action="new" title="New drawing (Ctrl+N)" aria-label="New drawing">+</button><div class="documentbar-right"><span id="drawing-kind">MODEL SPACE</span><span class="small-dot"></span><span id="document-units">Millimeters</span><button class="icon-button small" data-action="fit" title="Zoom extents" aria-label="Zoom extents"><span data-icon="fit"></span></button></div></div>
+ <main id="workbench">
+  <aside id="explorer" class="side-panel">
+   <div class="panel-header"><span>Drawing explorer</span><div class="panel-header-actions"><button class="icon-button small" data-action="layers" aria-label="Layer manager" title="Layer manager"><span data-icon="settings"></span></button><button class="icon-button small" data-action="toggle-explorer" aria-label="Hide explorer" title="Hide explorer"><span data-icon="chevron-left"></span></button></div></div>
+   <div class="panel-tabs"><button id="layers-tab" class="active" data-explorer="layers">Layers <span id="layer-count">8</span></button><button id="objects-tab" data-explorer="objects">Objects <span id="object-count">0</span></button></div>
+   <div class="panel-search"><span data-icon="search"></span><input id="explorer-search" placeholder="Filter layers…" aria-label="Filter drawing explorer"><kbd>/</kbd></div>
+   <div id="explorer-toolbar"><span class="eyebrow" id="explorer-subtitle">LAYER NAME</span><div><button class="icon-button small" data-action="new-layer" title="New layer" aria-label="New layer"><span data-icon="plus"></span></button><button class="icon-button small" data-action="all-layers-on" title="Show all layers" aria-label="Show all layers"><span data-icon="eye"></span></button></div></div>
+   <div id="explorer-list" class="panel-scroll"></div>
+   <div class="explorer-summary"><div class="summary-title"><span data-icon="drawing"></span><span id="summary-name">Courtyard House</span></div><dl><div><dt>Entities</dt><dd id="summary-entities">0</dd></div><div><dt>Selected</dt><dd id="summary-selected">0</dd></div><div><dt>Drawing units</dt><dd id="summary-units">mm</dd></div></dl><div class="local-note"><span data-icon="shield"></span>Stored on this device. No uploads.</div></div>
+   <div class="panel-resizer left-resizer" aria-label="Resize explorer"></div>
+  </aside>
+  <section id="viewport" aria-label="CAD drawing viewport" tabindex="0">
+   <canvas id="scene" class="scene-canvas" aria-label="Rendered CAD geometry"></canvas><canvas id="overlay" class="scene-canvas" aria-hidden="true"></canvas>
+   <div id="viewport-controls"><button class="viewport-button" data-action="toggle-explorer" title="Show / hide explorer">[−]</button><select id="view-select" aria-label="View direction"><option value="top">Top</option><option value="iso">SE isometric</option><option value="front">Front</option><option value="right">Right</option><option value="left">Left</option><option value="back">Back</option><option value="bottom">Bottom</option></select><select id="style-select" aria-label="Visual style"><option value="wireframe">2D wireframe</option><option value="shaded-edges">Shaded with edges</option><option value="shaded">Shaded</option><option value="xray">X-ray</option></select></div>
+   <div id="viewcube" aria-label="View navigation"><div class="cube-compass"><span>N</span><i></i></div><svg viewBox="0 0 110 100" role="group" aria-label="View cube"><g tabindex="0" role="button" data-view="top" aria-label="Top view"><polygon points="55,9 98,31 55,53 12,31"/><text x="55" y="34">TOP</text></g><g tabindex="0" role="button" data-view="front" aria-label="Front view"><polygon points="12,31 55,53 55,94 12,70"/><text x="33" y="64" transform="rotate(29 33 64)">FRONT</text></g><g tabindex="0" role="button" data-view="right" aria-label="Right view"><polygon points="55,53 98,31 98,70 55,94"/><text x="76" y="64" transform="rotate(-29 76 64)">RIGHT</text></g></svg><button data-action="view-iso" title="Isometric view">WCS <span>⌄</span></button></div>
+   <div id="viewport-tools" class="floating-toolbar"></div><div id="navigation-tools" class="floating-toolbar"></div>
+   <div id="tool-banner" hidden><span id="tool-banner-name">LINE</span><span id="tool-banner-text">Specify first point</span><kbd>ESC to cancel</kbd></div>
+   <div id="dynamic-input" hidden><span id="dynamic-label">Distance</span><strong id="dynamic-value">0.000</strong></div>
+   <div id="selection-window" hidden></div><div id="drop-zone" hidden><span data-icon="import"></span><strong>Open a drawing</strong><span>DXF · DWG · Kestrel project</span></div>
+   <div id="viewport-footer"><span id="view-hint">Wheel to zoom · Middle drag to pan</span><button id="engine-badge" data-action="diagnostics"><i></i><span id="engine-label">Starting renderer…</span></button></div>
+   <div id="sheet-label" hidden>A3 LANDSCAPE · FIT TO SHEET</div>
+  </section>
+  <aside id="properties" class="side-panel"><div class="panel-header"><span>Properties</span><div class="panel-header-actions"><button class="icon-button small" data-action="clear-selection" title="Clear selection" aria-label="Clear selection"><span data-icon="deselect"></span></button><button class="icon-button small" data-action="toggle-properties" title="Hide properties" aria-label="Hide properties"><span data-icon="chevron-right"></span></button></div></div><div id="inspector" class="panel-scroll"></div><div class="panel-resizer right-resizer" aria-label="Resize properties"></div></aside>
+ </main>
+ <section id="command-dock" aria-label="Command line"><div id="command-resizer" aria-label="Resize command line"></div><div id="command-history" role="log" aria-live="polite"><div><span class="history-label">Kestrel CAD</span><span>Precision starts here. Open a drawing or choose a tool.</span></div></div><div id="command-row"><span class="command-symbol">›_</span><span id="command-prefix">Command:</span><input id="command-input" placeholder="Type a command or search…" aria-label="CAD command input" spellcheck="false" autocomplete="off" autocapitalize="off"><span id="command-shortcut">Ctrl + K</span><button class="icon-button small" data-action="command-history" title="Expand command history" aria-label="Expand command history"><span data-icon="chevron-up"></span></button></div><div id="command-suggestions" hidden></div></section>
+ <footer id="statusbar"><div id="layout-tabs"><button class="active" data-layout="model">Model</button><button data-layout="sheet">Sheet A3</button></div><div class="status-coordinates"><span id="coordinates">0.000, 0.000, 0.000</span></div><div id="status-toggles"></div><div class="status-right"><span id="selection-status">No selection</span><span class="status-divider"></span><button data-action="units" id="units-status">mm</button><span class="status-divider"></span><button data-action="diagnostics" id="frame-status">— ms</button><button class="status-panel-button" data-action="toggle-properties" title="Show / hide properties"><span data-icon="sidebar"></span></button></div></footer>
+</div>
+<div id="file-menu" class="popover" hidden></div><div id="context-menu" class="popover" hidden></div><div id="toast-stack" aria-live="polite"></div>
+<dialog id="modal"><form id="modal-form"><div class="modal-header"><div><span id="modal-eyebrow" class="eyebrow">KESTREL CAD</span><h2 id="modal-title">Settings</h2></div><button type="button" class="icon-button" id="modal-close" aria-label="Close dialog"><span data-icon="close"></span></button></div><div id="modal-body"></div><div id="modal-error" role="alert" hidden></div><div id="modal-footer"><button type="button" class="button secondary" id="modal-cancel">Cancel</button><button type="submit" class="button primary" id="modal-submit">Apply</button></div></form></dialog>
+<dialog id="command-palette"><div class="palette-input"><span data-icon="search"></span><input id="palette-search" placeholder="Find a command, tool, or view…" aria-label="Find command"><kbd>ESC</kbd></div><div id="palette-results"></div><div class="palette-footer"><span>↑ ↓ to navigate</span><span>↵ to run</span><span>KESTREL CAD</span></div></dialog>
+<input id="file-input" type="file" accept=".dxf,.dwg,.kcad,.kst,.json" hidden>
+<noscript><div class="noscript">Kestrel CAD requires JavaScript. Enable JavaScript and reload this page.</div></noscript>
+<script src="src/math.js"></script><script src="src/geometry.js"></script><script src="src/model.js"></script><script src="src/csg.js"></script><script src="src/exchange.js"></script><script src="src/production.js"></script><script src="src/kernel.js"></script><script src="src/native-analysis.js"></script>
+<script src="src/native-curves.js"></script>
+    <script src="src/constraints.js"></script><script src="src/spatial-constraints.js"></script><script src="src/dynamic-blocks.js"></script>
+<script src="src/fonts.js"></script>
+<script src="src/unicode-bidi.js"></script>
+<script src="src/mtext.js"></script><script src="src/source-document.js"></script><script src="src/productivity.js"></script><script src="src/fields.js"></script>
+<script src="src/text-search.js"></script><script src="src/renderer.js"></script><script src="src/ui.js"></script><script src="src/examples.js"></script><script src="src/production-ui.js"></script><script src="src/kernel-ui.js"></script>
+<script src="src/constraints-ui.js"></script><script src="src/spatial-ui.js"></script><script src="src/dynamic-blocks-ui.js"></script><script src="src/fonts-ui.js"></script>
+<script src="src/mtext-ui.js"></script><script src="src/source-ui.js"></script>
+<script src="src/productivity-ui.js"></script><script src="src/acis-ui.js"></script><script src="src/native-analysis-ui.js"></script>
+<script src="src/native-curves-ui.js"></script>
+<script src="src/fields-ui.js"></script>
+<script src="src/text-search-ui.js"></script>
+<script src="src/app.js"></script>
+</body></html>

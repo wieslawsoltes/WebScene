@@ -1,0 +1,389 @@
+{
+  "upstream_commit": "7a1e84c67fd24410c22f0d1a45b2e54120b32d0e",
+  "script_order": [
+    "src/math.js",
+    "src/geometry.js",
+    "src/model.js",
+    "src/csg.js",
+    "src/exchange.js",
+    "src/production.js",
+    "src/kernel.js",
+    "src/native-analysis.js",
+    "src/native-curves.js",
+    "src/constraints.js",
+    "src/spatial-constraints.js",
+    "src/dynamic-blocks.js",
+    "src/fonts.js",
+    "src/unicode-bidi.js",
+    "src/mtext.js",
+    "src/source-document.js",
+    "src/productivity.js",
+    "src/fields.js",
+    "src/text-search.js",
+    "src/renderer.js",
+    "src/ui.js",
+    "src/examples.js",
+    "src/production-ui.js",
+    "src/kernel-ui.js",
+    "src/constraints-ui.js",
+    "src/spatial-ui.js",
+    "src/dynamic-blocks-ui.js",
+    "src/fonts-ui.js",
+    "src/mtext-ui.js",
+    "src/source-ui.js",
+    "src/productivity-ui.js",
+    "src/acis-ui.js",
+    "src/native-analysis-ui.js",
+    "src/native-curves-ui.js",
+    "src/fields-ui.js",
+    "src/text-search-ui.js",
+    "src/app.js"
+  ],
+  "scripts": [
+    {
+      "path": "src/math.js",
+      "sha256": "63b6d9a251c5416cd24100b887c2db73603b91bccdbdec9d00357d57e5e68847",
+      "lines": 154,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/geometry.js",
+      "sha256": "ebd8605be73abd58c5c0b3a2b53ffe2855260eaa710f48118592e93d53534c5b",
+      "lines": 399,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/model.js",
+      "sha256": "ec9aa5039736b6d2752d9c428db66935f17cb68e4b79362267787c4d5cb67ef6",
+      "lines": 227,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/csg.js",
+      "sha256": "083c341c3706b7d15dd6a35bde5cf3aca7f66d6be441d8c5672bf4dfba624d8f",
+      "lines": 139,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/exchange.js",
+      "sha256": "84e6d5ddd61976b730df7b641e476ec27651879c61a228e1d61776b685966ae0",
+      "lines": 639,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/production.js",
+      "sha256": "5cabb8afc1c00de8c459027f8f02976001fc986f01de6d8e5e817a4a4e15078f",
+      "lines": 342,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/kernel.js",
+      "sha256": "96a6a57b93649f68d2f54d7a83dfeb036fc25fbae5d8e41fa1ffd91510e6b990",
+      "lines": 95,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/native-analysis.js",
+      "sha256": "4992c6059fcc9f1f9eaac439def5a7a9a2b171c8118bb20d50bc3ac26bc3a4de",
+      "lines": 93,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/native-curves.js",
+      "sha256": "0dc90d41645b4c2f9ea7effca499ef1a6ee263b17463f1bd57eae22fc323254f",
+      "lines": 79,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/constraints.js",
+      "sha256": "316d464fc6c19b884eca883bb9780a3f5360d7aae0dbbbc979247f915ab44e22",
+      "lines": 191,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/spatial-constraints.js",
+      "sha256": "0e0dcb66301979ca6b739ecb5bea7251aa28b0eb3fc5f4694679afb599e31b13",
+      "lines": 278,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/dynamic-blocks.js",
+      "sha256": "8c1334a03c8b26fedd984e0dd3dbd9ac12e8ba61712c1c02941fd8c89985dd21",
+      "lines": 380,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/fonts.js",
+      "sha256": "896bbaad32aaba9d2b46d456d2a42a7bcd5e9135a98b043177bdf00112e1a7d2",
+      "lines": 193,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/unicode-bidi.js",
+      "sha256": "3b3841ec15ad0e880c3f673431446cb01bcddee67d5e1c499fbb24f012c2d6da",
+      "lines": 1145,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/mtext.js",
+      "sha256": "307faee1c883accffdde2166e3c3e83442283de0c7cd2d372cb4de042cded707",
+      "lines": 188,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/source-document.js",
+      "sha256": "de39079e1d3259e9cce9f936a253fdb7f7c060ec065c7fc351ca39c27e48ea1b",
+      "lines": 415,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/productivity.js",
+      "sha256": "23d5d052932d79df9a215c0272b1aa122a35554a61235b42d4c1288048ed3d20",
+      "lines": 285,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/fields.js",
+      "sha256": "8c069632d6ac656902d94adf7ce682765966f2564fb06f255219dea8ba379a0f",
+      "lines": 237,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/text-search.js",
+      "sha256": "a4664a225a9e2cabae0b03c22eba6953d6e80bd5d35807ab67454ac0d22029dc",
+      "lines": 93,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/renderer.js",
+      "sha256": "56da44dcab4391437ea46473e3c3911c80d1f931a9a0d73d096bb5566eae3e10",
+      "lines": 440,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/ui.js",
+      "sha256": "1a3e9418139ed04dcd84e9c10a583e44c70e9ca622927d042a603b176d9cfb72",
+      "lines": 34,
+      "html_api_sites": [
+        {
+          "line": 32,
+          "source": "function installIcons(scope = document) { scope.querySelectorAll('[data-icon]').forEach(e => e.innerHTML = icon(e.dataset.icon)); }"
+        }
+      ]
+    },
+    {
+      "path": "src/examples.js",
+      "sha256": "3a253a200858e00eb5ae55356eaceec471ca3c87e039e51497d7cfb7dcad9b1a",
+      "lines": 257,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/production-ui.js",
+      "sha256": "2bdb58988f8de41f5b2c4fb2d888fb317a9c92d31b6ff38380bea8fff36ded26",
+      "lines": 109,
+      "html_api_sites": [
+        {
+          "line": 102,
+          "source": "case 'plot-layout':if(!p.layouts.length)throw Error('Create a layout with LAYOUT first.');this.dialog({title:'Export scaled paper layout',html:`<div class=\"form-grid\">${select('layout','Layout',p.layouts.map((l,i)=>[i,l.name]))}${select('mode','Output',[['svg','Download SVG (physical mm)'],['preview','Open print preview']])}</div>`,onSubmit:f=>{const l=p.layouts[Number(f.layout)],svg=P.layoutSVG(doc,l);if(f.mode==='svg')this.download(svg,l.name+'.svg','image/svg+xml');else {const win=window.open('','_blank');if(!win)throw Error('Allow the print-preview window.');win.document.open();win.document.write(`<!doctype html><title>${esc(l.name)}</title><style>@page{size:${l.width}mm ${l.height}mm;margin:0}body{margin:0}svg{display:block}</style>${svg}`);win.document.close();win.opener=null;win.focus();win.print();}}});break;"
+        }
+      ]
+    },
+    {
+      "path": "src/kernel-ui.js",
+      "sha256": "e9525da2c618b3d60c766a4e7620e2b701342ec9cd2439b67838c3048e0f7da6",
+      "lines": 115,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/constraints-ui.js",
+      "sha256": "a8af224df5f5e94d838d744dd1ee20f680dbf50eb32915ca3315134c0b070bb7",
+      "lines": 63,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/spatial-ui.js",
+      "sha256": "1044a4ac4b2e1a6a5a8e045f5bbbc090880ee2d0303fbc659698d951c3c70e99",
+      "lines": 64,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/dynamic-blocks-ui.js",
+      "sha256": "be0334c3468c724a728ae656d45dceb77dc5acbf5c88da3cb111ecbed3906fc0",
+      "lines": 126,
+      "html_api_sites": [
+        {
+          "line": 61,
+          "source": "section.innerHTML='<h3>Block parameters</h3>'+fields(this,b,e)+'<button type=\"button\" class=\"button secondary\" data-action=\"dynamic-properties\">All block properties</button>';"
+        },
+        {
+          "line": 103,
+          "source": "document.getElementById('lookup-match-fields').innerHTML=tableFields(t);"
+        },
+        {
+          "line": 104,
+          "source": "document.getElementById('lookup-match-rows').innerHTML=tablePreview(t);"
+        }
+      ]
+    },
+    {
+      "path": "src/fonts-ui.js",
+      "sha256": "9ef3f2864184c50465f75756480db49d63c81bd0c5150ee7cf3392c952deb903",
+      "lines": 22,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/mtext-ui.js",
+      "sha256": "6db8eb97fde53b349ccc5a452447675e08ad11a1580d065ab954ab299f1b9066",
+      "lines": 29,
+      "html_api_sites": [
+        {
+          "line": 18,
+          "source": "function preview(){if(previewAbort.signal.aborted||!source.isConnected)return;try{const form=source.closest('form')||document.getElementById('modal'),values={};for(const el of form.querySelectorAll('[name]'))values[el.name]=el.type==='checkbox'?el.checked:el.value;const entity=read(values,e);entity.position=[0,0,0];delete entity.textAxisX;delete entity.textAxisY;entity.rotation=0;entity.direction=[1,0,0];entity.normal=[0,0,1];const g=T.geometry(entity,doc),c=g.texts[0].composition,scale=Math.min(650/Math.max(c.width,1),160/Math.max(c.height,1));const at=p=>[10+p[0]*scale,10-p[1]*scale];document.getElementById('mtext-preview').innerHTML=`<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 680 180\" width=\"100%\" height=\"180\">${T.svg(g.texts[0],at,'#1d2937',esc)}</svg>`;document.getElementById('mtext-preview-report').textContent=`${c.allLines.length} lines, ${c.width.toFixed(2)} \u00d7 ${c.height.toFixed(2)} ${doc.units}. `+c.warnings.join(' ');}catch(err){document.getElementById('mtext-preview-report').textContent=err.message;}}"
+        }
+      ]
+    },
+    {
+      "path": "src/source-ui.js",
+      "sha256": "27c8210d6905dc590d426a4b669e4327d2b3e9ed128bf8c3dc6750b41c2ea02b",
+      "lines": 48,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/productivity-ui.js",
+      "sha256": "5d0ae3766fbcb3066d18f51642c12055bb66cde395a33a0750ded1b48890e698",
+      "lines": 100,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/acis-ui.js",
+      "sha256": "be1b20b3cbb8e9ed4fc203b233e475eb3f42457e258dc0c5910d4b09e5bfb376",
+      "lines": 67,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/native-analysis-ui.js",
+      "sha256": "61ce1f6d5e0a568fedc50b0c2227ea0f66af1b8f91cdcb56dc08ef1971cb1381",
+      "lines": 70,
+      "html_api_sites": [
+        {
+          "line": 53,
+          "source": "document.getElementById('analysis-results').innerHTML=`<h3>${result.pairCount} pairs \u00b7 ${result.counts.interference} overlaps \u00b7 ${result.counts.contact} contact/within tolerance \u00b7 ${result.counts.clearance} clearance violations</h3>`+"
+        }
+      ]
+    },
+    {
+      "path": "src/native-curves-ui.js",
+      "sha256": "8c8a03412ef8d95add5daf553d6bed645092cb2d1f7cfaa417b4f4c903342396",
+      "lines": 25,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/fields-ui.js",
+      "sha256": "30c61e67a846a142db17458bfb210cd7e4cf8a4fd52ec2b7e2aa886bc2c4672d",
+      "lines": 55,
+      "html_api_sites": []
+    },
+    {
+      "path": "src/text-search-ui.js",
+      "sha256": "badd403ec42595b3adc8f9bba87df78c1dc1fb6c4afef15791c918da662f25ee",
+      "lines": 28,
+      "html_api_sites": [
+        {
+          "line": 16,
+          "source": "const render=()=>{if(!plan)return;const rows=plan.rows.slice(page*100,(page+1)*100),hit=plan.rows[current];element('search-results').innerHTML=`<table class=\"report-table\"><thead><tr><th>Result</th><th>Object / target</th><th>Context</th><th>Editing</th></tr></thead><tbody>${rows.map(r=>`<tr${r.index===current?' style=\"background:var(--active)\"':''}><td><button class=\"button secondary\" type=\"button\" data-hit=\"${r.index}\">${r.index+1}</button></td><td>${esc(r.type)} ${esc(r.entity)}<br>${esc(r.target.kind==='cell'?`Cell ${r.target.row+1}, ${r.target.column+1}`:r.target.kind==='attribute'?r.target.tag:'Text')}<br>${esc(r.layer)}</td><td style=\"white-space:pre-wrap;overflow-wrap:anywhere\">${esc(r.text.slice(Math.max(0,r.start-35),r.start))}<mark>${esc(r.match)}</mark>${esc(r.text.slice(r.end,r.end+50))}</td><td>${esc(r.reason||'Editable')}</td></tr>`).join('')}</tbody></table>`;"
+        }
+      ]
+    },
+    {
+      "path": "src/app.js",
+      "sha256": "c83202f8b5cf5b1ef3ee325896b5b59ede2274139e81acfee2adce8f20167b53",
+      "lines": 2397,
+      "html_api_sites": [
+        {
+          "line": 70,
+          "source": "$('quick-access').innerHTML = ['new', 'open', 'save', 'undo', 'redo'].map(U.toolButton).join('');"
+        },
+        {
+          "line": 71,
+          "source": "$('ribbon-tab-list').innerHTML = Object.keys(U.groups).map(t => `<button data-ribbon=\"${t}\" role=\"tab\" aria-selected=\"${t === 'Home'}\" class=\"${t === 'Home' ? 'active' : ''}\">${t}</button>`).join('');"
+        },
+        {
+          "line": 72,
+          "source": "$('viewport-tools').innerHTML = ['clear-selection', 'line', 'polyline', 'circle', 'rectangle', 'dimension'].map(U.toolButton).join('') + '<div class=\"toolbar-divider\"></div>' + ['move', 'hatch', 'extrude'].map(U.toolButton).join('');"
+        },
+        {
+          "line": 73,
+          "source": "$('navigation-tools').innerHTML = ['fit', 'zoomin', 'zoomout'].map(U.toolButton).join('') + '<div class=\"toolbar-divider\"></div>' + ['pan', 'orbit'].map(U.toolButton).join('');"
+        },
+        {
+          "line": 74,
+          "source": "$('status-toggles').innerHTML = [['grid', 'GRID'], ['snap', 'SNAP'], ['ortho', 'ORTHO'], ['polar', 'POLAR'], ['osnap', 'OSNAP'], ['lineweights', 'LWT']].map(([id, label]) => `<button data-action=\"${id}\" title=\"${esc(U.get(id).description + ' (' + U.get(id).alias + ')')}\">${U.icon(U.get(id).icon)}<span class=\"toggle-label\">${label}</span></button>`).join('');"
+        },
+        {
+          "line": 310,
+          "source": "refreshTabs() { $('document-tabs').innerHTML = this.docs.map(d => `<button class=\"document-tab ${d.id === this.activeId ? 'active' : ''}\" data-doc=\"${d.id}\" role=\"tab\" aria-selected=\"${d.id === this.activeId}\">${U.icon('drawing')}<span>${esc(d.name)}</span>${d.dirty ? '<span class=\"dirty-dot\">\u00b7</span>' : ''}<span class=\"tab-close\" role=\"button\" aria-label=\"Close ${esc(d.name)}\" title=\"Close drawing\">\u00d7</span></button>`).join(''); }"
+        },
+        {
+          "line": 324,
+          "source": "$('explorer-list').innerHTML = doc.layers.filter(l => l.name.toLowerCase().includes(query)).map(l => `<div class=\"layer-row ${l.id === doc.currentLayer ? 'current' : ''} ${l.visible ? '' : 'off'}\" data-layer=\"${l.id}\" title=\"Click to make current \u00b7 Shift+click to select layer objects\"><span class=\"color-dot\" style=\"background:${l.color}\"></span><span class=\"layer-name\">${esc(l.name)}</span><span class=\"layer-count\">${counts[l.id] || '\u2014'}</span><button class=\"icon-button\" data-layer-toggle=\"visible\" title=\"${l.visible ? 'Hide' : 'Show'} layer\" aria-label=\"${l.visible ? 'Hide' : 'Show'} ${esc(l.name)}\">${U.icon(l.visible ? 'eye' : 'eyeoff')}</button><button class=\"icon-button ${l.locked ? 'locked' : ''}\" data-layer-toggle=\"locked\" title=\"${l.locked ? 'Unlock' : 'Lock'} layer\" aria-label=\"${l.locked ? 'Unlock' : 'Lock'} ${esc(l.name)}\">${U.icon(l.locked ? 'lock' : 'unlock')}</button></div>`).join('') || '<div class=\"empty-explorer\">No layers match this filter.</div>';"
+        },
+        {
+          "line": 328,
+          "source": "$('explorer-list').innerHTML = matches.slice(0, 500).map(e => `<div class=\"object-row ${doc.selection.has(e.id) ? 'active' : ''}\" data-object=\"${e.id}\">${U.icon(this.entityIcon(e))}<div><strong>${esc(e.name || this.entityLabel(e))}</strong><small>${esc(doc.layer(e).name)}</small></div><span class=\"object-id\">${esc(e.id.split('_').at(-1))}</span></div>`).join('') + (matches.length > 500 ? `<div class=\"empty-explorer\">Showing the first 500 of ${matches.length.toLocaleString()} objects. Refine the filter.</div>` : '');"
+        },
+        {
+          "line": 368,
+          "source": "layer.innerHTML = this.doc.layers.map(l => `<option value=\"${l.id}\">${esc(l.name)}</option>`).join('');"
+        },
+        {
+          "line": 381,
+          "source": "setRibbon(tab) { this.ribbonTab = tab; $('ribbon').innerHTML = U.ribbon(tab); document.querySelectorAll('[data-ribbon]').forEach(b => { b.classList.toggle('active', b.dataset.ribbon === tab); b.setAttribute('aria-selected', b.dataset.ribbon === tab); }); this.refreshRibbon(); }"
+        },
+        {
+          "line": 383,
+          "source": "b.innerHTML = U.icon(this.theme === 'dark' ? 'sun' : 'moon'); }); this.invalidate(); }"
+        },
+        {
+          "line": 448,
+          "source": "toast(message, error = false) { const t = document.createElement('div'); t.className = 'toast' + (error ? ' error' : ''); t.innerHTML = U.icon(error ? 'warning' : 'check') + `<span>${esc(message)}</span>`; $('toast-stack').append(t); while ($('toast-stack').children.length > 3)"
+        },
+        {
+          "line": 471,
+          "source": "makeFileMenu() { const items = ['new', 'open', 'save', 'insert', '-', 'export-dxf', 'export-dwg', 'export-svg', 'export-png', 'print', '-', 'demo-2d', 'demo-3d', '-', 'help']; $('file-menu').innerHTML = '<div class=\"popover-title\">DRAWING & EXCHANGE</div>' + items.map(id => id === '-' ? '<div class=\"menu-separator\"></div>' : `<button class=\"menu-item\" data-action=\"${id}\">${U.icon(U.get(id).icon)}<span>${esc(U.get(id).label)}</span><span class=\"menu-shortcut\">${id === 'new' ? 'Ctrl+N' : id === 'open' ? 'Ctrl+O' : id === 'save' ? 'Ctrl+S' : ''}</span></button>`).join(''); }"
+        },
+        {
+          "line": 472,
+          "source": "dialog({ title, html, submit = 'Apply', wide = false, onSubmit = () => { }, onOpen, closeOnly = false }) { this.closeDialog(); $('modal-title').textContent = title; $('modal-body').innerHTML = html; $('modal-submit').textContent = submit; $('modal-cancel').hidden = closeOnly; $('modal-error').hidden = true; $('modal-submit').disabled = false; $('modal').classList.toggle('wide', wide); $('modal-form').onsubmit = async (event) => { event.preventDefault(); $('modal-submit').disabled = true; $('modal-error').hidden = true; try {"
+        },
+        {
+          "line": 595,
+          "source": "$('inspector').innerHTML = html;"
+        },
+        {
+          "line": 2037,
+          "source": "commandSuggest() { const value = $('command-input').value.trim(), matches = this.tool || /[\\d,@<>;]/.test(value) ? [] : this.commandMatches(value); this.suggestions = matches; this.suggestionIndex = clamp(this.suggestionIndex, 0, Math.max(0, matches.length - 1)); $('command-suggestions').innerHTML = matches.map((c, i) => `<div class=\"suggestion ${i === this.suggestionIndex ? 'active' : ''}\" data-command=\"${c.id}\"><strong>${esc(c.alias.split(' \u00b7 ')[0])}</strong><span>${esc(c.label)}</span></div>`).join(''); $('command-suggestions').hidden = !matches.length; }"
+        },
+        {
+          "line": 2235,
+          "source": "renderPalette() { const q = $('palette-search').value.toLowerCase(); this.paletteMatches = U.commands.filter(c => [c.label, c.alias, c.description].join(' ').toLowerCase().includes(q)); this.paletteIndex = clamp(this.paletteIndex, 0, Math.max(0, this.paletteMatches.length - 1)); $('palette-results').innerHTML = this.paletteMatches.map((c, i) => `<button type=\"button\" class=\"palette-item ${i === this.paletteIndex ? 'active' : ''}\" data-palette=\"${c.id}\">${U.icon(c.icon)}<div><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></div><kbd>${esc(c.alias.split(' \u00b7 ').at(-1))}</kbd></button>`).join('') || '<div class=\"empty-explorer\">No matching commands.</div>'; $('palette-results').querySelector('.active')?.scrollIntoView({ block: 'nearest' }); }"
+        },
+        {
+          "line": 2236,
+          "source": "showContextMenu(x, y) { const ids = this.tool ? ['finish-tool', 'close-tool', 'cancel-tool'] : ['copy-clipboard', 'paste', 'move', 'erase', 'fit', 'palette']; const menu = $('context-menu'); menu.innerHTML = '<div class=\"popover-title\">' + (this.tool ? esc(this.tool.id.toUpperCase()) : 'MODEL SPACE') + '</div>' + ids.map(id => `<button class=\"menu-item\" data-action=\"${id}\">${U.icon(({ 'finish-tool': 'check', 'cancel-tool': 'close', 'close-tool': 'polyline', 'copy-clipboard': 'copy', 'paste': 'insert' })[id] || U.get(id).icon)}${esc(({ 'finish-tool': 'Enter / finish', 'cancel-tool': 'Cancel command', 'close-tool': 'Close polyline', 'copy-clipboard': 'Copy to internal clipboard', 'paste': 'Paste objects' })[id] || U.get(id).label)}</button>`).join(''); menu.hidden = false; menu.style.left = clamp(x, 5, innerWidth - menu.offsetWidth - 5) + 'px'; menu.style.top = clamp(y, 5, innerHeight - menu.offsetHeight - 5) + 'px'; }"
+        },
+        {
+          "line": 2355,
+          "source": "throw Error('Allow popups for this local application to open its print sheet.'); const svg = K.Exchange.writeSVG(this.doc, { width: 1680, height: 1188, camera: f.projection === 'current' ? this.camera : null, monochrome: !!f.monochrome, sheet: true }); popup.document.write('<!doctype html><html><head><title>' + esc(this.doc.name) + ' \u2014 Kestrel CAD</title><style>@page{size:A3 landscape;margin:0}body{margin:0;background:#ddd}svg{display:block;width:100vw;height:100vh;background:white}button{position:fixed;top:12px;right:12px;padding:10px 20px;cursor:pointer}@media print{button{display:none}body{background:white}svg{width:420mm;height:297mm}}</style></head><body>' + svg + '<button onclick=\"window.print()\">Print / Save PDF</button></body></html>'); popup.document.close(); } }); }"
+        }
+      ]
+    }
+  ],
+  "note": "API occurrence inventory, not complete template inventory; dialog HTML producers require separate extraction.",
+  "additional_resources": [
+    {
+      "path": "src/io-worker.js",
+      "sha256": "9383269e51527bf97ce0257c19a65a7d764240a496fea6bff9ff03ce81b5e603",
+      "purpose": "Bundled file-processing worker; not a main-document entry script"
+    }
+  ]
+}

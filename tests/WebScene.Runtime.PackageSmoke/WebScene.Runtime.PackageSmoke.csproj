@@ -11,6 +11,8 @@
     <Compile Include="../Shared/NativeAbiContract.cs" Link="NativeAbiContract.cs" />
     <EmbeddedResource Include="../../experiments/WebScene.NativeEngine.Probe/native/webscene_native_engine.h"
                       LogicalName="WebScene.NativeAbiHeader" />
+    <EmbeddedResource Include="../../experiments/WebScene.NativeEngine.Probe/native/webscene/compiled_document.hpp"
+                      LogicalName="WebScene.CompiledDocumentAbiHeader" />
     <PackageReference Include="WebScene.Backend.Avalonia"
                       Version="$(WebScenePackageVersion)" />
     <PackageReference Include="WebScene.Sdk.Avalonia"

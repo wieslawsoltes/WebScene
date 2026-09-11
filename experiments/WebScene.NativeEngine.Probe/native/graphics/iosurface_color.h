@@ -3,6 +3,8 @@
 #include <IOSurface/IOSurface.h>
 #include <CoreVideo/CoreVideo.h>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <unistd.h>
@@ -15,7 +17,13 @@ class iosurface_color final {
     std::shared_ptr<void> external_owner_;
     explicit iosurface_color(IOSurfaceRef surface):surface_(surface) {}
 public:
-    ~iosurface_color() { if (surface_) CFRelease(surface_); }
+    ~iosurface_color() {
+        if (surface_) {
+            if (std::getenv("WEBSCENE_GRAPHICS_MEMORY_TRACE"))
+                std::fprintf(stderr, "iosurface-release id=%u bytes=%zu\n", IOSurfaceGetID(surface_), allocation_bytes());
+            CFRelease(surface_);
+        }
+    }
     iosurface_color(const iosurface_color&)=delete;
     iosurface_color& operator=(const iosurface_color&)=delete;
     IOSurfaceRef borrowed_handle() const noexcept { return surface_; }
@@ -67,6 +75,9 @@ public:
             CFRelease(surface);
             return {};
         }
+        if (std::getenv("WEBSCENE_GRAPHICS_MEMORY_TRACE"))
+            std::fprintf(stderr, "iosurface-create id=%u width=%u height=%u bytes=%zu\n",
+                IOSurfaceGetID(surface), width, height, IOSurfaceGetAllocSize(surface));
         // Take ownership before allocating the shared control block.
         std::unique_ptr<iosurface_color> owner;
         try { owner.reset(new iosurface_color(surface)); }

@@ -1,0 +1,42 @@
+include_guard(GLOBAL)
+get_filename_component(_ws_prefix "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+if(NOT APPLE OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+  message(FATAL_ERROR "WebScene SDK preview requires macOS ARM64")
+endif()
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR NOT CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "22.1.1")
+  message(FATAL_ERROR "This preview requires LLVM 22.1.1 with libc++; use WebSceneToolchain.cmake")
+endif()
+if(CMAKE_OSX_DEPLOYMENT_TARGET AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "26.0")
+  message(FATAL_ERROR "The qualified binary dependencies require macOS 26.0 or newer")
+endif()
+function(_ws_static name filename)
+  add_library(WebScene::${name} STATIC IMPORTED GLOBAL)
+  set_target_properties(WebScene::${name} PROPERTIES
+    IMPORTED_LOCATION "${_ws_prefix}/lib/${filename}"
+    INTERFACE_INCLUDE_DIRECTORIES "${_ws_prefix}/include"
+    INTERFACE_COMPILE_FEATURES cxx_std_20)
+endfunction()
+_ws_static(Core libwebscene_core.a)
+_ws_static(NativeWeb libwebscene_native_web.a)
+set_property(TARGET WebScene::NativeWeb PROPERTY INTERFACE_LINK_LIBRARIES WebScene::Core)
+_ws_static(_Parser libwebscene_html_parser.a)
+_ws_static(SharedCSS libwebscene_native_web_shared_css.a)
+set_property(TARGET WebScene::SharedCSS PROPERTY INTERFACE_LINK_LIBRARIES "WebScene::NativeWeb;WebScene::_Parser;iconv")
+add_library(WebScene::_Dawn SHARED IMPORTED GLOBAL)
+set_target_properties(WebScene::_Dawn PROPERTIES
+  IMPORTED_LOCATION "${_ws_prefix}/lib/libwebgpu_dawn.dylib"
+  INTERFACE_INCLUDE_DIRECTORIES "${_ws_prefix}/include")
+add_library(WebScene::WebGPU INTERFACE IMPORTED GLOBAL)
+set_property(TARGET WebScene::WebGPU PROPERTY INTERFACE_LINK_LIBRARIES
+  "WebScene::Core;WebScene::_Dawn;-framework Foundation;-framework IOSurface;-framework CoreVideo;-framework Metal")
+set_property(TARGET WebScene::WebGPU PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${_ws_prefix}/include/graphics")
+_ws_static(_Media libwebscene_media.a)
+_ws_static(_WebSocket libixwebsocket.a)
+_ws_static(_V8 libv8_monolith.a)
+_ws_static(Runtime libwebscene_native_engine.a)
+set_property(TARGET WebScene::Runtime PROPERTY INTERFACE_LINK_LIBRARIES
+ "WebScene::Core;WebScene::_Media;WebScene::_WebSocket;WebScene::_Parser;WebScene::_V8;WebScene::WebGPU;iconv;z;-framework Security;-framework CoreFoundation;-framework AVFoundation;-framework CoreMedia;-framework CoreVideo;-framework Foundation;-framework IOSurface")
+add_executable(WebScene::Compiler IMPORTED GLOBAL)
+set_property(TARGET WebScene::Compiler PROPERTY IMPORTED_LOCATION "${_ws_prefix}/bin/webscene-uic")
+set(WebScene_SDK_ROOT "${_ws_prefix}")
+include("${CMAKE_CURRENT_LIST_DIR}/WebSceneApplication.cmake")

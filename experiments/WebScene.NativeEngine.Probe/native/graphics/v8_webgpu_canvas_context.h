@@ -1,17 +1,13 @@
 #pragma once
+#include "webgpu_canvas_host.h"
+#include "v8_webgpu_canvas_configuration.h"
+#include "v8_webgpu_texture_descriptor.h"
 #include "v8_webgpu_devices.h"
 #include "webgpu_canvas_texture_descriptor.h"
 #include <functional>
 #include <tuple>
 namespace webscene::graphics {
-// Host callbacks run on the engine thread, invoke no JavaScript, and must retain
-// imported allocations through GPU completion. They never implement CPU copies.
-struct webgpu_canvas_host {
-    std::function<void(const webgpu_canvas_configuration&)> validate;
-    std::function<wgpu::Texture(const webgpu_canvas_configuration&,const webgpu_texture_descriptor&)> acquire;
-    std::function<void(const wgpu::Texture&,bool present)> retire;
-    std::function<void()> invalidate;
-};
+
 class v8_webgpu_canvas_context {
     alignas(void*) static inline char brand_{};
     v8::Isolate* isolate_;const std::thread::id thread_=std::this_thread::get_id();

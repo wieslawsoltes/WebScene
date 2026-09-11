@@ -1,6 +1,7 @@
 #pragma once
 
 #include "webscene_native_engine.h"
+#include "webscene_compiled_document.h"
 
 #include <chrono>
 #include <functional>
@@ -45,6 +46,7 @@ struct native_file_completion {
 };
 
 class native_document;
+struct dom_node;
 
 struct document_start_script final {
     std::string source;
@@ -254,6 +256,16 @@ public:
     v8_dom_runtime(const v8_dom_runtime&) = delete;
     v8_dom_runtime& operator=(const v8_dom_runtime&) = delete;
 
+    // Owner-thread registration. Factories construct detached nodes in the supplied
+    // document; JS attaches them using ordinary DOM operations and owns listeners.
+    // JSON is structured template data, never markup. Captures outlive the runtime.
+    using compiled_template_factory =
+        std::function<dom_node&(native_document&, const std::string&)>;
+    void register_compiled_template(std::string name, compiled_template_factory factory);
+
+    using compiled_document = webscene_native::compiled_document;
+    bool load_compiled_document(const compiled_document& package);
+
     bool initialize();
     bool execute(const std::string& source, const std::string& document_name);
     bool load_url(
@@ -328,6 +340,9 @@ public:
         std::function<void(webscene::graphics::completion_record)> deliver);
 #endif
     bool pump_task();
+    // Service V8's foreground/idle queue without fabricating application work
+    // or releasing requestAnimationFrame callbacks. Called at worker idle.
+    bool pump_idle_platform_tasks(bool& did_work);
     bool has_pending_tasks() const noexcept;
     std::chrono::milliseconds recommended_idle_wait(
         std::chrono::milliseconds maximum) const noexcept;

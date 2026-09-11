@@ -43,26 +43,11 @@
     }
 
     static void append_css_syntax_declaration(
-        std::vector<css_declaration>& result,
-        std::string_view raw_name,
-        std::string_view raw_value,
-        bool important,
+        std::vector<css_declaration>& result, std::string_view name,
+        std::string_view value, bool important,
         bool preserve_empty_custom_properties = false)
     {
-        auto name = raw_name.starts_with("--")
-            ? std::string(raw_name)
-            : copy_ascii_lower(raw_name);
-        auto value = std::string(raw_value);
-        const auto custom = name.starts_with("--");
-        if (custom && !valid_custom_property_name(name)) return;
-        if (!custom && name.starts_with("-")
-            && name != "-moz-transform"
-            && name != "-webkit-transform"
-            && name != "-webkit-font-smoothing") return;
-        if (custom && value.empty() && preserve_empty_custom_properties) value = " ";
-        if (!name.empty() && !value.empty()) {
-            result.push_back({std::move(name), std::move(value), important});
-        }
+        css::append_declaration(result,name,value,important,preserve_empty_custom_properties);
     }
 
     static std::vector<css_declaration> parse_css_declarations(
@@ -71,49 +56,7 @@
     {
         std::vector<css_declaration> result;
 #if defined(WEBSCENE_NATIVE_ENGINE_CSSPARSER)
-        class declaration_sink final : public css_syntax_sink {
-        public:
-            declaration_sink(
-                std::vector<css_declaration>& declarations,
-                bool preserve_empty_custom_properties)
-                : declarations_(declarations),
-                  preserve_empty_custom_properties_(preserve_empty_custom_properties)
-            {
-            }
-
-            bool begin_rule(
-                uint32_t,
-                bool,
-                size_t,
-                std::string_view,
-                std::string_view,
-                size_t&) override
-            {
-                return false;
-            }
-
-            bool declaration(
-                std::string_view name,
-                std::string_view value,
-                bool important) override
-            {
-                append_css_syntax_declaration(
-                    declarations_, name, value, important,
-                    preserve_empty_custom_properties_);
-                return true;
-            }
-
-            bool end_rule(size_t, size_t) override { return false; }
-
-        private:
-            std::vector<css_declaration>& declarations_;
-            bool preserve_empty_custom_properties_;
-        };
-
-        result.reserve(body.size() / 64U);
-        declaration_sink sink(result, preserve_empty_custom_properties);
-        const auto parsed = stream_css_syntax_declarations(body, sink);
-        if (!parsed) result.clear();
+        return css::parse_declarations(body, preserve_empty_custom_properties);
 #else
         size_t cursor = 0;
         while (cursor < body.size()) {
@@ -425,124 +368,9 @@
             }
             open = cursor;
         }
-        size_t compound_begin = 0;
-        int bracket_depth = 0;
-        int parenthesis_depth = 0;
-        for (size_t offset = selector.size(); offset > 0; --offset) {
-            const auto position = offset - 1U;
-            const auto character = selector[position];
-            if (character == ']') ++bracket_depth;
-            else if (character == '[') --bracket_depth;
-            else if (character == ')') ++parenthesis_depth;
-            else if (character == '(') --parenthesis_depth;
-            else if (bracket_depth == 0 && parenthesis_depth == 0
-                && (std::isspace(static_cast<unsigned char>(character))
-                    || character == '>' || character == '+' || character == '~')) {
-                compound_begin = position + 1U;
-                break;
-            }
-        }
-        // An attribute in an ancestor compound can change which descendants
-        // match. Attribute selectors in the rightmost compound only require
-        // recascading the mutated subject.
-        for (size_t open = 0;
-             (open = selector.find('[', open)) != std::string_view::npos;) {
-            auto cursor = open + 1U;
-            while (cursor < selector.size()
-                && std::isspace(static_cast<unsigned char>(selector[cursor]))) {
-                ++cursor;
-            }
-            const auto start = cursor;
-            while (cursor < selector.size()
-                && (std::isalnum(static_cast<unsigned char>(selector[cursor]))
-                    || selector[cursor] == '-' || selector[cursor] == '_')) {
-                ++cursor;
-            }
-            if (cursor > start
-                && (open < compound_begin
-                    || selector.find(":has(") != std::string_view::npos)) {
-                css_descendant_attribute_dependencies.emplace(
-                    selector.substr(start, cursor - start));
-            }
-            open = cursor;
-        }
-        auto compound = std::string_view(selector).substr(compound_begin);
-        while (!compound.empty()
-            && std::isspace(static_cast<unsigned char>(compound.front()))) {
-            compound.remove_prefix(1U);
-        }
-
-        size_t pseudo = compound.size();
-        bracket_depth = 0;
-        for (size_t position = 0; position < compound.size(); ++position) {
-            if (compound[position] == '[') ++bracket_depth;
-            else if (compound[position] == ']') --bracket_depth;
-            else if (compound[position] == ':' && bracket_depth == 0) {
-                pseudo = position;
-                break;
-            }
-        }
-        compound = compound.substr(0, pseudo);
-
-        const auto token_end = [&](size_t start) {
-            auto end = start;
-            while (end < compound.size()
-                && compound[end] != '.' && compound[end] != '#'
-                && compound[end] != '[' && compound[end] != ':') ++end;
-            return end;
-        };
-        bracket_depth = 0;
-        for (size_t position = 0; position < compound.size(); ++position) {
-            if (compound[position] == '[') ++bracket_depth;
-            else if (compound[position] == ']') --bracket_depth;
-            else if (bracket_depth == 0
-                && (compound[position] == '#' || compound[position] == '.')) {
-                const auto end = token_end(position + 1U);
-                const auto key = std::string(compound.substr(position + 1U, end - position - 1U));
-                if (!key.empty()) {
-                    auto& target = compound[position] == '#'
-                        ? css_rules_by_id[key]
-                        : css_rules_by_class[key];
-                    target.push_back(index);
-                    return;
-                }
-            }
-        }
-        if (!compound.empty() && std::isalpha(static_cast<unsigned char>(compound.front()))) {
-            size_t end = 1U;
-            while (end < compound.size()
-                && (std::isalnum(static_cast<unsigned char>(compound[end]))
-                    || compound[end] == '-')) ++end;
-            css_rules_by_tag[std::string(compound.substr(0, end))].push_back(index);
-            return;
-        }
-        if (const auto open = compound.find('['); open != std::string_view::npos) {
-            auto cursor = open + 1U;
-            while (cursor < compound.size()
-                && std::isspace(static_cast<unsigned char>(compound[cursor]))) {
-                ++cursor;
-            }
-            const auto start = cursor;
-            while (cursor < compound.size()
-                && (std::isalnum(static_cast<unsigned char>(compound[cursor]))
-                    || compound[cursor] == '-' || compound[cursor] == '_')) {
-                ++cursor;
-            }
-            if (cursor > start) {
-                css_rules_by_attribute[
-                    std::string(compound.substr(start, cursor - start))].push_back(index);
-                return;
-            }
-        }
-        if (trim_css_view(selector) == ":root") {
-            css_rules_by_tag["html"].push_back(index);
-            return;
-        }
-        if (trim_css_view(selector) == ":focus") {
-            css_focus_rules.push_back(index);
-            return;
-        }
-        unindexed_css_rules.push_back(index);
+        css::index_selector(index, selector, css_rules_by_id, css_rules_by_class,
+            css_rules_by_tag, css_rules_by_attribute, css_focus_rules,
+            unindexed_css_rules, css_descendant_attribute_dependencies);
     }
 
     bool attribute_requires_recascade(std::string_view name) const
@@ -559,80 +387,10 @@
 
     bool media_query_matches(std::string query) const
     {
-        std::transform(query.begin(), query.end(), query.begin(), [](unsigned char character) {
-            return static_cast<char>(std::tolower(character));
-        });
-        const auto [
-            viewport_width,
-            viewport_height,
-            device_scale_factor,
-            preferred_color_scheme] = viewport_provider();
-        static_cast<void>(device_scale_factor);
-        size_t alternative_start = 0;
-        while (alternative_start <= query.size()) {
-            auto alternative_end = query.find(',', alternative_start);
-            if (alternative_end == std::string::npos) alternative_end = query.size();
-            auto alternative = trim_css(std::string_view(query).substr(
-                alternative_start,
-                alternative_end - alternative_start));
-            const auto negated = alternative.starts_with("not ");
-            if (negated) alternative = trim_css(std::string_view(alternative).substr(4U));
-            auto matches = true;
-            if (alternative.starts_with("all and")) {
-                alternative = trim_css(std::string_view(alternative).substr(7U));
-            } else if (alternative.starts_with("screen and")) {
-                alternative = trim_css(std::string_view(alternative).substr(10U));
-            } else if (alternative == "all" || alternative == "screen"
-                || alternative.starts_with("(")) {
-            } else if (alternative == "print" || alternative.starts_with("print and")) {
-                matches = false;
-            } else {
-                matches = false;
-            }
-
-            size_t condition_start = 0;
-            while (matches && (condition_start = alternative.find('(', condition_start))
-                != std::string::npos) {
-                const auto condition_end = alternative.find(')', condition_start + 1U);
-                if (condition_end == std::string::npos) break;
-                const auto condition = trim_css(std::string_view(alternative).substr(
-                    condition_start + 1U,
-                    condition_end - condition_start - 1U));
-                const auto separator = condition.find(':');
-                const auto feature = trim_css(std::string_view(condition).substr(0, separator));
-                const auto value = separator == std::string::npos
-                    ? std::string{} : trim_css(std::string_view(condition).substr(separator + 1U));
-                const auto number = std::strtof(value.c_str(), nullptr);
-                if (feature == "max-width") matches = viewport_width <= number;
-                else if (feature == "min-width") matches = viewport_width >= number;
-                else if (feature == "max-height") matches = viewport_height <= number;
-                else if (feature == "min-height") matches = viewport_height >= number;
-                else if (feature == "orientation") {
-                    matches = value == "landscape"
-                        ? viewport_width >= viewport_height
-                        : value == "portrait" && viewport_height > viewport_width;
-                } else if (feature == "hover" || feature == "any-hover") {
-                    matches = value == "hover";
-                } else if (feature == "pointer" || feature == "any-pointer") {
-                    matches = value == "fine";
-                } else if (feature == "prefers-reduced-motion") {
-                    matches = value == "no-preference";
-                } else if (feature == "prefers-color-scheme") {
-                    matches = value == (
-                        preferred_color_scheme == WEBSCENE_PREFERRED_COLOR_SCHEME_DARK
-                            ? "dark"
-                            : "light");
-                } else {
-                    matches = false;
-                }
-                condition_start = condition_end + 1U;
-            }
-            if (negated) matches = !matches;
-            if (matches) return true;
-            if (alternative_end == query.size()) break;
-            alternative_start = alternative_end + 1U;
-        }
-        return false;
+        const auto [width,height,scale,scheme]=viewport_provider();
+        static_cast<void>(scale);
+        return css::media_matches(std::move(query),
+            {width,height,scheme==WEBSCENE_PREFERRED_COLOR_SCHEME_DARK});
     }
 
     bool css_rule_media_matches(const css_rule& rule) const
@@ -641,53 +399,6 @@
             rule.media_queries().begin(),
             rule.media_queries().end(),
             [this](const std::string& query) { return media_query_matches(query); });
-    }
-
-    static uint64_t css_rule_payload_hash(
-        std::string_view selector,
-        const std::vector<css_declaration>& declarations,
-        const std::vector<std::string>& media_queries)
-    {
-        auto hash = uint64_t{1469598103934665603ULL};
-        const auto append = [&](std::string_view value) {
-            for (const auto character : value) {
-                hash ^= static_cast<unsigned char>(character);
-                hash *= 1099511628211ULL;
-            }
-            hash ^= 0xffU;
-            hash *= 1099511628211ULL;
-        };
-        append(selector);
-        for (const auto& declaration : declarations) {
-            append(declaration.name);
-            append(declaration.value);
-            hash ^= declaration.important ? 1U : 0U;
-            hash *= 1099511628211ULL;
-        }
-        for (const auto& query : media_queries) append(query);
-        return hash;
-    }
-
-    static bool css_rule_payload_matches(
-        const css_rule_payload& payload,
-        std::string_view selector,
-        const std::vector<css_declaration>& declarations,
-        const std::vector<std::string>& media_queries)
-    {
-        if (payload.selector != selector
-            || payload.declarations.size() != declarations.size()
-            || payload.media_queries != media_queries) {
-            return false;
-        }
-        for (size_t index = 0; index < declarations.size(); ++index) {
-            const auto& left = payload.declarations[index];
-            const auto& right = declarations[index];
-            if (left.name != right.name || left.value != right.value
-                || left.important != right.important) {
-                return false;
-            }
-        }
-        return true;
     }
 
     static std::shared_ptr<const css_rule_payload> intern_css_rule_payload(
@@ -702,41 +413,10 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
         static_cast<void>(parsed_selector);
 #endif
-        const auto hash = css_rule_payload_hash(
-            selector,
-            declarations,
-            media_queries);
-        std::lock_guard lock(shared_css_rule_payload_mutex);
-        auto& candidates = shared_css_rule_payloads[hash];
-        for (auto iterator = candidates.begin(); iterator != candidates.end();) {
-            auto candidate = iterator->lock();
-            if (candidate == nullptr) {
-                iterator = candidates.erase(iterator);
-                continue;
-            }
-            if (css_rule_payload_matches(
-                    *candidate,
-                    selector,
-                    declarations,
-                    media_queries)) {
-                return candidate;
-            }
-            ++iterator;
-        }
-        auto payload = std::make_shared<css_rule_payload>();
-        payload->selector = std::move(selector);
-#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
-        // The syntax parser's output is used for validation and indexing, but
-        // matching also needs the native pre-tokenized compound representation.
-        payload->compiled_selector = compile_css_selector(payload->selector);
-#else
-        payload->compiled_selector = compile_css_selector(payload->selector);
-#endif
-        payload->specificity = payload->compiled_selector.specificity;
-        payload->declarations = declarations;
-        payload->media_queries = media_queries;
-        candidates.emplace_back(payload);
-        return payload;
+        return css::intern_rule_payload(
+            shared_css_rule_payload_mutex,shared_css_rule_payloads,
+            [](std::string_view value) { return compile_css_selector(std::string(value)); },
+            std::move(selector),declarations,media_queries);
     }
 
     void append_css_rule(
@@ -1069,64 +749,11 @@
 
     bool inventory_media_query(std::string query)
     {
-        std::transform(query.begin(), query.end(), query.begin(), [](unsigned char character) {
-            return static_cast<char>(std::tolower(character));
-        });
-        auto supported = true;
-        size_t alternative_start = 0U;
-        while (alternative_start <= query.size()) {
-            auto alternative_end = query.find(',', alternative_start);
-            if (alternative_end == std::string::npos) alternative_end = query.size();
-            auto alternative = trim_css(std::string_view(query).substr(
-                alternative_start, alternative_end - alternative_start));
-            if (alternative.starts_with("not ")) {
-                alternative = trim_css(std::string_view(alternative).substr(4U));
-            }
-            const auto first_condition = alternative.find('(');
-            auto media_type = trim_css(std::string_view(alternative).substr(0U, first_condition));
-            if (media_type.ends_with(" and")) media_type.resize(media_type.size() - 4U);
-            media_type = trim_css(media_type);
-            if (!media_type.empty()) {
-                const auto known = media_type == "all" || media_type == "screen" || media_type == "print";
-                record_feature(
-                    "css",
-                    "media-type:" + media_type,
-                    known ? "supported" : "unsupported",
-                    {},
-                    "media-query-parser");
-                supported = supported && known;
-            }
-            size_t condition_start = 0U;
-            while ((condition_start = alternative.find('(', condition_start))
-                != std::string::npos) {
-                const auto condition_end = alternative.find(')', condition_start + 1U);
-                if (condition_end == std::string::npos) {
-                    supported = false;
-                    break;
-                }
-                const auto condition = trim_css(std::string_view(alternative).substr(
-                    condition_start + 1U, condition_end - condition_start - 1U));
-                const auto separator = condition.find(':');
-                const auto feature = trim_css(std::string_view(condition).substr(0U, separator));
-                static const std::unordered_set<std::string> supported_features{
-                    "max-width", "min-width", "max-height", "min-height", "orientation",
-                    "hover", "any-hover", "pointer", "any-pointer",
-                    "prefers-reduced-motion", "prefers-color-scheme"};
-                const auto known = separator != std::string::npos
-                    && supported_features.contains(feature);
-                record_feature(
-                    "css",
-                    "media-feature:" + (feature.empty() ? std::string("<missing>") : feature),
-                    known ? "supported" : "unsupported",
-                    {},
-                    "media-query-parser");
-                supported = supported && known;
-                condition_start = condition_end + 1U;
-            }
-            if (alternative_end == query.size()) break;
-            alternative_start = alternative_end + 1U;
-        }
-        return supported;
+        return css::inventory_media(std::move(query),
+            [this](const auto& category,const auto& feature,const auto& classification,
+                const std::string& detail,const auto& source) {
+                record_feature(category,feature,classification,detail,source);
+            });
     }
 
     static uint32_t css_selector_specificity(std::string_view selector)
@@ -1226,20 +853,7 @@
     }
 
     void sort_css_candidates(std::vector<size_t>& candidates) const
-    {
-        // Declarations are applied in ascending precedence; later declarations
-        // therefore replace earlier ones while equal specificity retains source order.
-        std::sort(
-            candidates.begin(),
-            candidates.end(),
-            [this](size_t left, size_t right) {
-                const auto left_specificity = css_rules[left].specificity();
-                const auto right_specificity = css_rules[right].specificity();
-                return left_specificity != right_specificity
-                    ? left_specificity < right_specificity
-                    : left < right;
-            });
-    }
+    { css::sort_candidates(css_rules,candidates); }
 
     bool refresh_css_media_matches()
     {
@@ -1283,63 +897,8 @@
         return true;
     }
 
-    static std::string resolve_css_resource_urls(
-        std::string value,
-        const std::string& stylesheet_address)
-    {
-        if (value.empty() || stylesheet_address.empty()) return value;
-
-        auto lowercase = lower_html_name(value);
-        size_t search = 0U;
-        while ((search = lowercase.find("url(", search)) != std::string::npos) {
-            const auto argument_begin = search + 4U;
-            auto argument_end = argument_begin;
-            char quote = 0;
-            for (; argument_end < value.size(); ++argument_end) {
-                const auto character = value[argument_end];
-                if (quote != 0) {
-                    if (character == quote
-                        && (argument_end == argument_begin
-                            || value[argument_end - 1U] != '\\')) {
-                        quote = 0;
-                    }
-                    continue;
-                }
-                if (character == '\'' || character == '"') {
-                    quote = character;
-                } else if (character == ')') {
-                    break;
-                }
-            }
-            if (argument_end >= value.size()) break;
-
-            auto address = trim_css(std::string_view(value).substr(
-                argument_begin,
-                argument_end - argument_begin));
-            if (address.size() >= 2U
-                && ((address.front() == '\'' && address.back() == '\'')
-                    || (address.front() == '"' && address.back() == '"'))) {
-                address = address.substr(1U, address.size() - 2U);
-            }
-            if (address.empty() || address.starts_with('#')) {
-                search = argument_end + 1U;
-                continue;
-            }
-
-            auto resolved = resolve_resource_url(address, stylesheet_address);
-            std::string escaped;
-            escaped.reserve(resolved.size());
-            for (const auto character : resolved) {
-                if (character == '\\' || character == '"') escaped.push_back('\\');
-                escaped.push_back(character);
-            }
-            const auto replacement = "url(\"" + escaped + "\")";
-            value.replace(search, argument_end - search + 1U, replacement);
-            lowercase = lower_html_name(value);
-            search += replacement.size();
-        }
-        return value;
-    }
+    static std::string resolve_css_resource_urls(std::string value,const std::string& address)
+    { return css::resolve_resource_urls(std::move(value),address); }
 
     void parse_opacity_keyframes(
         const std::string& css,
@@ -1443,6 +1002,21 @@
         const std::vector<std::string>& inherited_media,
         const std::string& stylesheet_address)
     {
+#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
+        css::prepare_style_rule(prelude,std::move(declarations),inherited_media,stylesheet_address,
+            [this](const css_declaration& declaration) {
+                inventory_css_value_functions(declaration.value);
+                if(declaration.name == "background-image") {
+                    if(const auto url=first_css_url(declaration.value);url.has_value())
+                        start_resource_prefetch(*url,{},WEBSCENE_RESOURCE_IMAGE);
+                }
+            },
+            [this](const std::string& selector,const std::vector<css_declaration>& values,
+                   const std::vector<std::string>& media) {
+                inventory_css_selector(selector);
+                append_css_rule(selector,values,media);
+            });
+#else
         for (auto& declaration : declarations) {
             declaration.value = resolve_css_resource_urls(
                 std::move(declaration.value),
@@ -1464,18 +1038,6 @@
             append_css_rule(":host", declarations, inherited_media);
             return;
         }
-#if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
-        const auto parsed_selectors = parse_selector_syntax(prelude);
-        if (!parsed_selectors) return;
-        for (const auto& parsed_selector : parsed_selectors.selectors) {
-            inventory_css_selector(parsed_selector.serialized);
-            append_css_rule(
-                parsed_selector.serialized,
-                declarations,
-                inherited_media,
-                &parsed_selector);
-        }
-#else
         size_t selector_cursor = 0U;
         int bracket_depth = 0;
         int parenthesis_depth = 0;
@@ -1506,6 +1068,7 @@
                 selector_cursor = index + 1U;
             }
         }
+
 #endif
     }
 
@@ -1616,288 +1179,16 @@
     }
 
 #if defined(WEBSCENE_NATIVE_ENGINE_CSSPARSER)
-    void append_css_syntax_keyframe(
-        css_opacity_keyframes& definition,
-        std::string selector,
-        const std::vector<css_declaration>& declarations)
-    {
-        const auto opacity = std::find_if(
-            declarations.begin(), declarations.end(), [](const auto& declaration) {
-                return declaration.name == "opacity";
-            });
-        const auto transform = std::find_if(
-            declarations.begin(), declarations.end(), [](const auto& declaration) {
-                return declaration.name == "transform";
-            });
-        const auto rotation_degrees = [&]() -> std::optional<float> {
-            if (transform == declarations.end()) return std::nullopt;
-            auto value = lower_html_name(trim_css(transform->value));
-            const auto rotate = value.find("rotate(");
-            if (rotate == std::string::npos) return std::nullopt;
-            const auto close = value.find(')', rotate + 7U);
-            if (close == std::string::npos) return std::nullopt;
-            auto angle = trim_css(value.substr(rotate + 7U, close - rotate - 7U));
-            auto multiplier = 1.0F;
-            if (angle.ends_with("turn")) {
-                angle.resize(angle.size() - 4U);
-                multiplier = 360.0F;
-            } else if (angle.ends_with("deg")) {
-                angle.resize(angle.size() - 3U);
-            } else if (angle.ends_with("rad")) {
-                angle.resize(angle.size() - 3U);
-                multiplier = 57.29577951308232F;
-            } else return std::nullopt;
-            return std::strtof(angle.c_str(), nullptr) * multiplier;
-        }();
-        for (auto component : split_css_component_list(selector, ',')) {
-            component = lower_html_name(trim_css(std::move(component)));
-            float offset = -1;
-            if (component == "from") offset = 0;
-            else if (component == "to") offset = 1;
-            else if (component.ends_with('%')) {
-                component.pop_back();
-                offset = std::strtof(component.c_str(), nullptr) / 100.0F;
-            }
-            if (offset < 0 || offset > 1) continue;
-            if (opacity != declarations.end()) {
-                definition.opacity_stops.push_back({
-                    offset,
-                    std::clamp(std::strtof(opacity->value.c_str(), nullptr), 0.0F, 1.0F)});
-            }
-            if (rotation_degrees.has_value()) {
-                definition.rotation_stops.push_back({offset, *rotation_degrees});
-            }
-        }
-    }
-
-    void finish_css_syntax_keyframes(
-        std::string name,
-        css_opacity_keyframes definition)
-    {
-        const auto normalize = [](auto& stops) {
-            std::stable_sort(
-                stops.begin(), stops.end(),
-                [](const auto& left, const auto& right) { return left.offset < right.offset; });
-            using stop_type = typename std::decay_t<decltype(stops)>::value_type;
-            std::vector<stop_type> unique;
-            for (const auto& stop : stops) {
-                if (!unique.empty()
-                    && std::abs(unique.back().offset - stop.offset) < 0.0001F) {
-                    unique.back() = stop;
-                } else {
-                    unique.push_back(stop);
-                }
-            }
-            stops = std::move(unique);
-        };
-        normalize(definition.opacity_stops);
-        normalize(definition.rotation_stops);
-        if (definition.rotation_stops.size() == 1U
-            && definition.rotation_stops.front().offset > 0) {
-            definition.rotation_stops.insert(definition.rotation_stops.begin(), {0, 0});
-        }
-        if (definition.opacity_stops.size() >= 2U
-            || definition.rotation_stops.size() >= 2U) {
-            opacity_keyframes[lower_html_name(trim_css(std::move(name)))] =
-                std::move(definition);
-        }
-    }
+    void finish_css_syntax_keyframes(std::string name, css_opacity_keyframes definition)
+    { css::finish_keyframes(opacity_keyframes,std::move(name),std::move(definition)); }
 
     void parse_css_rules_with_cssparser(
         std::string_view css,
         const std::string& stylesheet_address)
     {
-        class stylesheet_sink final : public css_syntax_sink {
-        public:
-            stylesheet_sink(
-                implementation& owner,
-                const std::string& stylesheet_address,
-                size_t input_size)
-                : owner_(owner), stylesheet_address_(stylesheet_address)
-            {
-                stack_.reserve(8U);
-                completed_keyframes_.reserve(input_size / 4096U);
-            }
-
-            bool begin_rule(
-                uint32_t kind,
-                bool,
-                size_t parent_index,
-                std::string_view raw_name,
-                std::string_view prelude,
-                size_t& rule_index) override
-            {
-                const auto expected_parent = stack_.empty()
-                    ? css_syntax_no_parent
-                    : stack_.back().rule_index;
-                if (parent_index != expected_parent) return false;
-
-                rule_index = next_rule_index_++;
-                frame current;
-                current.rule_index = rule_index;
-                current.kind = kind;
-                current.active = stack_.empty() || stack_.back().children_active;
-                current.children_active = current.active;
-
-                if (!stack_.empty() && stack_.back().keyframes
-                    && kind != css_syntax_style_rule) {
-                    current.active = false;
-                    current.children_active = false;
-                }
-
-                if (kind == css_syntax_style_rule) {
-                    current.prelude = std::string(prelude);
-                    current.children_active = false;
-                    // Two declarations is the common generated-rule shape and
-                    // avoids the former IR's exact-size allocation without
-                    // over-reserving every small rule.
-                    current.declarations.reserve(2U);
-                    stack_.push_back(std::move(current));
-                    return true;
-                }
-
-                if (!current.active) {
-                    current.children_active = false;
-                    stack_.push_back(std::move(current));
-                    return true;
-                }
-
-                const auto name = copy_ascii_lower(raw_name);
-                if (name == "keyframes" || name == "-webkit-keyframes") {
-                    current.keyframes = true;
-                    current.prelude = std::string(prelude);
-                } else if (name == "font-face") {
-                    current.children_active = false;
-                    owner_.record_feature(
-                        "css", "at-rule:@font-face", "supported",
-                        "font-family and first src url are registered by the native host",
-                        "stylesheet-parser");
-                } else if (name == "media") {
-                    current.media_query = trim_css(prelude);
-                    const auto supported = owner_.inventory_media_query(current.media_query);
-                    owner_.record_feature(
-                        "css", "at-rule:@media",
-                        supported ? "supported" : "unsupported",
-                        supported ? std::string{} : "unsupported media type or condition",
-                        "stylesheet-parser");
-                } else if (name == "supports") {
-                    auto condition = lower_html_name(trim_css(prelude));
-                    auto negated = false;
-                    if (condition.starts_with("not ")) {
-                        negated = true;
-                        condition = trim_css(std::string_view(condition).substr(4U));
-                    }
-                    const auto supported = condition == "selector(:focus-visible)";
-                    owner_.record_feature(
-                        "css", "at-rule:@supports",
-                        supported ? "supported" : "unsupported",
-                        supported ? "selector(:focus-visible)" : "condition is not evaluated",
-                        "stylesheet-parser");
-                    current.children_active = supported != negated;
-                } else if (name == "layer") {
-                    owner_.record_feature(
-                        "css", "at-rule:@layer", "partially-supported",
-                        "nested rules are parsed without cascade-layer ordering",
-                        "stylesheet-parser");
-                } else if (name == "container") {
-                    owner_.record_feature(
-                        "css", "at-rule:@container", "unsupported",
-                        "container conditions are not evaluated",
-                        "stylesheet-parser");
-                    current.children_active = false;
-                } else {
-                    owner_.record_feature(
-                        "css", "at-rule:@" + name, "unsupported", {},
-                        "stylesheet-parser");
-                    current.children_active = false;
-                }
-                stack_.push_back(std::move(current));
-                return true;
-            }
-
-            bool declaration(
-                std::string_view name,
-                std::string_view value,
-                bool important) override
-            {
-                if (stack_.empty()) return false;
-                auto& current = stack_.back();
-                ++current.observed_declarations;
-                if (current.active && current.kind == css_syntax_style_rule) {
-                    append_css_syntax_declaration(
-                        current.declarations, name, value, important);
-                }
-                return true;
-            }
-
-            bool end_rule(size_t rule_index, size_t declaration_count) override
-            {
-                if (stack_.empty() || stack_.back().rule_index != rule_index
-                    || stack_.back().observed_declarations != declaration_count) {
-                    return false;
-                }
-                auto current = std::move(stack_.back());
-                stack_.pop_back();
-                if (!current.active) return true;
-
-                if (current.kind == css_syntax_style_rule) {
-                    if (!stack_.empty() && stack_.back().keyframes) {
-                        owner_.append_css_syntax_keyframe(
-                            stack_.back().keyframe_definition,
-                            std::move(current.prelude),
-                            current.declarations);
-                        return true;
-                    }
-                    std::vector<std::string> inherited_media;
-                    inherited_media.reserve(stack_.size());
-                    for (const auto& ancestor : stack_) {
-                        if (!ancestor.media_query.empty()) {
-                            inherited_media.push_back(ancestor.media_query);
-                        }
-                    }
-                    owner_.append_parsed_css_style_rule(
-                        std::move(current.prelude),
-                        std::move(current.declarations),
-                        inherited_media,
-                        stylesheet_address_);
-                } else if (current.keyframes) {
-                    completed_keyframes_.emplace_back(
-                        std::move(current.prelude),
-                        std::move(current.keyframe_definition));
-                }
-                return true;
-            }
-
-            bool complete() const noexcept { return stack_.empty(); }
-
-            std::vector<std::pair<std::string, css_opacity_keyframes>>& keyframes()
-            {
-                return completed_keyframes_;
-            }
-
-        private:
-            struct frame final {
-                size_t rule_index{css_syntax_no_parent};
-                uint32_t kind{css_syntax_style_rule};
-                std::string prelude;
-                std::string media_query;
-                std::vector<css_declaration> declarations;
-                css_opacity_keyframes keyframe_definition;
-                size_t observed_declarations{0U};
-                bool active{false};
-                bool children_active{false};
-                bool keyframes{false};
-            };
-
-            implementation& owner_;
-            const std::string& stylesheet_address_;
-            std::vector<frame> stack_;
-            std::vector<std::pair<std::string, css_opacity_keyframes>> completed_keyframes_;
-            size_t next_rule_index_{0U};
-        };
 
         const auto first_new_rule = css_rules.size();
-        stylesheet_sink sink(*this, stylesheet_address, css.size());
+        css::stylesheet_sink sink(*this, stylesheet_address, css.size());
         const auto parsed = stream_css_syntax_stylesheet(css, sink);
         if (!parsed || !sink.complete()) {
             css_rules.resize(first_new_rule);
@@ -1912,6 +1203,36 @@
         }
     }
 #endif
+
+    void add_prepared_stylesheet(const css::prepared_stylesheet& sheet)
+    {
+        const auto first_prepared_rule = css_rules.size();
+        for (const auto& payload : sheet.rules) {
+            css_rule rule;
+            rule.payload = payload;
+            rule.media_matches = css_rule_media_matches(rule);
+            const auto index = css_rules.size();
+            css_rules.push_back(std::move(rule));
+            index_css_rule(index);
+        }
+        for (auto index = first_prepared_rule; index < css_rules.size(); ++index) {
+            const auto& rule = css_rules[index];
+            if (!rule.media_matches || rule.shadow_scope_root_id != 0U) continue;
+            if (rule.selector() != ":root" && rule.selector() != "html") continue;
+            for (const auto& declaration : rule.declarations()) {
+                if (!declaration.name.starts_with("--")) continue;
+                if (!declaration.important
+                    && important_css_variables.contains(declaration.name)) continue;
+                css_variables[declaration.name] = declaration.value;
+                if (declaration.important) important_css_variables.insert(declaration.name);
+                else important_css_variables.erase(declaration.name);
+            }
+        }
+        for (const auto& [name, frames] : sheet.keyframes) opacity_keyframes[name] = frames;
+        for (const auto& diagnostic : sheet.diagnostics)
+            record_feature("css", diagnostic.feature, diagnostic.classification,
+                diagnostic.detail, "compiled-stylesheet");
+    }
 
     size_t add_stylesheet(
         std::string css,
@@ -1975,697 +1296,33 @@
     }
 
     std::string resolve_css_value(const dom_node& node, std::string value) const
-    {
-        // Component-library dimensions frequently expand through several
-        // custom-property layers and then repeat those variables across five
-        // size terms. A fixed substitution limit truncated large component stylesheets'
-        // button height before it reached a numeric calc() expression.
-        for (int depth = 0; depth < 128; ++depth) {
-            const auto start = value.find("var(");
-            if (start == std::string::npos) break;
-            size_t close = std::string::npos;
-            int parenthesis_depth = 1;
-            for (size_t index = start + 4U; index < value.size(); ++index) {
-                if (value[index] == '(') ++parenthesis_depth;
-                else if (value[index] == ')' && --parenthesis_depth == 0) {
-                    close = index;
-                    break;
-                }
-            }
-            if (close == std::string::npos) break;
-            const auto content = value.substr(start + 4U, close - start - 4U);
-            size_t comma = std::string::npos;
-            parenthesis_depth = 0;
-            for (size_t index = 0; index < content.size(); ++index) {
-                if (content[index] == '(') ++parenthesis_depth;
-                else if (content[index] == ')') --parenthesis_depth;
-                else if (content[index] == ',' && parenthesis_depth == 0) {
-                    comma = index;
-                    break;
-                }
-            }
-            const auto name = trim_css(std::string_view(content).substr(0, comma));
-            const std::string* known_value = nullptr;
-            for (auto* current = &node; current != nullptr; current = current->parent) {
-                const auto& custom = current->style.custom_properties().values;
-                const auto known = custom.find(name);
-                if (known != custom.end()) {
-                    known_value = &known->second;
-                    break;
-                }
-            }
-            if (known_value == nullptr) {
-                const auto known = css_variables.find(name);
-                if (known != css_variables.end()) known_value = &known->second;
-            }
-            const auto replacement = known_value != nullptr
-                ? *known_value
-                : comma == std::string::npos ? std::string{} : trim_css(std::string_view(content).substr(comma + 1U));
-            value.replace(start, close - start + 1U, replacement);
-        }
-        return trim_css(value);
-    }
+    { return css::resolve_value(node,std::move(value),css_variables); }
 
-    static bool is_css_hex_digit(unsigned char character)
-    {
-        return (character >= '0' && character <= '9')
-            || (character >= 'a' && character <= 'f')
-            || (character >= 'A' && character <= 'F');
-    }
+    static bool is_css_hex_digit(unsigned char c) { return css::is_css_hex_digit(c); }
+    static size_t skip_css_escape_sequence(std::string_view text,size_t slash)
+    { return css::skip_css_escape_sequence(text,slash); }
+    static std::string read_css_identifier(std::string_view text,size_t& cursor)
+    { return css::read_css_identifier(text,cursor); }
 
-    static size_t skip_css_escape_sequence(std::string_view text, size_t slash)
-    {
-        auto cursor = slash + 1U;
-        if (cursor >= text.size()) return cursor;
-        if (text[cursor] == '\r') {
-            ++cursor;
-            if (cursor < text.size() && text[cursor] == '\n') ++cursor;
-            return cursor;
-        }
-        if (text[cursor] == '\n' || text[cursor] == '\f') return cursor + 1U;
-        const auto hex_start = cursor;
-        while (cursor < text.size()
-            && cursor - hex_start < 6U
-            && is_css_hex_digit(static_cast<unsigned char>(text[cursor]))) ++cursor;
-        if (cursor > hex_start) {
-            if (cursor < text.size() && text[cursor] == '\r') {
-                ++cursor;
-                if (cursor < text.size() && text[cursor] == '\n') ++cursor;
-            } else if (cursor < text.size()
-                && std::isspace(static_cast<unsigned char>(text[cursor]))) ++cursor;
-        } else {
-            ++cursor;
-        }
-        return cursor;
-    }
+    static bool css_attribute_selector_matches(const dom_node& node,std::string_view condition)
+    { return css::attribute_matches(node,condition); }
 
-    static std::string read_css_identifier(std::string_view text, size_t& cursor)
-    {
-        std::string result;
-        while (cursor < text.size()) {
-            const auto character = static_cast<unsigned char>(text[cursor]);
-            if (character == '\\') {
-                ++cursor;
-                if (cursor >= text.size()) {
-                    append_utf8_codepoint(result, 0xfffdU);
-                    break;
-                }
-                if (text[cursor] == '\r') {
-                    ++cursor;
-                    if (cursor < text.size() && text[cursor] == '\n') ++cursor;
-                    continue;
-                }
-                if (text[cursor] == '\n' || text[cursor] == '\f') {
-                    ++cursor;
-                    continue;
-                }
-                const auto hex_start = cursor;
-                uint32_t codepoint = 0U;
-                while (cursor < text.size()
-                    && cursor - hex_start < 6U
-                    && is_css_hex_digit(static_cast<unsigned char>(text[cursor]))) {
-                    const auto digit = static_cast<unsigned char>(text[cursor++]);
-                    codepoint = codepoint * 16U
-                        + (digit >= '0' && digit <= '9'
-                            ? digit - '0'
-                            : static_cast<unsigned char>(std::tolower(digit)) - 'a' + 10U);
-                }
-                if (cursor > hex_start) {
-                    if (cursor < text.size() && text[cursor] == '\r') {
-                        ++cursor;
-                        if (cursor < text.size() && text[cursor] == '\n') ++cursor;
-                    } else if (cursor < text.size()
-                        && std::isspace(static_cast<unsigned char>(text[cursor]))) ++cursor;
-                    append_utf8_codepoint(
-                        result,
-                        codepoint == 0U || codepoint > 0x10ffffU
-                            || (codepoint >= 0xd800U && codepoint <= 0xdfffU)
-                            ? 0xfffdU
-                            : codepoint);
-                } else {
-                    result.push_back(text[cursor++]);
-                }
-                continue;
-            }
-            if (character == 0U) {
-                append_utf8_codepoint(result, 0xfffdU);
-                ++cursor;
-                continue;
-            }
-            if (!std::isalnum(character) && character != '-' && character != '_'
-                && character < 0x80U) break;
-            result.push_back(text[cursor++]);
-        }
-        return result;
-    }
+    static size_t find_css_attribute_close(std::string_view selector,size_t cursor)
+    { return css::find_css_attribute_close(selector,cursor); }
 
-    static bool css_attribute_selector_matches(
-        const dom_node& node,
-        std::string_view condition)
-    {
-        const auto equal = condition.find('=');
-        auto name_end = equal;
-        auto attribute_operator = std::string_view{};
-        if (equal != std::string::npos) {
-            if (equal > 0U && (condition[equal - 1U] == '~'
-                || condition[equal - 1U] == '|'
-                || condition[equal - 1U] == '^'
-                || condition[equal - 1U] == '$'
-                || condition[equal - 1U] == '*')) {
-                name_end = equal - 1U;
-                attribute_operator = condition.substr(equal - 1U, 2U);
-            } else {
-                attribute_operator = condition.substr(equal, 1U);
-            }
-        }
-        const auto raw_name = trim_css(std::string_view(condition).substr(0, name_end));
-        size_t name_cursor = 0U;
-        auto name = read_css_identifier(raw_name, name_cursor);
-        if (name.empty() || name_cursor != raw_name.size()) return false;
-        if (!node.xml_mode) name = lower_html_name(name);
-        const auto attribute = node.attributes.find(name);
-        if (attribute == node.attributes.end()) return false;
-        if (equal == std::string::npos) return true;
-
-        auto wanted = trim_css(std::string_view(condition).substr(equal + 1U));
-        if (wanted.size() >= 2U && (wanted.front() == '\'' || wanted.front() == '"')) {
-            wanted = wanted.substr(1U, wanted.size() - 2U);
-        }
-        const auto& actual = attribute->second;
-        if (attribute_operator == "=") return actual == wanted;
-        if (wanted.empty() && (attribute_operator == "^="
-            || attribute_operator == "$=" || attribute_operator == "*=")) {
-            return false;
-        }
-        if (attribute_operator == "^=") return actual.starts_with(wanted);
-        if (attribute_operator == "$=") return actual.ends_with(wanted);
-        if (attribute_operator == "*=") return actual.find(wanted) != std::string::npos;
-        if (attribute_operator == "|=") {
-            return actual == wanted || actual.starts_with(wanted + "-");
-        }
-        if (attribute_operator == "~=") {
-            std::istringstream words(actual);
-            for (std::string word; words >> word;) {
-                if (word == wanted) return true;
-            }
-            return false;
-        }
-        return true;
-    }
-
-    static size_t find_css_attribute_close(
-        std::string_view selector,
-        size_t cursor)
-    {
-        char quote = 0;
-        for (; cursor < selector.size(); ++cursor) {
-            const auto character = selector[cursor];
-            if (character == '\\') {
-                cursor = skip_css_escape_sequence(selector, cursor) - 1U;
-                continue;
-            }
-            if (quote != 0) {
-                if (character == quote) quote = 0;
-                continue;
-            }
-            if (character == '\'' || character == '"') {
-                quote = character;
-            } else if (character == ']') {
-                return cursor;
-            }
-        }
-        return std::string_view::npos;
-    }
-
-    static bool css_nth_expression_matches(
-        std::string_view argument,
-        int one_based_position)
-    {
-        auto expression = lower_html_name(trim_css(argument));
-        std::erase_if(expression, [](unsigned char character) {
-            return std::isspace(character);
-        });
-        auto coefficient = 0;
-        auto offset = 0;
-        const auto parse_integer = [](std::string_view value, int& result) {
-            if (value.empty()) return false;
-            if (value.front() == '+') value.remove_prefix(1U);
-            if (value.empty()) return false;
-            const auto parsed = std::from_chars(
-                value.data(), value.data() + value.size(), result);
-            return parsed.ec == std::errc{}
-                && parsed.ptr == value.data() + value.size();
-        };
-        if (expression == "odd") {
-            coefficient = 2;
-            offset = 1;
-        } else if (expression == "even") {
-            coefficient = 2;
-        } else if (const auto n = expression.find('n'); n != std::string::npos) {
-            const auto coefficient_text = std::string_view(expression).substr(0, n);
-            if (coefficient_text.empty() || coefficient_text == "+") {
-                coefficient = 1;
-            } else if (coefficient_text == "-") {
-                coefficient = -1;
-            } else if (!parse_integer(coefficient_text, coefficient)) {
-                return false;
-            }
-            const auto offset_text = std::string_view(expression).substr(n + 1U);
-            if (!offset_text.empty() && !parse_integer(offset_text, offset)) return false;
-        } else if (!parse_integer(expression, offset)) {
-            return false;
-        }
-        if (coefficient == 0) return one_based_position == offset;
-        const auto difference = one_based_position - offset;
-        return !((coefficient > 0 && difference < 0)
-            || (coefficient < 0 && difference > 0))
-            && difference % coefficient == 0;
-    }
+    static bool css_nth_expression_matches(std::string_view argument,int position)
+    { return css::nth_matches(argument,position); }
 
     bool is_actually_disabled(const dom_node& node) const
+    { return css::is_actually_disabled(document,node); }
+
+    static compiled_css_compound compile_css_compound_selector(std::string_view selector)
+    { return css::compile_css_compound_selector(selector); }
+
+    css::interaction_state selector_interaction_state() const
+    { return {hover_target,active_element,focus_visible}; }
+    std::optional<std::string> selector_target_hash() const
     {
-        if (node.attributes.contains("disabled")) return true;
-        if (node.tag == "option") {
-            for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
-                ancestor = document.dom_parent(*ancestor)) {
-                if ((ancestor->tag == "optgroup" || ancestor->tag == "select")
-                    && ancestor->attributes.contains("disabled")) return true;
-                if (ancestor->tag == "select") break;
-            }
-        }
-        if (node.tag != "button" && node.tag != "input"
-            && node.tag != "select" && node.tag != "textarea") return false;
-        for (auto* fieldset = document.dom_parent(node); fieldset != nullptr;
-            fieldset = document.dom_parent(*fieldset)) {
-            if (fieldset->tag != "fieldset"
-                || !fieldset->attributes.contains("disabled")) continue;
-            const dom_node* first_legend = nullptr;
-            for (const auto* child : fieldset->children) {
-                if (child != nullptr && child->tag == "legend") {
-                    first_legend = child;
-                    break;
-                }
-            }
-            auto inside_first_legend = false;
-            for (auto* ancestor = &node; ancestor != fieldset;
-                ancestor = document.dom_parent(*ancestor)) {
-                if (ancestor == first_legend) {
-                    inside_first_legend = true;
-                    break;
-                }
-            }
-            if (!inside_first_legend) return true;
-        }
-        return false;
-    }
-
-    static compiled_css_compound compile_css_compound_selector(
-        std::string_view selector)
-    {
-        compiled_css_compound result;
-        selector = trim_css_view(selector);
-        if (selector.empty()) return result;
-
-        size_t cursor = 0U;
-        if (selector.empty()) {
-            // A bare structural pseudo-class has an implicit universal selector.
-        } else if (selector[cursor] == '*') {
-            ++cursor;
-        } else if (std::isalpha(static_cast<unsigned char>(selector[cursor]))
-            || selector[cursor] == '\\') {
-            result.tag = read_css_identifier(selector, cursor);
-        }
-        while (cursor < selector.size()) {
-            const auto marker = selector[cursor++];
-            if (marker == '.' || marker == '#') {
-                auto wanted = read_css_identifier(selector, cursor);
-                if (wanted.empty()) return result;
-                result.identities.emplace_back(marker, std::move(wanted));
-            } else if (marker == '[') {
-                const auto close = find_css_attribute_close(selector, cursor);
-                if (close == std::string::npos) return result;
-                result.attributes.emplace_back(selector.substr(cursor, close - cursor));
-                cursor = close + 1U;
-            } else if (marker == ':') {
-                if (cursor < selector.size() && selector[cursor] == ':') {
-                    result.pseudo_element = true;
-                    ++cursor;
-                }
-                auto name = read_css_identifier(selector, cursor);
-                if (name.empty()) return result;
-                if (name == "before" || name == "after"
-                    || name == "first-letter" || name == "first-line") {
-                    result.pseudo_element = true;
-                }
-                auto argument = std::string{};
-                if (cursor < selector.size() && selector[cursor] == '(') {
-                    const auto argument_start = ++cursor;
-                    auto depth = 1;
-                    char quote = 0;
-                    while (cursor < selector.size() && depth > 0) {
-                        const auto value = selector[cursor];
-                        if (quote != 0) {
-                            if (value == quote
-                                && (cursor == argument_start
-                                    || selector[cursor - 1U] != '\\')) {
-                                quote = 0;
-                            }
-                        } else if (value == '\'' || value == '"') {
-                            quote = value;
-                        } else if (value == '\\') {
-                            cursor = skip_css_escape_sequence(selector, cursor) - 1U;
-                        } else if (value == '(') {
-                            ++depth;
-                        } else if (value == ')') {
-                            --depth;
-                        }
-                        if (depth > 0) ++cursor;
-                    }
-                    if (depth != 0) return result;
-                    argument.assign(
-                        selector.substr(argument_start, cursor - argument_start));
-                    ++cursor;
-                }
-                result.pseudos.push_back(
-                    compiled_css_pseudo{std::move(name), std::move(argument)});
-            } else {
-                return result;
-            }
-        }
-        result.valid = true;
-        return result;
-    }
-
-    bool css_compound_selector_matches(
-        const dom_node& node,
-        const compiled_css_compound& selector,
-        const dom_node* scope_root = nullptr) const
-    {
-        if (!selector.valid) return false;
-        // The probe intentionally collapses each browsing context's HTML and
-        // BODY boxes into a single native root node.  Browser CSS still targets
-        // that box with selectors such as `html.theme-dark`, so let the virtual
-        // root participate as both tags.  A frame document is parented beneath
-        // its owning iframe in the unified native tree.
-        const auto explicit_document_element = node.tag == "html"
-            && node.parent != nullptr
-            && (node.parent == &document.body() || node.parent->tag == "iframe");
-        const auto has_explicit_document_element = node.tag == "body"
-            && std::any_of(node.children.begin(), node.children.end(), [](const auto* child) {
-                return child != nullptr && child->tag == "html";
-            });
-        const auto is_document_root = explicit_document_element
-            || (node.tag == "body"
-                && (node.parent == nullptr || node.parent->tag == "iframe")
-                && !has_explicit_document_element);
-        // A pseudo-element is a different CSS box, not the originating DOM
-        // element.  Treating it as the element makes rules such as
-        // `.scroller::-webkit-scrollbar { display: none }` hide the scroller
-        // itself, which is catastrophic for toolbar layout.
-        if (selector.pseudo_element) {
-            return false;
-        }
-
-        if (!selector.tag.empty()) {
-            auto wanted_tag = selector.tag;
-            if (!node.xml_mode) wanted_tag = lower_html_name(wanted_tag);
-            if (wanted_tag != node.tag
-                && !(wanted_tag == "html" && is_document_root && node.tag == "body")) return false;
-        }
-        for (const auto& [marker, wanted] : selector.identities) {
-            if (marker == '#') {
-                if (node.id_attribute != wanted) return false;
-            } else if (!has_class(node, wanted)) {
-                return false;
-            }
-        }
-        for (const auto& attribute : selector.attributes) {
-            if (!css_attribute_selector_matches(node, attribute)) return false;
-        }
-
-        const auto is_element = [](const dom_node* candidate) {
-            return candidate != nullptr && !candidate->tag.starts_with('#');
-        };
-#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
-        std::vector<const dom_node*> element_siblings;
-        auto element_siblings_ready = false;
-        const auto siblings = [&]() -> const std::vector<const dom_node*>& {
-            if (element_siblings_ready) return element_siblings;
-            element_siblings_ready = true;
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-            selector_sibling_vector_materializations.fetch_add(
-                1U, std::memory_order_relaxed);
-#endif
-            if (node.parent != nullptr) {
-                element_siblings.reserve(node.parent->children.size());
-                for (const auto* child : node.parent->children) {
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                    selector_sibling_scans.fetch_add(1U, std::memory_order_relaxed);
-#endif
-                    if (is_element(child)) {
-                        element_siblings.push_back(child);
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                        selector_sibling_pointer_copies.fetch_add(
-                            1U, std::memory_order_relaxed);
-#endif
-                    }
-                }
-            }
-            return element_siblings;
-        };
-#else
-        struct sibling_positions final {
-            size_t count{0U};
-            size_t position{0U};
-            bool node_found{false};
-        };
-        sibling_positions element_positions;
-        sibling_positions same_type_positions;
-        auto element_positions_ready = false;
-        auto same_type_positions_ready = false;
-        const auto element_sibling_summary = [&]() -> const sibling_positions& {
-            if (element_positions_ready) return element_positions;
-            element_positions_ready = true;
-            if (node.parent == nullptr) return element_positions;
-            for (const auto* child : node.parent->children) {
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                selector_sibling_scans.fetch_add(1U, std::memory_order_relaxed);
-#endif
-                if (!is_element(child)) continue;
-                ++element_positions.count;
-                if (child != &node) continue;
-                element_positions.node_found = true;
-                element_positions.position = element_positions.count;
-            }
-            return element_positions;
-        };
-        const auto same_type_sibling_summary = [&]() -> const sibling_positions& {
-            if (same_type_positions_ready) return same_type_positions;
-            same_type_positions_ready = true;
-            if (node.parent == nullptr) return same_type_positions;
-            for (const auto* child : node.parent->children) {
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                selector_sibling_scans.fetch_add(1U, std::memory_order_relaxed);
-#endif
-                if (!is_element(child) || child->tag != node.tag) continue;
-                ++same_type_positions.count;
-                if (child != &node) continue;
-                same_type_positions.node_found = true;
-                same_type_positions.position = same_type_positions.count;
-            }
-            return same_type_positions;
-        };
-#endif
-
-        for (const auto& pseudo : selector.pseudos) {
-            const std::string_view name(pseudo.name);
-            const std::string_view argument(pseudo.argument);
-            const auto form_control = node.tag == "button" || node.tag == "input"
-                || node.tag == "select" || node.tag == "textarea"
-                || node.tag == "option" || node.tag == "optgroup" || node.tag == "fieldset";
-            if (name == "root") {
-                if (!is_document_root) return false;
-            } else if (name == "scope") {
-                if (scope_root == nullptr ? !is_document_root : scope_root != &node) return false;
-            } else if (name == "first-child") {
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
-#endif
-#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
-                const auto& values = siblings();
-                const auto position = std::find(values.begin(), values.end(), &node);
-                if (node.parent == nullptr || position != values.begin()) return false;
-#else
-                const auto& values = element_sibling_summary();
-                if (node.parent == nullptr || !values.node_found
-                    || values.position != 1U) return false;
-#endif
-            } else if (name == "last-child") {
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
-#endif
-#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
-                const auto& values = siblings();
-                const auto position = std::find(values.begin(), values.end(), &node);
-                if (node.parent == nullptr || position == values.end()
-                    || position + 1 != values.end()) return false;
-#else
-                const auto& values = element_sibling_summary();
-                if (node.parent == nullptr || !values.node_found
-                    || values.position != values.count) return false;
-#endif
-            } else if (name == "only-child") {
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
-#endif
-#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
-                if (node.parent == nullptr || siblings().size() != 1U) return false;
-#else
-                const auto& values = element_sibling_summary();
-                if (node.parent == nullptr || !values.node_found
-                    || values.count != 1U) return false;
-#endif
-            } else if (name == "nth-child" || name == "nth-last-child"
-                || name == "nth-of-type" || name == "nth-last-of-type") {
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
-#endif
-                if (node.parent == nullptr) return false;
-#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
-                auto values = siblings();
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                selector_sibling_vector_materializations.fetch_add(
-                    1U, std::memory_order_relaxed);
-                selector_sibling_pointer_copies.fetch_add(
-                    values.size(), std::memory_order_relaxed);
-#endif
-                if (name == "nth-of-type" || name == "nth-last-of-type") {
-                    std::erase_if(values, [&](const auto* sibling) {
-                        return sibling->tag != node.tag;
-                    });
-                }
-                const auto position = std::find(values.begin(), values.end(), &node);
-                if (position == values.end()) return false;
-                const auto from_end = name == "nth-last-child"
-                    || name == "nth-last-of-type";
-                const auto one_based_position = static_cast<int>(from_end
-                    ? std::distance(position, values.end())
-                    : std::distance(values.begin(), position) + 1);
-#else
-                const auto of_type = name == "nth-of-type"
-                    || name == "nth-last-of-type";
-                const auto& values = of_type
-                    ? same_type_sibling_summary()
-                    : element_sibling_summary();
-                if (!values.node_found) return false;
-                const auto from_end = name == "nth-last-child"
-                    || name == "nth-last-of-type";
-                const auto one_based_position = static_cast<int>(
-                    from_end ? values.count - values.position + 1U : values.position);
-#endif
-                if (!css_nth_expression_matches(argument, one_based_position)) return false;
-            } else if (name == "first-of-type" || name == "last-of-type"
-                || name == "only-of-type") {
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                selector_sibling_positional_matches.fetch_add(1U, std::memory_order_relaxed);
-#endif
-                if (node.parent == nullptr) return false;
-#if !defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_SCAN_EXPERIMENT)
-                std::vector<const dom_node*> same_type;
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                selector_sibling_vector_materializations.fetch_add(
-                    1U, std::memory_order_relaxed);
-#endif
-                for (const auto* sibling : siblings()) {
-                    if (sibling->tag == node.tag) {
-                        same_type.push_back(sibling);
-#if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
-                        selector_sibling_pointer_copies.fetch_add(
-                            1U, std::memory_order_relaxed);
-#endif
-                    }
-                }
-                const auto same_position = std::find(same_type.begin(), same_type.end(), &node);
-                if (name == "first-of-type" && same_position != same_type.begin()) return false;
-                if (name == "last-of-type"
-                    && (same_position == same_type.end() || same_position + 1 != same_type.end())) return false;
-                if (name == "only-of-type" && same_type.size() != 1U) return false;
-#else
-                const auto& values = same_type_sibling_summary();
-                if (!values.node_found) return false;
-                if (name == "first-of-type" && values.position != 1U) return false;
-                if (name == "last-of-type"
-                    && values.position != values.count) return false;
-                if (name == "only-of-type" && values.count != 1U) return false;
-#endif
-            } else if (name == "empty") {
-                const auto has_text = std::any_of(
-                    node.text_content.begin(),
-                    node.text_content.end(),
-                    [](unsigned char character) { return !std::isspace(character); });
-                if (!node.children.empty() || has_text) return false;
-            } else if (name == "enabled") {
-                if (!form_control || is_actually_disabled(node)) return false;
-            } else if (name == "disabled") {
-                if (!form_control || !is_actually_disabled(node)) return false;
-            } else if (name == "valid") {
-                if (!form_control || node.tag == "fieldset" || node.tag == "optgroup"
-                    || node.tag == "option") return false;
-                if (node.attributes.contains("required")) {
-                    const auto value = node.attributes.find("value");
-                    if (value == node.attributes.end() || value->second.empty()) return false;
-                }
-            } else if (name == "invalid") {
-                if (!form_control || !node.attributes.contains("required")) return false;
-                const auto value = node.attributes.find("value");
-                if (value != node.attributes.end() && !value->second.empty()) return false;
-            } else if (name == "lang") {
-                auto wanted = lower_html_name(trim_css(argument));
-                if (wanted.size() >= 2U
-                    && (wanted.front() == '\'' || wanted.front() == '"')
-                    && wanted.back() == wanted.front()) {
-                    wanted = wanted.substr(1U, wanted.size() - 2U);
-                } else {
-                    size_t language_cursor = 0U;
-                    auto decoded = read_css_identifier(wanted, language_cursor);
-                    if (decoded.empty() || language_cursor != wanted.size()) return false;
-                    wanted = lower_html_name(decoded);
-                }
-                auto matched = false;
-                for (auto* language_node = &node; language_node != nullptr;
-                    language_node = document.dom_parent(*language_node)) {
-                    auto language = language_node->attributes.find("lang");
-                    if (language == language_node->attributes.end()) {
-                        language = language_node->attributes.find("xml:lang");
-                    }
-                    if (language == language_node->attributes.end()) continue;
-                    const auto actual = lower_html_name(language->second);
-                    matched = actual == wanted || actual.starts_with(wanted + "-");
-                    break;
-                }
-                if (!matched) return false;
-            } else if (name == "dir") {
-                auto wanted = lower_html_name(trim_css(argument));
-                if (wanted.size() >= 2U
-                    && (wanted.front() == '\'' || wanted.front() == '"')
-                    && wanted.back() == wanted.front()) {
-                    wanted = wanted.substr(1U, wanted.size() - 2U);
-                }
-                auto actual = std::string("ltr");
-                for (auto* direction_node = &node; direction_node != nullptr;
-                    direction_node = document.dom_parent(*direction_node)) {
-                    const auto authored = direction_node->attributes.find("dir");
-                    if (authored == direction_node->attributes.end()) continue;
-                    const auto candidate = lower_html_name(trim_css(authored->second));
-                    if (candidate == "ltr" || candidate == "rtl") {
-                        actual = candidate;
-                        break;
-                    }
-                }
-                if ((wanted != "ltr" && wanted != "rtl") || wanted != actual) {
-                    return false;
-                }
-            } else if (name == "target") {
                 const auto local_context = isolate->GetCurrentContext();
                 v8::Local<v8::Value> location_value;
                 v8::Local<v8::Value> hash_value;
@@ -2674,115 +1331,14 @@
                     || !location_value->IsObject()
                     || !location_value.As<v8::Object>()->Get(
                         local_context, js_string(isolate, "hash")).ToLocal(&hash_value)) {
-                    return false;
+                    return std::nullopt;
                 }
                 auto hash = to_utf8(isolate, hash_value);
-                if (!hash.empty() && hash.front() == '#') hash.erase(0U, 1U);
-                if (hash.empty() || node.id_attribute != hash) return false;
-            } else if (name == "checked") {
-                const auto input_type = node.attributes.find("type");
-                const auto checkable_input = node.tag == "input"
-                    && input_type != node.attributes.end()
-                    && (input_type->second == "checkbox" || input_type->second == "radio");
-                const auto checked_input = checkable_input
-                    && (node.form_control().checkedness_initialized
-                        ? node.form_control().checkedness
-                        : node.attributes.contains("checked"));
-                const auto selected_option = node.tag == "option"
-                    && option_is_selected(const_cast<dom_node&>(node));
-                if (!checked_input
-                    && !selected_option) return false;
-            } else if (name == "hover") {
-                auto* hovered = hover_target;
-                bool matches_hover = false;
-                for (; hovered != nullptr; hovered = hovered->parent) {
-                    if (hovered == &node) {
-                        matches_hover = true;
-                        break;
-                    }
-                }
-                if (!matches_hover) return false;
-            } else if (name == "focus") {
-                if (active_element != &node) return false;
-            } else if (name == "focus-visible") {
-                if (active_element != &node || (!focus_visible && !is_text_control(&node))) {
-                    return false;
-                }
-            } else if (name == "focus-within") {
-                auto matches_focus_within = false;
-                for (auto* focused = active_element; focused != nullptr;
-                    focused = document.event_parent(*focused)) {
-                    if (focused == &node) {
-                        matches_focus_within = true;
-                        break;
-                    }
-                }
-                if (!matches_focus_within) return false;
-            } else if (name == "not") {
-                size_t start = 0;
-                while (start <= argument.size()) {
-                    auto end = argument.find(',', start);
-                    if (end == std::string::npos) end = argument.size();
-                    if (css_selector_matches(
-                            node,
-                            trim_css_view(argument.substr(start, end - start)),
-                            scope_root)) {
-                        return false;
-                    }
-                    if (end == argument.size()) break;
-                    start = end + 1U;
-                }
-            } else if (name == "is" || name == "where") {
-                bool any = false;
-                size_t start = 0;
-                while (start <= argument.size()) {
-                    auto end = argument.find(',', start);
-                    if (end == std::string::npos) end = argument.size();
-                    any = any || css_selector_matches(
-                        node,
-                        trim_css_view(argument.substr(start, end - start)),
-                        scope_root);
-                    if (end == argument.size()) break;
-                    start = end + 1U;
-                }
-                if (!any) return false;
-            } else if (name == "has") {
-                bool any = false;
-                size_t start = 0;
-                while (start <= argument.size()) {
-                    auto end = argument.find(',', start);
-                    if (end == std::string::npos) end = argument.size();
-                    const auto relative = trim_css_view(
-                        argument.substr(start, end - start));
-                    if (!relative.empty()) {
-                        if (relative.front() == '>') {
-                            const auto child_selector = trim_css_view(relative.substr(1U));
-                            any = !child_selector.empty() && std::any_of(
-                                node.children.begin(),
-                                node.children.end(),
-                                [&](const auto* child) {
-                                    return is_element(child)
-                                        && css_selector_matches(
-                                            *child, child_selector, &node);
-                                });
-                        } else if (relative.front() != '+' && relative.front() != '~') {
-                            any = query_selector_node(
-                                const_cast<dom_node&>(node), relative, false) != nullptr;
-                        }
-                    }
-                    if (any || end == argument.size()) break;
-                    start = end + 1U;
-                }
-                if (!any) return false;
-            } else {
-                // Stateful and vendor pseudo-classes are not active unless the
-                // native DOM explicitly models that state.  Matching them as
-                // the base element applies hover/focus/active CSS constantly.
-                return false;
-            }
-        }
-        return true;
+                return hash;
     }
+    bool css_compound_selector_matches(const dom_node& node,const compiled_css_compound& selector,
+        const dom_node* scope_root = nullptr) const
+    { return css::compound_matches(*this,node,selector,scope_root); }
 
     bool css_compound_selector_matches(
         const dom_node& node,
@@ -2861,14 +1417,7 @@
     static compiled_css_selector compile_css_selector(std::string_view selector)
     {
 #if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
-        const auto parsed = parse_selector_syntax(selector);
-        if (!parsed || parsed.selectors.size() != 1U) return {};
-        const auto& source = parsed.selectors.front();
-        compiled_css_selector result{
-            source.compounds,
-            source.combinators,
-            source.specificity,
-            {}};
+        return css::compile_selector(selector);
 #else
         std::vector<std::string> reversed_compounds;
         std::vector<char> reversed_combinators;
@@ -2889,13 +1438,13 @@
             reversed_combinators.rbegin(),
             reversed_combinators.rend());
         result.specificity = css_selector_specificity(selector);
-#endif
         result.compiled_compounds.reserve(result.compounds.size());
         for (const auto& compound : result.compounds) {
             result.compiled_compounds.push_back(
                 compile_css_compound_selector(compound));
         }
         return result;
+#endif
     }
 
     static compiled_css_selector_list compile_css_selector_list(
@@ -2903,22 +1452,7 @@
     {
         compiled_css_selector_list result;
 #if defined(WEBSCENE_NATIVE_ENGINE_SERVO_SELECTORS)
-        const auto parsed = parse_selector_syntax(selector);
-        if (!parsed) return result;
-        result.selectors.reserve(parsed.selectors.size());
-        for (const auto& source : parsed.selectors) {
-            compiled_css_selector compiled{
-                source.compounds,
-                source.combinators,
-                source.specificity,
-                {}};
-            compiled.compiled_compounds.reserve(compiled.compounds.size());
-            for (const auto& compound : compiled.compounds) {
-                compiled.compiled_compounds.push_back(
-                    compile_css_compound_selector(compound));
-            }
-            result.selectors.push_back(std::move(compiled));
-        }
+        return css::compile_selector_list(selector);
 #else
         size_t start = 0;
         int bracket_depth = 0;
@@ -2974,25 +1508,7 @@
     }
 
     static const dom_node* previous_element_sibling(const dom_node& node)
-    {
-        if (node.parent == nullptr) return nullptr;
-        const auto position = std::find(
-            node.parent->children.begin(),
-            node.parent->children.end(),
-            &node);
-        if (position == node.parent->children.begin()
-            || position == node.parent->children.end()) {
-            return nullptr;
-        }
-        auto sibling = position;
-        while (sibling != node.parent->children.begin()) {
-            --sibling;
-            if (*sibling != nullptr && !(*sibling)->tag.starts_with('#')) {
-                return *sibling;
-            }
-        }
-        return nullptr;
-    }
+    { return css::previous_element_sibling(node); }
 
     bool css_selector_matches(
         const dom_node& node,
@@ -3005,67 +1521,13 @@
             scope_root);
     }
 
-    bool compiled_css_selector_matches(
-        const dom_node& node,
-        const compiled_css_selector& selector,
-        size_t component,
-        const dom_node* scope_root = nullptr) const
+    bool compiled_css_selector_matches(const dom_node& node,const compiled_css_selector& selector,
+        size_t component,const dom_node* scope_root = nullptr) const
     {
-        if (selector.compounds.empty()
-            || selector.compiled_compounds.size() != selector.compounds.size()
-            || component >= selector.compiled_compounds.size()
-            || !css_compound_selector_matches(
-                node,
-                selector.compiled_compounds[component],
-                scope_root)) {
-            return false;
-        }
-        if (component == 0U) return true;
-        if (selector.combinators.size() < component) return false;
-
-        const auto combinator = selector.combinators[component - 1U];
-        if (combinator == '>') {
-            const auto* parent = document.dom_parent(node);
-            return parent != nullptr
-                && compiled_css_selector_matches(
-                    *parent,
-                    selector,
-                    component - 1U,
-                    scope_root);
-        }
-        if (combinator == '+') {
-            const auto* sibling = previous_element_sibling(node);
-            return sibling != nullptr
-                && compiled_css_selector_matches(
-                    *sibling,
-                    selector,
-                    component - 1U,
-                    scope_root);
-        }
-        if (combinator == '~') {
-            for (auto* sibling = previous_element_sibling(node); sibling != nullptr;
-                sibling = previous_element_sibling(*sibling)) {
-                if (compiled_css_selector_matches(
-                        *sibling,
-                        selector,
-                        component - 1U,
-                        scope_root)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        for (auto* ancestor = document.dom_parent(node); ancestor != nullptr;
-            ancestor = document.dom_parent(*ancestor)) {
-            if (compiled_css_selector_matches(
-                    *ancestor,
-                    selector,
-                    component - 1U,
-                    scope_root)) {
-                return true;
-            }
-        }
-        return false;
+        return css::selector_matches(document,node,selector,component,scope_root,
+            [&](const dom_node& candidate,const compiled_css_compound& compound,const dom_node* scope) {
+                return css_compound_selector_matches(candidate,compound,scope);
+            });
     }
 
     bool css_rule_matches(
@@ -3092,19 +1554,5 @@
             scope_root);
     }
 
-    static int split_pseudo_element_selector(const std::string& selector, std::string& origin)
-    {
-        const auto split_suffix = [&](std::string_view suffix, int kind) {
-            if (!selector.ends_with(suffix)) return 0;
-            origin = trim_css(std::string_view(selector).substr(0, selector.size() - suffix.size()));
-            return kind;
-        };
-        if (const auto kind = split_suffix("::before", 1); kind != 0) return kind;
-        if (const auto kind = split_suffix("::after", 2); kind != 0) return kind;
-        if (const auto kind = split_suffix("::-webkit-scrollbar-thumb", 4); kind != 0) return kind;
-        if (const auto kind = split_suffix("::-webkit-scrollbar-track", 5); kind != 0) return kind;
-        if (const auto kind = split_suffix("::-webkit-scrollbar-corner", 6); kind != 0) return kind;
-        if (const auto kind = split_suffix("::-webkit-scrollbar", 3); kind != 0) return kind;
-        if (const auto kind = split_suffix(":before", 1); kind != 0) return kind;
-        return split_suffix(":after", 2);
-    }
+    static int split_pseudo_element_selector(const std::string& selector,std::string& origin)
+    { return css::split_pseudo_element_selector(selector,origin); }

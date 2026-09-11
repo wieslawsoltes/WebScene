@@ -319,68 +319,8 @@ private:
     std::shared_ptr<const immutable_byte_buffer> bytes_;
 };
 
-enum inline_style_property : uint64_t {
-    inline_width = 1ULL << 0U,
-    inline_height = 1U << 1U,
-    inline_left = 1U << 2U,
-    inline_top = 1U << 3U,
-    inline_right = 1U << 4U,
-    inline_bottom = 1U << 5U,
-    inline_display = 1U << 6U,
-    inline_position = 1U << 7U,
-    inline_flex_direction = 1U << 8U,
-    inline_flex_grow = 1U << 9U,
-    inline_background = 1U << 10U,
-    inline_overflow = 1U << 11U,
-    inline_color = 1U << 12U,
-    inline_font_size = 1U << 13U,
-    inline_font_family = 1U << 14U,
-    inline_font_weight = 1U << 15U,
-    inline_line_height = 1U << 16U,
-    inline_text_align = 1U << 17U,
-    inline_visibility = 1U << 18U,
-    inline_pointer_events = 1U << 19U,
-    inline_padding = 1U << 20U,
-    inline_margin = 1U << 21U,
-    inline_align_items = 1U << 22U,
-    inline_opacity = 1U << 23U,
-    inline_flex_wrap = 1U << 24U,
-    inline_flex_shrink = 1U << 25U,
-    inline_align_self = 1U << 26U,
-    inline_min_width = 1U << 27U,
-    inline_justify_content = 1U << 28U,
-    inline_box_sizing = 1U << 29U,
-    inline_border_radius = 1U << 30U,
-    inline_transform = 1ULL << 31U,
-    inline_white_space = 1ULL << 32U,
-    inline_min_height = 1ULL << 33U,
-    inline_max_width = 1ULL << 34U,
-    inline_max_height = 1ULL << 35U,
-    inline_gap = 1ULL << 36U,
-    inline_box_shadow = 1ULL << 37U,
-    inline_transform_origin = 1ULL << 38U,
-    inline_svg_fill = 1ULL << 39U,
-    inline_svg_stroke = 1ULL << 40U,
-    inline_cursor = 1ULL << 41U,
-    inline_letter_spacing = 1ULL << 42U,
-    inline_word_spacing = 1ULL << 43U,
-    inline_z_index = 1ULL << 44U,
-    inline_float = 1ULL << 45U,
-    inline_border = 1ULL << 46U,
-    inline_flex_basis = 1ULL << 47U,
-    inline_grid = 1ULL << 48U,
-    inline_transition_property = 1ULL << 49U,
-    inline_transition_duration = 1ULL << 50U,
-    inline_transition_delay = 1ULL << 51U,
-    inline_transition_timing = 1ULL << 52U,
-    inline_table_border_model = 1ULL << 53U,
-    inline_font_smoothing = 1ULL << 54U,
-    inline_background_image = 1ULL << 55U,
-    inline_contain = 1ULL << 56U,
-    inline_svg_text_anchor = 1ULL << 57U,
-    inline_transition = inline_transition_property | inline_transition_duration
-        | inline_transition_delay | inline_transition_timing
-};
+using css::inline_style_property;
+using enum css::inline_style_property;
 
 std::once_flag v8_initialize_once;
 std::unique_ptr<v8::Platform> v8_platform;
@@ -461,6 +401,19 @@ std::filesystem::path native_module_directory()
 #endif
 }
 
+std::filesystem::path native_runtime_assets_directory()
+{
+    const auto directory = native_module_directory();
+#if defined(__APPLE__)
+    // A statically linked app keeps non-code resources out of Contents/MacOS
+    // so the bundle can be sealed by codesign. Shared-engine layouts retain
+    // their existing adjacent-assets convention.
+    if (directory.filename() == "MacOS" && directory.parent_path().filename() == "Contents")
+        return directory.parent_path() / "Resources" / "Runtime";
+#endif
+    return directory;
+}
+
 #if defined(WEBSCENE_V8_BOOTSTRAP_SNAPSHOT)
 std::once_flag startup_snapshot_once;
 std::vector<char> startup_snapshot_bytes;
@@ -469,7 +422,7 @@ v8::StartupData startup_snapshot_data{};
 void configure_startup_snapshot(v8::Isolate::CreateParams& params)
 {
     std::call_once(startup_snapshot_once, [] {
-        const auto directory = native_module_directory();
+        const auto directory = native_runtime_assets_directory();
         const auto metadata_path =
             directory / WEBSCENE_V8_SNAPSHOT_METADATA_FILENAME;
         const auto blob_path = directory / WEBSCENE_V8_SNAPSHOT_FILENAME;
@@ -517,71 +470,7 @@ void configure_startup_snapshot(v8::Isolate::CreateParams&) {}
 constexpr bool bootstrap_snapshot_enabled = false;
 #endif
 
-display_mode default_display_for_tag(std::string_view tag)
-{
-    constexpr std::array<std::string_view, 8> non_rendered_tags{
-        "base", "head", "link", "meta", "script", "style", "template", "title"};
-    if (std::find(non_rendered_tags.begin(), non_rendered_tags.end(), tag)
-        != non_rendered_tags.end()) {
-        return display_mode::none;
-    }
-    if (tag == "table") return display_mode::table;
-    if (tag == "thead") return display_mode::table_header_group;
-    if (tag == "tbody") return display_mode::table_row_group;
-    if (tag == "tfoot") return display_mode::table_footer_group;
-    if (tag == "tr") return display_mode::table_row;
-    if (tag == "td" || tag == "th") return display_mode::table_cell;
-    if (tag == "colgroup") return display_mode::table_column_group;
-    if (tag == "col") return display_mode::table_column;
-    if (tag == "caption") return display_mode::table_caption;
-    if (tag == "li" || tag == "summary") return display_mode::list_item;
-    // CSS starts elements at `display:inline`; the HTML UA stylesheet then
-    // promotes only known structural elements. In particular autonomous
-    // custom elements and HTMLUnknownElement remain inline. Treating every
-    // unlisted tag as a block made consumer helpers such as <time-format>
-    // split a single metadata line into several overlapping flex rows.
-    constexpr std::array<std::string_view, 38> block_tags{
-        "address", "article", "aside", "blockquote", "body", "center",
-        "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset",
-        "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4",
-        "h5", "h6", "header", "hgroup", "html", "hr", "main", "menu",
-        "nav", "ol", "p", "pre", "search", "section", "ul", "legend"};
-    if (std::find(block_tags.begin(), block_tags.end(), tag) != block_tags.end()) {
-        return display_mode::block;
-    }
-    constexpr std::array<std::string_view, 9> inline_block_tags{
-        "button", "img", "input", "meter", "progress", "rect", "select",
-        "textarea", "object"};
-    if (std::find(inline_block_tags.begin(), inline_block_tags.end(), tag)
-        != inline_block_tags.end()) {
-        return display_mode::inline_block;
-    }
-    return display_mode::inline_flow;
-}
-
-display_mode parse_display_mode(std::string_view value)
-{
-    if (value == "flex") return display_mode::flex;
-    if (value == "inline-flex") return display_mode::inline_flex;
-    if (value == "grid") return display_mode::grid;
-    if (value == "inline-grid") return display_mode::inline_grid;
-    if (value == "table") return display_mode::table;
-    if (value == "inline-table") return display_mode::inline_table;
-    if (value == "table-row-group") return display_mode::table_row_group;
-    if (value == "table-header-group") return display_mode::table_header_group;
-    if (value == "table-footer-group") return display_mode::table_footer_group;
-    if (value == "table-row") return display_mode::table_row;
-    if (value == "table-cell") return display_mode::table_cell;
-    if (value == "table-column-group") return display_mode::table_column_group;
-    if (value == "table-column") return display_mode::table_column;
-    if (value == "table-caption") return display_mode::table_caption;
-    if (value == "contents") return display_mode::contents;
-    if (value == "inline") return display_mode::inline_flow;
-    if (value == "inline-block") return display_mode::inline_block;
-    if (value == "list-item") return display_mode::list_item;
-    if (value == "none") return display_mode::none;
-    return display_mode::block;
-}
+display_mode parse_display_mode(std::string_view value) { return css::parse_display_mode(value); }
 
 std::string_view display_mode_name(display_mode value)
 {
@@ -610,39 +499,8 @@ std::string_view display_mode_name(display_mode value)
     }
 }
 
-struct parsed_flex_flow
-{
-    flex_direction direction{flex_direction::row};
-    bool reverse{false};
-    bool wrap{false};
-};
-
-parsed_flex_flow parse_flex_flow(std::string_view value)
-{
-    parsed_flex_flow result{};
-    std::istringstream stream{std::string(value)};
-    std::string token;
-    while (stream >> token) {
-        std::transform(
-            token.begin(),
-            token.end(),
-            token.begin(),
-            [](unsigned char character) {
-                return static_cast<char>(std::tolower(character));
-            });
-        if (token == "row" || token == "row-reverse"
-            || token == "column" || token == "column-reverse") {
-            result.direction = token == "row" || token == "row-reverse"
-                ? flex_direction::row : flex_direction::column;
-            result.reverse = token == "row-reverse" || token == "column-reverse";
-        } else if (token == "wrap" || token == "wrap-reverse") {
-            result.wrap = true;
-        } else if (token == "nowrap") {
-            result.wrap = false;
-        }
-    }
-    return result;
-}
+using css::parsed_flex_flow;
+parsed_flex_flow parse_flex_flow(std::string_view value) { return css::parse_flex_flow(value); }
 
 std::string flex_direction_name(const node_style& style)
 {
@@ -656,264 +514,25 @@ std::string flex_wrap_name(const node_style& style)
     return style.flex_wrap ? "wrap" : "nowrap";
 }
 
-overflow_mode parse_overflow_mode(std::string_view value)
-{
-    if (value == "hidden") return overflow_mode::hidden;
-    if (value == "clip") return overflow_mode::clip;
-    if (value == "auto") return overflow_mode::automatic;
-    if (value == "scroll") return overflow_mode::scroll;
-    return overflow_mode::visible;
-}
-
-std::pair<overflow_mode, overflow_mode> computed_overflow(const node_style& style)
-{
-    auto x = style.overflow_x;
-    auto y = style.overflow_y;
-    const auto neither_visible_nor_clip = [](overflow_mode value) {
-        return value != overflow_mode::visible && value != overflow_mode::clip;
-    };
-    if (x == overflow_mode::visible && neither_visible_nor_clip(y)) x = overflow_mode::automatic;
-    else if (x == overflow_mode::clip && neither_visible_nor_clip(y)) x = overflow_mode::hidden;
-    if (y == overflow_mode::visible && neither_visible_nor_clip(x)) y = overflow_mode::automatic;
-    else if (y == overflow_mode::clip && neither_visible_nor_clip(x)) y = overflow_mode::hidden;
-    return {x, y};
-}
-
-void refresh_overflow_state(node_style& style)
-{
-    const auto [x, y] = computed_overflow(style);
-    style.clip = x != overflow_mode::visible || y != overflow_mode::visible;
-    style.scroll_x_enabled = x == overflow_mode::automatic || x == overflow_mode::scroll;
-    style.scroll_y_enabled = y == overflow_mode::automatic || y == overflow_mode::scroll;
-}
+using css::parse_overflow_mode;
+using css::computed_overflow;
+using css::refresh_overflow_state;
 
 display_mode default_display_for_node(const dom_node& node)
 {
-    if (node.kind != dom_node_kind::element) {
-        return node.kind == dom_node_kind::text
-            ? display_mode::inline_flow
-            : display_mode::none;
-    }
-    if (node.attributes.contains("hidden")) return display_mode::none;
-    if (node.tag == "dialog" && !node.attributes.contains("open")) return display_mode::none;
-    if (node.tag == "input") {
-        const auto type = node.attributes.find("type");
-        if (type != node.attributes.end()) {
-            auto value = type->second;
-            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character) {
-                return static_cast<char>(std::tolower(character));
-            });
-            if (value == "hidden") return display_mode::none;
-        }
-    }
-    return default_display_for_tag(node.tag);
+    return native_default_display_for_node(node);
 }
 
-float inherited_font_size(const dom_node& node)
-{
-    if (node.tag == "html") return 16.0F;
-    for (auto* parent = node.parent; parent != nullptr; parent = parent->parent) {
-        if (parent->style.font_size >= 0) return parent->style.font_size;
-        if (parent->tag == "html") return 16.0F;
-    }
-    return 14.0F;
-}
-
-std::string resolved_font_family(const dom_node& node)
-{
-    for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (!current->style.textual().font_family.empty()) {
-            return current->style.textual().font_family;
-        }
-    }
-    return "sans-serif";
-}
-
-std::string resolved_font_smoothing(const dom_node& node)
-{
-    for (auto* current = &node; current != nullptr; current = current->parent) {
-        const auto& value = current->style.textual().font_smoothing;
-        if (!value.empty() && value != "inherit" && value != "unset") return value;
-    }
-    return "auto";
-}
-
-int32_t resolved_font_weight(const dom_node& node)
-{
-    for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (current->style.font_weight > 0) return current->style.font_weight;
-    }
-    return 400;
-}
-
-float resolved_letter_spacing(const dom_node& node)
-{
-    for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (current->style.letter_spacing_specified) return current->style.letter_spacing;
-    }
-    return 0;
-}
-
-float resolved_word_spacing(const dom_node& node)
-{
-    for (auto* current = &node; current != nullptr; current = current->parent) {
-        if (current->style.word_spacing_specified) return current->style.word_spacing;
-    }
-    return 0;
-}
-
-float resolved_declared_font_size(const dom_node& node, const std::string& value)
-{
-    if (value == "inherit" || value == "unset") return -1.0F;
-    if (value == "initial" || value == "revert") return 14.0F;
-    const auto parsed = native_document::parse_length(value);
-    if (parsed.unit == length_unit::em) {
-        return std::max(0.0F, parsed.value * inherited_font_size(node));
-    }
-    if (parsed.unit == length_unit::rem) {
-        const auto root_size = node.tag == "html" ? 16.0F : document_root_font_size(node);
-        return std::max(0.0F, parsed.value * root_size);
-    }
-    if (parsed.unit == length_unit::percent) {
-        return std::max(0.0F,
-            parsed.value * inherited_font_size(node) / 100.0F + parsed.pixel_offset);
-    }
-    return std::max(0.0F, parsed.value);
-}
-
-float resolved_declared_line_height(
-    const dom_node& node,
-    const std::string& value,
-    float font_size)
-{
-    // -1 means inherit/unspecified; -2 is the specified initial `normal`
-    // value and must stop inheritance at this element.
-    if (value == "inherit" || value == "unset") return -1.0F;
-    if (value == "normal" || value == "initial" || value == "revert") return -2.0F;
-    const auto parsed = native_document::parse_length(value);
-    if (parsed.unit == length_unit::em) {
-        return std::max(0.0F, parsed.value * font_size);
-    }
-    if (parsed.unit == length_unit::rem) {
-        const auto root_size = document_root_font_size(node);
-        return std::max(0.0F, parsed.value * root_size);
-    }
-    if (parsed.unit == length_unit::percent) {
-        return std::max(0.0F,
-            parsed.value * font_size / 100.0F + parsed.pixel_offset);
-    }
-    const auto parsed_value = std::max(0.0F, parsed.value);
-    const auto has_explicit_unit = std::any_of(
-        value.begin(),
-        value.end(),
-        [](unsigned char character) { return std::isalpha(character) || character == '%'; });
-    // Preserve a <number> until used-value resolution. It inherits as a
-    // multiplier, not as the declaring element's pixel line-height.
-    return !has_explicit_unit
-        ? -3.0F - parsed_value
-        : parsed_value;
-}
-
-struct parsed_font_shorthand final {
-    float font_size{14.0F};
-    float line_height{-2.0F};
-    std::string line_height_token{"normal"};
-    int32_t font_weight{400};
-    std::string font_family;
-    bool complete{true};
-};
-
-std::optional<parsed_font_shorthand> parse_font_shorthand(
-    const dom_node& node,
-    const std::string& value)
-{
-    const auto lowercase = [](std::string text) {
-        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char character) {
-            return static_cast<char>(std::tolower(character));
-        });
-        return text;
-    };
-    std::istringstream stream(value);
-    std::vector<std::string> tokens;
-    for (std::string token; stream >> token;) tokens.push_back(std::move(token));
-    if (tokens.empty()) return std::nullopt;
-
-    const auto looks_like_size = [](std::string_view token) {
-        if (token == "xx-small" || token == "x-small" || token == "small"
-            || token == "medium" || token == "large" || token == "x-large"
-            || token == "xx-large" || token == "smaller" || token == "larger") {
-            return true;
-        }
-        const auto slash = token.find('/');
-        if (slash != std::string_view::npos) token = token.substr(0, slash);
-        return !token.empty()
-            && (std::isdigit(static_cast<unsigned char>(token.front()))
-                || token.front() == '.');
-    };
-
-    auto size_index = tokens.size();
-    for (size_t index = 0; index < tokens.size(); ++index) {
-        if (looks_like_size(tokens[index])) {
-            size_index = index;
-            break;
-        }
-    }
-    if (size_index == tokens.size()) return std::nullopt;
-
-    parsed_font_shorthand result;
-    for (size_t index = 0; index < size_index; ++index) {
-        const auto token = lowercase(tokens[index]);
-        if (token == "bold" || token == "bolder") result.font_weight = 700;
-        else if (token == "normal") continue;
-        else if (token.size() == 3U && token.front() >= '1' && token.front() <= '9'
-            && token[1] == '0' && token[2] == '0') {
-            result.font_weight = std::atoi(token.c_str());
-        } else {
-            // Style, stretch, and variant tokens are accepted so their size,
-            // line-height, weight, and family companions still take effect,
-            // but those additional font axes are not represented natively.
-            result.complete = false;
-        }
-    }
-
-    auto size_token = tokens[size_index];
-    std::string line_height_token;
-    if (const auto slash = size_token.find('/'); slash != std::string::npos) {
-        line_height_token = size_token.substr(slash + 1U);
-        size_token.resize(slash);
-    }
-    const auto size_keyword = lowercase(size_token);
-    if (size_keyword == "medium") result.font_size = 14.0F;
-    else if (size_keyword == "small") result.font_size = 12.0F;
-    else if (size_keyword == "large") result.font_size = 18.0F;
-    else if (size_keyword == "x-small") result.font_size = 10.0F;
-    else if (size_keyword == "xx-small") result.font_size = 9.0F;
-    else if (size_keyword == "x-large") result.font_size = 24.0F;
-    else if (size_keyword == "xx-large") result.font_size = 32.0F;
-    else if (size_keyword == "smaller") result.font_size = inherited_font_size(node) * 0.8F;
-    else if (size_keyword == "larger") result.font_size = inherited_font_size(node) * 1.2F;
-    else result.font_size = resolved_declared_font_size(node, size_token);
-
-    auto family_index = size_index + 1U;
-    if (line_height_token.empty() && family_index < tokens.size()
-        && tokens[family_index] == "/") {
-        ++family_index;
-        if (family_index < tokens.size()) line_height_token = tokens[family_index++];
-    }
-    if (!line_height_token.empty()) {
-        result.line_height_token = line_height_token;
-        result.line_height = resolved_declared_line_height(
-            node,
-            line_height_token,
-            result.font_size);
-    }
-    for (auto index = family_index; index < tokens.size(); ++index) {
-        if (!result.font_family.empty()) result.font_family.push_back(' ');
-        result.font_family += tokens[index];
-    }
-    if (result.font_family.empty()) return std::nullopt;
-    return result;
-}
+using css::inherited_font_size;
+using css::resolved_font_family;
+using css::resolved_font_smoothing;
+using css::resolved_font_weight;
+using css::resolved_letter_spacing;
+using css::resolved_word_spacing;
+using css::resolved_declared_font_size;
+using css::resolved_declared_line_height;
+using css::parse_font_shorthand;
+using css::parsed_font_shorthand;
 
 std::string serialize_overflow_mode(overflow_mode value)
 {
@@ -935,25 +554,7 @@ std::string serialize_css_number(double value)
 }
 
 std::string canonical_css_property_name(std::string_view name)
-{
-    if (name.starts_with("--")) return std::string(name);
-    if (name == "cssFloat") return "float";
-    std::string result;
-    result.reserve(name.size() + 4U);
-    for (const auto character : name) {
-        if (std::isupper(static_cast<unsigned char>(character))) {
-            result.push_back('-');
-            result.push_back(static_cast<char>(std::tolower(
-                static_cast<unsigned char>(character))));
-        } else {
-            result.push_back(character);
-        }
-    }
-    if (result == "grid-gap") return "gap";
-    if (result == "grid-row-gap") return "row-gap";
-    if (result == "grid-column-gap") return "column-gap";
-    return result;
-}
+{ return css::canonical_property_name(name); }
 
 bool is_css_color_value_property(std::string_view name)
 {
@@ -1088,155 +689,7 @@ bool is_css_whitespace(unsigned char character)
 
 bool valid_custom_property_name(std::string_view name)
 {
-    if (!name.starts_with("--") || name.size() <= 2U) return false;
-    return std::none_of(name.begin(), name.end(), [](unsigned char character) {
-        return character <= 0x20U || character == 0x7FU;
-    });
-}
-
-bool has_multiple_grid_columns(std::string_view value)
-{
-    auto first = value.find_first_not_of(" \t\r\n");
-    if (first == std::string_view::npos) return false;
-    value.remove_prefix(first);
-    if (value.starts_with("repeat(")) {
-        const auto count_start = value.find_first_of("0123456789", 7U);
-        if (count_start != std::string_view::npos) {
-            const auto count_end = value.find_first_not_of("0123456789", count_start);
-            const auto count_text = value.substr(count_start, count_end - count_start);
-            int count = 0;
-            const auto result = std::from_chars(
-                count_text.data(), count_text.data() + count_text.size(), count);
-            if (result.ec == std::errc{} && count > 1) return true;
-        }
-    }
-
-    size_t track_count = 0;
-    size_t token_start = std::string_view::npos;
-    int parenthesis_depth = 0;
-    int bracket_depth = 0;
-    auto finish_token = [&](size_t end) {
-        if (token_start == std::string_view::npos) return;
-        const auto token = value.substr(token_start, end - token_start);
-        if (!token.empty() && token.front() != '[') ++track_count;
-        token_start = std::string_view::npos;
-    };
-    for (size_t index = 0; index <= value.size(); ++index) {
-        const auto character = index < value.size() ? value[index] : ' ';
-        if (character == '(') ++parenthesis_depth;
-        else if (character == ')' && parenthesis_depth > 0) --parenthesis_depth;
-        else if (character == '[') ++bracket_depth;
-        else if (character == ']' && bracket_depth > 0) --bracket_depth;
-        const auto separator = parenthesis_depth == 0 && bracket_depth == 0
-            && std::isspace(static_cast<unsigned char>(character));
-        if (!separator && token_start == std::string_view::npos) token_start = index;
-        if (separator) finish_token(index);
-    }
-    return track_count > 1U;
-}
-
-std::vector<node_style::grid_data::track> parse_simple_grid_tracks(
-    const std::string& value)
-{
-    using grid_track = node_style::grid_data::track;
-    const auto trim = [](std::string_view input) {
-        const auto first = input.find_first_not_of(" \t\r\n");
-        if (first == std::string_view::npos) return std::string_view{};
-        return input.substr(first, input.find_last_not_of(" \t\r\n") - first + 1U);
-    };
-    const auto parse_fraction = [&](std::string_view token) {
-        token = trim(token);
-        if (!token.ends_with("fr")) return 0.0F;
-        token.remove_suffix(2U);
-        if (token.empty()) return 1.0F;
-        char* end = nullptr;
-        const auto text = std::string(token);
-        const auto result = std::strtof(text.c_str(), &end);
-        return end != text.c_str() && *end == '\0' && result > 0 ? result : 0.0F;
-    };
-    const auto parse_track = [&](std::string_view raw) -> std::optional<grid_track> {
-        const auto token = trim(raw);
-        if (token.empty()) return std::nullopt;
-        if (token == "auto" || token == "max-content") {
-            grid_track track;
-            track.kind = grid_track::sizing::automatic;
-            return track;
-        }
-        if (token == "min-content") {
-            grid_track track;
-            track.kind = grid_track::sizing::min_content;
-            return track;
-        }
-        if (const auto fraction = parse_fraction(token); fraction > 0) {
-            grid_track track;
-            track.kind = grid_track::sizing::fractional;
-            track.fraction = fraction;
-            return track;
-        }
-        if (token.starts_with("minmax(") && token.ends_with(')')) {
-            const auto arguments = token.substr(7U, token.size() - 8U);
-            auto comma = std::string_view::npos;
-            auto depth = 0;
-            for (size_t index = 0; index < arguments.size(); ++index) {
-                if (arguments[index] == '(') ++depth;
-                else if (arguments[index] == ')') --depth;
-                else if (arguments[index] == ',' && depth == 0) {
-                    comma = index;
-                    break;
-                }
-            }
-            if (comma == std::string_view::npos) return std::nullopt;
-            grid_track track;
-            track.kind = grid_track::sizing::minmax;
-            const auto minimum = trim(arguments.substr(0, comma));
-            const auto maximum = trim(arguments.substr(comma + 1U));
-            if (minimum != "auto" && minimum != "min-content"
-                && minimum != "max-content") {
-                track.minimum = native_document::parse_length(std::string(minimum));
-            }
-            track.fraction = parse_fraction(maximum);
-            if (track.fraction <= 0 && maximum != "auto"
-                && maximum != "min-content" && maximum != "max-content") {
-                track.maximum = native_document::parse_length(std::string(maximum));
-            }
-            return track;
-        }
-        grid_track track;
-        track.kind = grid_track::sizing::fixed;
-        track.minimum = native_document::parse_length(std::string(token));
-        track.maximum = track.minimum;
-        return track;
-    };
-
-    std::vector<std::string_view> tokens;
-    size_t token_start = std::string_view::npos;
-    auto parenthesis_depth = 0;
-    auto bracket_depth = 0;
-    for (size_t index = 0; index <= value.size(); ++index) {
-        const auto character = index < value.size() ? value[index] : ' ';
-        if (character == '(') ++parenthesis_depth;
-        else if (character == ')' && parenthesis_depth > 0) --parenthesis_depth;
-        else if (character == '[') ++bracket_depth;
-        else if (character == ']' && bracket_depth > 0) --bracket_depth;
-        const auto separator = parenthesis_depth == 0 && bracket_depth == 0
-            && std::isspace(static_cast<unsigned char>(character));
-        if (!separator && token_start == std::string_view::npos) token_start = index;
-        if (separator && token_start != std::string_view::npos) {
-            tokens.push_back(std::string_view(value).substr(token_start, index - token_start));
-            token_start = std::string_view::npos;
-        }
-    }
-
-    std::vector<grid_track> tracks;
-    for (auto token : tokens) {
-        token = trim(token);
-        if (token.empty() || token.front() == '[') continue;
-        if (token == "none" || token.starts_with("repeat(")) return {};
-        const auto parsed = parse_track(token);
-        if (!parsed.has_value()) return {};
-        tracks.push_back(*parsed);
-    }
-    return tracks;
+    return css::valid_custom_property_name(name);
 }
 
 void initialize_v8_process()
@@ -1312,7 +765,7 @@ void initialize_v8_process()
         }
 #if defined(WEBSCENE_V8_ICU_DATA_FILENAME)
         const auto icu_data_path =
-            native_module_directory() / WEBSCENE_V8_ICU_DATA_FILENAME;
+            native_runtime_assets_directory() / WEBSCENE_V8_ICU_DATA_FILENAME;
         if (!std::filesystem::is_regular_file(icu_data_path)
             || !v8::V8::InitializeICU(icu_data_path.string().c_str())) {
             throw std::runtime_error(

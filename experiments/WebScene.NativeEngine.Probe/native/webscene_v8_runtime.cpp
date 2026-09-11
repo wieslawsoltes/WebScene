@@ -8,6 +8,7 @@
 #endif
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
 #include "graphics/platform_webgpu_canvas.h"
+#include "graphics/v8_webgpu_canvas_context.h"
 #endif
 #include "webscene_v8_runtime.h"
 #include "webscene_frame_trace.h"
@@ -20,6 +21,39 @@
 #include "webscene_embed_fallback.h"
 
 #include "webscene_native_dom.h"
+#include "webscene_native_style_defaults.h"
+#include "webscene_shadow_value.h"
+#include "webscene_css_state.h"
+#include "webscene_css_declarations.h"
+#include "webscene_css_selectors.h"
+#include "webscene_css_matching.h"
+#include "webscene_css_compound.h"
+#include "webscene_css_rule_operations.h"
+#include "webscene_css_rule_index.h"
+#include "webscene_css_candidates.h"
+#include "webscene_css_variables.h"
+#include "webscene_css_box_values.h"
+#include "webscene_css_transitions.h"
+#include "webscene_css_layout_values.h"
+#include "webscene_css_pseudo_values.h"
+#include "webscene_css_stylesheet_sink.h"
+#include "webscene_css_rule_payload.h"
+#include "webscene_css_resources.h"
+#include "webscene_css_rule_preparation.h"
+#include "webscene_css_media.h"
+#include "webscene_css_property_mask.h"
+#include "webscene_css_reset.h"
+#include "webscene_css_box_application.h"
+#include "webscene_css_paint_values.h"
+#include "webscene_css_visibility_values.h"
+#include "webscene_css_text_values.h"
+#include "webscene_css_decoration_values.h"
+#include "webscene_css_application.h"
+#include "webscene_css_cascade_reset.h"
+#include "webscene_css_cascade_application.h"
+#include "webscene_css_pseudo_application.h"
+#include "webscene_css_rule_matching.h"
+#include "webscene_css_cascade_finalization.h"
 #include "webscene_native_websocket.h"
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
 #include "webscene_html_parser.h"
@@ -179,10 +213,10 @@ webscene_media_refresh_benchmark_owned_class_lookup_bytes(void)
 
 #if defined(WEBSCENE_NATIVE_ENGINE_SELECTOR_SIBLING_BENCHMARK_COUNTERS)
 namespace {
-std::atomic<uint64_t> selector_sibling_positional_matches{0U};
-std::atomic<uint64_t> selector_sibling_scans{0U};
-std::atomic<uint64_t> selector_sibling_vector_materializations{0U};
-std::atomic<uint64_t> selector_sibling_pointer_copies{0U};
+using webscene_native::css::selector_sibling_positional_matches;
+using webscene_native::css::selector_sibling_scans;
+using webscene_native::css::selector_sibling_vector_materializations;
+using webscene_native::css::selector_sibling_pointer_copies;
 }
 
 extern "C" WEBSCENE_API void webscene_selector_sibling_benchmark_reset_counters(void)
@@ -924,6 +958,12 @@ struct v8_dom_runtime::implementation final {
         document_template->SetNativeDataProperty(
             js_string(isolate, "implementation"),
             get_document_implementation);
+        document_template->Set(
+            js_string(isolate, "createCompiledTemplateParts"),
+            v8::FunctionTemplate::New(isolate, create_compiled_template_parts));
+        document_template->Set(
+            js_string(isolate, "createCompiledTemplate"),
+            v8::FunctionTemplate::New(isolate, create_compiled_template));
         document_template->Set(
             js_string(isolate, "createElement"),
             v8::FunctionTemplate::New(isolate, create_element));
@@ -2202,7 +2242,8 @@ struct v8_dom_runtime::implementation final {
             const decoderLabels = new Map([
               ['utf-8', 'utf-8'], ['utf8', 'utf-8'], ['unicode-1-1-utf-8', 'utf-8'],
               ['utf-16', 'utf-16le'], ['utf-16le', 'utf-16le'], ['utf16le', 'utf-16le'],
-              ['utf-16be', 'utf-16be'], ['utf16be', 'utf-16be']
+              ['utf-16be', 'utf-16be'], ['utf16be', 'utf-16be'],
+              ['windows-1252', 'windows-1252'], ['cp1252', 'windows-1252'], ['x-cp1252', 'windows-1252']
             ]);
             class WebSceneTextDecoder {
               constructor(label = 'utf-8', options = {}) {
@@ -2224,6 +2265,17 @@ struct v8_dom_runtime::implementation final {
                     input.buffer, input.byteOffset, input.byteLength);
                 } else {
                   throw new TypeError('TextDecoder.decode requires an ArrayBuffer view');
+                }
+                if (this.encoding === 'windows-1252') {
+                  // WHATWG Encoding index-windows-1252, including control mappings.
+                  const special = [0x20ac,0x81,0x201a,0x192,0x201e,0x2026,0x2020,0x2021,
+                    0x2c6,0x2030,0x160,0x2039,0x152,0x8d,0x17d,0x8f,
+                    0x90,0x2018,0x2019,0x201c,0x201d,0x2022,0x2013,0x2014,
+                    0x2dc,0x2122,0x161,0x203a,0x153,0x9d,0x17e,0x178];
+                  let result = '';
+                  for (const byte of bytes) result += String.fromCharCode(
+                    byte >= 0x80 && byte < 0xa0 ? special[byte - 0x80] : byte);
+                  return result;
                 }
                 if (this.encoding === 'utf-16le' || this.encoding === 'utf-16be') {
                   const littleEndian = this.encoding === 'utf-16le';
@@ -4263,6 +4315,7 @@ struct v8_dom_runtime::implementation final {
 #include "webscene_v8_runtime_css_cascade.inc"
 #include "webscene_v8_runtime_cache_and_frames.inc"
 #include "webscene_v8_runtime_html.inc"
+#include "webscene_v8_runtime_compiled_templates.inc"
 #include "webscene_v8_runtime_style.inc"
 #include "webscene_v8_runtime_browser_apis.inc"
     static void promise_rejected(v8::PromiseRejectMessage message)
@@ -4372,6 +4425,15 @@ v8_dom_runtime::v8_dom_runtime(
 
 v8_dom_runtime::~v8_dom_runtime() = default;
 
+void v8_dom_runtime::register_compiled_template(
+    std::string name, compiled_template_factory factory)
+{
+    if (name.empty() || !factory)
+        throw std::invalid_argument("A compiled template requires a name and factory");
+    if (!impl_->compiled_templates.emplace(std::move(name), std::move(factory)).second)
+        throw std::invalid_argument("Compiled template already registered");
+}
+
 bool v8_dom_runtime::initialize()
 {
     if(!impl_->initialize())return false;
@@ -4384,6 +4446,15 @@ bool v8_dom_runtime::initialize()
 bool v8_dom_runtime::execute(const std::string& source, const std::string& document_name)
 {
     return impl_->execute(source, document_name);
+}
+
+bool v8_dom_runtime::load_compiled_document(const compiled_document& package)
+{
+    if (!package.construct || package.base_url.empty()) {
+        impl_->last_error = "Compiled document requires a constructor and base URL";
+        return false;
+    }
+    return impl_->load_url(package.base_url, {}, &package);
 }
 
 bool v8_dom_runtime::load_url(
@@ -4887,6 +4958,30 @@ bool v8_dom_runtime::pump_task()
     v8::Context::Scope context_scope(local_context);
     const bool result = impl_->drain_tasks() && impl_->promote_pending_promise_error();
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    impl_->finish_gpu_rendering_opportunity(result);
+#endif
+    return result;
+}
+
+bool v8_dom_runtime::pump_idle_platform_tasks(bool& did_work)
+{
+    did_work = false;
+    if (impl_->isolate == nullptr) return true;
+    auto isolate_locker = impl_->lock_shared_isolate();
+    v8::Isolate::Scope isolate_scope(impl_->isolate);
+    v8::HandleScope handle_scope(impl_->isolate);
+    auto local_context = impl_->context.Get(impl_->isolate);
+    v8::Context::Scope context_scope(local_context);
+    // Delayed V8 tasks (including heap maintenance) do not appear in the DOM
+    // task queue. Waiting for a DOM timer/input before pumping strands them
+    // when a desktop app becomes idle after an allocation-heavy interaction.
+    did_work = impl_->pump_v8_platform_tasks() != 0;
+    v8::platform::RunIdleTasks(v8_platform.get(), impl_->isolate, 0.001);
+    if (did_work) impl_->perform_microtask_checkpoint();
+    const bool result = impl_->promote_pending_promise_error();
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+    // A foreground completion's microtasks may draw a canvas just like a DOM
+    // task. Retire that opportunity using the same ownership boundary.
     impl_->finish_gpu_rendering_opportunity(result);
 #endif
     return result;
@@ -5518,6 +5613,10 @@ uint64_t v8_dom_runtime::input_callbacks_invoked() const noexcept
 v8_dom_runtime::memory_metrics v8_dom_runtime::read_memory_metrics() const noexcept
 {
     memory_metrics result{};
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS)
+    if (impl_->graphics && std::getenv("WEBSCENE_GRAPHICS_MEMORY_TRACE"))
+        impl_->graphics->trace_memory_resources();
+#endif
     if (impl_->isolate != nullptr) {
         auto isolate_locker = impl_->lock_shared_isolate();
         v8::HeapStatistics statistics;

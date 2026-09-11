@@ -1,3 +1,41 @@
+void test_modal_backdrop_scene(webscene_engine* engine)
+{
+    resize(engine,400,300,1);
+    execute(engine,R"JS(
+      document.body.innerHTML='<style>dialog{width:100px;height:50px}dialog::backdrop{background:#080e185e!important}dialog.clear::backdrop{background:transparent!important}</style><dialog id="backdrop-probe">Dialog</dialog>';
+      globalThis.backdropProbe=document.getElementById('backdrop-probe');
+      backdropProbe.showModal();
+    )JS","backdrop-setup.js");
+    uint64_t revision=0;
+    const auto expect_backdrop=[&](bool expected) {
+        webscene_engine_request_scene_checkpoint(engine);
+        for(int attempt=0;attempt<100;++attempt) {
+            const auto* scene=webscene_engine_acquire_latest_scene(engine);
+            bool matched=false;
+            if(scene) {
+                if(scene->header.revision>revision) {
+                    unsigned count=0;
+                    for(uint32_t i=0;i<scene->header.command_count;++i) {
+                        const auto& command=scene->commands[i];
+                        if(command.kind==9U && command.rgba==0x080e185eU && command.width==400 && command.height==300)++count;
+                    }
+                    matched=count==(expected?1U:0U);
+                    if(matched)revision=scene->header.revision;
+                }
+                webscene_scene_acknowledge(scene);webscene_scene_release(scene);
+            }
+            if(matched)return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        fail("V8 modal backdrop scene did not match expected state");
+    };
+    expect_backdrop(true);
+    execute(engine,"backdropProbe.className='clear';","backdrop-clear.js");expect_backdrop(false);
+    execute(engine,"backdropProbe.className='';","backdrop-restore.js");expect_backdrop(true);
+    execute(engine,"backdropProbe.close();","backdrop-close.js");expect_backdrop(false);
+    execute(engine,"document.body.innerHTML='';","backdrop-cleanup.js");
+}
+
 void test_responsive_positioned_sizing(webscene_engine* engine)
 {
     resize(engine, 1280, 720, 1);
@@ -3509,6 +3547,8 @@ void test_outer_box_shadow_reaches_elevated_scene(webscene_engine* engine)
             border-radius:6px; background:rgb(20,30,40);
             box-shadow:3px 5px 12px 2px rgba(1,2,3,0.5);
           }
+          .inset-probe { position:fixed;left:300px;top:30px;width:40px;height:20px;
+            color:rgb(10,20,30);box-shadow:inset 2px 0; }
           .padded-uppercase {
             position:fixed; left:150px; top:30px; font-size:11px;
             padding-left:6px; color:rgb(4,5,6); text-transform:uppercase;
@@ -3517,6 +3557,8 @@ void test_outer_box_shadow_reaches_elevated_scene(webscene_engine* engine)
           const probe = document.createElement('div');
           probe.className = 'shadow-probe';
           document.body.appendChild(probe);
+          const inset = document.createElement('div');
+          inset.className='inset-probe';document.body.appendChild(inset);
           const text = document.createElement('span');
           text.className = 'padded-uppercase';
           text.textContent = 'Candles';
@@ -3534,7 +3576,8 @@ void test_outer_box_shadow_reaches_elevated_scene(webscene_engine* engine)
     webscene_engine_request_scene_checkpoint(engine);
     auto observed = false;
     auto observed_padded_text = false;
-    for (auto attempt = 0; attempt < 100 && (!observed || !observed_padded_text); ++attempt) {
+    auto observed_inset = false;
+    for (auto attempt = 0; attempt < 100 && (!observed || !observed_padded_text || !observed_inset); ++attempt) {
         const auto* scene = webscene_engine_acquire_latest_scene(engine);
         if (scene != nullptr) {
             for (uint32_t index = 0; index < scene->header.command_count; ++index) {
@@ -3548,6 +3591,8 @@ void test_outer_box_shadow_reaches_elevated_scene(webscene_engine* engine)
                     && std::abs(command.stroke_width - 12.0F) < 0.01F) {
                     observed = true;
                 }
+                if (command.kind == 18U && command.flags == 1 &&
+                    command.rgba == 0x0a141effU && std::abs(command.x-302.0F)<0.01F) observed_inset=true;
                 if (command.kind == 3U
                     && (command.rgba >> 8U) == 0x040506U
                     && std::abs(command.x - 156.0F) < 0.01F) {
@@ -3557,10 +3602,11 @@ void test_outer_box_shadow_reaches_elevated_scene(webscene_engine* engine)
             webscene_scene_acknowledge(scene);
             webscene_scene_release(scene);
         }
-        if (!observed || !observed_padded_text) {
+        if (!observed || !observed_padded_text || !observed_inset) {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
     }
+    require(observed_inset, "runtime inset shadow did not use shared currentColor semantics");
     require(observed, "elevated outer box-shadow command was absent from the native scene");
     require(observed_padded_text,
         "padded text did not paint from its content-box inset in the native scene");

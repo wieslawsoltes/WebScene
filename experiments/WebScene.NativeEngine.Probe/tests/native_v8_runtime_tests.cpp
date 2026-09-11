@@ -125,6 +125,44 @@ int main()
     if (const auto* filter = std::getenv("WEBSCENE_NATIVE_ENGINE_TEST_FILTER");
         filter != nullptr) {
         const auto selected = std::string_view(filter);
+        if (selected == "idle-v8-platform") {
+            test_idle_v8_foreground_completion();
+            return 0;
+        }
+        if(selected=="modal-backdrop") {
+            auto* focused_engine=webscene_engine_create(0);
+            require(focused_engine!=nullptr,"backdrop engine creation failed");
+            test_modal_backdrop_scene(focused_engine);
+            webscene_engine_destroy(focused_engine);return 0;
+        }
+        if (selected == "paint-only-cascade") {
+            auto* focused_engine=webscene_engine_create(0);
+            require(focused_engine != nullptr,"paint invalidation engine creation failed");
+            test_paint_only_stylesheet_recascade_does_not_force_layout(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "all-unset") {
+            auto* focused_engine=webscene_engine_create(0);
+            require(focused_engine != nullptr,"reset test engine creation failed");
+            test_all_unset_resets_modeled_control_properties(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
+        if (selected == "relative-stylesheet-resource") {
+            test_relative_stylesheet_background_uses_stylesheet_address();
+            return 0;
+        }
+        if (selected == "shared-shadow-values") {
+            auto* focused_engine=webscene_engine_create(0);
+            require(focused_engine != nullptr,"shadow test engine creation failed");
+            resize(focused_engine,800,600,1U);
+            wait_for_consumed_inputs(focused_engine,1U,"shadow test viewport resize was not consumed");
+            execute(focused_engine,"void 0","shared-shadow-bootstrap.js");
+            test_outer_box_shadow_reaches_elevated_scene(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "async-save-publication") { test_async_save_acknowledgement_publishes_without_pointer_input(); return 0; }
         if (selected == "youtube-embed") { test_youtube_embed_fallback(); return 0; }
         if (selected == "table-cell-copy") { test_table_cell_click_copies_text_to_host(); return 0; }
@@ -505,6 +543,18 @@ int main()
             test_mouse_moves_are_raf_aligned_at_compositor_cadence();
             return 0;
         }
+        if (selected == "host-clock-keyframes") {
+            auto* focused_engine = webscene_engine_create(64);
+            require(focused_engine != nullptr, "keyframe test engine creation failed");
+            // These regressions share a host-clock timeline starting with transitions.
+            test_opacity_and_color_transitions_use_host_clock_and_dispatch_events(focused_engine);
+            test_inline_transition_longhands_survive_dynamic_parse_and_recascade(focused_engine);
+            test_opacity_keyframes_use_host_clock_with_staggered_infinite_delays(focused_engine);
+            test_rotation_keyframes_use_host_clock_and_wrap_continuously(focused_engine);
+            test_clipped_offscreen_keyframes_do_not_keep_host_frame_clock_alive(focused_engine);
+            webscene_engine_destroy(focused_engine);
+            return 0;
+        }
         if (selected == "logical-inset-transition") {
             auto* focused_engine = webscene_engine_create(0);
             require(focused_engine != nullptr, "focused engine creation failed");
@@ -587,6 +637,7 @@ int main()
     test_loaded_iframe_replaces_provisional_layout_root();
     test_youtube_embed_fallback();
     test_outer_dynamic_recascade_preserves_iframe_cascade();
+    test_idle_v8_foreground_completion();
     test_animation_frame_demand_emits_idle_to_active_edges();
     test_dynamic_stylesheet_custom_properties_preserve_cascade_order();
     test_persistent_compilation_cache_reuse();
@@ -622,6 +673,7 @@ int main()
     test_dimension_custom_property_recascade(engine);
     test_dimension_custom_property_inheritance(engine);
     test_geometry_variable_positions(engine);
+    test_modal_backdrop_scene(engine);
     test_responsive_positioned_sizing(engine);
     test_compact_go_to_fixed_grid_tracks_preserve_trailing_space(engine);
     test_go_to_tab_lines_and_calendar_scroll_ranges(engine);

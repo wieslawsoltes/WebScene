@@ -1,0 +1,29 @@
+
+    body { margin:0; padding:0; }
+    #target { display:block; width:80px; height:20px; padding:0; border:0; }
+    #target.changed {width:120px;}
+    #target:focus {height:30px;}
+    #target:hover {width:90px;}
+    .row {height:17px; width:40px;}
+    canvas {width:40px; height:40px;}
+    @media (max-width:150px) {#target {width:60px;}}
+    @media (prefers-reduced-motion:reduce) {#target:focus {height:10px;}}
+    @media (prefers-color-scheme:dark) {#target {width:95px;}}
+  
+@keyframes fade {from {opacity:0} to {opacity:1}}
+
+.unused[data-label="a;b"] > span.note::before {content:"é\"\\"; color:red !important;}
+@keyframes turn {from {transform:rotate(-15deg)} to {transform:rotate(45deg)}}
+#scroll-parent {scrollbar-color: red blue;}
+#scroller {width:40px;height:30px;overflow-y:scroll;scrollbar-width:thin!important;}
+#scroller.hide {scrollbar-width:none!important;}
+#scroller.auto {scrollbar-color:auto;}
+#scroller .tall {height:100px;}
+
+#mark.wide {stroke-width:3px;}
+#mark.inherited {stroke-width:inherit;}
+
+#mark.bad {stroke-width:-1px!important;}
+
+#mark.paint {fill:blue;stroke:green;}
+dialog::backdrop {background:#080e185e;}

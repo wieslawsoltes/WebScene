@@ -1,16 +1,11 @@
 #pragma once
+#include "webgpu_canvas_configuration.h"
 #include "v8_webgpu_vertex_state.h"
 namespace webscene::graphics {
 // Conversion only: presentation capability negotiation and configure's device
 // validation are separate. Preserve requested color/HDR modes without silently
 // substituting an SDR or sRGB canvas.
-struct webgpu_canvas_configuration {
-    wgpu::Device device;
-    wgpu::TextureFormat format=wgpu::TextureFormat::Undefined;
-    uint32_t usage=0x10;
-    std::vector<wgpu::TextureFormat> view_formats;
-    std::string alpha_mode="opaque",color_space="srgb",tone_mapping="standard";
-};
+
 template<class ResolveDevice> bool read_webgpu_canvas_configuration(v8::Isolate* isolate,v8::Local<v8::Context> context,
     v8::Local<v8::Value> input,webgpu_canvas_configuration& output,ResolveDevice resolve_device) {
     webgpu_state_reader reader(isolate,context,input);webgpu_canvas_configuration converted;v8::Local<v8::Value> value;

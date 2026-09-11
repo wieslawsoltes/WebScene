@@ -71,10 +71,19 @@ if(MSVC)
         "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-add_library(webscene_native_engine SHARED
-    native/graphics/windows_gpu_interop.cpp
-    native/webscene_native_engine.cpp
-    native/webscene_native_dom.cpp)
+option(WEBSCENE_NATIVE_ENGINE_STATIC "Build a reusable statically linked runtime" OFF)
+if(WEBSCENE_NATIVE_ENGINE_STATIC)
+    set(webscene_runtime_kind STATIC)
+else()
+    set(webscene_runtime_kind SHARED)
+endif()
+add_library(webscene_native_engine ${webscene_runtime_kind} native/webscene_native_engine.cpp)
+if(TARGET webscene_core)
+    target_link_libraries(webscene_native_engine PRIVATE webscene_core)
+else()
+    target_sources(webscene_native_engine PRIVATE
+        native/graphics/windows_gpu_interop.cpp native/webscene_native_dom.cpp)
+endif()
 
 target_compile_features(webscene_native_engine PRIVATE cxx_std_20)
 target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_NATIVE_ENGINE_BUILD)
@@ -721,6 +730,9 @@ if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
             webscene_native_engine
             ixwebsocket)
         add_test(NAME webscene_native_engine_tests COMMAND webscene_native_engine_tests)
+        add_test(NAME webscene_native_idle_v8_platform COMMAND webscene_native_engine_tests)
+        set_tests_properties(webscene_native_idle_v8_platform PROPERTIES
+            ENVIRONMENT "WEBSCENE_NATIVE_ENGINE_TEST_FILTER=idle-v8-platform")
         set_tests_properties(webscene_native_engine_tests PROPERTIES
             ENVIRONMENT
                 "WEBSCENE_V8_DETAILED_MEMORY_METRICS=1;WEBSCENE_INTEROP_STRESS=1")
@@ -1150,8 +1162,66 @@ if(WEBSCENE_NATIVE_ENGINE_DENSE_LINK)
     endif()
 endif()
 
+if(WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    add_custom_command(TARGET webscene_native_engine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${WEBSCENE_V8_ICU_DATA}"
+            "$<TARGET_FILE_DIR:webscene_native_engine>/icudtl.dat")
+endif()
+
+# Optional compiled application module. Only the hybrid engine links this target;
+# standalone native document libraries have no dependency on the V8 adapter.
+set(WEBSCENE_COMPILED_APPLICATION_MODULE "" CACHE FILEPATH "Generated webscene.application C++ module")
+set(WEBSCENE_COMPILED_APPLICATION_NAME "application" CACHE STRING "Compiled package name")
+if(WEBSCENE_COMPILED_APPLICATION_MODULE)
+    if(NOT WEBSCENE_COMPILED_APPLICATION_NAME MATCHES "^[A-Za-z0-9_.-]+$")
+        message(FATAL_ERROR "Compiled package name must contain only letters, digits, underscore, dot or hyphen")
+    endif()
+    if(NOT WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+        message(FATAL_ERROR "Use the native document host for a native-only compiled application")
+    endif()
+    if(CMAKE_VERSION VERSION_LESS 3.28)
+        message(FATAL_ERROR "Compiled application modules require CMake 3.28 or newer")
+    endif()
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/compiled_application.cpp"
+        "#include <webscene_compiled_document.h>\n#include <stdexcept>\nimport webscene.application;\nnamespace webscene_native {\ncompiled_document compiled_application(std::string_view name,std::string base) {\nif(name != \"${WEBSCENE_COMPILED_APPLICATION_NAME}\") return {};\nreturn compiled_engine::build(std::move(base));\n}\n}\n")
+    add_library(webscene_compiled_application OBJECT "${CMAKE_CURRENT_BINARY_DIR}/compiled_application.cpp")
+    get_filename_component(compiled_module_dir "${WEBSCENE_COMPILED_APPLICATION_MODULE}" DIRECTORY)
+    target_sources(webscene_compiled_application PUBLIC FILE_SET CXX_MODULES BASE_DIRS "${compiled_module_dir}" FILES "${WEBSCENE_COMPILED_APPLICATION_MODULE}")
+    target_include_directories(webscene_compiled_application PRIVATE "$<TARGET_PROPERTY:webscene_native_engine,INCLUDE_DIRECTORIES>")
+    target_compile_definitions(webscene_compiled_application PRIVATE "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_DEFINITIONS>")
+    target_compile_features(webscene_compiled_application PRIVATE cxx_std_20)
+    set_target_properties(webscene_compiled_application PROPERTIES POSITION_INDEPENDENT_CODE ON CXX_SCAN_FOR_MODULES ON)
+    target_link_libraries(webscene_native_engine PRIVATE webscene_compiled_application)
+    target_compile_definitions(webscene_native_engine PRIVATE WEBSCENE_COMPILED_APPLICATION=1)
+endif()
+
 # White-box runtime coverage without adding test hooks to the production C ABI.
 # Compile the same source/configuration graph into a separate executable.
+if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
+    get_target_property(hybrid_runtime_sources webscene_native_engine SOURCES)
+    add_executable(webscene_hybrid_v8_runtime_tests
+        tests/hybrid_v8_runtime_tests.cpp ${hybrid_runtime_sources})
+    target_compile_features(webscene_hybrid_v8_runtime_tests PRIVATE cxx_std_20)
+    target_include_directories(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,INCLUDE_DIRECTORIES>")
+    target_compile_definitions(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_DEFINITIONS>")
+    target_compile_options(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,COMPILE_OPTIONS>")
+    target_link_libraries(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<TARGET_PROPERTY:webscene_native_engine,LINK_LIBRARIES>" Threads::Threads)
+    # Preserve toolchain/LTO options, excluding the production ABI export lists.
+    target_link_options(webscene_hybrid_v8_runtime_tests PRIVATE
+        "$<FILTER:$<TARGET_PROPERTY:webscene_native_engine,LINK_OPTIONS>,EXCLUDE,exported_symbols_list|version-script>")
+    get_target_property(hybrid_runtime_ipo webscene_native_engine INTERPROCEDURAL_OPTIMIZATION)
+    if(hybrid_runtime_ipo)
+        set_property(TARGET webscene_hybrid_v8_runtime_tests PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+    add_dependencies(webscene_hybrid_v8_runtime_tests webscene_native_engine)
+    add_test(NAME webscene_hybrid_v8_runtime_tests COMMAND webscene_hybrid_v8_runtime_tests)
+    set_tests_properties(webscene_hybrid_v8_runtime_tests PROPERTIES TIMEOUT 30 LABELS "hybrid;runtime")
+endif()
+
 if(BUILD_TESTING AND WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS AND WEBSCENE_NATIVE_ENGINE_ENABLE_V8)
     get_target_property(graphics_runtime_sources webscene_native_engine SOURCES)
     add_executable(webscene_graphics_v8_runtime_tests

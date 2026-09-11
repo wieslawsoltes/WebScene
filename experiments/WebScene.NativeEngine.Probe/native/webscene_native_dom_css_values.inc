@@ -242,24 +242,7 @@ uint32_t native_document::parse_color(const std::string& value)
             return static_cast<char>(std::tolower(character));
         });
 
-    if (normalized == "transparent") return 0;
-    if (normalized == "black") return 0x000000FFU;
-    if (normalized == "white") return 0xFFFFFFFFU;
-    if (normalized == "red") return 0xFF0000FFU;
-    if (normalized == "green") return 0x008000FFU;
-    if (normalized == "lime") return 0x00FF00FFU;
-    if (normalized == "blue") return 0x0000FFFFU;
-    if (normalized == "yellow") return 0xFFFF00FFU;
-    if (normalized == "cyan" || normalized == "aqua") return 0x00FFFFFFU;
-    if (normalized == "magenta" || normalized == "fuchsia") return 0xFF00FFFFU;
-    if (normalized == "gray" || normalized == "grey") return 0x808080FFU;
-    if (normalized == "silver") return 0xC0C0C0FFU;
-    if (normalized == "maroon") return 0x800000FFU;
-    if (normalized == "purple") return 0x800080FFU;
-    if (normalized == "olive") return 0x808000FFU;
-    if (normalized == "navy") return 0x000080FFU;
-    if (normalized == "teal") return 0x008080FFU;
-    if (normalized == "orange") return 0xFFA500FFU;
+    if (const auto named = named_color_rgba(normalized)) return *named;
     if ((normalized.starts_with("hsl(") || normalized.starts_with("hsla("))
         && normalized.ends_with(')')) {
         const auto open = normalized.find('(');

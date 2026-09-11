@@ -224,6 +224,14 @@ void native_document::update_style_animations(dom_node& node)
         }
     }
 
+    if (animation.opacity_animation_active && node.style.animations().transition_property_value == "none") {
+        transition_events_.push_back({node.id,"transitioncancel","opacity",
+            std::clamp(static_cast<float>(animation_frame_timestamp_ms_-
+                animation.opacity_animation_started_ms-animation.opacity_animation_delay_ms),
+                0.0F,animation.opacity_animation_duration_ms)/1000.0F});
+        animation.opacity_animation_active=false;
+        animation.painted_opacity=node.style.opacity;
+    }
     if (!animation.opacity_animation_initialized) {
         animation.opacity_animation_initialized = true;
         animation.painted_opacity = node.style.opacity;

@@ -1,0 +1,1097 @@
+import json
+import pathlib
+import subprocess
+import sys
+import tempfile
+import unittest
+UIC=pathlib.Path(sys.argv.pop(1)).resolve()
+class CompilerTests(unittest.TestCase):
+    def compile(self,body,css=''):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        source.write_text('<!doctype html>\n<html><head><style>'+css+'</style></head><body>'+body+'</body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        return result,output
+    def test_hybrid_engine_module(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder);source=root/'view.html';output=root/'view.cppm'
+            source.write_text('<html><head><style>button {color:red}</style><script src="app.js"></script></head><body><button id="root">Hello</button><template><style>div{position:fixed}</style><script src="must-not-load.js"></script></template></body></html>')
+            (root/'app.js').write_text('globalThis.started=true;')
+            (root/'templates.html').write_text('<template id="row"><style>button{position:fixed}</style><textarea>__ws_slot_0__</textarea><svg><path d="__ws_slot_1__"/></svg></template>')
+            (root/'template-attributes.html').write_text('')
+            command=[UIC,'--engine-module',source,output,'--module','webscene.application','--templates',root/'templates.html']
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            first=output.read_bytes();generated=first.decode()
+            self.assertEqual(generated.count('p.stylesheets.push_back('),1)
+            self.assertIn('p.allow_runtime_html=false',generated)
+            self.assertIn('compiled_argument(args,0)',generated)
+            self.assertIn('compiled_argument_text(args,1)',generated)
+            self.assertIn('http://www.w3.org/2000/svg',generated)
+            self.assertIn('globalThis.started=true;',generated)
+            self.assertIn('app.js',pathlib.Path(str(output)+'.d').read_text())
+            self.assertEqual(subprocess.run(command,capture_output=True).returncode,0)
+            self.assertEqual(output.read_bytes(),first)
+
+    def test_shared_css_html_backend(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder);source=root/'view.html';output=root/'view.cppm'
+            css=root/'original.css';css.write_text('.item::before {content:"x"}')
+            source.write_text('<html><head><link rel="stylesheet" href="original.css"></head><body><div class="item" style="width:20px"></div></body></html>')
+            command=[UIC,source,output,'--module','test.shared','--css-backend','shared']
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            generated=output.read_text()
+            self.assertIn('make_shared_stylesheet_resolver',generated)
+            self.assertIn('r->compiled_pseudo_origin',generated)
+            self.assertNotIn('d.add_rule',generated)
+            self.assertIn('original.css',pathlib.Path(str(output)+'.d').read_text())
+            result=subprocess.run(command[:-1]+['invalid'],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+
+    def test_prepared_css_module(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=pathlib.Path(folder);source=root/'style.css';output=root/'style.cppm'
+            source.write_text('div {color:red} @keyframes fade {from {opacity:0} to {opacity:1}}')
+            command=[UIC,'--prepare-css',source,output,'--module','test.styles']
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            first=output.read_bytes()
+            self.assertIn(b'export module test.styles;',first)
+            self.assertIn(b'r->compiled_selector',first)
+            self.assertIn('partially-supported',result.stderr)
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(first,output.read_bytes())
+            result=subprocess.run(command[:-1]+['invalid;module'],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertEqual(first,output.read_bytes())
+            original=source.read_bytes()
+            result=subprocess.run([UIC,'--prepare-css',source,source,'--module','test.styles'],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertEqual(original,source.read_bytes())
+
+    def test_opacity_transition_shorthand(self):
+        for value in ['opacity 100ms linear 20ms', 'opacity .2s ease-in', 'none']:
+            result, out = self.compile('<div></div>', 'div {transition:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('clear_transitions', out.read_text())
+        for value in ['opacity -1s', 'opacity 1s 2s 3s', 'fill 1s', 'opacity 1s linear ease']:
+            result, _ = self.compile('<div></div>', 'div {transition:'+value+'}')
+            self.assertNotEqual(result.returncode, 0, value)
+
+    def test_reduced_motion_conditions(self):
+        result, out = self.compile('<div></div>',
+            '@media (prefers-reduced-motion: reduce) {div {width:45px}}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('std::optional<bool>{true}', out.read_text())
+        result, out = self.compile('<div></div>',
+            '@media (prefers-reduced-motion: reduce) {@media (prefers-reduced-motion: no-preference) {div {width:123px}}}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('123.0f', out.read_text())
+
+    def test_screen_media_types(self):
+        result, out = self.compile('<div></div>',
+            '@media print {div {width:123px}} @media screen {div {width:45px}}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('123.0f', out.read_text())
+        self.assertIn('45.0f', out.read_text())
+        result, out = self.compile('<div></div>',
+            '@media print {@media screen {div {width:123px}}} @media not print {div {width:45px}}')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('123.0f', out.read_text())
+        self.assertIn('45.0f', out.read_text())
+
+    def test_native_cursor_keywords(self):
+        for value in ['pointer', 'crosshair', 'col-resize', 'row-resize', 'grab', 'grabbing', 'not-allowed', 'inherit']:
+            result, out = self.compile('<div></div>', 'div {cursor:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('set_cursor', out.read_text())
+        result, _ = self.compile('<div></div>', 'div {cursor:url(hand.png), pointer}')
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_full_grid_columns(self):
+        for value in ['1/-1', '1 / -1', 'auto']:
+            result, out = self.compile('<div></div>', 'div {grid-column:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('set_grid_full_columns', out.read_text())
+        result, _ = self.compile('<div></div>', 'div {grid-column:1/0}')
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_scrollbar_colors(self):
+        for value in ['red transparent', 'var(--line) transparent', 'auto', 'inherit']:
+            result, out = self.compile('<div></div>', 'div {scrollbar-color:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('scrollbar_colors', out.read_text())
+        for value in ['red', 'red blue green', '1px red']:
+            result, _ = self.compile('<div></div>', 'div {scrollbar-color:'+value+'}')
+            self.assertNotEqual(result.returncode, 0, value)
+
+    def test_scrollbar_width_keywords(self):
+        for value, expected in [('auto', 'automatic'), ('thin', 'thin'), ('none', 'none'), ('THIN', 'thin')]:
+            result, out = self.compile('<div></div>', 'div {scrollbar-width:'+value+'}')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('scrollbar_width::'+expected, out.read_text())
+        for value in ['3px', 'narrow', 'thin none']:
+            result, _ = self.compile('<div></div>', 'div {scrollbar-width:'+value+'}')
+            self.assertNotEqual(result.returncode, 0, value)
+
+    def test_opacity_clamps_but_negative_flex_factors_fail(self):
+        for value,expected in [('-0.5','0.0f'),('2','1.0f'),('5e-1','0.5f'),('50%','0.5f'),('-20%','0.0f'),('+2e2%','1.0f')]:
+            result,out=self.compile('<div></div>', 'div { opacity:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_opacity('+expected+')',out.read_text())
+        for value in ['50%%','%','1e%','50 %']:
+            result,_=self.compile('<div></div>', 'div { opacity:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+        for name in ['flex-grow','flex-shrink']:
+            result,_=self.compile('<div></div>', 'div { '+name+':-0.5; }')
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('numeric value out of range',result.stderr)
+
+    def test_grid_tracks_compile_without_runtime_parsing(self):
+        result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:222px minmax(250px, 1fr) 252px; grid-template-rows:auto 1fr; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        self.assertIn('set_grid_template_columns',generated)
+        self.assertIn('grid_track::sizing::minmax',generated)
+        self.assertIn('grid_track::sizing::fractional',generated)
+        self.assertNotIn('parse_',generated)
+        self.assertNotIn('250px',generated)
+        for tracks in ['-1px 1fr', 'minmax(1px)', 'bogus', '1fr -2px']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
+            self.assertNotEqual(result.returncode,0,tracks)
+    def test_background_none_resets_background(self):
+        result,out=self.compile('<div></div>', 'div { background:#ffffff; background:none; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.reset_background();',out.read_text())
+        result,_=self.compile('<div></div>', 'div { background-color:none; }')
+        self.assertNotEqual(result.returncode,0)
+
+    def test_calc_function_case_preserves_custom_names(self):
+        for value in ['CALC(10px + 5%)', 'CaLc(calc(10px + 5%) * 2)',
+                      'CALC(var(--Offset, 10px) + 5%)']:
+            result,out=self.compile('<div></div>', 'div { left:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('add_compiled_lengths',out.read_text())
+            if '--Offset' in value:
+                self.assertIn('--Offset',out.read_text())
+                self.assertNotIn('--offset',out.read_text())
+        result,out=self.compile('<div></div>', 'div { inset:CALC(var(--Offset, 10px) + 5%) 0; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('--Offset',out.read_text())
+
+    def test_var_function_case_across_lowering_paths(self):
+        for name,value in [('width','VAR(--Width, 10px)'),
+                           ('margin','VaR(--Margin, 1px 2px)'),
+                           ('padding','VAR(--Padding, 1px)'),
+                           ('gap','VAR(--Gap, 2px)'),
+                           ('text-align','VAR(--Align, CENTER)'),
+                           ('left','CALC(VAR(--Offset, 10px) + 5%)'),
+                           ('grid-template-columns','VAR(--Tracks, 10px 20px)'),
+                           ('color','VAR(--Color, VaR(--Fallback, #fff))')]:
+            result,out=self.compile('<div></div>', 'div { '+name+':'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            lower=value.replace('VAR(', 'var(').replace('VaR(', 'var(')
+            reference,expected=self.compile('<div></div>', 'div { '+name+':'+lower+'; }')
+            self.assertEqual(reference.returncode,0,reference.stderr)
+            rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
+            self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
+
+    def test_color_mix_nested_reference_grammar(self):
+        for color in ['var(--尺寸, #fff)', r'var(--a\)b, var(--fallback, #fff))', 'WHITE']:
+            for percent in ['50%', '+5e1%', '.5%']:
+                result,out=self.compile('<div></div>', 'div { color:COLOR-MIX(in srgb, '+color+' '+percent+', TRANSPARENT); }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn('color_with_opacity',out.read_text())
+        for percent in ['-1%', '101%', '1e999%', '5 %']:
+            result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb, #fff '+percent+', transparent); }')
+            self.assertNotEqual(result.returncode,0,percent)
+
+    def test_at_rule_diagnostics_distinguish_media(self):
+        for css,message in [('@keyframes spin { from { opacity:0; } }', 'unsupported at-rule: @keyframes'),
+                            ('@supports (display:grid) { div { width:1px; } }', 'unsupported at-rule: @supports'),
+                            ('@media speech { div { width:1px; } }', 'media conditions')]:
+            result,_=self.compile('<div></div>',css)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn(message,result.stderr)
+
+    def test_shadow_color_mix_component(self):
+        for value in ['0 0 0 1px color-mix(in srgb,var(--Accent) 25%,transparent)',
+                      'inset color-mix(in srgb,red,blue) 2px 0 3px']:
+            result,out=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_box_shadow(shadow)',out.read_text())
+        result,_=self.compile('<div></div>', 'div { box-shadow:0 0 color-mix(in srgb,red 0%,blue 0%); }')
+        self.assertNotEqual(result.returncode,0)
+
+    def test_dashed_border_compilation(self):
+        for css in ['border:1px dashed #65c5a4;', 'border:2px dashed var(--Accent,red);', 'border-style:solid dashed;']:
+            result,out=self.compile('<div></div>', 'div {'+css+'}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('_dashed()',out.read_text())
+
+    def test_shadow_component_order_and_defaults(self):
+        for value in ['red inset 2px 0', '2px 0 red inset', 'inset 2px 0', '0 0 currentColor', 'red 1px 2px 3px 4px']:
+            result,_=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for value in ['red blue 1px 2px', 'inset inset 1px 2px', '1px red 2px', '0', '0 0 0 0 0']:
+            result,_=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_compiled_inset_shadow(self):
+        for value in ['inset 0 -2px 0 var(--Accent)', 'inset 0 0 0 1px var(--Accent)', 'inset 2px 0 0 red', 'inset 1px 2px 3px 4px rgba(0,0,0,.5)']:
+            result,_=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        result,_=self.compile('<div></div>', 'div { box-shadow:inset 0 0 -2px red; }')
+        self.assertNotEqual(result.returncode,0)
+
+    def test_outline_shorthand_order_and_defaults(self):
+        for value in ['solid', 'red solid', 'solid 2px', 'red 2px solid', 'thick solid currentColor', 'var(--Outline, solid red)']:
+            result,_=self.compile('<div></div>', 'div { outline:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for value in ['red blue solid', 'solid solid', '1px 2px solid']:
+            result,_=self.compile('<div></div>', 'div { outline:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_compiled_outline_and_offset(self):
+        for css in ['outline:2px solid var(--Accent,red); outline-offset:-2px;', 'outline:none;', 'outline:0;']:
+            result,_=self.compile('<div></div>', 'div {'+css+'}')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for css in ['outline:-1px solid red;', 'outline:10% solid red;', 'outline-offset:10%;', 'outline-offset:auto;']:
+            result,_=self.compile('<div></div>', 'div {'+css+'}')
+            self.assertNotEqual(result.returncode,0,css)
+
+    def test_two_color_mix_weights(self):
+        for value in ['var(--First, red) 63%, var(--Second, blue)', 'red, blue',
+                      'red 25%, blue 25%', 'red, blue 75%']:
+            result,out=self.compile('<div></div>', 'div { background:color-mix(in srgb,'+value+'); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('mix_colors',out.read_text())
+        result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb,red 0%,blue 0%); }')
+        self.assertNotEqual(result.returncode,0)
+
+    def test_hsl_literals_and_variable_tokens(self):
+        for value,rgba in [('hsl(0,100%,50%)',0xff0000ff),('HSLA(.5turn 100% 50% / .5)',0x00ffff80),
+                           ('hsl(-120deg 100% 50%)',0x0000ffff),('hsl(200grad 100% 50%)',0x00ffffff),
+                           ('hsl(3.141592653589793rad 100% 50%)',0x00ffffff),
+                           ('hsl(120 200% 50% / -1)',0x00ff0000),('hsl(0 0% 50%)',0x808080ff)]:
+            for authored in [value, 'var(--Paint, '+value+')']:
+                result,out=self.compile('<div></div>', 'div { color:'+authored+'; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn(str(rgba)+'u',out.read_text())
+        for value in ['hsl(0 1 50%)','hsl(0 100% 50)','hsl(1px 100% 50%)','hsl(0,100%,50% / .5)', 'hsl(1e999 100% 50%)']:
+            result,_=self.compile('<div></div>', 'div { color:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_rgb_literals_and_variable_tokens(self):
+        for value,rgba in [('rgb(255,0,128)',0xff0080ff),('RGBA(100%, 0%, 50%, .5)',0xff008080),
+                           ('rgb(255 0 50% / 25%)',0xff008040),('rgb(-10 300 0 / 2)',0x00ff00ff),
+                           ('rgb(1e2 0 +2e2)',0x6400c8ff)]:
+            for authored in [value, 'var(--Color, '+value+')']:
+                result,out=self.compile('<div></div>', 'div { background-color:'+authored+'; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn(str(rgba)+'u',out.read_text())
+        for value in ['rgb(1,2)', 'rgb(1,2,3,4,5)', 'rgb(1 2 3 /)', 'rgb(1%,2,3)',
+                      'rgb(1 2 3, .5)', 'rgb(1px 2 3)', 'rgb(1e999 2 3)']:
+            result,_=self.compile('<div></div>', 'div { color:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_complete_named_color_table(self):
+        colors=json.loads(pathlib.Path(__file__).with_name('named-colors.json').read_text())
+        css=''.join('.c'+str(i)+' { color:'+name.upper()+'; background:var(--Paint,'+name+'); }' for i,name in enumerate(colors))
+        result,out=self.compile('<div></div>',css)
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        for hex_rgb in colors.values():
+            self.assertIn(str(int(hex_rgb+'ff',16))+'u',generated)
+
+    def test_supported_named_colors_share_literal_and_variable_lowering(self):
+        for name,rgba in [('ReD',0xff0000ff),('GREEN',0x008000ff),('lime',0x00ff00ff),
+                          ('orange',0xffa500ff),('AQUA',0x00ffffff),('grey',0x808080ff)]:
+            for property in ['color', 'background-color', 'border-color']:
+                result,out=self.compile('<div></div>', 'div { '+property+':'+name+'; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn(str(rgba)+'u',out.read_text())
+                result,out=self.compile('<div></div>', 'div { '+property+':var(--Paint,'+name+'); }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn(str(rgba)+'u',out.read_text())
+
+    def test_direct_variable_and_calc_comments(self):
+        for name,value in [('width', 'var(--Size /* , ) */, 12px)'),
+                           ('left', 'calc(var(--Size, 12px) + /* ) , ( */ 2px)'),
+                           ('--Saved', 'var(--Size /* ) , */, 12px)')]:
+            result,_=self.compile('<div></div>', 'div { '+name+':'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_component_comments_do_not_change_function_boundaries(self):
+        for value in ['color-mix(in /* , ) ( */ srgb, #fff 50%, transparent)',
+                      'color-mix(in srgb, var(--Color, #fff) /* , ) */ 50%, transparent)']:
+            result,_=self.compile('<div></div>', 'div { color:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        result,_=self.compile('<div></div>', 'div { inset:var(--Inset, 3px) /* ) , ( */ 2px; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_color_mix_interpolation_whitespace(self):
+        for space in ['  ', '\t', '\n', ' /* separator */ ']:
+            result,_=self.compile('<div></div>', 'div { color:color-mix(IN'+space+'SRGB, #fff 50%, transparent); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_color_mix_rejects_empty_arguments_and_invalid_colors(self):
+        for value in ['in srgb,, #fff 50%, transparent', 'in srgb, #fff 50%, transparent,',
+                      'in srgb, 12px 50%, transparent', 'in srgb, unknown 50%, transparent']:
+            result,_=self.compile('<div></div>', 'div { color:color-mix('+value+'); }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_calc_preserves_escaped_custom_names(self):
+        for name in [r'--a\)b', r'--a\(b', r'--a\*b', r'--a\/b']:
+            for value in ['calc(var('+name+', 3px) + 2px)', 'calc(2 * (var('+name+', 3px) - 1px))']:
+                result,out=self.compile('<div></div>', 'div { left:'+value+'; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn('add_compiled_lengths',out.read_text())
+
+    def test_shorthand_components_preserve_escaped_names(self):
+        for name in [r'--a\)b', r'--a\(b', r'--a\,b']:
+            for property in ['inset', 'padding', 'margin', 'gap']:
+                result,out=self.compile('<div></div>', 'div { '+name+':3px; '+property+':var('+name+') 2px; }')
+                self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_custom_property_escaped_delimiters(self):
+        for name in [r'--a\,b', r'--a\)b', r'--a\(b', r'--a\\b']:
+            result,out=self.compile('<div></div>', 'div { '+name+':17px; width:var('+name+', 9px); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_width',out.read_text())
+
+    def test_unicode_and_escaped_custom_property_references(self):
+        for name in ['--é', '--尺寸', r'--\31 size', r'--caf\e9']:
+            result,out=self.compile('<div></div>', 'div { '+name+':12px; width:var('+name+'); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_width',out.read_text())
+        for name in ['--a:0;--b', '--a; color:red', '--a{}']:
+            result,_=self.compile('<div></div>', 'div { width:var('+name+', 1px); }')
+            self.assertNotEqual(result.returncode,0,name)
+
+    def test_custom_names_allow_digit_and_hyphen_suffixes(self):
+        for name in ['--1', '---', '--9-grid', '--_']:
+            for declaration in ['width:var('+name+');', 'color:color-mix(in srgb,var('+name+') 50%,transparent);']:
+                result,out=self.compile('<div></div>', 'div { '+name+':10px; '+declaration+' }')
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertIn('"'+name+'"',out.read_text())
+        for name in ['--', '--a b', '--a!']:
+            result,_=self.compile('<div></div>', 'div { width:var('+name+', 1px); }')
+            self.assertNotEqual(result.returncode,0,name)
+
+    def test_custom_keyword_casing_and_color_typing(self):
+        for keyword in ['INITIAL','InHerit','UNSET','REVERT','REVERT-LAYER']:
+            result,_=self.compile('<div></div>', 'div { --Token:'+keyword+'; }')
+            self.assertNotEqual(result.returncode,0,keyword)
+            self.assertIn('CSS-wide keywords',result.stderr)
+        for token,rgba in [('WHITE',4294967295),('Black',255),('TRANSPARENT',0)]:
+            result,out=self.compile('<div></div>', 'div { color:var(--Color, '+token+'); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('"'+token+'",{},false,std::nullopt,'+str(rgba)+'u',out.read_text())
+
+    def test_calc_rejects_invalid_length_products(self):
+        for value in ['calc(10px / 0)', 'calc(10px * 2px)', 'calc(2 / 10px)']:
+            result,_=self.compile('<div></div>', 'div { left:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_inset_nested_calc_without_variables(self):
+        for value in ['calc(2 * (50% - (15px + 5px)) / 2) 0',
+                      '0 CALC(10px + calc(2px * 3)) auto',
+                      'calc(1px + 2px) calc(3px + 4px) calc(5px + 6px) calc(7px + 8px)']:
+            result,out=self.compile('<div></div>', 'div { position:absolute; inset:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('add_compiled_lengths',out.read_text())
+        for value in ['calc(10px / 0) 0', 'calc(2px * 3px) auto']:
+            result,_=self.compile('<div></div>', 'div { inset:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_inset_shorthand(self):
+        for value,expected in [('1px',[1,1,1,1]),('1px 2px',[1,2,1,2]),
+                               ('1px 2px 3px',[1,2,3,2]),('1px 2px 3px 4px',[1,2,3,4])]:
+            result,out=self.compile('<div></div>', 'div { position:absolute; inset:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            for side,number in zip(['top','right','bottom','left'],expected):
+                self.assertIn('set_'+side+'({'+str(number)+'.0f',out.read_text())
+        result,_=self.compile('<div></div>', 'div { inset:auto -2px 10% 0; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        result,_=self.compile('<div></div>', 'div { inset:1px 2px 3px 4px 5px; }')
+        self.assertNotEqual(result.returncode,0)
+
+    def test_grid_fraction_numeric_forms(self):
+        for tracks in ['.5fr +1fr', '5e-1fr 1E+0fr', 'minmax(0px,.5fr) 1fr']:
+            result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:'+tracks+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('0.5f',out.read_text())
+        for tracks in ['-.5fr', 'minmax(0px,-.5fr)', '1efr', '1.fr']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
+            self.assertNotEqual(result.returncode,0,tracks)
+
+    def test_grid_function_and_unit_casing(self):
+        for value in ['REPEAT(+2, MINMAX(0PX, .5FR) AUTO)', 'MIN-CONTENT 1FR', 'NONE']:
+            result,out=self.compile('<div></div>', 'div { grid-template-columns:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            reference,expected=self.compile('<div></div>', 'div { grid-template-columns:'+value.lower()+'; }')
+            self.assertEqual(reference.returncode,0,reference.stderr)
+            rules=lambda text: [line for line in text.splitlines() if line.startswith('d.add_rule')]
+            self.assertEqual(rules(out.read_text()),rules(expected.read_text()))
+        for count in ['+0', '+2.0', '+2e0', '++2']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:repeat('+count+', 1fr); }')
+            self.assertNotEqual(result.returncode,0,count)
+
+    def test_grid_range_validation_accepts_negative_zero(self):
+        for value in ['-0px', '-0fr', 'minmax(-0px, -0fr)', 'minmax(-0, -0%)']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for value in ['-1px', '-1fr', 'minmax(-1px, 1fr)', 'minmax(0, -1%)',
+                      '1e999fr', 'minmax(0, 1e999fr)', 'minmax(1fr, 2fr)']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_grid_function_argument_validation_matches_audit(self):
+        for value in ['repeat(2,)', 'repeat(2, )', 'repeat(, 1fr)',
+                      'repeat(2, 1fr, 2fr)', 'repeat(2, none)',
+                      'minmax(, 1fr)', 'minmax(0,)', 'minmax(0, 1fr, 2fr)',
+                      'repeat(2, minmax(0,))']:
+            css='div { grid-template-columns:'+value+'; }'
+            result,out=self.compile('<div></div>',css)
+            self.assertNotEqual(result.returncode,0,value)
+            self.assertFalse(out.exists())
+            source=out.with_suffix('.css');source.write_text(css)
+            audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+            self.assertNotEqual(audit.returncode,0,value)
+            self.assertIn('grid-template-columns',audit.stderr)
+
+    def test_grid_repeat_is_expanded_at_build_time(self):
+        result,out=self.compile('<div></div>', 'div { display:grid; grid-template-columns:repeat(3,1fr); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        self.assertEqual(generated.count('grid_track::sizing::fractional'),3)
+        self.assertNotIn('repeat(',generated)
+        result,out=self.compile('<div></div>', 'div { grid-template-columns:10px repeat(2, 20px minmax(0, 1fr)); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(out.read_text().count('grid_track::sizing::minmax'),2)
+        for tracks in ['repeat(0,1fr)', 'repeat(-1,1fr)', 'repeat(2,none)', 'repeat(2,repeat(2,1fr))', 'repeat(2.5,1fr)', 'repeat(1025,1fr)']:
+            result,_=self.compile('<div></div>', 'div { grid-template-columns:'+tracks+'; }')
+            self.assertNotEqual(result.returncode,0,tracks)
+    def test_control_state_selectors(self):
+        result,out=self.compile('<button>Go</button>', 'button:active { width:20px; } button:disabled { opacity:0.34; } button:focus-visible { width:30px; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+    def test_text_metrics(self):
+        for value,expected in [('normal','-2.0f'),('1.5','-4.5f'),('30px','30.0f'),('inherit','-1.0f')]:
+            result,out=self.compile('<p>Text</p>', 'p { line-height:'+value+'; letter-spacing:1.05px; color:inherit; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_line_height('+expected+')',out.read_text())
+        for value in ['-1px','-1','bogus']:
+            result,_=self.compile('<p>Text</p>', 'p { line-height:'+value+'; }')
+            self.assertNotEqual(result.returncode,0)
+    def test_css_audit_reports_multiple_gaps_without_output(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        source=pathlib.Path(folder.name)/'audit.css'
+        source.write_text('div { filter:blur(2px); cursor:zoom-in; } p:has(a) { width:20px; }')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,1)
+        self.assertIn('filter',result.stderr)
+        self.assertIn('cursor',result.stderr)
+        self.assertIn('in rule: div',result.stderr)
+        self.assertIn('has',result.stderr)
+        self.assertIn('3 distinct unsupported constructs',result.stdout)
+        self.assertEqual(list(source.parent.iterdir()),[source])
+        source.write_text('@media (max-width:400px) { div { cursor:zoom-in; } } div { cursor:zoom-in; }')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,1)
+        self.assertIn('@media (max-width:400px) > div',result.stderr)
+        self.assertIn('1 distinct unsupported constructs',result.stdout)
+        source.write_text('/* header */\n@media (max-width:400px) {\n  div {\n    cursor:zoom-in;\n    cursor:zoom-in;\n  }\n}\n')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,1)
+        self.assertIn(str(source)+':4:5',result.stderr)
+        self.assertIn(str(source)+':5:5',result.stderr)
+        self.assertIn('1 distinct unsupported constructs',result.stdout)
+        source.write_text('/* header */\n@media speech {\n  div::before { color:black; }\n}\n@import "other.css";\n')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,1)
+        for location in [':2:1',':3:3',':5:1']:
+            self.assertIn(str(source)+location,result.stderr)
+        self.assertIn('3 distinct unsupported constructs',result.stdout)
+        source.write_text('div { display:grid; grid-template-columns:repeat(3,1fr); }')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+    def test_media_numeric_grammar_audit_and_compile_agree(self):
+        for condition,generated in [('(min-width:.5px)', ',0.5f,1e+09f,0,0.0f,1e+09f}'),
+                                    ('(MAX-WIDTH: +2E2PX)', ',0.0f,200.0f,0,0.0f,1e+09f}'),
+                                    ('( min-height : 0 )', ',0.0f,1e+09f,0,0.0f,1e+09f}'),
+                                    ('(max-height:-1px)', ',0.0f,1e+09f,0,0.0f,-1.0f}')]:
+            css='@media '+condition+' { div { width:1px; } }'
+            result,out=self.compile('<div></div>',css)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn(generated,out.read_text())
+            source=out.with_suffix('.css');source.write_text(css)
+            audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+            self.assertEqual(audit.returncode,0,audit.stderr)
+        for value in ['1.', '1e', '2', '1 px', '1e999px', 'auto', '10%']:
+            css='@media (min-width:'+value+') { div { width:1px; } }'
+            result,out=self.compile('<div></div>',css)
+            self.assertNotEqual(result.returncode,0,value)
+            source=out.with_suffix('.css');source.write_text(css)
+            audit=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+            self.assertNotEqual(audit.returncode,0,value)
+
+    def test_embedded_css_ignores_earlier_comment_text(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html'
+        source.write_text('<html><head>\n<!-- div { cursor:zoom-in; } -->\n<style>div { cursor:zoom-in; }</style>\n</head><body></body></html>')
+        result=subprocess.run([UIC,source,root/'view.hpp','--preview'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn(str(source)+':3:14: warning:',result.stderr)
+        self.assertNotIn(str(source)+':2:',result.stderr)
+
+    def test_embedded_css_normalized_line_endings(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html'
+        for newline in ['\r\n', '\r']:
+            source.write_bytes(newline.join(['<html><head>', '<style>', 'div {', '  cursor:zoom-in;', '}', '</style></head><body></body></html>']).encode())
+            result=subprocess.run([UIC,source,root/'view.hpp','--preview'],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn(str(source)+':4:3: warning:',result.stderr)
+
+    def test_embedded_css_repeated_declaration_locations(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html'
+        source.write_text('<html><head>\n<style>div { cursor:zoom-in; }</style>\n<style>div { cursor:zoom-in; }</style>\n<style>\ndiv {\n  cursor:zoom-in;\n}\n</style></head><body></body></html>')
+        result=subprocess.run([UIC,source,root/'view.hpp','--preview'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        for line,column in [(2,14),(3,14),(6,3)]:
+            self.assertIn(str(source)+':'+str(line)+':'+str(column)+': warning:',result.stderr)
+
+    def test_preview_linked_css_reports_each_exact_location(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name)
+        css=root/'linked.css'
+        css.write_text('/* audit */\n@media speech { div { width:1px; } }\ndiv {\n  filter:blur(2px);\n  filter:blur(3px);\n}\n')
+        source=root/'view.html'
+        source.write_text('<html><head><link rel="stylesheet" href="linked.css"></head><body><div></div></body></html>')
+        result=subprocess.run([UIC,source,root/'view.cppm','--module','audit.view','--preview'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        for line,column in [(2,1),(4,3),(5,3)]:
+            self.assertIn(str(css)+':'+str(line)+':'+str(column)+': warning: preview:',result.stderr)
+        self.assertEqual(result.stderr.count(': warning: preview:'),3)
+
+    def test_repeated_elements_use_parser_lines(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        source.write_text('<html><body>\n<div>first</div>\n<div>second</div>\n<section>\n<div>third</div>\n</section>\n</body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=output.read_text()
+        for line in [2,3,4,5]:
+            self.assertIn('#line '+str(line)+' "'+str(source)+'"',generated)
+
+    def test_native_text_controls(self):
+        result,output=self.compile('<input id="name" value="Ada" placeholder="Name"><textarea id="notes" readonly>Notes</textarea>')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=output.read_text()
+        self.assertIn('"input"',generated)
+        self.assertIn('"textarea"',generated)
+        self.assertIn('"value","Ada"',generated)
+
+    def test_element_rejections_use_current_parser_line(self):
+        for element,message in [('<video>', 'unsupported Native Web element'),
+                                ('<script></script>', 'excludes scripts'),
+                                ('<template></template>', 'requires a nonempty id'),
+                                ('<link>', 'only local stylesheet links')]:
+            folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+            root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+            source.write_text('<html><body>\n<div>first</div>\n<div>second</div>\n'+element+'\n</body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn(str(source)+':4:1: error:',result.stderr)
+            self.assertIn(message,result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_inline_errors_anchor_to_owning_element(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        source.write_text('<html><body>\n<div style="width:1px">first</div>\n<div style="width:bogus">second</div>\n</body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn(str(source)+':3:1: error:',result.stderr)
+        self.assertFalse(output.exists())
+        preview=subprocess.run([UIC,source,output,'--preview'],capture_output=True,text=True)
+        self.assertEqual(preview.returncode,0,preview.stderr)
+        self.assertIn(str(source)+':3:1: warning: preview: width: bogus:',preview.stderr)
+
+    def test_dependency_write_failure_is_not_success(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        source.write_text('<html><body><div></div></body></html>')
+        dependency=root/'view.hpp.d';dependency.mkdir()
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('cannot write dependency file: '+str(dependency),result.stderr)
+        dependency.rmdir()
+        retry=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertEqual(retry.returncode,0,retry.stderr)
+        self.assertIn(str(source),dependency.read_text())
+
+    def test_root_inline_style_and_script_attribute(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        source.write_text('<html style="width:123px"><body></body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.set_width({123.0f',output.read_text())
+        self.assertIn(',0,1e9f,d.root()}',output.read_text())
+        source.write_text('<html onclick="run()"><body></body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('JavaScript attributes',result.stderr)
+        preview=subprocess.run([UIC,source,output,'--preview'],capture_output=True,text=True)
+        self.assertEqual(preview.returncode,0,preview.stderr)
+        self.assertNotIn('onclick',output.read_text())
+
+    def test_root_id_participates_in_duplicate_validation(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        for body in ['<body id="root"></body>', '<body><div id="root"></div></body>']:
+            source.write_text('<html id="root">'+body+'</html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('duplicate id: root',result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_html_stylesheet_media_is_preserved(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        (root/'view.css').write_text('div { width:123px; }')
+        for element in ['<style media="(min-width:400px)">div { width:123px; }</style>',
+                        '<link rel="stylesheet" href="view.css" media="(min-width:400px)">']:
+            source.write_text('<html><head>'+element+'</head><body><div></div></body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn(',400.0f,1e+09f,0,0.0f,1e+09f}',output.read_text())
+            source.write_text(source.read_text().replace('(min-width:400px)','speech'))
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            preview=subprocess.run([UIC,source,output,'--preview'],capture_output=True,text=True)
+            self.assertEqual(preview.returncode,0,preview.stderr)
+            self.assertNotIn('123.0f',output.read_text())
+
+    def test_inactive_stylesheets_do_not_apply(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        for element in ['<style type="text/plain">not CSS</style>',
+                        '<link rel="stylesheet" disabled="false" href="missing.css">',
+                        '<link rel="stylesheet" type="text/plain" href="missing.css">']:
+            source.write_text('<html><head>'+element+'</head><body></body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertNotIn('d.add_rule',output.read_text())
+        for mime in ['text/css','TEXT/CSS','']:
+            source.write_text('<html><head><style type="'+mime+'">body { width:123px; }</style></head><body></body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('123.0f',output.read_text())
+
+    def test_stylesheet_rel_token_grammar(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        (root/'view.css').write_text('body { width:123px; }')
+        for rel in ['STYLESHEET', ' stylesheet ', 'StyleSheet stylesheet', '\tstylesheet\n']:
+            source.write_text('<html><head><link rel="'+rel+'" href="view.css"></head><body></body></html>')
+            result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('123.0f',output.read_text())
+        source.write_text('<html><head><link rel="alternate stylesheet" href="view.css"></head><body></body></html>')
+        result=subprocess.run([UIC,source,output],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('unsupported stylesheet link relationship: alternate',result.stderr)
+
+    def test_input_directories_are_rejected(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';output=root/'view.hpp'
+        directory=root/'styles.css';directory.mkdir()
+        source.write_text('<html><head><link rel="stylesheet" href="styles.css"></head><body></body></html>')
+        for command in [[UIC,source,output], [UIC,'--check-css',directory], [UIC,directory,output]]:
+            result=subprocess.run(command,capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn('not a regular file:',result.stderr)
+            self.assertIn(directory.name,result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_table_layout_lowering(self):
+        for value,expected in [('auto','false'),('fixed','true'),('FIXED','true')]:
+            result,out=self.compile('<table><tr><td></td></tr></table>', 'table { table-layout:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_table_layout_fixed('+expected+')',out.read_text())
+        result,_=self.compile('<table></table>', 'table { table-layout:bogus; }')
+        self.assertNotEqual(result.returncode,0)
+
+    def test_table_display_roles_lower_to_native_enums(self):
+        for value in ['table','inline-table','table-row-group','table-header-group',
+                      'table-footer-group','table-row','table-cell','table-column-group',
+                      'table-column','table-caption']:
+            result,out=self.compile('<div></div>', 'div { display:'+value.upper()+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('display_mode::'+value.replace('-','_'),out.read_text())
+
+    def test_normal_gap_lowering(self):
+        for name,value in [('gap','normal'),('gap','NORMAL 12px'),
+                           ('gap','12px normal'),('row-gap','Normal'),('column-gap','NORMAL')]:
+            result,out=self.compile('<div></div>', 'div { '+name+':'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('{0.0f, static_cast<webscene::native_web::length_unit>',out.read_text())
+
+    def test_css_syntax_error_location(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        source=pathlib.Path(folder.name)/'invalid.css'
+        source.write_text('div {\n  broken;\n  also-broken;\n}\n')
+        result=subprocess.run([UIC,'--check-css',source],capture_output=True,text=True)
+        self.assertEqual(result.returncode,1)
+        self.assertIn(str(source)+':2:9: error: invalid CSS syntax',result.stderr)
+        self.assertIn('2 parse errors',result.stderr)
+
+    def test_external_stylesheet_build_locations(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        root=pathlib.Path(folder.name);source=root/'view.html';css=root/'style.css'
+        source.write_text('<link rel="stylesheet" href="style.css"><div></div>')
+        for text,location in [('div {\n  cursor:zoom-in;\n}',':2:3'),('\n  div::before { color:black; }',':2:3'),('div {\n  broken;\n}',':2:9')]:
+            css.write_text(text)
+            result=subprocess.run([UIC,source,root/'view.hpp'],capture_output=True,text=True)
+            self.assertEqual(result.returncode,1)
+            self.assertIn(str(css.resolve())+location+': error:',result.stderr)
+
+    def test_preserves_whitespace_text_nodes(self):
+        result,out=self.compile('<div><span>A</span> <span>B</span></div><div>  </div>')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        self.assertRegex(generated, r'd\.text\(n[0-9]+," "\);')
+        self.assertRegex(generated, r'd\.text\(n[0-9]+,"  "\);')
+
+    def test_hidden_attribute(self):
+        for value in ['', 'hidden', 'false']:
+            result,out=self.compile('<div hidden="'+value+'">Hidden</div>')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('"hidden",',out.read_text())
+        result,_=self.compile('<div hidden="UNTIL-FOUND">Hidden</div>')
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('find/reveal support',result.stderr)
+
+    def test_layout_keywords_are_ascii_case_insensitive(self):
+        for name,value in [('display','inline-flex'),('flex-direction','column'),('align-items','flex-start'),('justify-content','space-between'),('position','absolute'),('box-sizing','border-box')]:
+            lower,out=self.compile('<div></div>', 'div {'+name+':'+value+';}')
+            self.assertEqual(lower.returncode,0,lower.stderr)
+            expected=[line for line in out.read_text().splitlines() if 'd.add_rule' in line]
+            upper,out=self.compile('<div></div>', 'div {'+name.upper()+':'+value.upper()+';}')
+            self.assertEqual(upper.returncode,0,upper.stderr)
+            self.assertEqual(expected,[line for line in out.read_text().splitlines() if 'd.add_rule' in line])
+
+    def test_length_unit_case(self):
+        for unit in ['PX','EM','REM','VW','VH','DVW','DVH']:
+            result,out=self.compile('<div></div>', 'div { width:2'+unit+'; height:var(--Size); --Size:3'+unit+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('"--Size"',out.read_text())
+            self.assertNotIn('parse_length',out.read_text())
+        for value in ['1e999PX','1PPX','2 PX']:
+            result,_=self.compile('<div></div>', 'div { width:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_pixel_property_grammar(self):
+        for name in ['font-size','line-height','letter-spacing','word-spacing','border-left-width']:
+            for value in ['+.5e1PX','-0px','0']:
+                result,_=self.compile('<div></div>', 'div {'+name+':'+value+';}')
+                self.assertEqual(result.returncode,0,name+':'+value+result.stderr)
+            for value in ['1e999px','1em','2 PX']:
+                result,_=self.compile('<div></div>', 'div {'+name+':'+value+';}')
+                self.assertNotEqual(result.returncode,0,name+':'+value)
+        result,out=self.compile('<div></div>', 'div {font-size:+.5e1PX;}')
+        self.assertIn('s.set_font_size(5.0f)',out.read_text())
+
+    def test_length_property_ranges(self):
+        for name in ['width','height','min-width','max-height','padding','gap','flex-basis','border-radius']:
+            for value in ['-1px','-.5%','-2EM']:
+                result,_=self.compile('<div></div>', 'div {'+name+':'+value+';}')
+                self.assertNotEqual(result.returncode,0,name+':'+value)
+            result,_=self.compile('<div></div>', 'div {'+name+':-0px;}')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for name in ['padding','gap','border-radius']:
+            result,_=self.compile('<div></div>', 'div {'+name+':auto;}')
+            self.assertNotEqual(result.returncode,0,name)
+        for name in ['margin','left','right','top','bottom']:
+            result,_=self.compile('<div></div>', 'div {'+name+':-2px;}')
+            self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_literal_auto_case(self):
+        for name in ['width','height','left','margin','inset','flex-basis']:
+            result,out=self.compile('<div></div>', 'div {'+name+':AuTo;}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            if name == 'margin':
+                self.assertIn('set_margin_left_auto(true)',out.read_text())
+        for name in ['padding','gap','border-radius']:
+            result,_=self.compile('<div></div>', 'div {'+name+':AUTO;}')
+            self.assertNotEqual(result.returncode,0,name)
+        result,out=self.compile('<div></div>', 'div {font-family:AUTO;}')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('set_font_family("AUTO")',out.read_text())
+
+    def test_font_weight_keywords(self):
+        for value,expected in [('normal',400),('NORMAL',400),('bold',700),('BoLd',700),('INHERIT',0),('UNSET',0)]:
+            result,out=self.compile('<div>Text</div>', 'div {font-weight:'+value+';}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_font_weight('+str(expected)+')',out.read_text())
+        for value in ['boldish','0','1001']:
+            result,_=self.compile('<div>Text</div>', 'div {font-weight:'+value+';}')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_translation_transform_profile(self):
+        for value in ['none','NONE','translate(10px)','translate(50%, -2px)','translateX(-50%)','translateY(7px)','TRANSLATEX(+.5e1PX)']:
+            result,out=self.compile('<div></div>', 'div {transform:'+value+';}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_translation(',out.read_text())
+        for value in ['translate(1px,2px,3px)','translate(1px 2px)','translate(auto)','translateX(auto)','translateY(2)','translateX(1px) rotate(2deg)','translateX(1px,2px)']:
+            result,_=self.compile('<div></div>', 'div {transform:'+value+';}')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_overflow_and_text_keyword_case(self):
+        for name,value in [('overflow','hidden auto'),('overflow-x','clip'),('overflow-y','scroll'),('text-align','center'),('white-space','pre-wrap'),('text-transform','capitalize')]:
+            result,out=self.compile('<div>Text</div>', 'div {'+name+':'+value+';}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            expected=[line for line in out.read_text().splitlines() if 'd.add_rule' in line]
+            result,out=self.compile('<div>Text</div>', 'div {'+name+':'+value.upper()+';}')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(expected,[line for line in out.read_text().splitlines() if 'd.add_rule' in line])
+
+    def test_custom_property_expressions(self):
+        result,out=self.compile('<div></div>', ':root { --accent:#5ac6d2; --border:1px solid var(--accent, var(--missing, #fff)); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('variable_expression::kind::reference',out.read_text())
+        self.assertNotIn('var(',out.read_text())
+        self.assertIn('nullptr,"--accent"',out.read_text())
+    def test_variable_property_lowering(self):
+        result,out=self.compile('<div></div>', ':root { --width:222px; --accent:#5ac6d2; } div { width:var(--width); color:var(--accent, #fff); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.evaluate(',out.read_text())
+        self.assertNotIn('parse_',out.read_text())
+        self.assertNotIn('var(',out.read_text())
+    def test_grid_variable_lowering(self):
+        result,out=self.compile('<div></div>', ':root { --left-width:222px; --right-width:252px; } div { display:grid; grid-template-columns:var(--left-width) minmax(250px,1fr) var(--right-width); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.evaluate(',out.read_text())
+        self.assertNotIn('parse_',out.read_text())
+    def test_border_color_lowering(self):
+        for value in ['#c69a6655','transparent','currentColor','var(--accent)']:
+            result,out=self.compile('<div></div>', 'div { border-color:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            for side in ['left','top','right','bottom']:
+                self.assertIn('set_border_'+side+'_color',out.read_text())
+            self.assertNotIn('parse_',out.read_text())
+    def test_solid_border_shorthand(self):
+        for value in ['0','none','1px solid var(--line)','3px solid #c69a66']:
+            result,out=self.compile('<div></div>', 'div { border:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_border_left_width',out.read_text())
+        result,_=self.compile('<div></div>', 'div { border:1px dashed red; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+    def test_border_width_and_style_shorthands(self):
+        result,out=self.compile('<div></div>', 'div { border-width:.5px +2e0px 0 -0px; border-style:solid none hidden solid; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        generated=out.read_text()
+        for side,value in [('top','true'),('right','false'),('bottom','false'),('left','true')]:
+            self.assertIn('set_border_'+side+'_solid('+value+')',generated)
+        for value in ['.5px solid #fff','+2e0px solid black','-0px solid white','+0e0 solid black']:
+            result,_=self.compile('<div></div>', 'div { border:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+        for name,value in [('border-width','-1px'),('border-width','2'),('border-width','1%'),('border-width','1px 2px 3px 4px 5px'),('border','-1px solid black')]:
+            result,_=self.compile('<div></div>', 'div { '+name+':'+value+'; }')
+            self.assertNotEqual(result.returncode,0,name+':'+value)
+
+    def test_outer_shadow(self):
+        for value in ['none','0 30px 100px #0007','var(--shadow)','0 4px 10px var(--color)']:
+            result,out=self.compile('<div></div>', 'div { box-shadow:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_box_shadow',out.read_text())
+        result,_=self.compile('<div></div>', 'div { box-shadow:inset 0 0 1px #fff; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+    def test_overflow_and_text_layout(self):
+        result,out=self.compile('<div>Text</div>', 'div { overflow:hidden auto; text-align:center; white-space:nowrap; text-transform:uppercase; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('set_overflow_x(webscene::native_web::overflow_mode::hidden)',out.read_text())
+        self.assertIn('set_overflow_y(webscene::native_web::overflow_mode::automatic)',out.read_text())
+        for declaration in ['overflow:bogus','overflow:hidden auto scroll','text-align:bogus','white-space:bogus']:
+            result,_=self.compile('<div></div>', 'div {'+declaration+';}')
+            self.assertNotEqual(result.returncode,0)
+    def test_structural_selectors(self):
+        for selector in ['first-child','last-child','only-child']:
+            result,out=self.compile('<div></div>', 'div:'+selector+' { width:10px; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+    def test_compound_negation(self):
+        for selector in ['div:not([type=checkbox])','div:not(.hidden, #excluded)','div:not(:not(.visible))']:
+            result,out=self.compile('<div></div>', selector+' { width:10px; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('.parts.front()',out.read_text())
+        result,_=self.compile('<div></div>', 'div:not(section > div) { width:10px; }')
+        self.assertNotEqual(result.returncode,0)
+    def test_flex_shorthand_numeric_grammar_matches_longhands(self):
+        for grow,shrink,basis in [('.5','+2','10px'), ('5e-1','2E+0','10px'),
+                                  ('+0.5','2','1e1px'), ('-0','+0','-0px')]:
+            shorthand,out=self.compile('<div></div>', 'div { flex:'+grow+' '+shrink+' '+basis+'; }')
+            self.assertEqual(shorthand.returncode,0,shorthand.stderr)
+            longhands,expanded=self.compile('<div></div>', 'div { flex-grow:'+grow+'; flex-shrink:'+shrink+'; flex-basis:'+basis+'; }')
+            self.assertEqual(longhands.returncode,0,longhands.stderr)
+            import re
+            setters=lambda text: re.findall(r's\.set_flex_(?:grow|shrink|basis)\([^;]+;',text)
+            self.assertEqual(setters(out.read_text()),setters(expanded.read_text()))
+        for value in ['.5', '+.5', '5e-1']:
+            result,out=self.compile('<div></div>', 'div { flex:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_flex_grow(0.5f)',out.read_text())
+        for value in ['-1', '1 -2', '1 1 -2px', '1e', '1.', '1 2 3px 4', '1e999']:
+            result,_=self.compile('<div></div>', 'div { flex:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_flex_shorthand(self):
+        for value in ['1','2','auto','none','initial','1 0 20px','1 30%','2 3']:
+            result,out=self.compile('<div></div>', 'div { flex:'+value+'; flex-wrap:wrap; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_flex_basis',out.read_text())
+        for value in ['-1','1 -2 0','1 1 -2px','1 2 3 4']:
+            result,_=self.compile('<div></div>', 'div { flex:'+value+'; }')
+            self.assertNotEqual(result.returncode,0)
+    def test_stroke_width_numeric_grammar(self):
+        for value in ['.5', '+5e-1', '1E+1PX', '-0', '-0px', '25%']:
+            result,out=self.compile('<svg></svg>', 'svg { stroke-width:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_svg_stroke_width("'+value.lower()+'")',out.read_text())
+        for value in ['-1', '-.5px', '-1%', '1e999', '1.', '1 px', '1em', 'NaN', '1%%']:
+            result,_=self.compile('<svg></svg>', 'svg { stroke-width:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+
+    def test_font_numeric_forms_and_family_case(self):
+        for value in ['.5px/1.2 MixedCaseFont', '+5e-1PX/+1.2 MixedCaseFont',
+                      '.5px/NORMAL MixedCaseFont', '0/-0 MixedCaseFont']:
+            result,out=self.compile('<div></div>', 'div { font:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_font_family("MixedCaseFont")',out.read_text())
+        for value in ['-1px MixedCaseFont', '1px/-1 MixedCaseFont',
+                      '1e999px MixedCaseFont', '1px/1e999 MixedCaseFont',
+                      '1 MixedCaseFont', '1.px MixedCaseFont']:
+            result,_=self.compile('<div></div>', 'div { font:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+        for value in ['0','-0','+0','0e1']:
+            result,out=self.compile('<div></div>', 'div { line-height:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_line_height(-3.0f)',out.read_text())
+
+    def test_font_shorthand(self):
+        for value in ['inherit','10px Consolas,"SFMono-Regular",monospace','10px/19px Consolas,monospace','10px/1.5 monospace']:
+            result,out=self.compile('<div></div>', 'div { font:'+value+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('set_font_family',out.read_text())
+            self.assertIn('set_line_height',out.read_text())
+        for value in ['10px','italic 10px monospace','-10px monospace']:
+            result,_=self.compile('<div></div>', 'div { font:'+value+'; }')
+            self.assertNotEqual(result.returncode,0)
+    def test_preview_is_explicit_and_reports_omissions(self):
+        result,out=self.compile('<div>Hello</div>', 'div { color-scheme:dark; width:20px; }')
+        self.assertNotEqual(result.returncode,0)
+        result=subprocess.run([UIC,out.with_name('view.html'),out,'--preview'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('warning: preview:',result.stderr)
+        self.assertIn('color-scheme',result.stderr)
+        self.assertIn('set_width',out.read_text())
+    def test_dynamic_viewport_units(self):
+        result,out=self.compile('<div></div>', 'div { height:100dvh; width:50dvw; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertNotIn('100dvh',out.read_text())
+    def test_generated_namespace(self):
+        result,out=self.compile('<div></div>')
+        module=out.with_suffix('.cppm')
+        result=subprocess.run([UIC,out.with_name('view.html'),module,'--module','app.tabs','--namespace','app_tabs'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('namespace app_tabs',module.read_text())
+        self.assertNotIn('namespace compiled_ui',module.read_text())
+    def test_stacking_and_pointer_properties(self):
+        result,out=self.compile('<div></div>', 'div { z-index:-3; pointer-events:none; visibility:hidden; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('set_z_index(-3)',out.read_text())
+        for value in ['2.5','2147483648','bogus']:
+            result,_=self.compile('<div></div>', 'div { z-index:'+value+'; }')
+            self.assertNotEqual(result.returncode,0)
+    def test_transparent_color_mix(self):
+        result,out=self.compile('<div></div>', 'div { border-bottom:1px solid color-mix(in srgb,var(--accent) 25%,transparent); }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('color_with_opacity',out.read_text())
+        result,_=self.compile('<div></div>', 'div { color:color-mix(in srgb,#fff 101%,transparent); }')
+        self.assertNotEqual(result.returncode,0)
+    def test_font_family_compiles(self):
+        result,out=self.compile('<p>Hello</p>', 'p { font-family: Arial, sans-serif; }')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('s.set_font_family("Arial, sans-serif")',out.read_text())
+    def test_short_hex_colors(self):
+        for color,expected in [('#fff',0xffffffff),('#0005',0x55),('#aBc',0xaabbccff),('#1234',0x11223344)]:
+            result,out=self.compile('<p>Hello</p>', 'p { color: '+color+'; }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_foreground_rgba('+str(expected)+'u)',out.read_text())
+        for color in ['#12','#12345','#1234567','#ggg']:
+            result,_=self.compile('<p>Hello</p>', 'p { color: '+color+'; }')
+            self.assertNotEqual(result.returncode,0)
+    def test_typed_linear_gradients(self):
+        for angle in ['125deg','145deg','-90deg']:
+            result,out=self.compile('<div></div>','div { --a:red; --b:blue; background:linear-gradient('+angle+',var(--a),var(--b)); }')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('s.set_linear_gradient(',out.read_text())
+            self.assertNotIn('linear-gradient(',out.read_text())
+        for value in ['linear-gradient(red)','linear-gradient(hello,red,blue)','linear-gradient(90deg,red 20%,blue)']:
+            result,_=self.compile('<div></div>','div { background:'+value+'; }')
+            self.assertNotEqual(result.returncode,0,value)
+    def test_module_output(self):
+        result,out=self.compile('<button id="go">Hello</button>')
+        self.assertEqual(result.returncode,0,result.stderr)
+        module=out.with_suffix('.cppm')
+        command=[UIC,out.with_name('view.html'),module,'--module','app.views.main']
+        result=subprocess.run(command,capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        text=module.read_text()
+        self.assertIn('export module app.views.main;',text)
+        self.assertIn('export namespace compiled_ui',text)
+        self.assertNotIn('#pragma once',text)
+        subprocess.run(command,check=True)
+        self.assertEqual(text,module.read_text())
+        for name in ['', '.app', 'app.', 'app..view', '3app', 'app;bad']:
+            result=subprocess.run(command[:-1]+[name],capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0,name)
+            self.assertIn('Invalid module name',result.stderr)
+    def test_compiled_values_and_determinism(self):
+        result,out=self.compile('<button id="go">Hello &amp; goodbye</button>','#go { width: 20px; color: #123456; }')
+        self.assertEqual(result.returncode,0,result.stderr);text=out.read_text();self.assertIn('Hello & goodbye',text);self.assertIn('20.0f',text)
+        self.assertNotIn('webscene_native::',text);self.assertNotIn('s.width',text);self.assertNotIn('parse_',text);self.assertNotIn('20px',text)
+        source=out.with_name('view.html');subprocess.run([UIC,source,out],check=True);self.assertEqual(text,out.read_text())
+    def test_unsupported_property_has_source_diagnostic(self):
+        result,out=self.compile('<div></div>','div { filter: blur(2px); }');self.assertNotEqual(result.returncode,0);self.assertIn(':2:26: error:',result.stderr);self.assertIn('filter',result.stderr);self.assertFalse(out.exists())
+    def test_scripts_rejected(self):
+        result,_=self.compile('<script>alert(1)</script>');self.assertNotEqual(result.returncode,0)
+    def test_js_attributes_rejected(self):
+        result,_=self.compile('<button onclick="x()">Go</button>');self.assertNotEqual(result.returncode,0)
+    def test_duplicate_ids_rejected(self):
+        result,_=self.compile('<div id="x"></div><div id="x"></div>');self.assertNotEqual(result.returncode,0);self.assertIn('duplicate id',result.stderr)
+    def test_unknown_selector_rejected(self):
+        result,_=self.compile('<div></div>','div:has(button) { width: 1px; }');self.assertNotEqual(result.returncode,0)
+    def test_missing_resource_rejected(self):
+        result,_=self.compile('<link rel="stylesheet" href="missing.css">');self.assertNotEqual(result.returncode,0)
+    def test_nonzero_unitless_length_rejected(self):
+        result,_=self.compile('<div></div>','div { width: 10; }');self.assertNotEqual(result.returncode,0)
+    def test_template_scripts_rejected(self):
+        result,_=self.compile('<template id="item"><script>alert(1)</script></template>')
+        self.assertNotEqual(result.returncode,0)
+    def test_template_global_ids_preserved(self):
+        result,out=self.compile('<template id="item"><div id="original"></div></template>')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('"id","original"',out.read_text())
+    def test_template_duplicate_references_rejected(self):
+        result,_=self.compile('<template id="item"><div data-ref="x"></div><div data-ref="x"></div></template>')
+        self.assertNotEqual(result.returncode,0)
+    def test_nested_templates_rejected(self):
+        result,_=self.compile('<template id="item"><div><template id="nested"></template></div></template>')
+        self.assertNotEqual(result.returncode,0)
+if __name__=='__main__':unittest.main()

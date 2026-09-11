@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Foco Native Web</title>
+<link rel="stylesheet" href="Main.css">
+</head><body>
+<main id="app">
+  <p class="eyebrow">FOCO / NATIVE WEB</p>
+  <h1>HTML. CSS. Native C++.</h1>
+  <p id="intro">Compiled views. A live DOM. No JavaScript runtime.</p>
+  <section id="workspace">
+    <div class="card" id="counterCard">
+      <h2>Your application, compiled.</h2>
+      <p id="count">Count: 0</p>
+      <div class="actions">
+        <button id="increment">Increment</button>
+        <button id="reset" class="secondary">Reset</button>
+      </div>
+      <p>Use Tab and Enter, or click. Resize the window.</p>
+    </div>
+    <div class="card">
+      <h2>Native Canvas</h2>
+      <canvas id="chart" width="300" height="120"></canvas>
+      <button id="add">Add an item</button>
+      <div id="items"></div>
+    </div>
+  </section>
+</main>
+<template id="item"><button data-ref="button">Item</button></template>
+</body></html>

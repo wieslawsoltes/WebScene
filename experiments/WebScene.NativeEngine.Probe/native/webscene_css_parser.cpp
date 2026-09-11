@@ -44,18 +44,18 @@ uint8_t begin_rule(
     size_t parent_index,
     webscene_css_byte_slice name,
     webscene_css_byte_slice prelude,
-    size_t* rule_index)
+    size_t* rule_index, uint32_t line, uint32_t column)
 {
     if (opaque == nullptr || rule_index == nullptr) return 0U;
     try {
         auto& context = *static_cast<stream_context*>(opaque);
-        const auto accepted = context.sink->begin_rule(
+        const auto accepted = context.sink->located_begin_rule(
             kind,
             has_block != 0U,
             parent_index,
             borrow_slice(name),
             borrow_slice(prelude),
-            *rule_index);
+            *rule_index, line, column);
         if (accepted) ++context.rule_count;
         return accepted ? 1U : 0U;
     } catch (...) {
@@ -67,15 +67,15 @@ uint8_t declaration(
     void* opaque,
     webscene_css_byte_slice name,
     webscene_css_byte_slice value,
-    uint8_t important)
+    uint8_t important, uint32_t line, uint32_t column)
 {
     if (opaque == nullptr) return 0U;
     try {
         auto& context = *static_cast<stream_context*>(opaque);
-        const auto accepted = context.sink->declaration(
+        const auto accepted = context.sink->located_declaration(
             borrow_slice(name),
             borrow_slice(value),
-            important != 0U);
+            important != 0U, line, column);
         if (accepted) ++context.declaration_count;
         return accepted ? 1U : 0U;
     } catch (...) {
@@ -101,7 +101,7 @@ css_syntax_parse_result stream_parse(
     Parse parse_native)
 {
     css_syntax_parse_result output;
-    if (webscene_css_stream_abi_version() != 1U) {
+    if (webscene_css_stream_abi_version() != 2U) {
         output.error = "cssparser streaming ABI version mismatch";
         return output;
     }
@@ -115,6 +115,8 @@ css_syntax_parse_result stream_parse(
     output.metrics.duration_ns = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(finished - started).count());
     output.metrics.parse_error_count = parsed.parse_error_count;
+    output.metrics.first_error_line = parsed.first_error_line;
+    output.metrics.first_error_column = parsed.first_error_column;
     output.metrics.parser_allocation_count = parsed.rust_allocation_count;
     output.metrics.parser_peak_bytes = parsed.rust_peak_bytes;
     output.metrics.parser_retained_bytes = parsed.rust_retained_bytes;
@@ -167,6 +169,15 @@ public:
         return true;
     }
 
+    bool located_begin_rule(uint32_t kind, bool has_block, size_t parent_index,
+        std::string_view name, std::string_view prelude, size_t& rule_index,
+        uint32_t line, uint32_t column) override {
+        begin_rule(kind, has_block, parent_index, name, prelude, rule_index);
+        output_.rules.back().source_line = line;
+        output_.rules.back().source_column = column;
+        return true;
+    }
+
     bool declaration(
         std::string_view name,
         std::string_view value,
@@ -176,6 +187,14 @@ public:
         if (!copied_name.starts_with("--")) ascii_lower(copied_name);
         output_.declarations.push_back({
             std::move(copied_name), std::string(value), important});
+        return true;
+    }
+
+    bool located_declaration(std::string_view name, std::string_view value,
+        bool important, uint32_t line, uint32_t column) override {
+        declaration(name, value, important);
+        output_.declarations.back().source_line = line;
+        output_.declarations.back().source_column = column;
         return true;
     }
 

@@ -784,6 +784,7 @@ void serialize_svg_subtree(const dom_node& node, std::string& output, bool root)
         if (source.style.letter_spacing_specified) add("letter-spacing", std::to_string(source.style.letter_spacing));
         if (source.style.word_spacing_specified) add("word-spacing", std::to_string(source.style.word_spacing));
         add("text-anchor", source.style.textual().svg_text_anchor);
+        add("stroke-width", source.style.textual().svg_stroke_width);
     };
     collect_typography(node, false);
     if (root) {

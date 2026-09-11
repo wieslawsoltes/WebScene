@@ -1,0 +1,45 @@
+{
+  "test": "OS CGEvent corner drag, 300x180 points inward and back, 360 steps",
+  "start": 63910.721123,
+  "end": 63917.818877,
+  "duration_seconds": 7.097753999994893,
+  "layer_size_events": 358,
+  "submissions": 426,
+  "valid_presented_timestamps": 1,
+  "retained_submissions": 51,
+  "conclusion": "Native live resize exercised; physical presentation rate and visual stretching remain unproven.",
+  "context_trace_followup": [
+    {
+      "transaction": false,
+      "retained": false,
+      "callbacks": 3,
+      "valid_presentation_timestamps": 1,
+      "distinct_dimensions": 1
+    },
+    {
+      "transaction": true,
+      "retained": true,
+      "callbacks": 58,
+      "valid_presentation_timestamps": 0,
+      "distinct_dimensions": 57
+    },
+    {
+      "transaction": true,
+      "retained": false,
+      "callbacks": 381,
+      "valid_presentation_timestamps": 1,
+      "distinct_dimensions": 181
+    }
+  ],
+  "midpoint_capture": {
+    "path": "/tmp/kestrel-live-resize-midpoint.png",
+    "method": "macOS screencapture of target CGWindow during held corner drag after 180 of 360 steps",
+    "pause_seconds": 0.2,
+    "observations": [
+      "Original narrow-window layout hides Properties panel",
+      "Ribbon becomes horizontally scrollable",
+      "Drawing is clipped to resized viewport; no obvious stretching in sampled frame"
+    ],
+    "limitations": "Paused sample cannot prove continuous no-stretch motion or displayed 60fps."
+  }
+}

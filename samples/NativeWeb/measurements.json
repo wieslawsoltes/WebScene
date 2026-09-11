@@ -1,0 +1,119 @@
+{
+  "sample": "Main.html + Main.css; native counter, dynamic nodes and Canvas rectangles",
+  "runs": [
+    {
+      "construct_and_first_layout_us": 161.0,
+      "mutation_layout_scene_mean_us": 46.81
+    },
+    {
+      "construct_and_first_layout_us": 145.0,
+      "mutation_layout_scene_mean_us": 46.74
+    },
+    {
+      "construct_and_first_layout_us": 122.0,
+      "mutation_layout_scene_mean_us": 45.12
+    },
+    {
+      "construct_and_first_layout_us": 121.0,
+      "mutation_layout_scene_mean_us": 47.28
+    },
+    {
+      "construct_and_first_layout_us": 123.0,
+      "mutation_layout_scene_mean_us": 45.55
+    },
+    {
+      "construct_and_first_layout_us": 153.0,
+      "mutation_layout_scene_mean_us": 48.87
+    },
+    {
+      "construct_and_first_layout_us": 132.0,
+      "mutation_layout_scene_mean_us": 44.99
+    },
+    {
+      "construct_and_first_layout_us": 135.0,
+      "mutation_layout_scene_mean_us": 48.53
+    },
+    {
+      "construct_and_first_layout_us": 128.0,
+      "mutation_layout_scene_mean_us": 44.89
+    },
+    {
+      "construct_and_first_layout_us": 130.0,
+      "mutation_layout_scene_mean_us": 47.24
+    },
+    {
+      "construct_and_first_layout_us": 157.0,
+      "mutation_layout_scene_mean_us": 45.49
+    },
+    {
+      "construct_and_first_layout_us": 135.0,
+      "mutation_layout_scene_mean_us": 47.87
+    },
+    {
+      "construct_and_first_layout_us": 160.0,
+      "mutation_layout_scene_mean_us": 48.71
+    },
+    {
+      "construct_and_first_layout_us": 146.0,
+      "mutation_layout_scene_mean_us": 49.25
+    },
+    {
+      "construct_and_first_layout_us": 146.0,
+      "mutation_layout_scene_mean_us": 45.44
+    },
+    {
+      "construct_and_first_layout_us": 131.0,
+      "mutation_layout_scene_mean_us": 46.23
+    },
+    {
+      "construct_and_first_layout_us": 139.0,
+      "mutation_layout_scene_mean_us": 48.0
+    },
+    {
+      "construct_and_first_layout_us": 131.0,
+      "mutation_layout_scene_mean_us": 45.34
+    },
+    {
+      "construct_and_first_layout_us": 125.0,
+      "mutation_layout_scene_mean_us": 48.49
+    },
+    {
+      "construct_and_first_layout_us": 126.0,
+      "mutation_layout_scene_mean_us": 46.23
+    }
+  ],
+  "median_construct_and_first_layout_us": 133.5,
+  "median_mutation_layout_scene_mean_us": 46.775000000000006,
+  "ui_compiler": {
+    "wall_seconds": 0.00572104100137949,
+    "peak_rss_bytes": 3047424
+  },
+  "generated_ui_and_app_cpp_compile": {
+    "wall_seconds": 0.7042770839980221,
+    "peak_rss_bytes": 196411392
+  },
+  "native_headless_process": {
+    "wall_seconds": 0.009145459000137635,
+    "peak_rss_bytes": 2392064
+  },
+  "notes": [
+    "Construction timing begins inside main and ends at the first layout/scene; it excludes process launch and GPU presentation.",
+    "Each interaction mean covers 100 native mutations plus layout/scene generation.",
+    "Filesystem caches are not flushed. The C++ compile measures one application translation unit with Apple Clang, excluding the prebuilt engine and Foco SDK.",
+    "RSS is the macOS time(1) process resident high-water mark; GPU memory is not included.",
+    "Packaged app wall time includes the deliberate 1.5-second delay before Cocoa input verification; it is not a startup-latency metric."
+  ],
+  "packaged_foco_app": {
+    "wall_seconds": 1.7252232499995444,
+    "peak_rss_bytes": 104628224
+  },
+  "app_bytes": 12460638,
+  "environment": {
+    "date": "2026-09-10",
+    "os": "macOS 26.6.2",
+    "cpu": "Apple M4",
+    "webscene_base": "937d467244ee2aae5ad135e418cceeb96f78696e",
+    "foco_base": "d8c4d169d2b65111c1a99645497191907beb4f99",
+    "changes": "Working-tree Native Web implementation and accompanying Foco adapter fixes."
+  }
+}

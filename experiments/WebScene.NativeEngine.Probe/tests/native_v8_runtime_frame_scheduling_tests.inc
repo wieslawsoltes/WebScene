@@ -1820,3 +1820,44 @@ void test_resize_and_frame_form_one_rendering_opportunity()
         "paired resize/frame API accepted a non-frame record");
     webscene_engine_destroy(engine);
 }
+
+// Async Wasm completion is V8 foreground work, not a DOM timer or host RAF.
+void test_idle_v8_foreground_completion()
+{
+    auto* engine = webscene_engine_create(0);
+    require(engine != nullptr, "idle V8 engine creation failed");
+    execute_and_wait(engine, R"JS(
+        globalThis.compileWhileIdle = () => {
+            const uleb = n => { const r=[]; do { let b=n&127; n>>>=7; r.push(b|(n?128:0)); } while(n); return r; };
+            const section = (id, bytes) => [id, ...uleb(bytes.length), ...bytes];
+            const count=100000;
+            const functions=[...uleb(count), ...new Array(count).fill(0)];
+            const bodies=[...uleb(count)];
+            for(let i=0;i<count;i++) bodies.push(2,0,11);
+            const bytes=new Uint8Array([0,97,115,109,1,0,0,0,
+                ...section(1,[1,96,0,0]), ...section(3,functions), ...section(10,bodies)]);
+            return WebAssembly.compile(bytes).then(() => 73);
+        };
+    )JS", "idle-v8-foreground.js");
+    const std::array<webscene_interop_value_v3, 1> arguments{{
+        {WEBSCENE_INTEROP_VALUE_ARRAY_V3, 0U, 0U, 0U, 0U}}};
+    const std::string_view name{"compileWhileIdle"};
+    webscene_interop_invoke_request_v3 request{};
+    request.struct_size = sizeof(request);
+    request.version = 3;
+    request.operation = WEBSCENE_INTEROP_INVOKE_GLOBAL_V3;
+    request.flags = WEBSCENE_INTEROP_CALL_AWAIT_PROMISE_V3;
+    request.global_name = name.data(); request.global_name_length = name.size();
+    request.values = arguments.data(); request.value_count = arguments.size();
+    request.result_mode = WEBSCENE_INTEROP_RESULT_VALUE_V3;
+    // invoke_generated waits on the native completion callback: no evaluate(),
+    // timers, input, RAF, or forced collection can accidentally drive progress.
+    const auto* result = invoke_generated(engine, request);
+    require(result->status == WEBSCENE_INTEROP_RESULT_SUCCEEDED_V3
+        && result->value_count == 1
+        && result->values[0].kind == WEBSCENE_INTEROP_VALUE_NUMBER_V3
+        && std::bit_cast<double>(result->values[0].payload) == 73.,
+        "V8 foreground completion failed while application was idle");
+    release_interop_result(result);
+    webscene_engine_destroy(engine);
+}

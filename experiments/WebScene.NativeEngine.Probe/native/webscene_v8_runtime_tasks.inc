@@ -13,7 +13,7 @@
         return false;
     }
 
-    void pump_v8_platform_tasks()
+    uint32_t pump_v8_platform_tasks()
     {
         constexpr uint32_t maximum_tasks = 8U;
         constexpr auto maximum_time = std::chrono::milliseconds(1);
@@ -27,6 +27,7 @@
                 v8::platform::MessageLoopBehavior::kDoNotWait)) {
             ++count;
         }
+        return count;
     }
 
     void perform_microtask_checkpoint()
@@ -1883,21 +1884,7 @@
         return true;
     }
 
-    static bool is_text_control(const dom_node* node)
-    {
-        if (node == nullptr || (node->tag != "input" && node->tag != "textarea")
-            || node->attributes.contains("disabled")) {
-            return false;
-        }
-        if (node->tag == "textarea") return true;
-        const auto type = node->attributes.find("type");
-        if (type == node->attributes.end()) return true;
-        return type->second != "checkbox" && type->second != "radio"
-            && type->second != "button" && type->second != "submit"
-            && type->second != "reset" && type->second != "file"
-            && type->second != "image" && type->second != "range"
-            && type->second != "color";
-    }
+    static bool is_text_control(const dom_node* node) { return forms::is_text_control(node); }
 
     dom_node* form_owner(dom_node& control)
     {
@@ -2273,39 +2260,17 @@
 
     void ensure_form_value(dom_node& node)
     {
-        if (node.mutable_form_control().value_initialized) return;
-        if (node.tag == "textarea") {
-            reset_textarea_value(node);
-        } else {
-            const auto value = node.attributes.find("value");
-            node.mutable_form_control().value = value == node.attributes.end() ? std::string{} : value->second;
-            node.mutable_form_control().value_initialized = true;
-            node.mutable_form_control().selection_start = node.mutable_form_control().value.size();
-            node.mutable_form_control().selection_end = node.mutable_form_control().value.size();
-            node.mutable_form_control().selection_direction = text_selection_direction::none;
-        }
+        webscene_native::forms::ensure_text_value(node);
     }
 
     static size_t previous_utf8_boundary(const std::string& value, size_t index)
     {
-        if (index == 0) return 0;
-        --index;
-        while (index > 0
-            && (static_cast<unsigned char>(value[index]) & 0xC0U) == 0x80U) {
-            --index;
-        }
-        return index;
+        return webscene_native::forms::previous_utf8_boundary(value,index);
     }
 
     static size_t next_utf8_boundary(const std::string& value, size_t index)
     {
-        if (index >= value.size()) return value.size();
-        ++index;
-        while (index < value.size()
-            && (static_cast<unsigned char>(value[index]) & 0xC0U) == 0x80U) {
-            ++index;
-        }
-        return index;
+        return webscene_native::forms::next_utf8_boundary(value,index);
     }
 
     bool dispatch_keyboard_or_text(const webscene_input_event& input)

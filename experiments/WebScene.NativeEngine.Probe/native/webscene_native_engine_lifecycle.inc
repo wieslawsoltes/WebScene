@@ -568,11 +568,54 @@
 #endif
     }
 
+    bool register_compiled_package(std::string name, webscene_native::compiled_document package) {
+#if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
+        set_last_error("Compiled runtime packages require the JavaScript runtime");
+        return false;
+#else
+        if (name.empty() || name.size() > 256 || !package.construct) {
+            set_last_error("Invalid compiled document package"); return false;
+        }
+        auto owned = std::make_shared<const webscene_native::compiled_document>(std::move(package));
+        std::lock_guard lock(script_mutex_);
+        compiled_packages_.insert_or_assign(std::move(name), std::move(owned));
+        return true;
+#endif
+    }
+
+    bool load_compiled_document(const char* name, size_t name_length,
+        const char* base_url, size_t base_url_length, const webscene_input_event* viewport)
+    {
+        if (!name || !name_length || name_length > 256 || !base_url || !base_url_length
+            || base_url_length > 65536) {
+            set_last_error("Invalid compiled document name or base URL"); return false;
+        }
+        if (viewport && (viewport->kind != WEBSCENE_INPUT_RESIZE || !std::isfinite(viewport->x)
+            || !std::isfinite(viewport->y) || !std::isfinite(viewport->delta_x)
+            || viewport->x <= 0 || viewport->y <= 0 || viewport->delta_x <= 0)) {
+            set_last_error("Invalid compiled document viewport"); return false;
+        }
+        std::shared_ptr<const webscene_native::compiled_document> package;
+        {
+            std::lock_guard lock(script_mutex_);
+            auto found = compiled_packages_.find(std::string(name, name_length));
+            if (found != compiled_packages_.end()) package = found->second;
+        }
+#if !defined(WEBSCENE_COMPILED_APPLICATION)
+        if (!package) { set_last_error("Unknown compiled document package"); return false; }
+#endif
+        return enqueue_url(base_url, base_url_length, {},
+            viewport ? std::optional<webscene_input_event>(*viewport) : std::nullopt,
+            std::string(name, name_length), std::move(package));
+    }
+
     bool enqueue_url(
         const char* value,
         size_t length,
         std::vector<webscene_native::document_start_script> scripts,
-        std::optional<webscene_input_event> viewport = {})
+        std::optional<webscene_input_event> viewport = {},
+        std::string compiled_name = {},
+        std::shared_ptr<const webscene_native::compiled_document> compiled_package = {})
     {
 #if !defined(WEBSCENE_NATIVE_ENGINE_WITH_V8)
         static_cast<void>(value);
@@ -598,7 +641,7 @@
         }
         script_work_.emplace_back(url_request{
             std::string(value, length),
-            std::move(scripts), viewport});
+            std::move(scripts), viewport, std::move(compiled_name), std::move(compiled_package)});
         signal_worker();
         return true;
 #endif

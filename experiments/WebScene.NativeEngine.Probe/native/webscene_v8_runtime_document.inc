@@ -4,6 +4,7 @@
         const auto xml = info.Length() > 0 ? to_utf8(info.GetIsolate(), info[0]) : std::string{};
         const auto mime_type = info.Length() > 1 ? to_utf8(info.GetIsolate(), info[1]) : std::string{};
         if (mime_type == "text/html") {
+            if (!self->require_runtime_html()) return;
 #if defined(WEBSCENE_NATIVE_ENGINE_HTML5EVER)
             auto& document_root = self->document.create_node(
                 dom_node_kind::internal, "#document-root");

@@ -1,0 +1,25 @@
+{
+  "webscene_revision": "7353e907e9f96e4279e4ae64331c76be2a05b999",
+  "foco_revision": "259843090d8f75b604d294e2aadae9d7cf6dcce6",
+  "workload": "--benchmark-courtyard; 265 entities, 30 text records, 360 host ticks",
+  "trace": "native-kestrel-pan-post-inspector.jsonl",
+  "sha256": "0641e18d1b2f877c86f636770dedc8a82a44ce875c40196c1c50b5b9c79d98ca",
+  "callbacks": 360,
+  "valid_timestamps": 358,
+  "invalid_timestamps": 2,
+  "fps": 59.66543900671257,
+  "p95_ms": 16.66683300572913,
+  "max_ms": 50.000250004814006,
+  "intervals_over_25ms": 1,
+  "gap_location": "First interval between positive presentation timestamps; trace records 2 to 3 (zero-based).",
+  "pipeline_log": [
+    "Pan pipeline: seconds=5.98998 host_ticks=360 entities=265 text_records=30 published_images=360 images_per_second=60.1004 tick_mean_ms=3.95496 tick_max_ms=4.91387 scene_rebuilds=0 (publication timing, not display presentation timing)",
+    "Scene publication: commits=359 publications=359 no_ops=0",
+    "Compositor: presented=359 presented_per_second=59.9335 skipped=0 occluded=0 (backend success counts, not physical display timestamps)"
+  ],
+  "limitations": [
+    "One startup presentation interval is 50ms; this run does not prove uninterrupted 60fps.",
+    "Synthetic panning only; no OS pointer latency or live-resize validation.",
+    "Invalid timestamps excluded, not inferred."
+  ]
+}

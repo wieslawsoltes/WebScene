@@ -66,6 +66,7 @@ unsafe impl GlobalAlloc for MeasuringAllocator {
 static ALLOCATOR: MeasuringAllocator = MeasuringAllocator;
 
 const ABI_VERSION: u32 = 1;
+const HTML_ABI_VERSION: u32 = 2;
 const STATUS_OK: u32 = 0;
 const STATUS_INVALID_ARGUMENT: u32 = 1;
 const STATUS_CALLBACK_FAILED: u32 = 2;
@@ -130,6 +131,7 @@ pub struct SinkVTable {
             *const QualifiedName,
             *const ParserAttribute,
             usize,
+            u64,
         ) -> NodeHandle,
     >,
     pub create_comment: Option<unsafe extern "C" fn(*mut c_void, ByteSlice) -> NodeHandle>,
@@ -192,6 +194,7 @@ struct ElementData {
 }
 
 struct Sink<'a> {
+    current_line: Cell<u64>,
     callbacks: &'a SinkVTable,
     // Boxed metadata keeps QualName addresses stable when the handle map
     // rehashes. TreeSink::elem_name returns a borrow that may outlive the
@@ -279,6 +282,10 @@ impl TreeSink for Sink<'_> {
     where
         Self: 'a;
 
+    fn set_current_line(&self, line_number: u64) {
+        self.current_line.set(line_number);
+    }
+
     fn finish(self) -> Self::Output {
         ParseResult {
             status: if self.callback_failed() {
@@ -357,6 +364,7 @@ impl TreeSink for Sink<'_> {
                     &QualifiedName::from_name(&name),
                     attributes.as_ptr(),
                     attributes.len(),
+                    self.current_line.get(),
                 )
             })
             .unwrap_or_default();
@@ -579,8 +587,8 @@ fn validate<'a>(
             ..Default::default()
         });
     };
-    if options.abi_version != ABI_VERSION
-        || callbacks.abi_version != ABI_VERSION
+    if options.abi_version != HTML_ABI_VERSION
+        || callbacks.abi_version != HTML_ABI_VERSION
         || options.struct_size < std::mem::size_of::<ParseOptions>() as u32
         || callbacks.struct_size < std::mem::size_of::<SinkVTable>() as u32
         || callbacks.document == 0
@@ -598,6 +606,7 @@ fn validate<'a>(
 
 fn new_sink<'a>(options: &ParseOptions, callbacks: &'a SinkVTable) -> Sink<'a> {
     Sink {
+        current_line: Cell::new(1),
         callbacks,
         elements: RefCell::new(HashMap::new()),
         quirks_mode: Cell::new(QuirksMode::NoQuirks),
@@ -626,7 +635,7 @@ fn attach_allocation_metrics(mut result: ParseResult) -> ParseResult {
 
 #[no_mangle]
 pub extern "C" fn webscene_html_parser_abi_version() -> u32 {
-    ABI_VERSION
+    HTML_ABI_VERSION
 }
 
 #[no_mangle]
@@ -739,6 +748,17 @@ mod css_syntax {
                     break;
                 }
             };
+            // Consume blocks now: next() otherwise skips their contents on its
+            // next call, leaving the saved state before an adjacent !important
+            // at the opening function token rather than after its closing ')'.
+            if matches!(token, Token::Function(_) | Token::ParenthesisBlock
+                | Token::SquareBracketBlock | Token::CurlyBracketBlock) {
+                let _: Result<(), ParseError<'i, ()>> = input.parse_nested_block(|nested| {
+                    consume_raw(nested);
+                    Ok(())
+                });
+                continue;
+            }
             if token == Token::Delim('!') {
                 input.reset(&state);
                 if input.try_parse(parse_important).is_ok() && input.is_exhausted() {
@@ -758,8 +778,8 @@ mod css_syntax {
     }
 
     type CssBeginRuleCallback =
-        unsafe extern "C" fn(*mut c_void, u32, u8, usize, ByteSlice, ByteSlice, *mut usize) -> u8;
-    type CssDeclarationCallback = unsafe extern "C" fn(*mut c_void, ByteSlice, ByteSlice, u8) -> u8;
+        unsafe extern "C" fn(*mut c_void, u32, u8, usize, ByteSlice, ByteSlice, *mut usize, u32, u32) -> u8;
+    type CssDeclarationCallback = unsafe extern "C" fn(*mut c_void, ByteSlice, ByteSlice, u8, u32, u32) -> u8;
     type CssEndRuleCallback = unsafe extern "C" fn(*mut c_void, usize, usize) -> u8;
 
     #[repr(C)]
@@ -774,6 +794,8 @@ mod css_syntax {
     #[derive(Clone, Copy, Default)]
     pub struct CssStreamResult {
         status: u32,
+        first_error_line: u32,
+        first_error_column: u32,
         parse_error_count: u64,
         rule_count: u64,
         declaration_count: u64,
@@ -787,6 +809,7 @@ mod css_syntax {
         callbacks: CssSinkVTable,
         context: *mut c_void,
         errors: std::rc::Rc<Cell<u64>>,
+        first_error: std::rc::Rc<Cell<Option<cssparser::SourceLocation>>>,
         callback_failed: std::rc::Rc<Cell<bool>>,
         rule_count: std::rc::Rc<Cell<u64>>,
         declaration_count: std::rc::Rc<Cell<u64>>,
@@ -800,6 +823,7 @@ mod css_syntax {
             parent_index: usize,
             name: &str,
             prelude: &str,
+            location: cssparser::SourceLocation,
         ) -> usize {
             let mut index = usize::MAX;
             let accepted = self.callbacks.begin_rule.is_some_and(|callback| unsafe {
@@ -811,6 +835,8 @@ mod css_syntax {
                     ByteSlice::from_bytes(name.as_bytes()),
                     ByteSlice::from_bytes(prelude.as_bytes()),
                     &mut index,
+                    location.line + 1,
+                    location.column,
                 ) != 0
             });
             if accepted {
@@ -821,13 +847,15 @@ mod css_syntax {
             index
         }
 
-        fn declaration(&self, name: &str, value: &str, important: bool) {
+        fn declaration(&self, name: &str, value: &str, important: bool, location: cssparser::SourceLocation) {
             let accepted = self.callbacks.declaration.is_some_and(|callback| unsafe {
                 callback(
                     self.context,
                     ByteSlice::from_bytes(name.as_bytes()),
                     ByteSlice::from_bytes(value.as_bytes()),
                     u8::from(important),
+                    location.line + 1,
+                    location.column,
                 ) != 0
             });
             if accepted {
@@ -871,10 +899,10 @@ mod css_syntax {
             &mut self,
             name: CowRcStr<'i>,
             input: &mut Parser<'i, 't>,
-            _declaration_start: &ParserState,
+            declaration_start: &ParserState,
         ) -> Result<Self::Declaration, ParseError<'i, Self::Error>> {
             let (value, important) = consume_declaration_value(input);
-            self.state.declaration(&name, value, important);
+            self.state.declaration(&name, value, important, declaration_start.source_location());
             Ok(CssStreamingBodyItem::Declaration)
         }
     }
@@ -906,6 +934,7 @@ mod css_syntax {
                 self.parent_index,
                 &prelude.name,
                 prelude.prelude,
+                _start.source_location(),
             );
             self.state.end_rule(index, 0);
             Ok(())
@@ -923,6 +952,7 @@ mod css_syntax {
                 self.parent_index,
                 &prelude.name,
                 prelude.prelude,
+                _start.source_location(),
             );
             let mut declarations = 0usize;
             if prelude.name.eq_ignore_ascii_case("font-face")
@@ -983,7 +1013,7 @@ mod css_syntax {
         ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
             let index = self
                 .state
-                .begin_rule(CSS_RULE_STYLE, true, self.parent_index, "", prelude);
+                .begin_rule(CSS_RULE_STYLE, true, self.parent_index, "", prelude, _start.source_location());
             let before = self.state.declaration_count.get();
             parse_css_stream_declaration_list(
                 input,
@@ -1072,9 +1102,11 @@ mod css_syntax {
         parser: CssStreamingParser,
     ) {
         let errors = parser.state.errors.clone();
+        let first_error = parser.state.first_error.clone();
         let mut body_parser = CssStreamingDeclarationListParser { parser };
         for item in RuleBodyParser::new(input, &mut body_parser) {
-            if item.is_err() {
+            if let Err((error, _)) = item {
+                if first_error.get().is_none() { first_error.set(Some(error.location)); }
                 errors.set(errors.get() + 1);
             }
         }
@@ -1082,8 +1114,10 @@ mod css_syntax {
 
     fn parse_css_stream_rule_list<'i>(input: &mut Parser<'i, '_>, mut parser: CssStreamingParser) {
         let errors = parser.state.errors.clone();
+        let first_error = parser.state.first_error.clone();
         for item in StyleSheetParser::new(input, &mut parser) {
-            if item.is_err() {
+            if let Err((error, _)) = item {
+                if first_error.get().is_none() { first_error.set(Some(error.location)); }
                 errors.set(errors.get() + 1);
             }
         }
@@ -1114,6 +1148,7 @@ mod css_syntax {
             callbacks,
             context,
             errors: std::rc::Rc::new(Cell::new(0)),
+            first_error: std::rc::Rc::new(Cell::new(None)),
             callback_failed: std::rc::Rc::new(Cell::new(false)),
             rule_count: std::rc::Rc::new(Cell::new(0)),
             declaration_count: std::rc::Rc::new(Cell::new(0)),
@@ -1127,6 +1162,8 @@ mod css_syntax {
             } else {
                 STATUS_OK
             },
+            first_error_line: state.first_error.get().map_or(0, |l| l.line + 1),
+            first_error_column: state.first_error.get().map_or(0, |l| l.column),
             parse_error_count: state.errors.get(),
             rule_count: state.rule_count.get(),
             declaration_count: state.declaration_count.get(),
@@ -1138,7 +1175,7 @@ mod css_syntax {
 
     #[no_mangle]
     pub extern "C" fn webscene_css_stream_abi_version() -> u32 {
-        1
+        2
     }
 
     #[no_mangle]

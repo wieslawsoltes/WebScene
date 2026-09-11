@@ -118,7 +118,18 @@
             auto scheme = value.find("://");
             return scheme == std::string::npos ? std::string{} : value.substr(0,value.find('/',scheme+3));
         };
-        if (origin(url) != origin(self->current_base_address())) {
+        // Capture a same-origin object URL before entering another isolate. The
+        // worker owns its source even if the parent revokes the URL immediately.
+        std::optional<std::string> embedded_source;
+        if (url.starts_with("blob:")) {
+            const auto found = self->object_url_binary.find(url);
+            if (found == self->object_url_binary.end()
+                || found->second.origin != resource_origin(self->current_base_address())) {
+                throw_dom_exception(info,"Worker Blob URL is unavailable for this origin","SecurityError"); return;
+            }
+            embedded_source.emplace(found->second.bytes.begin(), found->second.bytes.end());
+        }
+        if (!embedded_source && origin(url) != origin(self->current_base_address())) {
             throw_dom_exception(info,"Worker script must be same origin","SecurityError"); return;
         }
         bool module = false;
@@ -157,7 +168,7 @@
         auto loader=self->load_resource_callback;
         auto root=self->resource_root;
         self->dedicated_workers.push_back(std::move(state));
-        raw->thread=std::thread([raw,url,module,worker_name=std::move(worker_name),loader=std::move(loader),root=std::move(root)] {
+        raw->thread=std::thread([raw,url,module,embedded_source=std::move(embedded_source),worker_name=std::move(worker_name),loader=std::move(loader),root=std::move(root)] {
             auto report=[&](const std::string& text) {
                 {std::lock_guard lock(raw->mutex);if(raw->stopped)return;raw->errors.push_back(text);}
                 if(raw->notify_parent)raw->notify_parent();
@@ -198,7 +209,8 @@
                     global->Delete(realm,js_string(child->isolate,"document")).FromMaybe(false);
                     global->Delete(realm,js_string(child->isolate,"window")).FromMaybe(false);
                     std::string source,resolved,error;
-                    if(!child->load_text_resource(url,{},WEBSCENE_RESOURCE_SCRIPT,source,resolved))report("Unable to load worker: "+url);
+                    if (embedded_source) { source = *embedded_source; resolved = url; }
+                    if(!embedded_source && !child->load_text_resource(url,{},WEBSCENE_RESOURCE_SCRIPT,source,resolved))report("Unable to load worker: "+url);
                     else if(!(module ? child->execute_module(realm,source,resolved,error)
                                       : child->execute_in_context(realm,source,resolved,error)))report(error);
                 }

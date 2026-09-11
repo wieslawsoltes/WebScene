@@ -1,3 +1,14 @@
+static size_t native_table_span(std::string_view text, size_t maximum = 1000, bool preserve_zero = false) {
+    size_t cursor = text.find_first_not_of(" \t\n\r\f");
+    if (cursor == std::string_view::npos) return 1;
+    if (text[cursor] == '+') ++cursor;
+    const auto first_digit = cursor;
+    size_t value = 0;
+    while (cursor < text.size() && text[cursor] >= '0' && text[cursor] <= '9')
+        value = std::min<size_t>(maximum, value * 10 + (text[cursor++] - '0'));
+    return value || (preserve_zero && cursor > first_digit) ? value : 1;
+}
+
 void native_document::layout(float viewport_width, float viewport_height)
 {
     if (layout_scratch_ == nullptr) {
@@ -86,6 +97,16 @@ void native_document::layout(float viewport_width, float viewport_height)
         std::max(1.0F, viewport_height)};
     body_->visible = true;
     body_->used_height_is_definite = true;
+    // Default-positioned modal dialogs leave normal document flow. Keep authored
+    // positioned dialogs on the ordinary CSS positioning path.
+    std::vector<dom_node*> centered_modals;
+    for(const auto& entry:modal_dialogs()) {
+        auto* modal=find_by_native_id(entry.dialog_id);
+        if(modal && modal->style.position==position_mode::normal) {
+            centered_modals.push_back(modal);
+            modal->style.position=position_mode::fixed;
+        }
+    }
     layout_children(*body_);
     // Sticky offsets are visual adjustments to completed normal-flow geometry.
     // Applying them during row layout uses unfinished table/group dimensions
@@ -104,6 +125,14 @@ void native_document::layout(float viewport_width, float viewport_height)
         node.list_marker_layout.y += dy;
         for (auto* child : composed_children(node)) self(self, *child, dx, dy);
     };
+    for(auto* modal:centered_modals) {
+        if(modal->visible) {
+            const float x=std::max(0.0F,(viewport_width_-modal->layout.width)*0.5F);
+            const float y=std::max(0.0F,(viewport_height_-modal->layout.height)*0.5F);
+            translate(translate,*modal,x-modal->layout.x,y-modal->layout.y);
+        }
+        modal->style.position=position_mode::normal;
+    }
     const auto apply_sticky = [&](const auto& self, dom_node& node) -> void {
         if (!node.visible || node.style.display == display_mode::none) return;
         if (node.style.position == position_mode::sticky) {
@@ -540,6 +569,7 @@ void native_document::layout_children(dom_node& parent)
         };
         struct table_row_placement final {
             dom_node* row{nullptr};
+            dom_node* group{nullptr};
             std::vector<table_cell_placement> cells;
         };
 
@@ -549,7 +579,7 @@ void native_document::layout_children(dom_node& parent)
                 if (child->style.display == display_mode::none
                     || is_table_track(child->style.display)) continue;
                 if (child->style.display == display_mode::table_row) {
-                    rows.push_back({child, {}});
+                    rows.push_back({child, &node, {}});
                 } else if (is_table_row_group(child->style.display)) {
                     collect_rows(*child);
                 }
@@ -572,10 +602,14 @@ void native_document::layout_children(dom_node& parent)
                     }
                     return found == child->attributes.end()
                         ? size_t{1}
-                        : std::max<size_t>(1, static_cast<size_t>(parse_number(found->second, 1)));
+                        : native_table_span(found->second, name == "rowspan" ? 65534 : 1000, name == "rowspan");
                 };
                 const auto column_span = parse_span("colspan");
-                const auto row_span = parse_span("rowspan");
+                auto row_span = parse_span("rowspan");
+                size_t remaining_rows = 0;
+                for (size_t index = static_cast<size_t>(&row - rows.data());
+                     index < rows.size() && rows[index].group == row.group; ++index) ++remaining_rows;
+                row_span = row_span ? std::min(row_span, remaining_rows) : remaining_rows;
                 if (occupied_rows.size() < column + column_span) {
                     occupied_rows.resize(column + column_span, 0);
                 }
@@ -596,6 +630,7 @@ void native_document::layout_children(dom_node& parent)
         }
 
         std::vector<float> authored_column_widths;
+        std::vector<bool> authored_columns_specified;
         const auto collect_column_widths = [&](const auto& self,
                                                const dom_node& node) -> void {
             for (const auto* child : composed_children(node)) {
@@ -605,14 +640,11 @@ void native_document::layout_children(dom_node& parent)
                 }
                 if (child->style.display != display_mode::table_column) continue;
                 const auto span_value = child->attributes.find("span");
-                const auto span = span_value == child->attributes.end()
-                    ? size_t{1}
-                    : std::max<size_t>(
-                        1,
-                        static_cast<size_t>(parse_number(span_value->second, 1)));
+                const auto span = span_value == child->attributes.end() ? size_t{1} : native_table_span(span_value->second);
                 const auto width = is_specified(child->style.width)
                     ? resolve_length(*child, child->style.width, content.width, 0)
                     : 0.0F;
+                authored_columns_specified.insert(authored_columns_specified.end(), span, is_specified(child->style.width));
                 authored_column_widths.insert(
                     authored_column_widths.end(), span, width);
             }
@@ -642,14 +674,25 @@ void native_document::layout_children(dom_node& parent)
             authored_column_widths.begin(),
             authored_column_widths.end(),
             columns.begin());
+        const bool fixed_table_layout = parent.style.table_layout_fixed && is_specified(parent.style.width);
         std::vector<bool> fixed_columns(column_count, false);
         std::vector<bool> percentage_columns(column_count, false);
         std::vector<bool> specified_columns(column_count, false);
+        if (fixed_table_layout) {
+            for (size_t column = 0; column < authored_columns_specified.size(); ++column) {
+                specified_columns[column] = authored_columns_specified[column];
+                fixed_columns[column] = authored_columns_specified[column];
+            }
+        }
         for (const auto& row : rows) {
+            if (fixed_table_layout && &row != &rows.front()) break;
             for (const auto& placement : row.cells) {
-                auto cell_width = intrinsic_size(
+                if (fixed_table_layout && placement.column_span == 1 &&
+                    placement.column < authored_columns_specified.size() &&
+                    authored_columns_specified[placement.column]) continue;
+                auto cell_width = fixed_table_layout ? 0.0F : intrinsic_size(
                     *placement.cell, true, track_available_width);
-                if (parent.style.table_layout_fixed
+                if (fixed_table_layout
                     && is_specified(placement.cell->style.width)) {
                     cell_width = resolve_length(
                         *placement.cell,
@@ -685,7 +728,7 @@ void native_document::layout_children(dom_node& parent)
         const auto intrinsic_width = std::accumulate(columns.begin(), columns.end(), 0.0F);
         if (!columns.empty() && track_available_width > intrinsic_width) {
             const auto excess = track_available_width - intrinsic_width;
-            if (parent.style.table_layout_fixed) {
+            if (fixed_table_layout) {
                 std::vector<size_t> distribution_columns;
                 for (size_t column = 0; column < columns.size(); ++column) {
                     if (!specified_columns[column]) distribution_columns.push_back(column);
@@ -860,9 +903,7 @@ void native_document::layout_children(dom_node& parent)
                 const auto span_value = track->attributes.find("span");
                 const auto span = span_value == track->attributes.end()
                     ? size_t{1}
-                    : std::max<size_t>(
-                        1,
-                        static_cast<size_t>(parse_number(span_value->second, 1)));
+                    : native_table_span(span_value->second);
                 const auto start = std::min(column_cursor, columns.size());
                 const auto end = std::min(columns.size(), column_cursor + span);
                 track->layout = {
@@ -1429,6 +1470,29 @@ void native_document::layout_children(dom_node& parent)
                 auto* run = text_runs[run_index];
                 const auto allow_wrap = resolved_white_space_wraps(*run);
                 const auto transformed_text = resolved_text_transform(*run, run->text_content);
+                std::string_view whitespace;
+                for (auto* ancestor = run; ancestor; ancestor = ancestor->parent) {
+                    if (ancestor->style.textual().white_space.empty()) continue;
+                    whitespace = ancestor->style.textual().white_space;
+                    break;
+                }
+                if (whitespace == "pre") {
+                    size_t start = 0;
+                    for (size_t i = 0; i <= transformed_text.size(); ++i) {
+                        if (i < transformed_text.size() && transformed_text[i] != '\n') continue;
+                        auto segment = transformed_text.substr(start, i - start);
+                        if (!segment.empty()) append_fragment(*run, segment, measure_text_width(segment, *run));
+                        if (i < transformed_text.size()) {
+                            current_line_height = std::max(current_line_height, resolved_line_height(*run, resolved_font_size(*run)));
+                            start_new_line();
+                        }
+                        start = i + 1;
+                    }
+                    pending_space = false;
+                    pending_space_run = nullptr;
+                    static_anchors[run_index + 1U] = {content.x + cursor_x, content.y + cursor_y, 0, current_line_height};
+                    continue;
+                }
                 std::string word;
                 const auto flush_word = [&] {
                     if (word.empty()) return;
@@ -1465,7 +1529,13 @@ void native_document::layout_children(dom_node& parent)
                     pending_space_run = nullptr;
                 };
                 for (const auto character : transformed_text) {
-                    if (std::isspace(static_cast<unsigned char>(character))) {
+                    if (character == '\n' && whitespace == "pre-line") {
+                        flush_word();
+                        pending_space = false;
+                        pending_space_run = nullptr;
+                        current_line_height = std::max(current_line_height, resolved_line_height(*run, resolved_font_size(*run)));
+                        start_new_line();
+                    } else if (std::isspace(static_cast<unsigned char>(character))) {
                         flush_word();
                         pending_space = true;
                         pending_space_run = run;
@@ -1910,7 +1980,7 @@ void native_document::layout_children(dom_node& parent)
             const auto& placement = child->style.grid();
             auto column_span = std::min(
                 column_count,
-                parse_span(
+                placement.compiled_full_columns ? column_count : parse_span(
                     placement.column_start_value,
                     placement.column_end_value,
                     column_count));
@@ -1918,10 +1988,10 @@ void native_document::layout_children(dom_node& parent)
                 placement.row_start_value,
                 placement.row_end_value,
                 std::max<size_t>(parent_grid.template_rows.size(), 1U));
-            const auto authored_column_start = parse_line(
-                placement.column_start_value);
-            const auto authored_column_end = parse_line(
-                placement.column_end_value);
+            const auto authored_column_start = placement.compiled_full_columns
+                ? std::optional<int32_t>{1} : parse_line(placement.column_start_value);
+            const auto authored_column_end = placement.compiled_full_columns
+                ? std::optional<int32_t>{-1} : parse_line(placement.column_end_value);
             const auto authored_row = parse_line(placement.row_start_value);
             auto row = authored_row.has_value() && *authored_row > 0
                 ? static_cast<size_t>(*authored_row - 1) : auto_row;
@@ -2290,12 +2360,19 @@ void native_document::layout_children(dom_node& parent)
                     *child, child->style.margin_top, available_height, 0);
                 const auto margin_bottom = resolve_length(
                     *child, child->style.margin_bottom, available_height, 0);
+                const bool auto_horizontal_margin = child->style.margin_left_auto || child->style.margin_right_auto;
                 auto width = is_specified(child->style.width)
                     ? outer_authored_size(*child, true, available_width)
-                    : std::max(0.0F, available_width - margin_left - margin_right);
+                    : auto_horizontal_margin ? intrinsic_size(*child, true, available_width)
+                        : std::max(0.0F, available_width - margin_left - margin_right);
+                const auto alignment = child->style.align_self_specified
+                    ? child->style.align_self : parent.style.align_items;
+                const bool auto_vertical_margin = child->style.margin_top_auto || child->style.margin_bottom_auto;
                 auto height = is_specified(child->style.height)
                     ? outer_authored_size(*child, false, available_height)
-                    : std::max(0.0F, available_height - margin_top - margin_bottom);
+                    : alignment == align_mode::stretch && !auto_vertical_margin
+                        ? std::max(0.0F, available_height - margin_top - margin_bottom)
+                        : intrinsic_size(*child, false, available_height);
                 if (child->style.grid().subgrid_columns) {
                     auto& inherited = child->mutable_grid_layout();
                     inherited.column_widths.assign(
@@ -2306,9 +2383,48 @@ void native_document::layout_children(dom_node& parent)
                 } else {
                     child->clear_grid_layout();
                 }
+                const auto constrain_grid_size = [&](bool horizontal, float size) {
+                    const auto available = horizontal ? available_width : available_height;
+                    const auto& minimum = horizontal
+                        ? child->style.min_width : child->style.min_height;
+                    const auto& maximum = horizontal
+                        ? child->style.max_width : child->style.max_height;
+                    const auto box_adjustment = child->style.border_box ? 0.0F
+                        : horizontal
+                            ? resolve_length(*child, child->style.padding_left, available, 0)
+                                + resolve_length(*child, child->style.padding_right, available, 0)
+                                + resolve_length(*child, child->style.border_left_width, available, 0)
+                                + resolve_length(*child, child->style.border_right_width, available, 0)
+                            : resolve_vertical_padding(*child, child->style.padding_top, available, 0)
+                                + resolve_vertical_padding(*child, child->style.padding_bottom, available, 0)
+                                + resolve_length(*child, child->style.border_top_width, available, 0)
+                                + resolve_length(*child, child->style.border_bottom_width, available, 0);
+                    if (is_specified(maximum)) {
+                        size = std::min(
+                            size,
+                            resolve_length(*child, maximum, available, size) + box_adjustment);
+                    }
+                    if (is_specified(minimum)) {
+                        size = std::max(
+                            size,
+                            resolve_length(*child, minimum, available, 0) + box_adjustment);
+                    }
+                    return std::max(0.0F, size);
+                };
+                width = constrain_grid_size(true, width);
+                height = constrain_grid_size(false, height);
+                const auto remaining_height = available_height - margin_top - margin_bottom - height;
+                const auto alignment_offset = auto_vertical_margin
+                    ? (child->style.margin_top_auto ? std::max(0.0F, remaining_height) /
+                        (child->style.margin_bottom_auto ? 2.0F : 1.0F) : 0.0F)
+                    : alignment == align_mode::center ? remaining_height * 0.5F
+                    : alignment == align_mode::end ? remaining_height : 0.0F;
+                const auto horizontal_offset = child->style.margin_left_auto
+                    ? std::max(0.0F, available_width - margin_left - margin_right - width) /
+                        (child->style.margin_right_auto ? 2.0F : 1.0F) : 0.0F;
                 layout_child(*child, parent.layout, {
-                    column_offsets[item.column] + margin_left,
-                    row_offsets[item.row] + margin_top,
+                    column_offsets[item.column] + margin_left + horizontal_offset,
+                    row_offsets[item.row] + margin_top + alignment_offset,
                     width,
                     height}, true); // The resolved grid area supplies the stretched block size.
             };
@@ -3101,7 +3217,7 @@ void native_document::layout_children(dom_node& parent)
             const auto intrinsic_width = intrinsic_size(*child, true, content.width);
             const auto intrinsic_height = intrinsic_size(*child, false, content.height);
             auto width = flex_container && is_specified(child->style.flex_basis)
-                ? outer_specified_size(*child, true, child->style.flex_basis, content.width)
+                ? flex_base_main_sizes.at(child)
                     + (grow > 0
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
                         : 0.0F)
@@ -3216,7 +3332,7 @@ void native_document::layout_children(dom_node& parent)
                 && parent.used_height_is_definite;
             const auto intrinsic_height = intrinsic_size(*child, false, content.height);
             auto height = flex_container && is_specified(child->style.flex_basis)
-                ? resolve_length(*child, child->style.flex_basis, content.height, 0)
+                ? flex_base_main_sizes.at(child)
                     + (grow > 0
                         ? remaining * std::max(0.0F, child->style.flex_grow) / grow
                         : 0.0F)
@@ -3934,9 +4050,7 @@ float native_document::compute_intrinsic_size(
                     auto span_value = child->attributes.find("span");
                     const auto span = span_value == child->attributes.end()
                         ? size_t{1}
-                        : std::max<size_t>(
-                            1,
-                            static_cast<size_t>(parse_number(span_value->second, 1)));
+                        : native_table_span(span_value->second);
                     const auto width = is_specified(child->style.width)
                         ? resolve_length(*child, child->style.width, available, 0)
                         : 0.0F;
@@ -3986,7 +4100,7 @@ float native_document::compute_intrinsic_size(
                     auto span = cell->attributes.find("colspan");
                     if (span == cell->attributes.end()) span = cell->attributes.find("colSpan");
                     row_count += span == cell->attributes.end()
-                        ? 1U : std::max<size_t>(1, static_cast<size_t>(parse_number(span->second, 1)));
+                        ? 1U : native_table_span(span->second);
                 }
                 count = std::max(count, row_count);
             }
@@ -4005,7 +4119,7 @@ float native_document::compute_intrinsic_size(
                         span_value = cell->attributes.find("colSpan");
                     }
                     const auto span = span_value == cell->attributes.end()
-                        ? 1U : std::max<size_t>(1, static_cast<size_t>(parse_number(span_value->second, 1)));
+                        ? 1U : native_table_span(span_value->second);
                     const auto share = intrinsic_size(*cell, true, available)
                         / static_cast<float>(span);
                     for (size_t track = column; track < std::min(count, column + span); ++track) {
@@ -4265,7 +4379,7 @@ float native_document::compute_intrinsic_size(
             const auto& placement = child->style.grid();
             const auto column_span = std::min(
                 column_count,
-                span_for(
+                placement.compiled_full_columns ? column_count : span_for(
                     placement.column_start_value,
                     placement.column_end_value,
                     column_count));
@@ -4273,7 +4387,8 @@ float native_document::compute_intrinsic_size(
                 placement.row_start_value,
                 placement.row_end_value,
                 std::max<size_t>(grid.template_rows.size(), 1U));
-            const auto authored_column = parse_line(placement.column_start_value);
+            const auto authored_column = placement.compiled_full_columns
+                ? std::optional<int32_t>{1} : parse_line(placement.column_start_value);
             const auto authored_row = parse_line(placement.row_start_value);
             auto row = authored_row.has_value() && *authored_row > 0
                 ? static_cast<size_t>(*authored_row - 1) : auto_row;
@@ -4762,13 +4877,23 @@ void native_document::layout_child(
         // mount node. Re-resolving against that mount collapses an otherwise
         // valid auto-height dialog after its descendants have been laid out.
         const auto available_height = containing_block.height;
-        const auto capped_height = std::min(
+        const auto box_adjustment = child.style.border_box ? 0.0F
+            : resolve_vertical_padding(child, child.style.padding_top, available_height, 0)
+                + resolve_vertical_padding(child, child.style.padding_bottom, available_height, 0)
+                + resolve_length(child, child.style.border_top_width, available_height, 0)
+                + resolve_length(child, child.style.border_bottom_width, available_height, 0);
+        auto capped_height = std::min(
             child.layout.height,
             resolve_length(
                 child,
                 child.style.max_height,
                 available_height,
-                child.layout.height));
+                child.layout.height) + box_adjustment);
+        if (is_specified(child.style.min_height)) {
+            capped_height = std::max(capped_height,
+                resolve_length(child, child.style.min_height, available_height, 0)
+                    + box_adjustment);
+        }
         if (capped_height + 0.01F < child.layout.height) {
             child.layout.height = capped_height;
             child.used_height_is_definite = true;

@@ -46,6 +46,9 @@ void native_document::build_scene(
         if (entry.dialog_id > native_id_index_.size()) continue;
         const auto* modal = native_id_index_[entry.dialog_id - 1U];
         if (modal == nullptr || !display_tree_allows_render(*this, *modal)) continue;
+        if(modal->dialog_state && (modal->dialog_state->backdrop_rgba&0xffU))
+            commands.push_back(webscene_scene_command{9U,0U,0,0,viewport_width_,viewport_height_,
+                modal->dialog_state->backdrop_rgba,modal->id,0,0,0,0,0});
         bool hidden = false;
         std::vector<const dom_node*> ancestors;
         for (auto* ancestor = composed_parent(*modal); ancestor != nullptr;
@@ -858,7 +861,7 @@ void native_document::append_scene(
         node.layout.width,
         node.layout.height);
     if (paint_self
-        && node.style.box_shadow_present
+        && node.style.box_shadow_present && !node.style.box_shadow_inset
         && node.layout.width > 0
         && node.layout.height > 0) {
         const auto spread = node.style.box_shadow_spread_radius;
@@ -885,7 +888,7 @@ void native_document::append_scene(
                 shadow_y,
                 shadow_width,
                 shadow_height,
-                with_opacity(node.style.box_shadow_rgba),
+                with_opacity(node.style.box_shadow_current_color ? resolved_foreground(node) : node.style.box_shadow_rgba),
                 node.id,
                 shadow_radii.top_left,
                 shadow_radii.top_right,
@@ -933,6 +936,19 @@ void native_document::append_scene(
         [](unsigned char character) {
             return static_cast<char>(std::tolower(character));
         });
+    if (paint_self && background_image.linear_colors.size() >= 2 && node.layout.width > 0 && node.layout.height > 0) {
+        commands.push_back(webscene_scene_command{
+            paint_box_in_foreground ? 46U : 44U,
+            static_cast<uint32_t>(background_image.linear_colors.size()),
+            node.layout.x, node.layout.y, node.layout.width, node.layout.height,
+            0U, node.id, radii.top_left, radii.top_right, radii.bottom_right,
+            radii.bottom_left, background_image.linear_angle});
+        for (size_t i=0; i<background_image.linear_colors.size(); ++i) {
+            commands.push_back(webscene_scene_command{45U, 0U,
+                static_cast<float>(i) / (background_image.linear_colors.size()-1), 0, 0, 0,
+                background_image.linear_colors[i], node.id});
+        }
+    }
     if (paint_self
         && (background_image_value_lower.starts_with("linear-gradient(") || background_image_value_lower.starts_with("radial-gradient("))
         && node.layout.width > 0
@@ -1032,6 +1048,30 @@ void native_document::append_scene(
             0U,
             node.id});
     }
+    if (paint_self && node.style.box_shadow_present && node.style.box_shadow_inset
+        && node.layout.width > 0 && node.layout.height > 0) {
+        const float left = resolve_length(node, node.style.border_left_width, node.layout.width, 0);
+        const float right = resolve_length(node, node.style.border_right_width, node.layout.width, 0);
+        const float top = resolve_length(node, node.style.border_top_width, node.layout.width, 0);
+        const float bottom = resolve_length(node, node.style.border_bottom_width, node.layout.width, 0);
+        const layout_rect box{node.layout.x + left, node.layout.y + top,
+            std::max(0.0F, node.layout.width - left - right), std::max(0.0F, node.layout.height - top - bottom)};
+        const float spread = node.style.box_shadow_spread_radius;
+        const auto tl = std::max(0.0F, radii.top_left - std::max(left, top));
+        const auto tr = std::max(0.0F, radii.top_right - std::max(right, top));
+        const auto br = std::max(0.0F, radii.bottom_right - std::max(right, bottom));
+        const auto bl = std::max(0.0F, radii.bottom_left - std::max(left, bottom));
+        commands.push_back(webscene_scene_command{12U,0U,box.x,box.y,box.width,box.height,0U,node.id,tl,tr,br,bl});
+        // Shadow flag 1 paints the inverse rounded hole inside the preceding clip.
+        commands.push_back(webscene_scene_command{paint_box_in_foreground ? 18U : 17U,1U,
+            box.x + node.style.box_shadow_offset_x + spread,
+            box.y + node.style.box_shadow_offset_y + spread,
+            std::max(0.0F, box.width - 2 * spread), std::max(0.0F, box.height - 2 * spread),
+            with_opacity(node.style.box_shadow_current_color ? resolved_foreground(node) : node.style.box_shadow_rgba),node.id,
+            std::max(0.0F,tl-spread),std::max(0.0F,tr-spread),std::max(0.0F,br-spread),std::max(0.0F,bl-spread),
+            node.style.box_shadow_blur_radius});
+        commands.push_back(webscene_scene_command{13U,0U,0,0,0,0,0U,node.id});
+    }
     const auto append_border_rect = [&](float x, float y, float width, float height, uint32_t rgba) {
         if ((rgba & 0xFFU) == 0U || width <= 0 || height <= 0) return;
         commands.push_back(webscene_scene_command{
@@ -1082,7 +1122,28 @@ void native_document::append_scene(
             && (right <= 0 || std::abs(right - rounded_stroke_width) < 0.01F)
             && (bottom <= 0 || std::abs(bottom - rounded_stroke_width) < 0.01F)
             && (left <= 0 || std::abs(left - rounded_stroke_width) < 0.01F);
-        if (radii.any() && compatible_rounded_widths) {
+        const auto &dash = node.style.border_dashed;
+        if (std::any_of(dash.begin(), dash.end(), [](bool value){ return value; })) {
+            if (uniform_width && uniform_color && std::all_of(dash.begin(), dash.end(), [](bool value){ return value; })) {
+                const float inset = top * .5F;
+                commands.push_back(webscene_scene_command{paint_box_in_foreground ? 41U : 40U,0U,
+                    node.layout.x+inset,node.layout.y+inset,
+                    std::max(0.0F,node.layout.width-top),std::max(0.0F,node.layout.height-top),
+                    with_opacity(border_top_rgba),node.id,
+                    std::max(0.0F,radii.top_left-inset),std::max(0.0F,radii.top_right-inset),
+                    std::max(0.0F,radii.bottom_right-inset),std::max(0.0F,radii.bottom_left-inset),top});
+            } else {
+                const auto edge = [&](float x,float y,float end_x,float end_y,float width,uint32_t color,bool dashed) {
+                    if (width <= 0) return;
+                    commands.push_back(webscene_scene_command{dashed ? (paint_box_in_foreground ? 43U : 42U) :
+                        (paint_box_in_foreground ? 14U : 2U),0U,x,y,end_x,end_y,with_opacity(color),node.id,0,0,0,0,width});
+                };
+                edge(node.layout.x,node.layout.y+top*.5F,node.layout.x+node.layout.width,node.layout.y+top*.5F,top,border_top_rgba,dash[1]);
+                edge(node.layout.x+node.layout.width-right*.5F,node.layout.y,node.layout.x+node.layout.width-right*.5F,node.layout.y+node.layout.height,right,border_right_rgba,dash[2]);
+                edge(node.layout.x,node.layout.y+node.layout.height-bottom*.5F,node.layout.x+node.layout.width,node.layout.y+node.layout.height-bottom*.5F,bottom,border_bottom_rgba,dash[3]);
+                edge(node.layout.x+left*.5F,node.layout.y,node.layout.x+left*.5F,node.layout.y+node.layout.height,left,border_left_rgba,dash[0]);
+            }
+        } else if (radii.any() && compatible_rounded_widths) {
             constexpr uint32_t border_top_flag = 1U << 28U;
             constexpr uint32_t border_right_flag = 1U << 29U;
             constexpr uint32_t border_bottom_flag = 1U << 30U;
@@ -1177,26 +1238,33 @@ void native_document::append_scene(
                 border_left_rgba);
         }
     }
+    const auto outline_rgba = node.style.outline_current_color
+        ? resolved_foreground(node) : node.style.outline_rgba;
     if (paint_self && node.layout.width > 0 && node.layout.height > 0
-        && (node.style.outline_rgba & 0xFFU) != 0U) {
+        && (outline_rgba & 0xFFU) != 0U) {
         const auto outline = std::max(
             0.0F,
             resolve_length(node, node.style.outline_width, node.layout.width, 0));
+        const auto offset = std::max(-std::min(node.layout.width, node.layout.height) * .5F,
+            resolve_length(node, node.style.outline_offset, node.layout.width, 0));
+        const layout_rect outline_box{node.layout.x - offset, node.layout.y - offset,
+            std::max(0.0F, node.layout.width + 2 * offset),
+            std::max(0.0F, node.layout.height + 2 * offset)};
         if (outline > 0 && radii.any()) {
             const auto half_outline = outline * 0.5F;
-            const auto outline_x = node.layout.x - half_outline;
-            const auto outline_y = node.layout.y - half_outline;
-            const auto outline_width = node.layout.width + outline;
-            const auto outline_height = node.layout.height + outline;
+            const auto outline_x = outline_box.x - half_outline;
+            const auto outline_y = outline_box.y - half_outline;
+            const auto outline_width = outline_box.width + outline;
+            const auto outline_height = outline_box.height + outline;
             const auto outline_radii = resolved_radii{
-                radii.top_left + half_outline,
-                radii.top_right + half_outline,
-                radii.bottom_right + half_outline,
-                radii.bottom_left + half_outline,
-                radii.top_left_y + half_outline,
-                radii.top_right_y + half_outline,
-                radii.bottom_right_y + half_outline,
-                radii.bottom_left_y + half_outline};
+                std::max(0.0F, radii.top_left + offset + half_outline),
+                std::max(0.0F, radii.top_right + offset + half_outline),
+                std::max(0.0F, radii.bottom_right + offset + half_outline),
+                std::max(0.0F, radii.bottom_left + offset + half_outline),
+                std::max(0.0F, radii.top_left_y + offset + half_outline),
+                std::max(0.0F, radii.top_right_y + offset + half_outline),
+                std::max(0.0F, radii.bottom_right_y + offset + half_outline),
+                std::max(0.0F, radii.bottom_left_y + offset + half_outline)};
             append_ellipse_metadata(
                 outline_radii,
                 outline_x,
@@ -1210,7 +1278,7 @@ void native_document::append_scene(
                 outline_y,
                 outline_width,
                 outline_height,
-                with_opacity(node.style.outline_rgba),
+                with_opacity(outline_rgba),
                 node.id,
                 outline_radii.top_left,
                 outline_radii.top_right,
@@ -1219,29 +1287,29 @@ void native_document::append_scene(
                 outline});
         } else {
             append_border_rect(
-                node.layout.x - outline,
-                node.layout.y - outline,
-                node.layout.width + outline * 2.0F,
+                outline_box.x - outline,
+                outline_box.y - outline,
+                outline_box.width + outline * 2.0F,
                 outline,
-                node.style.outline_rgba);
+                outline_rgba);
             append_border_rect(
-                node.layout.x + node.layout.width,
-                node.layout.y,
+                outline_box.x + outline_box.width,
+                outline_box.y,
                 outline,
-                node.layout.height,
-                node.style.outline_rgba);
+                outline_box.height,
+                outline_rgba);
             append_border_rect(
-                node.layout.x - outline,
-                node.layout.y + node.layout.height,
-                node.layout.width + outline * 2.0F,
+                outline_box.x - outline,
+                outline_box.y + outline_box.height,
+                outline_box.width + outline * 2.0F,
                 outline,
-                node.style.outline_rgba);
+                outline_rgba);
             append_border_rect(
-                node.layout.x - outline,
-                node.layout.y,
+                outline_box.x - outline,
+                outline_box.y,
                 outline,
-                node.layout.height,
-                node.style.outline_rgba);
+                outline_box.height,
+                outline_rgba);
         }
     }
     // An empty overflow viewport still clips all of its contents. In
@@ -1335,7 +1403,7 @@ void native_document::append_scene(
             WEBSCENE_SCENE_COMMAND_GPU_IMAGE,0U,node.layout.x,node.layout.y,
             node.layout.width,node.layout.height,0U,node.id,0,0,0,0,0});
     }
-    if (ordered_canvas && paint_self && !paints_gpu && node.tag=="canvas" && !canvas.commands.empty()) {
+    if (ordered_canvas && paint_self && !paints_gpu && node.tag=="canvas" && (!canvas.commands.empty() || canvas.externally_composited)) {
         commands.push_back(webscene_scene_command{
             WEBSCENE_SCENE_COMMAND_CANVAS_LAYER,0U,0,0,0,0,0U,node.id,0,0,0,0,0});
     }
@@ -1432,7 +1500,40 @@ void native_document::append_scene(
             arrow_color, node.id});
     }
 
-    if (paint_self && (node.tag == "input" || node.tag == "textarea")) {
+    const auto input_type = node.attributes.find("type");
+    const bool color_input = node.tag == "input"
+        && input_type != node.attributes.end() && input_type->second == "color";
+    const bool checkbox_input = node.tag == "input"
+        && input_type != node.attributes.end() && input_type->second == "checkbox";
+    if(paint_self && checkbox_input) {
+        const auto& control=node.form_control();
+        const bool checked=control.checkedness_initialized?control.checkedness:node.attributes.contains("checked");
+        if(checked) {
+            const auto size=std::min(node.layout.width,node.layout.height);
+            const auto x=node.layout.x+(node.layout.width-size)*0.5F;
+            const auto y=node.layout.y+(node.layout.height-size)*0.5F;
+            const auto color=with_opacity(resolved_foreground(node));
+            commands.push_back(webscene_scene_command{2U,150U,x+size*.2F,y+size*.5F,x+size*.43F,y+size*.72F,color,node.id});
+            commands.push_back(webscene_scene_command{2U,150U,x+size*.43F,y+size*.72F,x+size*.82F,y+size*.25F,color,node.id});
+        }
+    }
+    if (paint_self && color_input) {
+        // A color control presents its live value as a swatch, not editable text.
+        // Keep the value on the control so native application updates repaint it.
+        const auto& value = node.form_control().value;
+        const bool valid_color = value.size() == 7 && value.front() == '#'
+            && std::all_of(value.begin() + 1, value.end(), [](unsigned char c) {
+                return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+                    || (c >= 'A' && c <= 'F');
+            });
+        const auto inset = std::min(3.0F, std::min(node.layout.width, node.layout.height) * 0.5F);
+        commands.push_back(webscene_scene_command{
+            1U, 0U, node.layout.x + inset, node.layout.y + inset,
+            std::max(0.0F, node.layout.width - inset * 2),
+            std::max(0.0F, node.layout.height - inset * 2),
+            with_opacity(valid_color ? parse_color(value) : 0x000000FFU), node.id});
+    }
+    if (paint_self && !color_input && !checkbox_input && (node.tag == "input" || node.tag == "textarea")) {
         const auto font_size = resolved_font_size(node);
         const auto line_height = resolved_line_height(node, font_size);
         const auto padding_left = resolve_length(
@@ -1443,9 +1544,17 @@ void native_document::append_scene(
         const auto text_y = node.layout.y + std::max(0.0F, (node.layout.height - line_height) * 0.5F);
         const auto text_width = std::max(
             0.0F, node.layout.width - padding_left - padding_right);
-        if (!node.form_control().value.empty()) {
+        const auto placeholder = node.attributes.find("placeholder");
+        const bool placeholder_type = node.tag == "textarea" || input_type == node.attributes.end()
+            || input_type->second == "text" || input_type->second == "search"
+            || input_type->second == "url" || input_type->second == "tel"
+            || input_type->second == "email" || input_type->second == "password"
+            || input_type->second == "number";
+        const bool show_placeholder = placeholder_type && node.form_control().value.empty()
+            && placeholder != node.attributes.end() && !placeholder->second.empty();
+        if (!node.form_control().value.empty() || show_placeholder) {
             const auto painted_value = resolved_text_transform(
-                node, node.form_control().value);
+                node, show_placeholder ? placeholder->second : node.form_control().value);
             std::ostringstream resource;
             resource << font_size << '\t' << line_height << '\t'
                 << resolved_font_weight(node) << '\t' << "start" << '\t'

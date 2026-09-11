@@ -16,6 +16,8 @@ struct css_syntax_declaration final {
     std::string name;
     std::string value;
     bool important{false};
+    uint32_t source_line{0};
+    uint32_t source_column{0};
 };
 
 struct css_syntax_rule final {
@@ -26,11 +28,15 @@ struct css_syntax_rule final {
     std::string prelude;
     size_t first_declaration{0};
     size_t declaration_count{0};
+    uint32_t source_line{0};
+    uint32_t source_column{0};
 };
 
 struct css_syntax_metrics final {
     uint64_t duration_ns{0};
     uint64_t parse_error_count{0};
+    uint32_t first_error_line{0};
+    uint32_t first_error_column{0};
     uint64_t parser_allocation_count{0};
     uint64_t parser_peak_bytes{0};
     uint64_t parser_retained_bytes{0};
@@ -63,10 +69,19 @@ public:
         std::string_view name,
         std::string_view prelude,
         size_t& rule_index) = 0;
+    virtual bool located_begin_rule(uint32_t kind, bool has_block, size_t parent_index,
+        std::string_view name, std::string_view prelude, size_t& rule_index,
+        uint32_t line, uint32_t column) {
+        return begin_rule(kind, has_block, parent_index, name, prelude, rule_index);
+    }
     virtual bool declaration(
         std::string_view name,
         std::string_view value,
         bool important) = 0;
+    virtual bool located_declaration(std::string_view name, std::string_view value,
+        bool important, uint32_t line, uint32_t column) {
+        return declaration(name, value, important);
+    }
     virtual bool end_rule(size_t rule_index, size_t declaration_count) = 0;
 };
 

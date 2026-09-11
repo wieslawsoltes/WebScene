@@ -1,6 +1,7 @@
 #pragma once
 
 #include "webscene_native_engine.h"
+#include "webscene_named_colors.h"
 #include "graphics/canvas_backing.h"
 #include "graphics/image_lease_abi.h"
 
@@ -244,6 +245,8 @@ struct node_style final {
     }
 
     struct background_image_data final {
+        float linear_angle{180};
+        std::vector<uint32_t> linear_colors;
         std::string image_value{"none"};
         std::string image_markup;
         std::string image_view_box;
@@ -314,6 +317,7 @@ struct node_style final {
         bool auto_flow_column{false};
         bool fractional_rows{false};
         bool span_all{false};
+        bool compiled_full_columns{false};
         int32_t column_start{0};
         std::string area_value{"auto"};
         std::string row_value{"auto"};
@@ -483,6 +487,7 @@ struct node_style final {
     css_length border_right_width{};
     css_length border_bottom_width{};
     css_length outline_width{};
+    css_length outline_offset{};
     css_length border_top_left_radius{};
     css_length border_top_right_radius{};
     css_length border_bottom_right_radius{};
@@ -494,47 +499,22 @@ struct node_style final {
     float transform_scale_x{1};
     float transform_scale_y{1};
     float transform_rotate_degrees{0};
-    bool transform_specified{false};
-    // Retain whether transform-origin won the cascade independently from its
-    // computed value. The initial 50% 50% value is otherwise indistinguishable
-    // from an explicitly authored origin when detecting CSS compositions.
-    bool transform_origin_specified{false};
-    display_mode display{display_mode::block};
-    position_mode position{position_mode::normal};
-    float_mode floating{float_mode::none};
-    flex_direction direction{flex_direction::row};
-    align_mode align_items{align_mode::stretch};
-    align_mode align_self{align_mode::stretch};
-    justify_mode justify_content{justify_mode::start};
-    overflow_mode overflow_x{overflow_mode::visible};
-    overflow_mode overflow_y{overflow_mode::visible};
     float flex_grow{0};
     float flex_shrink{1};
     css_length flex_basis{};
     float opacity{1};
     uint32_t background_rgba{0};
-    // currentColor is a used-value dependency, not a transparent color. Keep
-    // it deferred so inherited color and declaration order resolve correctly.
-    bool background_current_color{false};
     uint32_t foreground_rgba{0};
     uint32_t border_left_rgba{0};
     uint32_t border_top_rgba{0};
     uint32_t border_right_rgba{0};
     uint32_t border_bottom_rgba{0};
-    // The initial value of every border-*-color longhand is currentColor.
-    // Keep that dependency deferred so declaration order and inherited color
-    // are resolved at paint time rather than collapsed to transparent.
-    bool border_left_current_color{true};
-    bool border_top_current_color{true};
-    bool border_right_current_color{true};
-    bool border_bottom_current_color{true};
     uint32_t outline_rgba{0};
     float box_shadow_offset_x{0};
     float box_shadow_offset_y{0};
     float box_shadow_blur_radius{0};
     float box_shadow_spread_radius{0};
     uint32_t box_shadow_rgba{0};
-    bool box_shadow_present{false};
     // Negative means unspecified/inherited. Zero is a valid CSS value and is
     // used by visually hidden accessibility content.
     float font_size{-1};
@@ -543,13 +523,7 @@ struct node_style final {
     int32_t font_weight{0};
     float letter_spacing{0};
     float word_spacing{0};
-    bool letter_spacing_specified{false};
-    bool word_spacing_specified{false};
     int32_t z_index{0};
-    // Keep the computed `auto` keyword distinct from its paint stacking level.
-    // Collapsing both to integer zero made CSSOM unable to distinguish an
-    // unspecified/root-inherited z-index from an authored `z-index: 0`.
-    bool z_index_auto{true};
     struct table_style_data final {
         css_length border_spacing_horizontal{2, length_unit::pixels};
         css_length border_spacing_vertical{2, length_unit::pixels};
@@ -584,6 +558,7 @@ struct node_style final {
         // the live inherited foreground when the scene is serialized.
         std::string svg_fill;
         std::string svg_stroke;
+        std::string svg_stroke_width;
         std::string svg_text_anchor;
         std::string list_style_position;
         std::string list_style_type;
@@ -736,8 +711,43 @@ struct node_style final {
             data->elliptical_border_radius = false;
         }
     }
-    uint64_t inline_property_mask{0};
-    uint64_t important_property_mask{0};
+    // Keep small style state together instead of padding each scalar. Border
+    // color and margin flags stay addressable for parsers that take bool&.
+    display_mode display{display_mode::block};
+    position_mode position{position_mode::normal};
+    float_mode floating{float_mode::none};
+    flex_direction direction{flex_direction::row};
+    align_mode align_items{align_mode::stretch};
+    align_mode align_self{align_mode::stretch};
+    justify_mode justify_content{justify_mode::start};
+    overflow_mode overflow_x{overflow_mode::visible};
+    overflow_mode overflow_y{overflow_mode::visible};
+    bool outline_current_color : 1 {false};
+    bool transform_specified : 1 {false};
+    // Retain whether transform-origin won the cascade independently from its
+    // computed value. The initial 50% 50% value is otherwise indistinguishable
+    // from an explicitly authored origin when detecting CSS compositions.
+    bool transform_origin_specified : 1 {false};
+    // currentColor is a used-value dependency, not a transparent color. Keep
+    // it deferred so inherited color and declaration order resolve correctly.
+    bool background_current_color : 1 {false};
+    // The initial value of every border-*-color longhand is currentColor.
+    // Keep that dependency deferred so declaration order and inherited color
+    // are resolved at paint time rather than collapsed to transparent.
+    bool border_left_current_color{true};
+    bool border_top_current_color{true};
+    bool border_right_current_color{true};
+    bool border_bottom_current_color{true};
+    bool box_shadow_present : 1 {false};
+    bool box_shadow_inset : 1 {false};
+    bool box_shadow_current_color : 1 {false};
+    bool letter_spacing_specified : 1 {false};
+    bool word_spacing_specified : 1 {false};
+    // Keep the computed `auto` keyword distinct from its paint stacking level.
+    // Collapsing both to integer zero made CSSOM unable to distinguish an
+    // unspecified/root-inherited z-index from an authored `z-index: 0`.
+    bool z_index_auto : 1 {true};
+    std::array<bool, 4> border_dashed{}; // left, top, right, bottom
     bool clip : 1 {false};
     bool scroll_x_enabled : 1 {false};
     bool scroll_y_enabled : 1 {false};
@@ -766,6 +776,8 @@ struct node_style final {
     bool margin_right_auto{false};
     bool margin_bottom_auto{false};
     bool table_layout_fixed : 1 {false};
+    uint64_t inline_property_mask{0};
+    uint64_t important_property_mask{0};
 private:
     void ensure_unique_pseudo_elements()
     {
@@ -842,6 +854,7 @@ struct gpu_canvas_scene_binding final {
 };
 
 struct canvas_node_data final {
+    bool externally_composited{false};
     webscene::graphics::canvas_backing backing;
     std::shared_ptr<const webscene_gpu_image_lease_v3> gpu_image;
     std::shared_ptr<webscene_gpu_image_snapshot> gpu_snapshot;
@@ -1000,6 +1013,8 @@ enum class script_execution_state : uint8_t {
 };
 
 struct dom_node final {
+    // HTML tree-builder line at creation, not an exact authored token span.
+    uint64_t parser_line{0};
     static constexpr std::string_view html_namespace_uri =
         "http://www.w3.org/1999/xhtml";
 
@@ -1032,6 +1047,7 @@ struct dom_node final {
     struct dialog_data final {
         std::string return_value;
         uint32_t previously_focused_id{};
+        uint32_t backdrop_rgba{};
     };
 
     struct form_control_data final {
@@ -1152,9 +1168,23 @@ struct dom_node final {
 
     uint32_t id{0};
     dom_node_kind kind{dom_node_kind::element};
+    // Script execution history survives reparenting. Group it with the node
+    // kind and flags to use the alignment gap before the string fields.
+    script_execution_state script_state{script_execution_state::ready};
+    // Records that the current used block size came from a definite
+    // containing-block/flex constraint rather than max-content expansion.
+    // Descendant percentage and overflow sizing must follow the used size
+    // even when this node's authored height remains `auto`.
+    bool used_height_is_definite : 1 {false};
+    bool visible : 1 {true};
+    // Temporary layout nodes created for ::before/::after are principal
+    // generated boxes, not anonymous whitespace text.  Keep that distinction
+    // even when content is empty so authored dimensions can participate in
+    // flex/grid sizing.
+    bool generated_pseudo_box : 1 {false};
     // XML documents preserve qualified/tag and attribute name case. HTML nodes
     // continue to apply the ASCII case-insensitive name rules at the binding.
-    bool xml_mode{false};
+    bool xml_mode : 1 {false};
     std::string tag;
     std::string id_attribute;
     std::string class_name;
@@ -1455,21 +1485,6 @@ struct dom_node final {
     float scroll_content_height{0};
     float scroll_viewport_width{0};
     float scroll_viewport_height{0};
-    // Records that the current used block size came from a definite
-    // containing-block/flex constraint rather than max-content expansion.
-    // Descendant percentage and overflow sizing must follow the used size
-    // even when this node's authored height remains `auto`.
-    bool used_height_is_definite{false};
-    // Script execution history is intrinsic DOM state. Keeping the byte in
-    // existing tail padding preserves the fixed dom_node footprint while
-    // preventing a connected script from executing again after a reparent.
-    script_execution_state script_state{script_execution_state::ready};
-    bool visible{true};
-    // Temporary layout nodes created for ::before/::after are principal
-    // generated boxes, not anonymous whitespace text.  Keep that distinction
-    // even when content is empty so authored dimensions can participate in
-    // flex/grid sizing.
-    bool generated_pseudo_box{false};
 };
 
 display_mode blockified_display(const dom_node& node) noexcept;

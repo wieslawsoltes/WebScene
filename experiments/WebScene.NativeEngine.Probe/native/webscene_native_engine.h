@@ -129,6 +129,14 @@ typedef struct webscene_scene_header {
     uint64_t content_hash;
 } webscene_scene_header;
 
+// DOM kinds 44/46 are typed linear gradients (background/foreground).
+// flags is the number of immediately following kind-45 stop records;
+// stroke_width is the CSS angle in degrees. Each stop carries offset in x
+// and color in rgba. Stop records are payload, never independent draws.
+// DOM kinds 40/41 are dashed rounded strokes; 42/43 are dashed lines
+// (background/foreground pairs). stroke_width carries the width in CSS pixels.
+// Shadow kinds 17/18: flags bit 0 selects an inverse rounded hole;
+// producers must bracket inverse shadows with clip commands 12/13.
 typedef struct webscene_scene_command {
     uint32_t kind;
     uint32_t flags;
@@ -1147,10 +1155,27 @@ WEBSCENE_API uint8_t webscene_engine_prewarm(void);
 WEBSCENE_API webscene_engine* webscene_engine_create(uint32_t simulated_chart_command_count);
 WEBSCENE_API webscene_engine* webscene_engine_create_with_options(const webscene_engine_options* options);
 WEBSCENE_API void webscene_engine_destroy(webscene_engine* engine);
+
+// One optional host observer, independent of the creation-time callbacks.
+// Called on a producer thread; it must only schedule work and must not reenter
+// this engine. Passing null unregisters and waits for any active call to finish.
+// The caller must serialize registration with destruction of the engine.
+typedef void (*webscene_work_available_callback_v1)(void* user_data);
+WEBSCENE_API void webscene_engine_set_work_available_callback_v1(
+    webscene_engine* engine,
+    webscene_work_available_callback_v1 callback,
+    void* user_data);
+
 WEBSCENE_API uint8_t webscene_engine_set_resource_root(
     webscene_engine* engine,
     const char* resource_root,
     size_t resource_root_length);
+// Loads a named, build-time compiled package on the engine worker. Strings and
+// viewport are copied before return. No application C++ objects cross this ABI.
+WEBSCENE_API uint8_t webscene_engine_load_compiled_document_v1(
+    webscene_engine* engine, const char* name, size_t name_length,
+    const char* base_url, size_t base_url_length, const webscene_input_event* viewport);
+
 WEBSCENE_API uint8_t webscene_engine_load_url(
     webscene_engine* engine,
     const char* url,

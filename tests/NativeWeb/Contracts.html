@@ -1,0 +1,135 @@
+<!doctype html><html id="html-root" data-theme="dark" style="--RootInline:23px"><head><style>
+:root { padding: 3px; --accent: #5ac6d2; --panel-width: 222px; --shadow:0 15px 40px #0005; --border: 1px solid var(--accent); }
+html[data-theme="light"] { padding: 7px; --panel-width:195px; --svg-paint:#112233; --insets:5px; }
+html[data-theme] > body { padding: 2px; }
+body { margin: 0; -webkit-font-smoothing:antialiased; }
+.outer { padding: 10px; }
+button { font-family: Arial, sans-serif; width: 20px; height: 20px; }
+.outer > button { font-family: Arial, sans-serif; width: 30px; }
+.outer .chosen { width: 40px; }
+#target { width: 50px; }
+.chosen { width: 60px !important; }
+button:focus { height: 30px; }
+@media (max-width: 400px) { #target { height: 40px; } }
+#variable-probe { overflow:hidden; text-align:center; white-space:nowrap; box-shadow:var(--shadow); border:0; border-bottom:1px solid color-mix(in srgb,var(--accent) 25%,transparent); border-top:1px solid var(--accent); border-width:+1e0px 0; border-style:solid hidden; width:var(--panel-width); color:var(--accent); height:var(--missing, 12px); }
+#variable-grid { display:grid; grid-template-columns:var(--panel-width) minmax(250px,1fr) 252px; }
+@media (max-height:300px) { :root { --panel-width:175px; } }
+#variable-probe:not([data-compact]) { min-width:100px; }
+#negation { width:10px; } #negation:not([data-excluded]) { width:20px; }
+#flex-test { display:flex; width:300px; } #flex-a { flex:1; } #flex-b { flex:2; }
+#font-probe { font:10px/19px Consolas,monospace; }
+#dynamic-viewport { height:50dvh; width:50dvw; }
+#hit-stack { position:relative; width:100px; height:40px; } #hit-back,#hit-front { position:absolute; left:0; top:0; width:100px; height:40px; } #hit-front { z-index:10; } #hit-front.pass { pointer-events:none; }
+#svg-paint polygon { fill:var(--svg-paint, var(--accent))!important; stroke:#ffffff; stroke-width:.8; }
+#flex-min-column { display:flex; flex-direction:column; height:400px; }
+#flex-min-row { display:flex; width:400px; }
+#flex-min-column > div { flex:1; min-height:140px; }
+#flex-min-row > div { flex:1; min-width:140px; }
+#numeric-length { width:+.5e1PX; height:7.5e-1px; margin-left:-.25px; opacity:8e-1; }
+#inset-parent { position:relative; width:200px; height:100px; }
+#inset-child { position:absolute; inset:var(--insets, 10px 20px 30px 40px); }
+#inset-child[data-invalid="true"] { --insets:bogus; width:12px; height:13px; }
+#svg-paint text { text-anchor:middle; }
+#calc-child.literal { inset:calc(2 * (5px + 2px)) auto auto calc((50% - 20px) / 2); }
+#calc-parent.delimiter-offset { --a\,b:38px; --a\)b:var(--a\,b); }
+#calc-parent.delimiter-offset #calc-child { inset:calc(var(--a\)b /* , ) */, 9px) + /* ) ( */ 2px) auto auto var(--a\,b); }
+#calc-parent.unicode-offset { --尺寸:34px; --café:var(--尺寸); }
+#calc-parent.unicode-offset #calc-child { left:var(--caf\e9); }
+#calc-parent.named-offset { --1:30px; ---:var(--1); }
+#calc-parent.named-offset #calc-child { left:var(---); }
+#mix-audit { width:20px; height:20px; background:COLOR-MIX(in /* , ) ( */ srgb, var(--色, var(--fallback, #123456)) /* , ) */ +5e1%, TRANSPARENT); }
+#mix-audit.pair { background:color-mix(in srgb,var(--First,red) 25%,var(--Second,blue)); }
+#mix-audit.short-weights { background:color-mix(in srgb,red 25%,blue 25%); }
+#mix-audit.hsl { --色:hsl(.5turn 100% 50% / 50%); }
+#shadow-audit.mixed { --Accent:red; box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--Accent) 25%,transparent); }
+#shadow-audit.current { color:blue; box-shadow:2px 0 inset; }
+#dash-audit { width:40px; height:20px; border:2px dashed var(--Dash,red); }
+#dash-audit.solid { border-style:solid; }
+#shadow-audit { width:20px; height:20px; background:white; box-shadow:inset 2px 0 0 var(--Shadow,red); }
+#outline-audit { width:20px; height:20px; outline:2px solid var(--Outline,#2468ac); }
+#outline-audit.current { color:#13579b; outline:solid 2px; }
+#outline-audit.inset { outline-offset:-2px; }
+#outline-audit.off { outline:none; }
+#mix-audit.rgb { --色:rgb(10 20 30 / 50%); }
+#mix-audit.named { --色:REBECCAPURPLE; }
+#mix-audit.changed { --色:#abcdef80; }
+#calc-parent { position:relative; width:25vw; height:100px; }
+#calc-child { position:absolute; inset:calc(var(--missing-offset, 5px) * 2 + 10px / 2) var(--auto-sides, auto auto) calc(2 * (50% - (15px + 5px)) / 2); width:10px; height:10px; }
+#zero-variable { --zero:+0e0; width:var(--zero); height:12px; }
+#variable-padding { --space:2px 4px; padding:var(--space); width:20px; height:10px; }
+#variable-padding.invalid { --space:2px -4px; }
+#padding-longhand { width:20px;height:10px;padding:3px; padding-left:var(--left-space,7px); }
+#padding-longhand.invalid { --left-space:-2px; }
+#variable-gap { display:grid;grid-template-columns:10px 10px;grid-template-rows:10px 10px; --gaps:3px 7px; gap:var(--gaps); }
+#variable-gap.invalid { --gaps:3px -7px; }
+#variable-gap.longhand { column-gap:var(--column-gap,11px); }
+#variable-gap.multi { --column-gap:2px 4px; }
+#variable-gap.negative { --column-gap:-2px; }
+#margin-container { width:100px; }
+#variable-margin { width:20px;height:10px;--margins:0 AUTO; margin:var(--margins); }
+#variable-margin.shift { --margins:0 0 0 -5px; }
+#variable-margin.invalid { --margins:bogus; }
+#variable-margin.longhand { margin-left:var(--left-margin,10px); }
+#variable-margin.bad-longhand { --left-margin:1px 2px; }
+#variable-margin.auto-longhand { --left-margin:AuTo; }
+#translated { width:2.5vw;height:10px;transform:translateX(50%); }
+#translated.reset { transform:none; }
+#translated.both { transform:translate(50%, 50%); }
+#translation-clip { width:20px;height:10px;overflow:hidden; }
+#translation-clipped { background:#123456;width:20px;height:10px;transform:translateX(10px); }
+#translation-clip.visible { overflow:visible; }
+#translation-clip.empty { height:0; }
+#translation-clip.mixed { overflow:visible hidden; }
+#native-scroll.hidden-mode { overflow:hidden!important; }
+#native-scroll.clip-mode { overflow:clip!important; }
+#native-scroll.visible-mode { overflow:visible!important; }
+#scroll-content.short { height:20px!important; }
+#native-scroll.expanded { height:25px!important; }
+#align-parent { text-align:right; }
+#align-variable { width:100px;text-align:var(--Align, CENTER); }
+#align-variable.invalid { --Align:bogus; }
+#transform-text-parent { text-transform:lowercase; }
+#transform-text { text-transform:var(--Case, UPPERCASE); }
+#transform-text.invalid { --Case:bogus; }
+#whitespace-variable { width:100px;font-size:10px;line-height:20px;white-space:var(--White, PRE); }
+#whitespace-variable.invalid { --White:bogus; }
+#whitespace-variable.preline { --White:pre-line; }
+#whitespace-variable.narrow { width:15px; }
+html[data-fractions="on"] { --InheritedTracks:3fr 1fr; }
+#fraction-grid.inherited { --Tracks:var(--InheritedTracks, 1fr 1fr); }
+#fraction-grid.reverse { --Tracks:2fr 1fr; }
+#fraction-grid.invalid { --Tracks:-1fr 2fr; }
+#fraction-grid { display:grid; width:300px; grid-template-columns:var(--Tracks, 1FR 2fr); }
+#html-root { --RootInline:41px; }
+#html-root.override-inline { --RootInline:37px !important; }
+#root-inline-child { width:var(--RootInline); }
+#media-attribute { width:20px; }
+#fixed-audit.auto-width { width:auto !important; }
+#priority-column.zero { width:0 !important; }
+#css-table { display:table; width:100px; }
+#css-table .row { display:table-row; }
+#css-table .cell { display:table-cell; height:10px; }
+#css-table.blocks, #css-table.blocks .row, #css-table.blocks .cell { display:block; }
+#contents-wrapper.box { display:block !important; }
+#self-child.stretch { align-self:stretch; height:auto; }
+#self-child.end { align-self:end; }
+#self-child.auto { align-self:auto; }
+#self-child { align-self:center; width:10px; height:10px; }
+#distribution { display:flex; width:100px; justify-content:space-around; }
+#distribution.variable-normal { gap:var(--MixedGap, NORMAL 12px); }
+#distribution.normal { gap:normal; }
+#distribution.gapped { gap:12px; }
+#distribution.even { justify-content:space-evenly; }
+#self-grid-child.maximum { max-width:10px; max-height:6px; margin:auto; }
+#self-grid-child.box { min-width:40px; min-height:20px; padding:2px; border:1px solid black; margin:auto; box-sizing:content-box; }
+#self-grid-child.border-box { box-sizing:border-box; }
+#self-grid-child.conflict { max-width:10px; max-height:6px; }
+#self-grid-child.constrained { min-width:40px; min-height:20px; margin-left:auto; }
+#self-grid-child.horizontal-margin { margin-left:auto; }
+#self-grid-child.auto-margin { margin-top:auto; }
+#gradient-audit { width:40px; height:20px; --start:red; background:linear-gradient(125deg,var(--start),blue); }
+#gradient-audit.changed { --start:green; }
+</style><style media="(min-width:500px)">#media-attribute { width:50px; } @media (max-width:700px) { #media-attribute { width:70px; } }#gradient-audit { width:40px; height:20px; --start:red; background:linear-gradient(125deg,var(--start),blue); }
+#gradient-audit.changed { --start:green; }
+</style></head><body><div class="outer"><button id="target" class="chosen" style="width: 70px">Go</button><button id="other">Other</button><canvas id="canvas" width="80" height="40"></canvas></div><div id="variable-probe"></div><div id="variable-grid"><div id="grid-left"></div><div id="grid-middle"></div><div id="grid-right"></div></div><div id="negation"></div><div id="flex-test"><div id="flex-a"></div><div id="flex-b"></div></div><div id="font-probe">FontProbe</div><div id="dynamic-viewport"></div><div id="hit-stack"><button id="hit-back">Back</button><button id="hit-front">Front</button></div><svg id="svg-paint" width="30" height="30" viewBox="0 0 30 30"><polygon points="0,0 30,0 15,30"></polygon><text x="15" y="15">Label</text></svg><section id="flex-min-column"><div id="flex-min-height"></div></section><section id="flex-min-row"><div id="flex-min-width"></div></section><div id="numeric-length"></div><div id="inset-parent"><div id="inset-child"></div></div><div id="calc-parent"><div id="calc-child"></div></div><div id="zero-variable"></div><div id="inline-whitespace"><span>A</span> <span>B</span></div><div id="preserved-whitespace" style="white-space:pre">  </div><div id="hidden-probe" hidden="false" style="width:31px;height:17px">Hidden</div><div id="line-breaks" style="font-size:10px;line-height:20px"><span id="before-break">A</span><br id="explicit-break"><span id="after-break">B</span></div><div id="variable-padding"></div><div id="padding-longhand"></div><div id="variable-gap"><div id="gap-first"></div><div id="gap-second"></div><div id="gap-third"></div></div><div id="margin-container"><div id="variable-margin"></div></div><div id="translate-parent"><div id="translated"><div id="translated-child" style="width:4px;height:4px;transform:translateX(2px)"></div></div><div id="translate-sibling" style="height:8px"></div></div><div id="translation-clip"><div id="translation-clipped"></div></div><div id="native-scroll" style="width:30px;height:10px;overflow:auto"><div id="scroll-content" style="height:50px"></div></div><div id="scroll-outer" style="width:30px;height:20px;overflow:auto"><div id="scroll-inner" style="height:10px;overflow:auto"><div style="height:30px"></div></div><div style="height:30px"></div></div><div id="align-parent"><div id="align-variable"><span id="align-item" style="display:inline-block;width:10px;height:5px"></span></div></div><div id="transform-text-parent"><div id="transform-text">CaseAuditProbe</div></div><div id="whitespace-variable">A
+B</div><div id="fraction-grid"><div id="fraction-a"></div><div id="fraction-b"></div></div><div id="root-inline-child"></div><div id="semantic-containers" style="width:80px"><article id="semantic-article" style="height:10px"></article><aside id="semantic-aside" style="height:11px"></aside><hgroup id="semantic-hgroup" style="height:12px"></hgroup><search id="semantic-search" style="height:13px"></search></div><div id="media-attribute"></div><table id="audit-table" style="width:100px"><tbody><tr><td id="audit-cell-a" style="height:10px"></td><td id="audit-cell-b" style="height:10px"></td></tr><tr><td id="audit-cell-span" colspan="2" style="height:12px"></td></tr></tbody></table><table id="fixed-audit" style="width:200px;table-layout:fixed"><tr><td id="fixed-first" style="width:50px;height:10px"></td><td id="fixed-second" style="height:10px"></td></tr><tr><td id="fixed-later" style="width:150px;height:10px">LongerContent</td><td></td></tr></table><table style="width:200px;table-layout:fixed"><colgroup><col span="+1" id="priority-column" style="width:60px"><col></colgroup><tr><td id="col-priority" style="width:120px;height:10px"></td><td id="col-priority-second"></td></tr></table><table style="width:100px"><tbody id="zero-rowspan-group"><tr><td id="zero-rowspan" rowspan="0"></td><td style="height:10px"></td></tr><tr><td id="zero-rowspan-peer" style="height:12px"></td></tr></tbody><tbody><tr><td id="next-group-cell" style="height:10px"></td></tr></tbody></table><div id="css-table"><div class="row"><div id="css-cell-a" class="cell"></div><div id="css-cell-b" class="cell"></div></div></div><div style="display:flex;width:100px"><div id="contents-wrapper" style="display:contents;background:#123456;border:2px solid #123456"><div id="contents-first" style="width:20px;height:10px"></div><div id="contents-second" style="width:30px;height:10px"></div></div><div id="contents-last" style="width:10px;height:10px"></div></div><div id="self-parent" style="display:flex;align-items:start;width:100px;height:40px"><div id="self-child"></div></div><div id="distribution"><div id="distribution-a" style="width:20px;height:10px"></div><div id="distribution-b" style="width:20px;height:10px"></div></div><div id="self-column" style="display:flex;flex-direction:column;align-items:start;width:100px;height:40px"><div id="self-column-child" style="align-self:center;width:20px;height:10px"></div></div><div id="self-grid" style="display:grid;grid-template-columns:100px;grid-template-rows:40px;width:100px;height:40px"><div id="self-grid-child" style="align-self:center;width:20px;height:10px"></div></div><div id="mix-audit"></div><div id="outline-audit"></div><div id="shadow-audit"></div><div id="dash-audit"></div><div id="gradient-audit"></div></body></html>

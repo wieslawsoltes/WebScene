@@ -174,10 +174,12 @@
             frame_paced_pointer_pending_.load(std::memory_order_acquire);
         if (previous == 0U
             && demand != 0U
-            && !pointer_frame_pending
-            && animation_frame_requested_callback_ != nullptr) {
-            animation_frame_requested_callback_(
-                animation_frame_requested_user_data_);
+            && !pointer_frame_pending) {
+            notify_host_work();
+            if (animation_frame_requested_callback_ != nullptr) {
+                animation_frame_requested_callback_(
+                    animation_frame_requested_user_data_);
+            }
         }
     }
 

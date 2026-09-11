@@ -1,0 +1,183 @@
+{
+  "checks": [
+    {
+      "ribbon": "Home",
+      "buttons": 30
+    },
+    {
+      "ribbon": "Insert",
+      "buttons": 17
+    },
+    {
+      "ribbon": "Annotate",
+      "buttons": 18
+    },
+    {
+      "ribbon": "Model",
+      "buttons": 27
+    },
+    {
+      "ribbon": "View",
+      "buttons": 25
+    },
+    {
+      "ribbon": "Manage",
+      "buttons": 19
+    },
+    {
+      "ribbon": "Drafting",
+      "buttons": 22
+    },
+    {
+      "ribbon": "Solids",
+      "buttons": 30
+    },
+    {
+      "ribbon": "Parametric",
+      "buttons": 17
+    },
+    {
+      "ribbon": "Assembly",
+      "buttons": 10
+    },
+    {
+      "ribbon": "Blocks",
+      "buttons": 11
+    },
+    {
+      "ribbon": "Text",
+      "buttons": 19
+    },
+    {
+      "ribbon": "Exchange",
+      "buttons": 10
+    },
+    {
+      "ribbon": "Productivity",
+      "buttons": 10
+    },
+    {
+      "command": "layers",
+      "ok": true,
+      "title": "Layer manager"
+    },
+    {
+      "command": "new-layer",
+      "ok": true,
+      "title": "Create layer"
+    },
+    {
+      "command": "units",
+      "ok": true,
+      "title": "Drawing units & precision"
+    },
+    {
+      "command": "help",
+      "ok": true,
+      "title": "Welcome to Kestrel CAD"
+    },
+    {
+      "command": "diagnostics",
+      "ok": true,
+      "title": "Renderer diagnostics"
+    },
+    {
+      "command": "palette",
+      "ok": true,
+      "title": "Renderer diagnostics"
+    },
+    {
+      "command": "group",
+      "ok": false,
+      "error": "Error: Select at least 2 editable objects first."
+    },
+    {
+      "command": "text",
+      "ok": true,
+      "title": "Create text"
+    },
+    {
+      "command": "dimension",
+      "ok": true,
+      "title": "Create text"
+    },
+    {
+      "command": "hatch",
+      "ok": true,
+      "title": "Create text"
+    },
+    {
+      "command": "array",
+      "ok": false,
+      "error": "Error: Select an editable object first."
+    },
+    {
+      "command": "transform3d",
+      "ok": false,
+      "error": "Error: Select an editable object first."
+    },
+    {
+      "command": "dwg-setup",
+      "ok": true,
+      "title": "DWG codec status"
+    },
+    {
+      "command": "mtext",
+      "ok": true,
+      "title": "Create rich MTEXT"
+    },
+    {
+      "command": "dimstyles",
+      "ok": true,
+      "title": "Dimension styles"
+    },
+    {
+      "command": "leader",
+      "ok": true,
+      "title": "Create leader"
+    },
+    {
+      "command": "table",
+      "ok": true,
+      "title": "Create table"
+    },
+    {
+      "command": "stretch",
+      "ok": true,
+      "title": "Stretch crossing vertices"
+    },
+    {
+      "command": "layout-manager",
+      "ok": true,
+      "title": "Scaled paper layouts"
+    },
+    {
+      "command": "ucs-manager",
+      "ok": true,
+      "title": "User coordinate system"
+    }
+  ],
+  "startup": {
+    "entities": 265,
+    "nodes": 781,
+    "backend": "Canvas 2D \u00b7 Compatibility"
+  },
+  "strict": true,
+  "mtext_preview": {
+    "nodes": 4,
+    "report": "2 lines, 120.00 \u00d7 16.67 mm. "
+  },
+  "history": {
+    "n": 265,
+    "added": 266,
+    "undone": 265,
+    "redone": 266
+  },
+  "worker_available": true,
+  "dxf_export": {
+    "length": 53542,
+    "eof": true
+  },
+  "caught_failures": [],
+  "errors": []
+}

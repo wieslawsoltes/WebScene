@@ -217,6 +217,7 @@
         if (runtime_work_metrics_enabled_.load(std::memory_order_relaxed)) {
             generated_callback_calls_.fetch_add(1, std::memory_order_relaxed);
         }
+        if (notify) notify_host_work();
         if (notify && interop_callback_available_callback_ != nullptr) {
             interop_callback_available_callback_(
                 interop_callback_available_user_data_);
