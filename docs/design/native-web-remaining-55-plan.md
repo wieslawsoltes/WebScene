@@ -1516,3 +1516,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   that host change was reverted, Foco worktree is clean, and final hosted exercise
   succeeds again. Teardown requires dedicated debugging; exit codes alone remain
   insufficient evidence for preview validation.
+
+- Cocoa shutdown root cause verified from macOS crash report: the active display
+  callback continued after application host-frame shutdown cleared renderer and
+  display-link resources. Foco now checks callback lifetime after reentrant input,
+  layout and host-frame work. Cocoa shutdown stops/wakes the AppKit loop instead
+  of terminating the process, allowing its requested exit code to return. Rebuilt
+  preview: --exercise-failure returns 5; --exercise-navigation returns 0 with its
+  success marker. Courtyard pan also exits 0 after 360 frames, 359 compositor
+  presentations, zero skips in 5.98628 s, zero geometry rebuilds. These are backend
+  counts, not physical display timestamp measurements or OS resize evidence.
