@@ -8,6 +8,16 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Native app relocation fix: FocoKestrel and FocoKestrelPreview now bundle Dawn in
+Contents/Frameworks, use @executable_path/../Frameworks instead of an absolute
+external SDK rpath, and receive local ad-hoc signatures after copying the library.
+The rebuilt preview copied to /tmp/KestrelRelocatedNative.app passes strict/deep
+signature verification and its routed spectrum drag/undo/capture exercise (exit
+0, GPU serial 3). DYLD_PRINT_LIBRARIES confirms Dawn loads from that copied bundle.
+Dawn's inspected dependencies are system libraries/frameworks. This establishes
+local relocation for the preview; release identity signing/notarization, resource
+coverage and complete application acceptance remain open.
+
 Startup-gap repeatability check: three consecutive fresh process launches of the
 same Courtyard benchmark produce approximately 59.9998fps with no positive
 presentation interval above 16.667ms. Raw traces and revision/hash metadata live

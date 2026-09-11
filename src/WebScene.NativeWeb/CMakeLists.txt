@@ -271,6 +271,22 @@ if(FOCO_SOURCE_DIR)
  endif()
 endif()
 
+if(APPLE AND TARGET dawn::webgpu_dawn)
+ foreach(app IN ITEMS FocoKestrel FocoKestrelPreview)
+  if(TARGET ${app})
+   set_target_properties(${app} PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "@executable_path/../Frameworks")
+   add_custom_command(TARGET ${app} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:${app}>/Contents/Frameworks"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:dawn::webgpu_dawn>" "$<TARGET_BUNDLE_DIR:${app}>/Contents/Frameworks/$<TARGET_FILE_NAME:dawn::webgpu_dawn>"
+    COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_DIR:${app}>/Contents/Frameworks/$<TARGET_FILE_NAME:dawn::webgpu_dawn>"
+    COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_DIR:${app}>"
+    VERBATIM)
+  endif()
+ endforeach()
+endif()
+
 if(BUILD_TESTING)
  add_executable(kestrel_ribbon_templates "${WEBSCENE_ROOT}/tests/NativeWeb/kestrel_ribbon_templates.cpp")
  target_link_libraries(kestrel_ribbon_templates PRIVATE webscene_native_web)
