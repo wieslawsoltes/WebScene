@@ -8,6 +8,15 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Shared CSS parity check strengthened: shared_styles now records serialized scene
+bytes at every render checkpoint and requires identical sequences for runtime
+stylesheet preparation and compiler-generated stylesheet data on compiled HTML.
+This includes hover/focus, class/text changes, viewport and reduced-motion changes,
+template insertion/removal, scrollbar styling, SVG paint and stylesheet replacement.
+The strengthened test passes. The compiler, shared document, native contract and
+text/input suites also pass after rebuilding their targets. This compares fixture
+scene serialization, not browser pixels or complete CSS/Kestrel coverage.
+
 Bundle symbol isolation: a broader audit found html5ever code linked into the
 preview from the shared Rust archive despite no HTML entry-point call in native
 authoring. Native macOS app targets now dead-strip unused code. The executable

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <iterator>
+#include <vector>
 import webscene.test.shared_styles;
 import webscene.test.prepared_styles;
 
@@ -12,28 +13,34 @@ using namespace webscene::native_web;
 void require(bool value, std::source_location where=std::source_location::current()) {
   if(!value) throw std::runtime_error("shared stylesheet contract failed at line " + std::to_string(where.line()));
 }
-void exercise(const webscene_native::css::prepared_stylesheet& input) {
+std::vector<std::string> exercise(const webscene_native::css::prepared_stylesheet& input) {
   const auto* sheet=&input;
   document d;
+  std::vector<std::string> snapshots;
+  const auto render=[&](float width,float height)->decltype(auto) {
+    const auto& scene=d.render(width,height);
+    snapshots.emplace_back(scene.bytes.begin(),scene.bytes.end());
+    return (scene);
+  };
   compiled_ui::build(d);
   auto report=std::make_shared<shared_css_report>();
   d.set_stylesheet_resolver(make_shared_stylesheet_resolver({*sheet},report));
   const auto target=d.find("target");
-  d.render(300,200);
+  render(300,200);
   require(d.bounds(target).width==80 && d.bounds(target).height==20);
-  d.pointer("pointermove",1,1,0);d.render(300,200);require(d.bounds(target).width==90);
-  d.pointer("pointermove",299,199,0);d.render(300,200);require(d.bounds(target).width==80);
+  d.pointer("pointermove",1,1,0);render(300,200);require(d.bounds(target).width==90);
+  d.pointer("pointermove",299,199,0);render(300,200);require(d.bounds(target).width==80);
   d.attribute(target,"class","changed");d.set_text(target,"Native update");
-  d.render(300,200);require(d.bounds(target).width==120);
-  d.focus(target);d.render(300,200);require(d.bounds(target).height==30);
-  d.render(100,200);require(d.bounds(target).width==120); // More specific class wins.
-  d.remove_attribute(target,"class");d.render(100,200);require(d.bounds(target).width==60);
-  d.set_reduced_motion(true);d.render(100,200);require(d.bounds(target).height==10);
+  render(300,200);require(d.bounds(target).width==120);
+  d.focus(target);render(300,200);require(d.bounds(target).height==30);
+  render(100,200);require(d.bounds(target).width==120); // More specific class wins.
+  d.remove_attribute(target,"class");render(100,200);require(d.bounds(target).width==60);
+  d.set_reduced_motion(true);render(100,200);require(d.bounds(target).height==10);
   auto row=compiled_ui::instantiate(d,d.body(),"row");
-  d.render(100,200);require(row.roots.size()==1 && d.bounds(row.roots[0]).height==17);
-  d.remove(row.roots[0]);d.render(100,200);
+  render(100,200);require(row.roots.size()==1 && d.bounds(row.roots[0]).height==17);
+  d.remove(row.roots[0]);render(100,200);
   auto passes=d.layout_passes();
-  d.fill_rect(d.find("drawing"),0,0,10,10,0xff0000ff);d.render(100,200);
+  d.fill_rect(d.find("drawing"),0,0,10,10,0xff0000ff);render(100,200);
   require(d.layout_passes()==passes);
   bool rejected=false;
   try {d.add_rule({});} catch(const std::logic_error&) {rejected=true;}
@@ -43,7 +50,7 @@ void exercise(const webscene_native::css::prepared_stylesheet& input) {
   auto tall=d.element(scroller,"div");d.attribute(tall,"class","tall");
   d.attribute(scroller,"style","scrollbar-width:auto");
   const auto has_rail=[&](uint32_t color,float width) {
-    const auto& scene=d.render(100,200);
+    const auto& scene=render(100,200);
     for(const auto& command:scene.commands)
       if(command.node_id==scroller && command.rgba==color && command.width==width) return true;
     return false;
@@ -58,7 +65,7 @@ void exercise(const webscene_native::css::prepared_stylesheet& input) {
   require(has_rail(0x0000ffff,4));
   auto mark=d.find("mark");
   const auto serialized=[&] {
-    const auto& scene=d.render(100,200);
+    const auto& scene=render(100,200);
     return std::string(scene.bytes.begin(),scene.bytes.end());
   };
   d.attribute(mark,"class","wide");
@@ -89,13 +96,13 @@ void exercise(const webscene_native::css::prepared_stylesheet& input) {
   // Replacing the sheet changes styling through the same document invalidation.
   auto replacement=webscene_native::css::prepare_stylesheet("#target {width:44px;height:12px}","asset://new.css",[](const auto&){return true;});
   d.set_stylesheet_resolver(make_shared_stylesheet_resolver({*replacement},report));
-  d.render(100,200);require(d.bounds(target).width==44);
+  render(100,200);require(d.bounds(target).width==44);
   d.dispose();require(d.disposed());
   document typed;typed.add_rule({});rejected=false;
   try {typed.set_stylesheet_resolver(make_shared_stylesheet_resolver({*sheet},report));}
   catch(const std::logic_error&) {rejected=true;}
   require(rejected);
-
+  return snapshots;
 }
 
 void compare_selector(const webscene_native::css::compiled_css_selector& a,
@@ -148,6 +155,8 @@ int main() {
       require(a.declarations[j].name==b.declarations[j].name &&
           a.declarations[j].value==b.declarations[j].value && a.declarations[j].important==b.declarations[j].important);
   }
-  exercise(*parsed);exercise(generated);
+  const auto parsed_scenes=exercise(*parsed);
+  const auto compiled_scenes=exercise(generated);
+  require(!parsed_scenes.empty() && parsed_scenes==compiled_scenes);
   std::cout<<"Parsed and generated CSS on compiled HTML integration passed\n";
 }
