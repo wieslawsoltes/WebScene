@@ -3,6 +3,7 @@
 #include "webscene_css_matching.h"
 #include "webscene_css_query.h"
 #include "webscene_css_rule_operations.h"
+#include "webscene_css_rule_index.h"
 #include "webscene_css_variables.h"
 #include "webscene_css_box_values.h"
 #include "webscene_css_transitions.h"
@@ -751,5 +752,27 @@ int main(int argc,char** argv) {
     geometry_style=ordered_node.style;
     geometry_style.mutable_before_pseudo().padding_left={9,webscene_native::length_unit::pixels};
     if(webscene_native::css::computed_layout_style_equal(ordered_node.style,geometry_style)) return 139;
+    webscene_native::css::css_cascade_state indexed;
+    const auto index_selector_test=[&](size_t index,const std::string& selector) {
+        webscene_native::css::index_selector(index,selector,indexed.rules_by_id,
+            indexed.rules_by_class,indexed.rules_by_tag,indexed.rules_by_attribute,
+            indexed.focus_rules,indexed.unindexed_rules,indexed.descendant_attribute_dependencies);
+    };
+    index_selector_test(0,"[data-state] > .item:hover");
+    index_selector_test(1,"#panel::before");
+    index_selector_test(2,"button:disabled");
+    index_selector_test(3,"[title]");
+    index_selector_test(4,":focus");
+    index_selector_test(5,":root");
+    index_selector_test(6,"*");
+    if(indexed.rules_by_class["item"]!=std::vector<size_t>{0} ||
+       indexed.rules_by_id["panel"]!=std::vector<size_t>{1} ||
+       indexed.rules_by_tag["button"]!=std::vector<size_t>{2} ||
+       indexed.rules_by_attribute["title"]!=std::vector<size_t>{3} ||
+       indexed.focus_rules!=std::vector<size_t>{4} ||
+       indexed.rules_by_tag["html"]!=std::vector<size_t>{5} ||
+       indexed.unindexed_rules!=std::vector<size_t>{6} ||
+       !indexed.descendant_attribute_dependencies.contains("data-state") ||
+       indexed.descendant_attribute_dependencies.contains("title")) return 140;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }

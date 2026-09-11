@@ -686,3 +686,13 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   CSS parsing into compiled applications. Native stylesheet ownership, candidate
   indexing and invalidation integration remain unfinished; full original Kestrel
   parity and presented 60fps panning/resize remain unverified.
+
+- Selector index extraction: shared native index_selector now selects subject
+  ID/class/tag/attribute keys, focus/root buckets and fallback rules, and records
+  ancestor attribute dependencies. The ordinary runtime delegates this portion of
+  index construction to it. Native tests cover all buckets and distinguish ancestor
+  attributes from subject attributes; runtime positional selector, pseudo border,
+  iframe recascade and media-query regressions pass after rebuilding. Existing
+  selector scanning limitations are preserved. Hover/variable dependency indexing,
+  candidate collection and native document invalidation remain to be integrated;
+  this does not increase audited compiler coverage or prove Kestrel parity.

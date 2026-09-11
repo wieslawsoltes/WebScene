@@ -28,6 +28,7 @@
 #include "webscene_css_matching.h"
 #include "webscene_css_compound.h"
 #include "webscene_css_rule_operations.h"
+#include "webscene_css_rule_index.h"
 #include "webscene_css_variables.h"
 #include "webscene_css_box_values.h"
 #include "webscene_css_transitions.h"
