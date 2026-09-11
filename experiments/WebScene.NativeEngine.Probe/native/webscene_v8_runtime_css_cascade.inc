@@ -500,35 +500,14 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (trace_css) css_profile_candidate_checks += candidates.size();
 #endif
-        const auto* node_shadow_root = document.containing_shadow_root(node);
-        const auto rule_is_in_scope = [&](const css_rule& rule) {
-            if (rule.shadow_scope_root_id == 0U) return node_shadow_root == nullptr;
-            auto* scope_root = document.find_by_native_id(rule.shadow_scope_root_id);
-            if (scope_root == nullptr) return false;
-            const auto* scope = document.shadow_dom(*scope_root);
-            const auto host_selector = trim_css_view(rule.selector()) == ":host";
-            if (host_selector) return scope != nullptr && scope->host == &node;
-            if (scope != nullptr && scope->host == &node) return false;
-            return node_shadow_root == scope_root;
-        };
-        std::vector<const css_rule*> matched_rules;
-        std::vector<std::pair<int, const css_rule*>> matched_pseudo_rules;
-        for (const auto index : candidates) {
-            const auto& rule = css_rules[index];
-            if (!rule.media_matches) continue;
-            if (!rule_is_in_scope(rule)) continue;
-            std::string pseudo_origin;
-            const auto pseudo_kind = split_pseudo_element_selector(rule.selector(), pseudo_origin);
-            if (pseudo_kind != 0) {
-                if (!pseudo_origin.empty() && css_selector_matches(node, pseudo_origin)) {
-                    matched_pseudo_rules.emplace_back(pseudo_kind, &rule);
-                }
-                continue;
-            }
-            if (trim_css_view(rule.selector()) != ":host"
-                && !css_rule_matches(node, rule)) continue;
-            matched_rules.push_back(&rule);
-        }
+        auto matching=css::match_candidates(document,node,css_rules,candidates,
+            [this](const dom_node& subject,const std::string& selector) {
+                return css_selector_matches(subject,selector);
+            },[this](const dom_node& subject,const css_rule& rule) {
+                return css_rule_matches(subject,rule);
+            });
+        auto& matched_rules=matching.ordinary;
+        auto& matched_pseudo_rules=matching.pseudo;
 #if defined(WEBSCENE_NATIVE_ENGINE_CERTIFICATION)
         if (trace_css) css_profile_matched_rules += matched_rules.size();
         const auto matching_completed = trace_css

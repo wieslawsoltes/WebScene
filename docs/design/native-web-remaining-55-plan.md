@@ -666,3 +666,11 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   active pseudo border, scrollbar drag/style and overflow navigation regressions
   pass. Existing suffix grammar, unsupported scrollbar-corner behavior and pseudo
   cascade limitations remain; native document lifecycle integration is unfinished.
+
+- Candidate matching extraction: shared matching now filters ordered candidate
+  indices by media and existing shadow-scope policy and separates ordinary/pseudo
+  rule targets. Native tests cover specificity ordering, media deactivation and
+  live class changes; runtime pseudo border, media, iframe cascade and positional
+  selector regressions pass. Results borrow their rule storage until application
+  completes. Candidate index construction, font finalization and invalidation still
+  need integration into a complete native document stylesheet owner.

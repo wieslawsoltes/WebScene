@@ -25,6 +25,7 @@
 #include "webscene_css_cascade_reset.h"
 #include "webscene_css_cascade_application.h"
 #include "webscene_css_pseudo_application.h"
+#include "webscene_css_rule_matching.h"
 #include <iostream>
 #include <fstream>
 #include <iterator>
@@ -709,5 +710,29 @@ int main(int argc,char** argv) {
     webscene_native::css::apply_scrollbar_declaration(ordered_node,3,{"display","none",true},variable_root);
     webscene_native::css::apply_scrollbar_declaration(ordered_node,3,{"display","block",false},variable_root);
     if(!ordered_node.style.scrollbar_hidden || ordered_node.style.display==webscene_native::display_mode::none) return 131;
+    const auto match_sheet=webscene_native::css::prepare_stylesheet(
+        ".view {width:10px} #panel {width:20px} .view::before {content:'x'}", "",
+        [](const auto&) { return true; });
+    if(!match_sheet || match_sheet->rules.size()!=3) return 132;
+    std::vector<webscene_native::css::css_rule> match_rules;
+    for(const auto& payload:match_sheet->rules) match_rules.push_back({payload,0,0,true});
+    std::vector<size_t> match_indices{2,1,0};
+    webscene_native::css::sort_candidates(match_rules,match_indices);
+    ordered_node.id_attribute="panel";
+    webscene_native::css::query_host match_query(ordered_document);
+    const auto collect=[&] {
+        return webscene_native::css::match_candidates(ordered_document,ordered_node,match_rules,match_indices,
+            [&](const auto& node,const auto& selector) { return match_query.css_selector_matches(node,selector); },
+            [&](const auto& node,const auto& rule) { return match_query.matches_prepared(node,rule.compiled_selector()); });
+    };
+    auto collected_matches=collect();
+    if(collected_matches.ordinary.size()!=2 || collected_matches.ordinary.back()->selector()!="#panel" ||
+       collected_matches.pseudo.size()!=1 || collected_matches.pseudo[0].first!=1) return 133;
+    match_rules[1].media_matches=false;
+    collected_matches=collect();
+    if(collected_matches.ordinary.size()!=1) return 134;
+    ordered_node.class_name.clear();
+    collected_matches=collect();
+    if(!collected_matches.ordinary.empty() || !collected_matches.pseudo.empty()) return 135;
     std::cout<<"V8-free shared CSS declaration service passed\n";
 }
