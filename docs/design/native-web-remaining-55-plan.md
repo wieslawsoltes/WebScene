@@ -1441,3 +1441,10 @@ an existing unguarded call to cancel_detached_frame_context_tasks, still unresol
   timestamp series sustains 60fps with the current text overlay, but the isolated
   skipped attempt is not characterized, and this does not prove physical input
   latency, live window resize or complete original app functionality.
+
+- Original view action wiring: Zoom Extents data-action=fit now calls shared
+  native fit_drawing logic (also used at Courtyard startup), fitting visible
+  geometry. Zoom In/Out now use original app.js factors 1.35 and 1/1.35 instead
+  of the diagnostic 1.25/0.8 values. FocoKestrelPreview rebuilds successfully.
+  Physical action clicks and wider command/ribbon synchronization remain to be
+  verified; this change does not establish full UI behavior parity.

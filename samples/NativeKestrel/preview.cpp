@@ -67,6 +67,15 @@ class preview_app final : public foco::application {
   double pan_tick_ms{}, pan_tick_max_ms{};
   bool gpu_dirty{true}, panning{};
   float pan_x{}, pan_y{};
+  void fit_drawing() {
+    if(!viewport)return;
+    std::vector<kestrel::vec3> points;
+    for(const auto& entity:model.data["entities"]) if(model.visible(entity)) {
+      const auto geometry=kestrel::geo::geometry(entity,1);
+      points.insert(points.end(),geometry.points.begin(),geometry.points.end());
+    }
+    viewport->camera.fit(points);gpu_dirty=true;
+  }
   void tick() {
     auto node = view->document.find("scene");
     auto bounds = view->document.bounds(node);
@@ -78,12 +87,7 @@ class preview_app final : public foco::application {
       viewport->options.style = (benchmark_pan && !benchmark_courtyard) || exercise_objects || exercise_layer_filter
           ? kestrel::display_style::shaded_edges : kestrel::display_style::wireframe;
       if((!benchmark_pan || benchmark_courtyard) && !exercise_objects && !exercise_layer_filter) {
-        std::vector<kestrel::vec3> points;
-        for(const auto& entity:model.data["entities"]) if(model.visible(entity)) {
-          const auto geometry=kestrel::geo::geometry(entity,1);
-          points.insert(points.end(),geometry.points.begin(),geometry.points.end());
-        }
-        viewport->camera.fit(points);
+        fit_drawing();
       }
     }
     if (w != gpu_width || h != gpu_height) {
@@ -235,8 +239,9 @@ public:
             else if (*action == "shaded") viewport->options.style = kestrel::display_style::shaded;
             else if (*action == "xray") viewport->options.style = kestrel::display_style::xray;
             else if (*action == "shaded-edges") viewport->options.style = kestrel::display_style::shaded_edges;
-            else if (*action == "zoomin") viewport->camera.zoom_at(1.25);
-            else if (*action == "zoomout") viewport->camera.zoom_at(0.8);
+            else if (*action == "fit") fit_drawing();
+            else if (*action == "zoomin") viewport->camera.zoom_at(1.35);
+            else if (*action == "zoomout") viewport->camera.zoom_at(1.0/1.35);
             else if (*action == "grid") viewport->grid_enabled = !viewport->grid_enabled;
             else if (action->starts_with("view-")) viewport->camera.set_view(action->substr(5));
             else return;
