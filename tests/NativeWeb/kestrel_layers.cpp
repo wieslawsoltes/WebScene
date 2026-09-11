@@ -11,6 +11,15 @@ using namespace webscene::native_web;
 void require(bool value) {if(!value) throw std::runtime_error("native layer panel contract failed");}
 int main() {
   {
+    kestrel::drawing model;model.add("MESH",kestrel::geo::box({0,0,0},10,20,30));
+    const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
+    const auto before=model.data;const auto bounds=kestrel::geo::mesh_bounds(*model.find(id));const auto volume=kestrel::geo::volume(*model.find(id));
+    require(kestrel::geo::change_mesh_center(model,0,50));const auto moved=kestrel::geo::mesh_bounds(*model.find(id));
+    require(moved.center[0]==50 && moved.size==bounds.size && moved.center[1]==bounds.center[1] && moved.center[2]==bounds.center[2]);
+    require(std::abs(kestrel::geo::volume(*model.find(id))-volume)<1e-8);
+    require(model.undo()=="Edit meshCenter.0" && model.data==before);
+  }
+  {
     kestrel::drawing model;model.add("DIMENSION",{{"points",{{0,0,0},{3,4,0}}},{"textHeight",1},{"offset",2}});
     const auto id=model.data["entities"].back()["id"].get<std::string>();model.selection.insert(id);
     const auto before=model.data;require(model.change_dimension_property("precision",9));require(model.find(id)->at("precision")==6);

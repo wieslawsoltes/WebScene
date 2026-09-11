@@ -268,11 +268,14 @@ public:
         const bool point_entity=(text_entity || one->value("type",std::string{})=="POINT") && one->contains("position") && (*one)["position"].is_array();
         const auto entity_type=one->value("type",std::string{});
         const bool conic_entity=(entity_type=="CIRCLE" || entity_type=="ARC" || entity_type=="ELLIPSE") && one->contains("center") && (*one)["center"].is_array();
-        const bool single_coordinate=point_entity || conic_entity;
+        const bool mesh_entity=entity_type=="MESH" && one->contains("vertices");
+        const auto mesh=mesh_entity?geo::mesh_bounds(*one):geo::mesh_extent{};
+        const bool single_coordinate=point_entity || conic_entity || mesh_entity;
         if(single_coordinate || (one->value("type",std::string{})=="LINE" && one->contains("points") &&
            (*one)["points"].is_array() && (*one)["points"].size()==2 &&
            (*one)["points"][0].is_array() && (*one)["points"][1].is_array())) {
           const auto coordinate=[&](size_t endpoint,size_t axis) {
+            if(mesh_entity)return mesh.center[axis];
             const auto& point=point_entity?(*one)["position"]:conic_entity?(*one)["center"]:(*one)["points"][endpoint];
             return axis<point.size() && point[axis].is_number()?point[axis].get<double>():0.0;
           };
@@ -281,25 +284,33 @@ public:
           double squared_length=0;
           for(size_t endpoint=0;endpoint<(single_coordinate?1U:2U);++endpoint)for(size_t axis=0;axis<3;++axis) {
             auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-coordinate");
-            const auto label=std::string(point_entity?"Position ":conic_entity?"Center ":endpoint?"End ":"Start ")+"XYZ"[axis];
-            const auto property=(point_entity?std::string("position"):conic_entity?std::string("center"):"points."+std::to_string(endpoint))+"."+std::to_string(axis);
+            const auto label=std::string(point_entity?"Position ":(conic_entity || mesh_entity)?"Center ":endpoint?"End ":"Start ")+"XYZ"[axis];
+            const auto property=(point_entity?std::string("position"):conic_entity?std::string("center"):mesh_entity?std::string("meshCenter"):"points."+std::to_string(endpoint))+"."+std::to_string(axis);
             document_.set_text(row.named("label"),label);
             document_.attribute(row.named("input"),"aria-label",label);
             document_.attribute(row.named("input"),"data-prop",property);
             std::ostringstream value;value.imbue(std::locale::classic());value<<std::fixed<<std::setprecision(4)<<coordinate(endpoint,axis);
             auto formatted=value.str();while(formatted.ends_with('0'))formatted.pop_back();if(formatted.ends_with('.'))formatted.pop_back();
             document_.set_value(row.named("input"),formatted=="-0"?"0":formatted);
-            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),endpoint,axis,point_entity,conic_entity](auto&) {
+            handlers_.push_back(document_.on(row.named("input"),"change",[this,node=row.named("input"),endpoint,axis,point_entity,conic_entity,mesh_entity](auto&) {
               const auto text=document_.value(node);double number=0;size_t used=0;bool valid=true;
               try {number=std::stod(text,&used);}catch(const std::exception&){valid=false;}
               if(valid && used==text.size()) {
                 if(point_entity)model_.change_point_position(axis,number);
                 else if(conic_entity)model_.change_conic_center(axis,number);
+                else if(mesh_entity)geo::change_mesh_center(model_,axis,number);
                 else model_.change_line_endpoint(endpoint,axis,number);
               }
               refresh();if(changed_)changed_();
             }));
             if(!single_coordinate && endpoint==0) {const double delta=coordinate(1,axis)-coordinate(0,axis);squared_length+=delta*delta;}
+          }
+          if(mesh_entity) {
+            const auto info=[&](const std::string& label,const std::string& value) {auto row=kestrel_layers::instantiate(document_,geometry.named("root"),"inspector-readonly");document_.set_text(row.named("label"),label);document_.set_text(row.named("value"),value);document_.attribute(row.named("value"),"title",value);};
+            const auto units=model_.data.value("units",std::string("mm"));
+            for(size_t axis=0;axis<3;++axis) {std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(3)<<mesh.size[axis]<<" "<<units;info(axis==0?"Width X":axis==1?"Depth Y":"Height Z",text.str());}
+            info("Vertices",std::to_string(one->at("vertices").size()));info("Faces",std::to_string(one->at("faces").size()));
+            std::ostringstream text;text.imbue(std::locale::classic());text<<std::fixed<<std::setprecision(2)<<geo::volume(*one)<<" "<<units<<"³";info("Signed volume",text.str());
           }
           if(text_entity) {
             for(auto key:{"height","rotationDeg"}) {

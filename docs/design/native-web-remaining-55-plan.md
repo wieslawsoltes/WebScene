@@ -8,6 +8,13 @@ unsupported constructs. These are distinct source usages, not 55 separate engine
 
 ## Architecture and boundaries
 
+Mesh inspector: compiled Center fields translate through the existing native
+geometry transform; Width/Depth/Height, Vertices/Faces and Signed volume readouts
+are populated. A model test verifies center translation, unchanged dimensions and
+volume, and exact undo. Count formatting currently uses plain decimal rather than
+locale grouping. Native-control/host mesh inspector verification and full parity
+remain open.
+
 Dimension inspector: compiled Measurement, Offset, Text height, Text override and
 Precision fields now bind to native edits. Precision rounds/clamps to 0..6; text
 height must be positive. Model tests verify precision clamping, signed offset,

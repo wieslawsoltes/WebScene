@@ -986,4 +986,24 @@ inline entity_geometry geometry(const json &e, double tolerance = .5) {
   }
   return out;
 }
+struct mesh_extent {std::array<double,3> center{},size{};};
+inline mesh_extent mesh_bounds(const json& entity) {
+  mesh_extent result;const auto& vertices=entity.at("vertices");if(vertices.empty())return result;
+  std::array<double,3> low{INFINITY,INFINITY,INFINITY},high{-INFINITY,-INFINITY,-INFINITY};
+  for(const auto& vertex:vertices)for(size_t axis=0;axis<3;++axis) {
+    const double value=axis<vertex.size()?vertex[axis].get<double>():0;
+    low[axis]=std::min(low[axis],value);high[axis]=std::max(high[axis],value);
+  }
+  for(size_t axis=0;axis<3;++axis){result.center[axis]=(low[axis]+high[axis])*.5;result.size[axis]=high[axis]-low[axis];}
+  return result;
+}
+inline bool change_mesh_center(drawing& model,size_t axis,double value) {
+  if(axis>2 || !std::isfinite(value))return false;
+  const auto ids=model.selected(true);if(ids.size()!=1)return false;
+  const auto* entity=model.find(ids.front());if(!entity || entity->value("type",std::string{})!="MESH")return false;
+  const double shift=value-mesh_bounds(*entity).center[axis];
+  const vec3 delta{axis==0?shift:0,axis==1?shift:0,axis==2?shift:0};
+  auto transformed=transform_entity(*entity,translation(delta));
+  return model.transaction("Edit meshCenter."+std::to_string(axis),[&]{model.replace(ids.front(),std::move(transformed));});
+}
 } // namespace kestrel::geo
