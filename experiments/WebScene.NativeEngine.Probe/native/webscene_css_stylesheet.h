@@ -53,6 +53,18 @@ std::optional<prepared_stylesheet> prepare_stylesheet(std::string_view text,
         host.output.diagnostics.push_back({"at-rule:@keyframes","partially-supported",
             "opacity and rotate() keyframes with host-clock timing"});
     }
+    // A property known to WebScene must never cross the preparation boundary as
+    // raw property grammar. Unknown properties remain explicit diagnostics, and
+    // custom properties intentionally retain their CSS token stream for var().
+    for(const auto& rule:host.output.rules) {
+        for(const auto& declaration:rule->declarations) {
+            if(declaration.property!=css_property_id::unknown && !declaration.has_typed_value()) {
+                host.output.diagnostics.push_back({"property:"+declaration.name,"invalid-authoring",
+                    "supported property did not compile to specified-value IR"});
+                return std::nullopt;
+            }
+        }
+    }
     return std::move(host.output);
 }
 } // namespace webscene_native::css
