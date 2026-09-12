@@ -572,3 +572,18 @@ css_syntax_output parse_css_syntax_declarations(std::string_view input)
 { return collect(input, stream_css_syntax_declarations); }
 
 } // namespace webscene_native
+
+#if defined(_WIN32)
+#define WEBSCENE_CSS_CACHE_API __declspec(dllexport)
+#else
+#define WEBSCENE_CSS_CACHE_API __attribute__((visibility("default")))
+#endif
+
+extern "C" WEBSCENE_CSS_CACHE_API void webscene_css_set_compilation_cache_directory_v1(
+    const char* directory, size_t directory_length)
+{
+    webscene_native::set_css_syntax_compilation_cache_directory(
+        directory == nullptr ? std::string{} : std::string(directory, directory_length));
+}
+
+#undef WEBSCENE_CSS_CACHE_API
