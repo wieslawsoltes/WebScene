@@ -13,8 +13,18 @@ import kestrel.viewport;
 import kestrel.gpu_renderer;
 import kestrel.render_data;
 int main(int argc, char **argv) {
+#if defined(__linux__)
+  const auto headless_options = webscene::graphics::headless_webgpu_options::environment();
+  auto gpu = webscene::graphics::native_webgpu_device::create(
+      wgpu::BackendType::Vulkan, {}, headless_options.force_software);
+  wgpu::AdapterInfo adapter_info{};
+  if (gpu.adapter.GetInfo(&adapter_info) != wgpu::Status::Success ||
+      (adapter_info.adapterType == wgpu::AdapterType::CPU && !headless_options.allow_software))
+    throw std::runtime_error("Linux Kestrel test requires an identified, explicitly authorized adapter");
+#else
   auto gpu = webscene::graphics::native_webgpu_device::create(
       wgpu::BackendType::Metal);
+#endif
   kestrel::gpu_pipelines pipelines(gpu.device, wgpu::TextureFormat::BGRA8Unorm);
   gpu.instance.ProcessEvents();
   if (*gpu.failed || !pipelines.lines || !pipelines.mesh || !pipelines.xray ||
