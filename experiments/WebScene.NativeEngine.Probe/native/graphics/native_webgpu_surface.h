@@ -64,4 +64,9 @@ public:
     bool failed() const { return gpu_->failed->load(); }
 };
 } // namespace webscene::graphics
+#elif defined(__linux__)
+#include "native_headless_webgpu_surface.h"
+namespace webscene::graphics {
+using native_webgpu_surface = native_headless_webgpu_surface;
+}
 #endif

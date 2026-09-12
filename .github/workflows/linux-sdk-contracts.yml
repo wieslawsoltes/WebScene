@@ -1,0 +1,39 @@
+name: Linux SDK source contracts
+on:
+  push:
+    branches: [codex/linux-headless-sdk]
+  pull_request:
+    paths: ['eng/sdk/**', 'experiments/WebScene.NativeEngine.Probe/native/graphics/**', 'src/WebScene.Sdk/**', '.github/workflows/linux-sdk-contracts.yml']
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Header scanner regressions and public dependency closure
+        run: |
+          python3 eng/sdk/test-header-closure.py
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          import sys
+          script=Path('eng/sdk/header-closure.py')
+          spec=importlib.util.spec_from_file_location('closure',script)
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          root=Path.cwd();native=root/'experiments/WebScene.NativeEngine.Probe/native';authoring=root/'src/WebScene.NativeWeb/include'
+          pending=[(p,[]) for p in list(authoring.rglob('*.hpp'))+[native/'webscene/compiled_document.hpp',native/'graphics/native_webgpu_surface.h']]
+          seen=set()
+          while pending:
+              item,parents=pending.pop();item=item.resolve()
+              if item in seen:continue
+              seen.add(item)
+              if not any(item.is_relative_to(p) for p in (native,authoring)):
+                  raise RuntimeError('Outside SDK header roots: '+' -> '.join(str(p.relative_to(root)) for p in parents+[item]))
+              for name in module.includes(item.read_text()):
+                  candidate=next((p for p in [item.parent/name,authoring/name,native/name,native/'graphics'/name] if p.is_file()),None)
+                  if candidate:pending.append((candidate,parents+[item]))
+          print('Verified',len(seen),'public header dependencies')
+          module.generate(root)
+          PY

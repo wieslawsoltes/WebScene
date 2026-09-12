@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(WebSceneSDK VERSION 0.1.0 LANGUAGES C CXX)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  include(cmake/LinuxSDK.cmake)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebSceneLinuxSDK.cmake")
   return()
 endif()
 enable_language(OBJCXX)

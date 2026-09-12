@@ -1,46 +1,50 @@
 include(CMakeFindDependencyMacro)
+include("${CMAKE_CURRENT_LIST_DIR}/WebSceneLinuxProfile.cmake")
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)$")
+  set(WebScene_FOUND FALSE)
+  set(WebScene_NOT_FOUND_MESSAGE "This SDK contains Linux x86_64 binaries")
+  return()
+endif()
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR NOT CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL "22.1.1")
+  message(FATAL_ERROR "This SDK requires LLVM 22.1.1/libc++; use WebSceneToolchain.cmake")
+endif()
 find_dependency(Threads)
-include("${CMAKE_CURRENT_LIST_DIR}/WebSceneLinuxBuild.cmake")
-if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)$")
-  message(FATAL_ERROR "This WebScene SDK is Linux x86_64")
-endif()
-if(NOT CMAKE_CXX_COMPILER_ID STREQUAL WebScene_SDK_COMPILER_ID OR
-   NOT CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL WebScene_SDK_COMPILER_VERSION)
-  message(FATAL_ERROR "Use this SDK's compiler: ${WebScene_SDK_COMPILER_ID} ${WebScene_SDK_COMPILER_VERSION}")
-endif()
 get_filename_component(WebScene_SDK_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 function(_ws_linux_static name file)
+  if(NOT EXISTS "${WebScene_SDK_ROOT}/lib/${file}")
+    message(FATAL_ERROR "Incomplete Linux SDK: missing ${file}")
+  endif()
   add_library(WebScene::${name} STATIC IMPORTED GLOBAL)
   set_target_properties(WebScene::${name} PROPERTIES
     IMPORTED_LOCATION "${WebScene_SDK_ROOT}/lib/${file}"
     INTERFACE_INCLUDE_DIRECTORIES "${WebScene_SDK_ROOT}/include"
-    INTERFACE_COMPILE_FEATURES cxx_std_20)
+    INTERFACE_COMPILE_FEATURES cxx_std_20
+    INTERFACE_COMPILE_OPTIONS "-stdlib=libc++"
+    INTERFACE_LINK_OPTIONS "-stdlib=libc++")
 endfunction()
-# Define imported targets once, but validate every find_package request.
 if(NOT TARGET WebScene::Core)
   _ws_linux_static(Core libwebscene_core.a)
   _ws_linux_static(NativeWeb libwebscene_native_web.a)
-  set_property(TARGET WebScene::NativeWeb PROPERTY INTERFACE_LINK_LIBRARIES "WebScene::Core;Threads::Threads;${CMAKE_DL_LIBS}")
-  set_property(TARGET WebScene::NativeWeb PROPERTY INTERFACE_LINK_OPTIONS "LINKER:--gc-sections")
   _ws_linux_static(_Parser libwebscene_html_parser.a)
-  set_property(TARGET WebScene::_Parser PROPERTY INTERFACE_LINK_LIBRARIES "Threads::Threads;${CMAKE_DL_LIBS};m")
   _ws_linux_static(SharedCSS libwebscene_native_web_shared_css.a)
-  set_property(TARGET WebScene::SharedCSS PROPERTY INTERFACE_LINK_LIBRARIES "WebScene::NativeWeb;WebScene::_Parser")
+  set_property(TARGET WebScene::NativeWeb PROPERTY INTERFACE_LINK_LIBRARIES "WebScene::Core;Threads::Threads;${CMAKE_DL_LIBS}")
+  set_property(TARGET WebScene::SharedCSS PROPERTY INTERFACE_LINK_LIBRARIES "WebScene::NativeWeb;WebScene::_Parser;Threads::Threads;${CMAKE_DL_LIBS}")
   if(WebScene_SDK_WEBGPU)
+    if(NOT EXISTS "${WebScene_SDK_ROOT}/lib/libwebgpu_dawn.so")
+      message(FATAL_ERROR "Incomplete Linux SDK: missing pinned Dawn library")
+    endif()
     add_library(WebScene::_Dawn SHARED IMPORTED GLOBAL)
-    set_target_properties(WebScene::_Dawn PROPERTIES
-      IMPORTED_LOCATION "${WebScene_SDK_ROOT}/lib/libwebgpu_dawn.so"
+    set_target_properties(WebScene::_Dawn PROPERTIES IMPORTED_LOCATION "${WebScene_SDK_ROOT}/lib/libwebgpu_dawn.so"
       INTERFACE_INCLUDE_DIRECTORIES "${WebScene_SDK_ROOT}/include")
     add_library(WebScene::WebGPU INTERFACE IMPORTED GLOBAL)
     set_target_properties(WebScene::WebGPU PROPERTIES
-      INTERFACE_INCLUDE_DIRECTORIES "${WebScene_SDK_ROOT}/include/graphics"
-      INTERFACE_LINK_LIBRARIES "WebScene::Core;WebScene::_Dawn;Threads::Threads;${CMAKE_DL_LIBS}")
+      INTERFACE_LINK_LIBRARIES "WebScene::Core;WebScene::_Dawn;Threads::Threads;${CMAKE_DL_LIBS}"
+      INTERFACE_INCLUDE_DIRECTORIES "${WebScene_SDK_ROOT}/include/graphics")
   endif()
   add_executable(WebScene::Compiler IMPORTED GLOBAL)
   set_property(TARGET WebScene::Compiler PROPERTY IMPORTED_LOCATION "${WebScene_SDK_ROOT}/bin/webscene-uic")
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/WebSceneApplication.cmake")
-# Required/optional components belong to this invocation, not the first one.
 set(WebScene_FOUND TRUE)
 unset(WebScene_NOT_FOUND_MESSAGE)
 foreach(component IN LISTS WebScene_FIND_COMPONENTS)
@@ -50,7 +54,7 @@ foreach(component IN LISTS WebScene_FIND_COMPONENTS)
     set(WebScene_${component}_FOUND FALSE)
     if(WebScene_FIND_REQUIRED_${component})
       set(WebScene_FOUND FALSE)
-      string(APPEND WebScene_NOT_FOUND_MESSAGE "Component ${component} is not in this native-only Linux SDK. ")
+      string(APPEND WebScene_NOT_FOUND_MESSAGE "Component ${component} is not installed in this native-only Linux SDK. ")
     endif()
   endif()
 endforeach()

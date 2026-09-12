@@ -17,7 +17,8 @@ struct native_webgpu_device {
     wgpu::Adapter adapter;
     wgpu::Device device;
     static native_webgpu_device create(wgpu::BackendType backend,
-                                       std::vector<wgpu::FeatureName> features = {}) {
+                                       std::vector<wgpu::FeatureName> features = {},
+                                       bool force_fallback_adapter = false) {
         native_webgpu_device result;
         constexpr auto timed_wait = wgpu::InstanceFeatureName::TimedWaitAny;
         wgpu::InstanceDescriptor descriptor{};
@@ -33,6 +34,7 @@ struct native_webgpu_device {
         };
         wgpu::RequestAdapterOptions options{};
         options.backendType = backend;
+        options.forceFallbackAdapter = force_fallback_adapter;
         auto future = result.instance.RequestAdapter(&options, wgpu::CallbackMode::WaitAnyOnly,
             [state, message](wgpu::RequestAdapterStatus status, wgpu::Adapter adapter, wgpu::StringView error) {
                 if (status == wgpu::RequestAdapterStatus::Success) state->adapter = std::move(adapter);
