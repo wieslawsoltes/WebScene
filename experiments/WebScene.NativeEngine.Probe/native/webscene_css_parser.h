@@ -40,6 +40,7 @@ struct css_syntax_metrics final {
     uint64_t parser_allocation_count{0};
     uint64_t parser_peak_bytes{0};
     uint64_t parser_retained_bytes{0};
+    bool compilation_cache_hit{false};
 };
 
 struct css_syntax_output final {
@@ -84,6 +85,15 @@ public:
     }
     virtual bool end_rule(size_t rule_index, size_t declaration_count) = 0;
 };
+
+// The runtime and build tool use the same consumer-independent syntax cache.
+// When a directory is supplied, successful stylesheet compilations are persisted
+// and can be replayed by later processes without invoking cssparser again.
+void set_css_syntax_compilation_cache_directory(std::string directory);
+void clear_css_syntax_process_cache();
+uint64_t css_syntax_process_cache_hits() noexcept;
+uint64_t css_syntax_persistent_cache_hits() noexcept;
+uint64_t css_syntax_compilation_count() noexcept;
 
 css_syntax_parse_result stream_css_syntax_stylesheet(
     std::string_view input,
