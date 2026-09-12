@@ -51,6 +51,11 @@
         , document_(text_measure_callback, text_measure_user_data)
         , worker_([this](std::stop_token token) { run(token); })
     {
+        if (!compilation_cache_directory_.empty()) {
+            webscene_css_set_compilation_cache_directory_v1(
+                compilation_cache_directory_.data(),
+                compilation_cache_directory_.size());
+        }
     }
 
     ~webscene_engine()

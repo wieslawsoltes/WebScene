@@ -1,11 +1,13 @@
 #include <webscene/shared_css.hpp>
 #include "webscene_css_stylesheet.h"
 #include "webscene_css_media.h"
+#include "webscene_css_parser.h"
 #include <source_location>
 #include <iostream>
 #include <fstream>
 #include <iterator>
 #include <vector>
+#include <filesystem>
 import webscene.test.shared_styles;
 import webscene.test.prepared_styles;
 
@@ -123,6 +125,30 @@ void compare_selector(const webscene_native::css::compiled_css_selector& a,
       require(x.pseudos[j].name==y.pseudos[j].name && x.pseudos[j].argument==y.pseudos[j].argument);
   }
 }
+
+void compare_sheet(const webscene_native::css::prepared_stylesheet& a,
+                   const webscene_native::css::prepared_stylesheet& b) {
+  require(a.rules.size()==b.rules.size());
+  require(a.keyframes.size()==b.keyframes.size());
+  require(a.diagnostics.size()==b.diagnostics.size());
+  for(size_t i=0;i<a.diagnostics.size();++i) {
+    require(a.diagnostics[i].feature==b.diagnostics[i].feature &&
+        a.diagnostics[i].classification==b.diagnostics[i].classification &&
+        a.diagnostics[i].detail==b.diagnostics[i].detail);
+  }
+  for(size_t i=0;i<a.rules.size();++i) {
+    const auto& x=*a.rules[i];const auto& y=*b.rules[i];
+    require(x.selector==y.selector && x.specificity==y.specificity && x.media_queries==y.media_queries);
+    compare_selector(x.compiled_selector,y.compiled_selector);
+    compare_selector(x.compiled_pseudo_origin,y.compiled_pseudo_origin);
+    require(x.declarations.size()==y.declarations.size());
+    for(size_t j=0;j<x.declarations.size();++j)
+      require(x.declarations[j].name==y.declarations[j].name &&
+          x.declarations[j].value==y.declarations[j].value &&
+          x.declarations[j].important==y.declarations[j].important);
+  }
+}
+
 int main() {
   {
     document d;auto modal=d.element(d.body(),"dialog");d.attribute(modal,"id","modal");
@@ -156,35 +182,46 @@ int main() {
     d.attribute(d.root(),"data-theme","light");d.render(200,100);require(d.bounds(target).width==90);
     d.attribute(d.root(),"data-theme","dark");d.render(200,100);require(d.bounds(target).width==40);
   }
+
   auto generated=compiled_css::build();
   std::ifstream file(generated.source_address);
   require(bool(file));
   const std::string text((std::istreambuf_iterator<char>(file)),{});
+
+  const auto cache_root=std::filesystem::temp_directory_path()/"webscene-shared-css-cache-contract";
+  std::error_code cleanup_error;
+  std::filesystem::remove_all(cache_root,cleanup_error);
+  webscene_native::set_css_syntax_compilation_cache_directory(cache_root.string());
+  webscene_native::clear_css_syntax_process_cache();
+  const auto compilations_before=webscene_native::css_syntax_compilation_count();
   auto parsed=webscene_native::css::prepare_stylesheet(text,generated.source_address,[](const auto&){return true;});
   require(bool(parsed));
-  require(parsed->rules.size()==generated.rules.size());
-  require(parsed->keyframes.size()==generated.keyframes.size());
+  require(webscene_native::css_syntax_compilation_count()>compilations_before);
+
+  // Simulate a later process: drop only the in-memory cache, keeping the on-disk
+  // compiled CSS unit. The second parse must replay the persistent unit and never
+  // invoke cssparser for this stylesheet again.
+  webscene_native::clear_css_syntax_process_cache();
+  const auto persistent_hits_before=webscene_native::css_syntax_persistent_cache_hits();
+  const auto compilations_after_cold=webscene_native::css_syntax_compilation_count();
+  auto cached=webscene_native::css::prepare_stylesheet(text,generated.source_address,[](const auto&){return true;});
+  require(bool(cached));
+  require(webscene_native::css_syntax_persistent_cache_hits()>persistent_hits_before);
+  require(webscene_native::css_syntax_compilation_count()==compilations_after_cold);
+
+  compare_sheet(*parsed,generated);
+  compare_sheet(*cached,generated);
   require(generated.keyframes.at("fade").opacity_stops.size()==2);
   require(generated.keyframes.at("fade").opacity_stops[1].opacity==1);
   require(generated.keyframes.at("turn").rotation_stops.size()==2);
   require(generated.keyframes.at("turn").rotation_stops[0].degrees==-15);
-  require(generated.diagnostics.size()==parsed->diagnostics.size());
-  for(size_t i=0;i<generated.diagnostics.size();++i) {
-    const auto& a=parsed->diagnostics[i];const auto& b=generated.diagnostics[i];
-    require(a.feature==b.feature && a.classification==b.classification && a.detail==b.detail);
-  }
-  for(size_t i=0;i<parsed->rules.size();++i) {
-    const auto& a=*parsed->rules[i];const auto& b=*generated.rules[i];
-    require(a.selector==b.selector && a.specificity==b.specificity && a.media_queries==b.media_queries);
-    compare_selector(a.compiled_selector,b.compiled_selector);
-    compare_selector(a.compiled_pseudo_origin,b.compiled_pseudo_origin);
-    require(a.declarations.size()==b.declarations.size());
-    for(size_t j=0;j<a.declarations.size();++j)
-      require(a.declarations[j].name==b.declarations[j].name &&
-          a.declarations[j].value==b.declarations[j].value && a.declarations[j].important==b.declarations[j].important);
-  }
+
   const auto parsed_scenes=exercise(*parsed);
+  const auto cached_scenes=exercise(*cached);
   const auto compiled_scenes=exercise(generated);
-  require(!parsed_scenes.empty() && parsed_scenes==compiled_scenes);
-  std::cout<<"Parsed and generated CSS on compiled HTML integration passed\n";
+  require(!parsed_scenes.empty() && parsed_scenes==cached_scenes && cached_scenes==compiled_scenes);
+
+  std::filesystem::remove_all(cache_root,cleanup_error);
+  webscene_native::set_css_syntax_compilation_cache_directory({});
+  std::cout<<"Runtime, cached runtime and build-time CSS integration passed\n";
 }

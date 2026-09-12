@@ -2,8 +2,17 @@
 
 #include "webscene_selector_parser_ffi.h"
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <limits>
+#include <mutex>
+#include <optional>
+#include <sstream>
+#include <unordered_map>
 #include <utility>
 
 namespace webscene_native {
@@ -24,6 +33,188 @@ webscene_selector_byte_slice borrow(std::string_view input)
 
 constexpr uint32_t surrogate_escape_sentinel = 0xF0000U;
 constexpr uint32_t surrogate_escape_base = 0xF1000U;
+constexpr size_t maximum_process_cache_entries = 512U;
+std::mutex selector_cache_mutex;
+std::unordered_map<std::string, selector_syntax_output> selector_process_cache;
+std::string selector_cache_directory;
+std::atomic<uint64_t> selector_process_hits{0U};
+std::atomic<uint64_t> selector_persistent_hits{0U};
+std::atomic<uint64_t> selector_compilations{0U};
+
+uint64_t selector_hash(std::string_view input)
+{
+    uint64_t hash = 1469598103934665603ULL;
+    for (const auto character : input) {
+        hash ^= static_cast<unsigned char>(character);
+        hash *= 1099511628211ULL;
+    }
+    hash ^= static_cast<uint64_t>(input.size());
+    hash *= 1099511628211ULL;
+    return hash;
+}
+
+std::filesystem::path selector_persistent_path(std::string_view input)
+{
+    std::lock_guard lock(selector_cache_mutex);
+    if (selector_cache_directory.empty()) return {};
+    std::ostringstream name;
+    name << std::hex << std::setw(16) << std::setfill('0') << selector_hash(input);
+    return std::filesystem::path(selector_cache_directory) / "css" / "selectors"
+        / (name.str() + ".wsslc");
+}
+
+template<typename T>
+bool write_scalar(std::ostream& output, const T& value)
+{
+    output.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    return bool(output);
+}
+
+template<typename T>
+bool read_scalar(std::istream& input, T& value)
+{
+    input.read(reinterpret_cast<char*>(&value), sizeof(value));
+    return bool(input);
+}
+
+bool write_string(std::ostream& output, std::string_view value)
+{
+    const auto size = static_cast<uint64_t>(value.size());
+    if (!write_scalar(output, size)) return false;
+    output.write(value.data(), static_cast<std::streamsize>(value.size()));
+    return bool(output);
+}
+
+bool read_string(std::istream& input, std::string& value, uint64_t maximum = 16ULL << 20U)
+{
+    uint64_t size{};
+    if (!read_scalar(input, size) || size > maximum) return false;
+    value.resize(static_cast<size_t>(size));
+    if (!value.empty()) input.read(value.data(), static_cast<std::streamsize>(value.size()));
+    return bool(input);
+}
+
+void remember_selector(std::string input, const selector_syntax_output& output)
+{
+    std::lock_guard lock(selector_cache_mutex);
+    if (selector_process_cache.size() >= maximum_process_cache_entries
+        && !selector_process_cache.contains(input)) {
+        selector_process_cache.clear();
+    }
+    selector_process_cache.insert_or_assign(std::move(input), output);
+}
+
+std::optional<selector_syntax_output> find_selector_process_cache(std::string_view input)
+{
+    std::lock_guard lock(selector_cache_mutex);
+    const auto found = selector_process_cache.find(std::string(input));
+    if (found == selector_process_cache.end()) return std::nullopt;
+    selector_process_hits.fetch_add(1U, std::memory_order_relaxed);
+    auto result = found->second;
+    result.metrics.duration_ns = 0U;
+    result.metrics.rust_allocation_count = 0U;
+    result.metrics.rust_peak_bytes = 0U;
+    result.metrics.rust_retained_bytes = 0U;
+    result.metrics.compilation_cache_hit = true;
+    return result;
+}
+
+bool write_selector_persistent_cache(std::string_view input, const selector_syntax_output& output)
+{
+    const auto path = selector_persistent_path(input);
+    if (path.empty() || !output) return false;
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    if (error) return false;
+    const auto temporary = path.string() + "." + std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count()) + ".tmp";
+    std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
+    if (!stream) return false;
+    constexpr char magic[8] = {'W','S','S','L','C','0','0','1'};
+    stream.write(magic, sizeof(magic));
+    const uint32_t schema = 1U;
+    const auto hash = selector_hash(input);
+    const auto selector_count = static_cast<uint64_t>(output.selectors.size());
+    if (!write_scalar(stream, schema) || !write_scalar(stream, hash)
+        || !write_string(stream, input) || !write_scalar(stream, selector_count)) return false;
+    for (const auto& selector : output.selectors) {
+        const auto compound_count = static_cast<uint64_t>(selector.compounds.size());
+        const auto combinator_count = static_cast<uint64_t>(selector.combinators.size());
+        if (!write_string(stream, selector.serialized)
+            || !write_scalar(stream, selector.specificity)
+            || !write_scalar(stream, compound_count)) return false;
+        for (const auto& compound : selector.compounds)
+            if (!write_string(stream, compound)) return false;
+        if (!write_scalar(stream, combinator_count)) return false;
+        if (combinator_count) {
+            stream.write(selector.combinators.data(),
+                static_cast<std::streamsize>(selector.combinators.size()));
+            if (!stream) return false;
+        }
+    }
+    stream.close();
+    if (!stream) return false;
+    std::filesystem::rename(temporary, path, error);
+    if (error) {
+        std::filesystem::remove(path, error);
+        error.clear();
+        std::filesystem::rename(temporary, path, error);
+    }
+    if (error) {
+        std::filesystem::remove(temporary, error);
+        return false;
+    }
+    return true;
+}
+
+std::optional<selector_syntax_output> read_selector_persistent_cache(std::string_view input)
+{
+    const auto path = selector_persistent_path(input);
+    if (path.empty()) return std::nullopt;
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) return std::nullopt;
+    char magic[8]{};
+    stream.read(magic, sizeof(magic));
+    constexpr char expected[8] = {'W','S','S','L','C','0','0','1'};
+    uint32_t schema{};
+    uint64_t hash{}, selector_count{};
+    std::string stored_input;
+    if (!stream || !std::equal(std::begin(magic), std::end(magic), std::begin(expected))
+        || !read_scalar(stream, schema) || !read_scalar(stream, hash)
+        || !read_string(stream, stored_input, 64ULL << 20U)
+        || !read_scalar(stream, selector_count) || schema != 1U
+        || hash != selector_hash(input) || stored_input != input || selector_count > 4096U) {
+        return std::nullopt;
+    }
+    selector_syntax_output output;
+    output.selectors.reserve(static_cast<size_t>(selector_count));
+    for (uint64_t index = 0; index < selector_count; ++index) {
+        selector_syntax_selector selector;
+        uint64_t compound_count{}, combinator_count{};
+        if (!read_string(stream, selector.serialized)
+            || !read_scalar(stream, selector.specificity)
+            || !read_scalar(stream, compound_count) || compound_count > 4096U) return std::nullopt;
+        selector.compounds.reserve(static_cast<size_t>(compound_count));
+        for (uint64_t compound = 0; compound < compound_count; ++compound) {
+            std::string value;
+            if (!read_string(stream, value)) return std::nullopt;
+            selector.compounds.push_back(std::move(value));
+        }
+        if (!read_scalar(stream, combinator_count) || combinator_count > 4096U) return std::nullopt;
+        selector.combinators.resize(static_cast<size_t>(combinator_count));
+        if (combinator_count) {
+            stream.read(selector.combinators.data(),
+                static_cast<std::streamsize>(selector.combinators.size()));
+            if (!stream) return std::nullopt;
+        }
+        if (selector.compounds.empty()
+            || selector.combinators.size() + 1U != selector.compounds.size()) return std::nullopt;
+        output.selectors.push_back(std::move(selector));
+    }
+    output.metrics.compilation_cache_hit = true;
+    selector_persistent_hits.fetch_add(1U, std::memory_order_relaxed);
+    return output;
+}
 
 void append_utf8(std::string& output, uint32_t value)
 {
@@ -145,8 +336,33 @@ void restore_wtf8_surrogates(std::string& value)
 
 } // namespace
 
+void set_selector_syntax_compilation_cache_directory(std::string directory)
+{
+    std::lock_guard lock(selector_cache_mutex);
+    selector_cache_directory = std::move(directory);
+}
+
+void clear_selector_syntax_process_cache()
+{
+    std::lock_guard lock(selector_cache_mutex);
+    selector_process_cache.clear();
+}
+
+uint64_t selector_syntax_process_cache_hits() noexcept
+{ return selector_process_hits.load(std::memory_order_relaxed); }
+uint64_t selector_syntax_persistent_cache_hits() noexcept
+{ return selector_persistent_hits.load(std::memory_order_relaxed); }
+uint64_t selector_syntax_compilation_count() noexcept
+{ return selector_compilations.load(std::memory_order_relaxed); }
+
 selector_syntax_output parse_selector_syntax(std::string_view input)
 {
+    if (auto cached = find_selector_process_cache(input)) return std::move(*cached);
+    if (auto cached = read_selector_persistent_cache(input)) {
+        remember_selector(std::string(input), *cached);
+        return std::move(*cached);
+    }
+
     selector_syntax_output output;
     if (webscene_selector_parser_abi_version() != 1U) {
         output.error = "Servo selector-parser ABI version mismatch";
@@ -164,6 +380,7 @@ selector_syntax_output parse_selector_syntax(std::string_view input)
     output.metrics.rust_allocation_count = parsed.rust_allocation_count;
     output.metrics.rust_peak_bytes = parsed.rust_peak_bytes;
     output.metrics.rust_retained_bytes = parsed.rust_retained_bytes;
+    selector_compilations.fetch_add(1U, std::memory_order_relaxed);
 
     struct handle_guard final {
         void* handle;
@@ -234,6 +451,8 @@ selector_syntax_output parse_selector_syntax(std::string_view input)
         }
         output.selectors.push_back(std::move(selector));
     }
+    remember_selector(std::string(input), output);
+    write_selector_persistent_cache(input, output);
     return output;
 }
 

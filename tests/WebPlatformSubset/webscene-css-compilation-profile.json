@@ -1,0 +1,28 @@
+{
+  "profile": "webscene-css-compilation-1",
+  "wptRevision": "2c705104a295c48053eeddf7fe0170d790a4e853",
+  "runtime": "v8",
+  "viewport": {
+    "width": 800,
+    "height": 600,
+    "deviceScaleFactor": 1
+  },
+  "required": [
+    {
+      "path": "contracts/css-compiled-cache.html",
+      "type": "testharness",
+      "capabilities": [
+        "runtime-css",
+        "css-compilation-cache",
+        "custom-properties",
+        "media-queries",
+        "class-recascade"
+      ],
+      "evidence": ["compiled-css-runtime-cache"],
+      "reason": "Exercises cold and repeated identical external and inline CSS through the runtime parser/cache path. Build-time parity for the same shared engine is covered by native_web_shared_styles."
+    }
+  ],
+  "candidate": [],
+  "harnessBlocked": [],
+  "excluded": []
+}

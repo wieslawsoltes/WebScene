@@ -9,6 +9,12 @@ extern "C" WEBSCENE_API uint8_t webscene_engine_register_compiled_document_v1(
     webscene_engine*, const char* name, size_t name_length,
     const webscene_native::compiled_document* package);
 
+// Optional host-level cache root shared with the engine's existing JavaScript
+// compilation cache. CSS syntax units stored under this root are content-checked
+// before replay and contain no document/cascade state.
+extern "C" WEBSCENE_API void webscene_css_set_compilation_cache_directory_v1(
+    const char* directory, size_t directory_length);
+
 namespace webscene {
 using compiled_document = webscene_native::compiled_document;
 // Registers a package on this engine only. Registration owns a copy; each load

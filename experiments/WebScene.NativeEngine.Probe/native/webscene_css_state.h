@@ -1,10 +1,12 @@
 #pragma once
 #include "webscene_native_dom.h"
+#include "webscene_css_specified_ir.h"
 #include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace webscene_native::css {
@@ -14,6 +16,18 @@ namespace webscene_native::css {
         std::string name;
         std::string value;
         bool important{false};
+        css_property_id property{css_property_id::unknown};
+        specified_css_value specified{};
+
+        css_declaration() = default;
+        css_declaration(std::string name_value, std::string value_value, bool important_value=false)
+            : name(std::move(name_value)), value(std::move(value_value)), important(important_value)
+        {
+            property = property_id(name);
+            specified = compile_specified_value(property, value);
+        }
+
+        bool has_typed_value() const noexcept { return specified.fully_typed(); }
     };
 
 struct compiled_css_pseudo final {

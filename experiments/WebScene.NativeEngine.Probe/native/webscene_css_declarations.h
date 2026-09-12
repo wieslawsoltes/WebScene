@@ -33,7 +33,10 @@ inline void append_declaration(
             && name != "-webkit-font-smoothing") return;
         if (custom && value.empty() && preserve_empty_custom_properties) value = " ";
         if (!name.empty() && !value.empty()) {
-            result.push_back({std::move(name), std::move(value), important});
+            css_declaration declaration{std::move(name), std::move(value), important};
+            declaration.property = property_id(declaration.name);
+            declaration.specified = compile_specified_value(declaration.property, declaration.value);
+            result.push_back(std::move(declaration));
         }
     }
 
