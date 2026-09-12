@@ -1,3 +1,7 @@
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  include("${CMAKE_CURRENT_LIST_DIR}/WebSceneLinuxConfig.cmake")
+  return()
+endif()
 include_guard(GLOBAL)
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/WebSceneLinuxProfile.cmake")
   include("${CMAKE_CURRENT_LIST_DIR}/WebSceneLinuxConfig.cmake")

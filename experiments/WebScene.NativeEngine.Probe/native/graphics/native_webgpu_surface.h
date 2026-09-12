@@ -2,7 +2,12 @@
 #include "native_webgpu_device.h"
 #include "native_webgpu_canvas_context.h"
 #include "platform_webgpu_canvas.h"
-#if defined(__APPLE__) || defined(_WIN32)
+#if defined(__linux__) || defined(WEBSCENE_NATIVE_WEBGPU_OFFSCREEN)
+#include "native_webgpu_offscreen_surface.h"
+namespace webscene::graphics {
+using native_webgpu_surface = native_webgpu_offscreen_surface;
+}
+#elif defined(__APPLE__) || defined(_WIN32)
 namespace webscene::graphics {
 // Native application surface using the same imported images and retained
 // snapshots as the JS binding. Hosts consume snapshots through their compositor;

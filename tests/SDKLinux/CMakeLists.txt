@@ -1,0 +1,23 @@
+cmake_minimum_required(VERSION 3.28)
+project(WebSceneLinuxSDKContracts LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+find_package(WebScene REQUIRED CONFIG COMPONENTS NativeWeb SharedCSS Compiler)
+include(CTest)
+option(WEBSCENE_TEST_WEBGPU "Require and exercise real offscreen WebGPU" ON)
+if(WEBSCENE_TEST_WEBGPU)
+  find_package(WebScene REQUIRED CONFIG COMPONENTS WebGPU)
+  add_executable(offscreen_gpu offscreen_gpu.cpp)
+  target_link_libraries(offscreen_gpu PRIVATE WebScene::WebGPU)
+  add_test(NAME offscreen_gpu COMMAND offscreen_gpu)
+  set_tests_properties(offscreen_gpu PROPERTIES TIMEOUT 90)
+endif()
+add_executable(compiled_native compiled_native.cpp)
+webscene_compile_html(compiled_native Main.html MODULE linux.contract.ui CSS_BACKEND shared)
+target_link_libraries(compiled_native PRIVATE WebScene::NativeWeb WebScene::SharedCSS)
+add_test(NAME compiled_native COMMAND compiled_native)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME installed_package_components
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/package_components.py"
+    --sdk "${WebScene_SDK_ROOT}" --compiler "${CMAKE_CXX_COMPILER}")
+set_tests_properties(installed_package_components PROPERTIES TIMEOUT 90)
