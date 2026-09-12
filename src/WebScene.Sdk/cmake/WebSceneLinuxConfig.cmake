@@ -1,3 +1,7 @@
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/WebSceneRuntimeProfile.cmake")
+  include("${CMAKE_CURRENT_LIST_DIR}/WebSceneLinuxRuntimeConfig.cmake")
+  return()
+endif()
 include(CMakeFindDependencyMacro)
 include("${CMAKE_CURRENT_LIST_DIR}/WebSceneLinuxProfile.cmake")
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64)$")

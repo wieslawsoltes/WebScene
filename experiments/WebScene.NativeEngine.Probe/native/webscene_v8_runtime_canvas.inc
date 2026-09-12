@@ -2648,7 +2648,7 @@
             js_string(isolate, "source-over")).Check();
     }
 
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32) || defined(WEBSCENE_NATIVE_ENGINE_HEADLESS))
     void finish_gpu_rendering_opportunity(bool present) {
         if(!gpu_rendering_opportunity||has_due_animation_frame_task())return;
         gpu_rendering_opportunity=false;
@@ -2679,11 +2679,11 @@
         publish_ready_gpu_canvases();
     }
     void publish_ready_gpu_canvases() {
-        for(auto& [key,canvas]:gpu_canvases)while(auto image=canvas.provider->take_ready()) {
-            const auto metadata=image->describe();const auto& backing=canvas.node->canvas().backing;
+        for(auto& [key,canvas]:gpu_canvases)while(auto image=webscene::graphics::take_platform_ready_gpu_image(canvas.provider)) {
+            const auto metadata=image->value.describe();const auto& backing=canvas.node->canvas().backing;
             if(metadata.canvas!=backing.identity()||metadata.allocation_generation!=backing.allocation_generation()||!backing.accepts_completed_content(metadata.content_serial))continue;
             if(canvas.node->canvas().gpu_image&&canvas.node->canvas().gpu_image->value.describe().content_serial>metadata.content_serial)continue;
-            document.publish_gpu_canvas_image(*canvas.node,std::make_shared<webscene_gpu_image_lease_v3>(std::move(*image)));
+            document.publish_gpu_canvas_image(*canvas.node,std::move(image));
         }
     }
 #endif
@@ -2699,7 +2699,7 @@
         const auto requested = info.Length() > 0
             ? to_utf8(info.GetIsolate(), info[0])
             : std::string{};
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32) || defined(WEBSCENE_NATIVE_ENGINE_HEADLESS))
         if(requested=="webgpu"&&self->webgpu&&self->webgpu_interop==webscene::graphics::platform_canvas_interop&&!self->in_frame_context()) {
             using namespace webscene::graphics;
             auto& backing=node->mutable_canvas().backing;
@@ -2715,6 +2715,9 @@
                 auto width=canvas_bitmap_dimension(*node,"width",300),height=canvas_bitmap_dimension(*node,"height",150);
                 if(backing.width()!=width||backing.height()!=height)backing.reset_bitmap(width,height);
                 auto provider=std::make_shared<platform_dawn_canvas_host>(64ULL*1024*1024,self->webgpu_wake);
+#if defined(WEBSCENE_NATIVE_ENGINE_HEADLESS)
+                provider->bind_instance(self->graphics->dawn().instance());
+#endif
                 auto host=make_platform_webgpu_canvas_host(provider,[self,node] {
                     auto& backing=node->mutable_canvas().backing;backing.publish_content();
                     image_metadata metadata;metadata.canvas=backing.identity();metadata.allocation_generation=backing.allocation_generation();

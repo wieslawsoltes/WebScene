@@ -214,7 +214,9 @@
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
         if(webgpu_policy_callback_)runtime_->set_webgpu_policy(graphics_wake_,[this](const std::string& url) {
             const auto decision=webgpu_policy_callback_(webgpu_policy_user_data_,url.data(),url.size());
-#if defined(_WIN32)
+#if defined(WEBSCENE_NATIVE_ENGINE_HEADLESS)
+            return decision==WEBSCENE_WEBGPU_OFFSCREEN ? webscene::graphics::webgpu_canvas_interop::offscreen : webscene::graphics::webgpu_canvas_interop::none;
+#elif defined(_WIN32)
             return decision==WEBSCENE_WEBGPU_DXGI ? webscene::graphics::webgpu_canvas_interop::dxgi : webscene::graphics::webgpu_canvas_interop::none;
 #else
             return decision==WEBSCENE_WEBGPU_IOSURFACE ? webscene::graphics::webgpu_canvas_interop::iosurface : webscene::graphics::webgpu_canvas_interop::none;

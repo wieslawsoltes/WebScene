@@ -562,7 +562,7 @@
                 perform_microtask_checkpoint();
         }
 #endif
-#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32))
+#if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_GRAPHICS) && (defined(__APPLE__) || defined(_WIN32) || defined(WEBSCENE_NATIVE_ENGINE_HEADLESS))
         publish_ready_gpu_canvases();
 #endif
 #if defined(WEBSCENE_NATIVE_ENGINE_ENABLE_MEDIA)

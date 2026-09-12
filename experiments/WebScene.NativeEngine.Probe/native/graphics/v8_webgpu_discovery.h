@@ -4,6 +4,8 @@
 #include "v8_webgpu_adapter_options.h"
 #include "wgsl_language_feature_names.h"
 #include <list>
+#include <cstdlib>
+#include <string_view>
 namespace webscene::graphics {
 // Internal realm-owned GPU discovery object. The host must apply its secure
 // context and graphics policy before installing it. This class installs nothing.
@@ -120,6 +122,15 @@ public:
         check_scope(); auto context=realm_.Get(isolate_);
         for (auto it=requests_.begin();it!=requests_.end();++it) {
             if (!*it || !(*it)->complete(isolate_,context,record,[&](wgpu::Adapter adapter) -> v8::MaybeLocal<v8::Value> {
+                // Native host policy remains separate from JavaScript adapter descriptors.
+#if defined(WEBSCENE_NATIVE_ENGINE_HEADLESS)
+                wgpu::AdapterInfo info{};
+                if(adapter.GetInfo(&info)!=wgpu::Status::Success) return v8::Null(isolate_);
+                const auto* software=std::getenv("WEBSCENE_HEADLESS_FORCE_SOFTWARE_ADAPTER");
+                const bool force=software && std::string_view(software)=="1";
+                const bool hardware=info.adapterType==wgpu::AdapterType::DiscreteGPU || info.adapterType==wgpu::AdapterType::IntegratedGPU;
+                if((force && info.adapterType!=wgpu::AdapterType::CPU) || (!force && !hardware)) return v8::Null(isolate_);
+#endif
                 auto handle=service_.adopt_adapter(std::move(adapter));
                 try {
                     v8::Local<v8::Object> wrapper;

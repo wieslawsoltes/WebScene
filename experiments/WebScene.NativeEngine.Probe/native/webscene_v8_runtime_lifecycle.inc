@@ -63,7 +63,7 @@
             v8::Isolate::Scope isolate_scope(isolate);
             v8::HandleScope handle_scope(isolate);
             v8::Context::Scope context_scope(context.Get(isolate));
-#if (defined(__APPLE__) || defined(_WIN32))
+#if (defined(__APPLE__) || defined(_WIN32) || defined(WEBSCENE_NATIVE_ENGINE_HEADLESS))
             gpu_canvases.clear();
 #endif
             webgpu.reset();

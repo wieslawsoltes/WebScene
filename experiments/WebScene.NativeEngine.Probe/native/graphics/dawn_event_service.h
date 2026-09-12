@@ -11,6 +11,16 @@ class dawn_event_service {
     std::shared_ptr<completion_mailbox> completions_;
     wgpu::Instance instance_;
     bool closed_{};
+    static wgpu::Instance create_instance() {
+#if defined(WEBSCENE_NATIVE_ENGINE_HEADLESS)
+        constexpr auto feature=wgpu::InstanceFeatureName::TimedWaitAny;
+        wgpu::InstanceDescriptor descriptor{};
+        descriptor.requiredFeatureCount=1;descriptor.requiredFeatures=&feature;
+        return wgpu::CreateInstance(&descriptor);
+#else
+        return wgpu::CreateInstance();
+#endif
+    }
     void check_thread() const {
         if (std::this_thread::get_id() != engine_thread_)
             throw std::logic_error("Dawn event service requires engine thread");
@@ -18,7 +28,7 @@ class dawn_event_service {
 public:
     dawn_event_service(size_t completion_capacity, std::shared_ptr<completion_wake> wake, bool measure_latency=false)
         : completions_(std::make_shared<completion_mailbox>(completion_capacity, std::move(wake), measure_latency)),
-          instance_(wgpu::CreateInstance()) {
+          instance_(create_instance()) {
         if (!instance_) throw std::runtime_error("Dawn instance creation failed");
     }
     ~dawn_event_service() {

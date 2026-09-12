@@ -70,6 +70,11 @@ public:
                 features.push_back(feature);
             }
         }
+        if(interop==webgpu_canvas_interop::offscreen) {
+            const auto feature=wgpu::FeatureName::ImplicitDeviceSynchronization;
+            if(!adapter.HasFeature(feature)) return {};
+            features.push_back(feature);
+        }
         error=webgpu_device_request_error::none; return result;
     }
 };

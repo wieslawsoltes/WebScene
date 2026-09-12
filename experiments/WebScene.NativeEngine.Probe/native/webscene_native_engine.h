@@ -807,7 +807,7 @@ typedef void (*webscene_stylesheet_consumed_callback)(
  * IOSURFACE certifies both a secure context and a GPU-capable scene consumer.
  * Return DISABLED for untrusted/non-secure documents. No ABI reentry or throws.
  * Current implementation supports IOSURFACE only on graphics-enabled macOS. */
-enum { WEBSCENE_WEBGPU_DISABLED = 0, WEBSCENE_WEBGPU_IOSURFACE = 1, WEBSCENE_WEBGPU_DXGI = 2 };
+enum { WEBSCENE_WEBGPU_DISABLED = 0, WEBSCENE_WEBGPU_IOSURFACE = 1, WEBSCENE_WEBGPU_DXGI = 2, WEBSCENE_WEBGPU_OFFSCREEN = 3 };
 typedef uint32_t (*webscene_webgpu_policy_callback)(void* user_data,
     const char* document_url, size_t document_url_length);
 

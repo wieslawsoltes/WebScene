@@ -19,7 +19,7 @@
             for(const auto* name:webscene::graphics::webgpu_error_names)
                 context.Get(isolate)->Global()->Delete(context.Get(isolate),js_string(isolate,name)).FromMaybe(false);
         }
-#if (defined(__APPLE__) || defined(_WIN32))
+#if (defined(__APPLE__) || defined(_WIN32) || defined(WEBSCENE_NATIVE_ENGINE_HEADLESS))
         gpu_canvases.clear();gpu_rendering_opportunity=false;
 #endif
         webgpu_dom_exception.Reset();
