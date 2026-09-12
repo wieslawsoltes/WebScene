@@ -1,6 +1,6 @@
 #pragma once
 #include "webscene_native_dom.h"
-#include "webscene_css_specified_value.h"
+#include "webscene_css_specified_ir.h"
 #include <memory>
 #include <string>
 #include <string_view>
