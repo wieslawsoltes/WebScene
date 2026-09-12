@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Collapsed single-select native activation updates selection</title>
+<title>Collapsed single-select activation opens without changing selection</title>
 <script src="/resources/testharness.js"></script>
 <script src="/resources/testharnessreport.js"></script>
 <script src="/resources/testdriver.js"></script>
@@ -24,8 +24,8 @@
     assert_equals(choice.value, "one", "initial value");
     await test_driver.click(choice);
     assert_equals(document.activeElement, choice, "activation focuses the select");
-    assert_equals(choice.value, "return", "activation advances the collapsed choice");
-    assert_equals(choice.selectedIndex, 1, "live selected index");
-    assert_array_equals(observed, ["click", "input", "change"], "activation event order");
-  }, "native collapsed select activation changes its live value without exposing option boxes");
+    assert_equals(choice.value, "one", "opening the picker does not choose another option");
+    assert_equals(choice.selectedIndex, 0, "selected index remains unchanged until commit");
+    assert_array_equals(observed, ["click"], "opening does not emit input/change");
+  }, "native collapsed select activation opens a picker without cycling its value");
 </script>
