@@ -1,0 +1,52 @@
+name: Headless Runtime engineering
+on:
+  push:
+    branches: [codex/headless-runtime-kestrel]
+    paths: ['.github/workflows/headless-runtime-engineering.yml', 'eng/sdk/headless-runtime-edit.py']
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/headless-runtime-kestrel
+      - name: Inspect exact runtime integration seams
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          files = {
+            'experiments/WebScene.NativeEngine.Probe/native/webscene_v8_runtime.cpp': r'webgpu|platform_dawn|defined\(__APPLE__\).*defined\(_WIN32\)',
+            'experiments/WebScene.NativeEngine.Probe/native/webscene_v8_runtime_canvas.inc': r'webgpu|provider->|platform_|defined\(__APPLE__\).*defined\(_WIN32\)',
+            'experiments/WebScene.NativeEngine.Probe/native/graphics/v8_webgpu.h': r'Backend|adapter|interop|software|RequestAdapter',
+            'experiments/WebScene.NativeEngine.Probe/CMakeLists.txt': r'WEBSCENE_V8_|V8_ROOT|v8_monolith|snapshot|ANGLE|GRAPHICS_ENABLE_ANGLE',
+          }
+          for name, pattern in files.items():
+            path=Path(name)
+            if not path.exists():
+              print('MISSING',name);continue
+            lines=path.read_text().splitlines();print('\nFILE',name,'LINES',len(lines))
+            selected=set()
+            for i,line in enumerate(lines):
+              if re.search(pattern,line,re.I):selected.update(range(max(0,i-2),min(len(lines),i+4)))
+            for i in sorted(selected):print(f'{i+1}: {lines[i]}')
+          print('\nV8 DEPENDENCY FILES')
+          for p in Path('.').rglob('*'):
+            if p.is_file() and ('v8' in str(p).lower()) and (p.suffix in ('.json','.gn','.py','.sh') or p.name=='args.gn') and '.git' not in p.parts:
+              print(p)
+          PY
+      - name: Apply reviewed source edits
+        if: hashFiles('eng/sdk/headless-runtime-edit.py') != ''
+        run: |
+          python3 eng/sdk/headless-runtime-edit.py
+          git diff --check
+          git add experiments src eng tests
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'feat(runtime): wire reusable Linux headless SDK and canvas integration'
+            git push origin HEAD:codex/headless-runtime-kestrel
+          fi
