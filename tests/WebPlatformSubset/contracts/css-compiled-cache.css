@@ -1,0 +1,6 @@
+:root { --compiled-cache-size: 73px; }
+#cache-target { width: var(--compiled-cache-size); height: 19px; background: rgb(12, 34, 56); }
+#cache-target.wide { width: calc(var(--compiled-cache-size) + 27px); }
+@media (min-width: 700px) {
+  #cache-target { min-height: 23px; }
+}
