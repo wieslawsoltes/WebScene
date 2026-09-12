@@ -1,5 +1,6 @@
 #pragma once
 #include "webscene_native_dom.h"
+#include "webscene_css_specified_value.h"
 #include <memory>
 #include <string>
 #include <string_view>
@@ -14,6 +15,10 @@ namespace webscene_native::css {
         std::string name;
         std::string value;
         bool important{false};
+        css_property_id property{css_property_id::unknown};
+        specified_css_value specified{};
+
+        bool has_typed_value() const noexcept { return specified.fully_typed(); }
     };
 
 struct compiled_css_pseudo final {
