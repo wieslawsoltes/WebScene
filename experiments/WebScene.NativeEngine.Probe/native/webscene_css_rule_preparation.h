@@ -13,6 +13,8 @@ void prepare_style_rule(std::string_view prelude,
 {
     for(auto& declaration:declarations) {
         declaration.value=resolve_resource_urls(std::move(declaration.value),address);
+        declaration.property=property_id(declaration.name);
+        declaration.specified=compile_specified_value(declaration.property,declaration.value);
         observe(declaration);
     }
     // Exact :host is scoped by the document owner, outside ordinary matching.
