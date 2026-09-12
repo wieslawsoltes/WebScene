@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WebScene cached CSS compilation unit</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<link rel="stylesheet" href="css-compiled-cache.css">
+<link rel="stylesheet" href="css-compiled-cache.css">
+<div id="cache-target"></div>
+<script>
+'use strict';
+const target = document.getElementById('cache-target');
+
+test(() => {
+  const style = getComputedStyle(target);
+  assert_equals(style.width, '73px');
+  assert_equals(style.height, '19px');
+  assert_equals(style.minHeight, '23px');
+  assert_equals(style.backgroundColor, 'rgb(12, 34, 56)');
+}, 'duplicate external stylesheet loads preserve compiled CSS behavior');
+
+test(() => {
+  target.className = 'wide';
+  assert_equals(getComputedStyle(target).width, '100px');
+  target.className = '';
+  assert_equals(getComputedStyle(target).width, '73px');
+}, 'cached rules remain live across class recascade');
+
+promise_test(async () => {
+  const text = await (await fetch('css-compiled-cache.css')).text();
+  const first = document.createElement('style');
+  const second = document.createElement('style');
+  first.textContent = text;
+  second.textContent = text;
+  document.head.append(first, second);
+  await Promise.resolve();
+  assert_equals(getComputedStyle(target).width, '73px');
+  first.remove(); second.remove();
+}, 'identical runtime style text reuses the compiled syntax unit without semantic drift');
+</script>
